@@ -1,0 +1,1112 @@
+cc/
+├── .env
+├── .vscode
+│   └── settings.json
+├── alembic.ini
+├── eppne-backend
+│   ├── .gitignore
+│   ├── Dockerfile
+│   ├── alembic.ini
+│   ├── app
+│   │   ├── __init__.py
+│   │   ├── api
+│   │   │   └── deps.py
+│   │   ├── core
+│   │   │   ├── __init__.py
+│   │   │   ├── ai_engine.py
+│   │   │   ├── celery_app.py
+│   │   │   ├── celery_config.py
+│   │   │   ├── config.py
+│   │   │   ├── database.py
+│   │   │   ├── enums.py
+│   │   │   ├── errors.py
+│   │   │   ├── event_bus.py
+│   │   │   ├── features.py
+│   │   │   ├── logging_conf.py
+│   │   │   ├── pagination.py
+│   │   │   ├── rate_limiter.py
+│   │   │   ├── redis_client.py
+│   │   │   ├── security.py
+│   │   │   ├── storage.py
+│   │   │   └── task_queue.py
+│   │   ├── domains
+│   │   │   ├── __init__.py
+│   │   │   ├── academy
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── admin
+│   │   │   │   └── router.py
+│   │   │   ├── affiliate
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── agritech
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── ai_agents
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── ai_governance
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── arbitration_syndicates
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── auth
+│   │   │   │   ├── jwt_service.py
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── automation
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── command
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── commerce
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── communications
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   ├── service.py
+│   │   │   │   └── tasks.py
+│   │   │   ├── digital_twin
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── employment
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── finance
+│   │   │   │   ├── _init__.py
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── health
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── identity
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   ├── service.py
+│   │   │   │   └── tests
+│   │   │   ├── insurance
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── invitations
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── iot
+│   │   │   │   ├── _init__.py
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── logistics
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── manufacturing
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── privacy
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   ├── service.py
+│   │   │   │   └── tasks.py
+│   │   │   ├── projects
+│   │   │   │   ├── _init__.py
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── realestate
+│   │   │   │   ├── _init__.py
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── saas
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── service_marketplace
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── social
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── sovereign_entities
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── tenders_auctions
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── tourism_sports
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── translation
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   ├── transport
+│   │   │   │   ├── models.py
+│   │   │   │   ├── repository.py
+│   │   │   │   ├── router.py
+│   │   │   │   ├── schemas.py
+│   │   │   │   └── service.py
+│   │   │   └── zamakana
+│   │   │       ├── models.py
+│   │   │       ├── repository.py
+│   │   │       ├── router.py
+│   │   │       ├── schemas.py
+│   │   │       └── service.py
+│   │   ├── main.py
+│   │   ├── services
+│   │   │   └── llm
+│   │   │       ├── factory.py
+│   │   │       └── kimi_adapter.py
+│   │   └── tasks
+│   │       ├── affiliate.py
+│   │       ├── affiliate_tasks.py
+│   │       ├── agritech.py
+│   │       ├── billing.py
+│   │       ├── commerce.py
+│   │       ├── deployment.py
+│   │       ├── employment.py
+│   │       ├── governance.py
+│   │       └── saas_tasks.py
+│   ├── docker-compose.yml
+│   ├── logs
+│   │   └── app.log
+│   ├── migrations
+│   │   ├── README
+│   │   ├── env.py
+│   │   └── script.py.mako
+│   ├── prometheus.yml
+│   ├── requirements.txt
+│   └── scripts
+│       ├── create_superuser.py
+│       └── seed_tenant.py
+├── eppne-web
+│   ├── .env.local
+│   ├── .gitignore
+│   ├── AGENTS.md
+│   ├── CLAUDE.md
+│   ├── README.md
+│   ├── app
+│   │   ├── (auth)
+│   │   │   ├── login
+│   │   │   │   └── page.tsx
+│   │   │   └── register
+│   │   │       └── page.tsx
+│   │   ├── (dashboard)
+│   │   │   ├── academy
+│   │   │   │   ├── [id]
+│   │   │   │   │   ├── learn
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── admin
+│   │   │   │   │   ├── ai-center
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   ├── bootcamps
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   ├── certificates
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   ├── cohorts
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   ├── courses
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   ├── entities
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   ├── live-sessions
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   ├── organization
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   ├── sovereign-ops
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   ├── studio
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   └── tasks
+│   │   │   │   │       └── page.tsx
+│   │   │   │   ├── ai-hub
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── catalog
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── certificates
+│   │   │   │   │   └── [courseId]
+│   │   │   │   │       └── page.tsx
+│   │   │   │   ├── enterprise
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── instructor
+│   │   │   │   │   ├── dashboard
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   └── grading
+│   │   │   │   │       └── page.tsx
+│   │   │   │   ├── layout.tsx
+│   │   │   │   ├── leaderboard
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── my-learning
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── profile
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── quiz-results
+│   │   │   │   │   └── [quizId]
+│   │   │   │   │       └── page.tsx
+│   │   │   │   └── store
+│   │   │   │       └── page.tsx
+│   │   │   ├── affiliate
+│   │   │   │   └── page.tsx
+│   │   │   ├── agritech
+│   │   │   │   ├── farms
+│   │   │   │   │   ├── [id]
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── ai
+│   │   │   │   └── approvals
+│   │   │   │       └── page.tsx
+│   │   │   ├── ai-agents
+│   │   │   │   ├── create
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── ai-governance
+│   │   │   │   └── page.tsx
+│   │   │   ├── arbitration-syndicates
+│   │   │   │   ├── cases
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── elections
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── licenses
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── syndicates
+│   │   │   │       └── page.tsx
+│   │   │   ├── automation
+│   │   │   │   ├── secrets
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── workflows
+│   │   │   │       ├── [id]
+│   │   │   │       │   ├── executions
+│   │   │   │       │   │   ├── [executionId]
+│   │   │   │       │   │   │   └── page.tsx
+│   │   │   │       │   │   └── page.tsx
+│   │   │   │       │   └── page.tsx
+│   │   │   │       └── page.tsx
+│   │   │   ├── command
+│   │   │   │   ├── alerts
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── brands
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── communications
+│   │   │   │   └── mail
+│   │   │   │       └── inbox
+│   │   │   │           └── page.tsx
+│   │   │   ├── dashboard
+│   │   │   │   └── page.tsx
+│   │   │   ├── digital-twin
+│   │   │   │   ├── TimeCapsuleForm.tsx
+│   │   │   │   ├── legacy
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── employment
+│   │   │   │   ├── jobs
+│   │   │   │   │   ├── [jobId]
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── entities
+│   │   │   │   ├── [id]
+│   │   │   │   │   ├── brand-builder
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── create
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── finance
+│   │   │   │   ├── history
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── wallet
+│   │   │   │       └── page.tsx
+│   │   │   ├── health
+│   │   │   │   └── page.tsx
+│   │   │   ├── insurance
+│   │   │   │   ├── claims
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── employee-profile
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── pensions
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── policies
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── subscriptions
+│   │   │   │       └── page.tsx
+│   │   │   ├── invitations
+│   │   │   │   ├── campaigns
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── invitations
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── leads
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── tickets
+│   │   │   │       └── page.tsx
+│   │   │   ├── iot
+│   │   │   │   └── page.tsx
+│   │   │   ├── layout.tsx
+│   │   │   ├── logistics
+│   │   │   │   ├── equipment
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── inventory
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── warehouses
+│   │   │   │       └── page.tsx
+│   │   │   ├── manufacturing
+│   │   │   │   ├── facilities
+│   │   │   │   │   └── [id]
+│   │   │   │   │       └── page.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── marketplace
+│   │   │   │   └── page.tsx
+│   │   │   ├── page.tsx
+│   │   │   ├── payroll
+│   │   │   │   └── page.tsx
+│   │   │   ├── privacy
+│   │   │   │   ├── admin
+│   │   │   │   │   └── erasure
+│   │   │   │   │       └── page.tsx
+│   │   │   │   ├── erasure
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── settings
+│   │   │   │       └── page.tsx
+│   │   │   ├── profile
+│   │   │   │   └── page.tsx
+│   │   │   ├── projects
+│   │   │   │   ├── [id]
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── realestate
+│   │   │   │   ├── ownerships
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── property
+│   │   │   │   │   └── [id]
+│   │   │   │   │       └── page.tsx
+│   │   │   │   └── tokenization
+│   │   │   │       └── page.tsx
+│   │   │   ├── saas
+│   │   │   │   ├── feature-flags
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── invoices
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── plans
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── services
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── subscriptions
+│   │   │   │       └── page.tsx
+│   │   │   ├── settings
+│   │   │   │   └── sessions
+│   │   │   │       └── page.tsx
+│   │   │   ├── social
+│   │   │   │   ├── contracts
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── events
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── gifts
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── groups
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── occasions
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── pages
+│   │   │   │       └── page.tsx
+│   │   │   ├── sovereign-entities
+│   │   │   │   └── page.tsx
+│   │   │   ├── store
+│   │   │   │   ├── cart
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── checkout
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── orders
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── tenders-auctions
+│   │   │   │   ├── auctions
+│   │   │   │   │   ├── [id]
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── tenders
+│   │   │   │       ├── [id]
+│   │   │   │       │   └── page.tsx
+│   │   │   │       └── page.tsx
+│   │   │   ├── tourism-sports
+│   │   │   │   ├── destinations
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── events
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── programs
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── sports
+│   │   │   │   │   └── transfers
+│   │   │   │   │       └── page.tsx
+│   │   │   │   └── tickets
+│   │   │   │       └── page.tsx
+│   │   │   ├── translation
+│   │   │   │   └── page.tsx
+│   │   │   ├── transport
+│   │   │   │   ├── bookings
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── deliveries
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── fleets
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── hubs
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── routes
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── trips
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── vehicles
+│   │   │   │       └── page.tsx
+│   │   │   ├── wallet
+│   │   │   │   └── page.tsx
+│   │   │   └── zamakana
+│   │   │       ├── campaigns
+│   │   │       │   ├── [id]
+│   │   │       │   │   └── page.tsx
+│   │   │       │   └── page.tsx
+│   │   │       ├── nodes
+│   │   │       │   └── page.tsx
+│   │   │       ├── page.tsx
+│   │   │       └── scenarios
+│   │   │           └── page.tsx
+│   │   ├── (public)
+│   │   │   └── public
+│   │   │       └── [slug]
+│   │   │           └── page.tsx
+│   │   ├── favicon.ico
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   ├── page.tsx
+│   │   ├── providers.tsx
+│   │   ├── public-entity
+│   │   │   └── [id]
+│   │   │       └── page.tsx
+│   │   └── web3-provider.tsx
+│   ├── components
+│   │   ├── academy
+│   │   │   ├── CourseActionButton.tsx
+│   │   │   ├── EnrollButton.tsx
+│   │   │   ├── OrgTree.tsx
+│   │   │   └── tenant-provider.tsx
+│   │   ├── affiliate
+│   │   │   └── ShareButton.tsx
+│   │   ├── agritech
+│   │   │   ├── AIRecommendationCard.tsx
+│   │   │   ├── HarvestBadge.tsx
+│   │   │   └── SoilSensorWidget.tsx
+│   │   ├── ai-agents
+│   │   │   ├── AgentCard.tsx
+│   │   │   ├── AgentForm.tsx
+│   │   │   └── ApprovalResolver.tsx
+│   │   ├── ai-governance
+│   │   │   ├── AuditLogViewer.tsx
+│   │   │   ├── QuotaManager.tsx
+│   │   │   ├── UsageDashboard.tsx
+│   │   │   └── UsageGauge.tsx
+│   │   ├── arbitration-syndicates
+│   │   │   ├── CaseCard.tsx
+│   │   │   ├── ElectionCard.tsx
+│   │   │   ├── JuryVoteModal.tsx
+│   │   │   ├── SyndicateCard.tsx
+│   │   │   └── VoteModal.tsx
+│   │   ├── auth
+│   │   │   ├── LoginForm.tsx
+│   │   │   ├── RegisterForm.tsx
+│   │   │   ├── SessionCard.tsx
+│   │   │   └── SessionsList.tsx
+│   │   ├── automation
+│   │   │   ├── CronInput.tsx
+│   │   │   ├── ExecutionStatusBadge.tsx
+│   │   │   ├── NodeSettingsPanel.tsx
+│   │   │   ├── SecretForm.tsx
+│   │   │   ├── TriggerSettings.tsx
+│   │   │   ├── WorkflowBuilder.tsx
+│   │   │   └── node-configs
+│   │   │       ├── AIAgentConfig.tsx
+│   │   │       ├── ConditionConfig.tsx
+│   │   │       ├── CreateEntityConfig.tsx
+│   │   │       ├── CreateInvoiceConfig.tsx
+│   │   │       ├── CreateOrderConfig.tsx
+│   │   │       ├── CreateUserConfig.tsx
+│   │   │       ├── DelayConfig.tsx
+│   │   │       ├── EmailConfig.tsx
+│   │   │       ├── EnrollCourseConfig.tsx
+│   │   │       ├── FileUploadConfig.tsx
+│   │   │       ├── HTTPConfig.tsx
+│   │   │       ├── LoopConfig.tsx
+│   │   │       ├── NotificationConfig.tsx
+│   │   │       ├── SQLConfig.tsx
+│   │   │       ├── TransferFundsConfig.tsx
+│   │   │       ├── TransformConfig.tsx
+│   │   │       └── WebSocketConfig.tsx
+│   │   ├── brand-builder
+│   │   │   ├── canvas.tsx
+│   │   │   ├── component-library.tsx
+│   │   │   ├── component-renderer.tsx
+│   │   │   ├── property-editor.tsx
+│   │   │   ├── sortable-component.tsx
+│   │   │   └── sortable-section.tsx
+│   │   ├── command
+│   │   │   ├── AlertList.tsx
+│   │   │   ├── BrandCard.tsx
+│   │   │   └── MetricCard.tsx
+│   │   ├── commerce
+│   │   │   ├── CheckoutForm.tsx
+│   │   │   ├── OrderCard.tsx
+│   │   │   ├── OrderList.tsx
+│   │   │   ├── ProductCard.tsx
+│   │   │   └── ProductGrid.tsx
+│   │   ├── communications
+│   │   │   ├── MailSidebar.tsx
+│   │   │   ├── NotificationBell.tsx
+│   │   │   └── NotificationList.tsx
+│   │   ├── digital-twin
+│   │   │   └── TwinConfigForm.tsx
+│   │   ├── employment
+│   │   │   ├── AttendanceWidget.tsx
+│   │   │   └── StatusBadge.tsx
+│   │   ├── entities
+│   │   │   ├── entity-basic-info.tsx
+│   │   │   ├── entity-brand-settings.tsx
+│   │   │   ├── entity-card.tsx
+│   │   │   ├── entity-documents.tsx
+│   │   │   ├── entity-form.tsx
+│   │   │   ├── entity-representatives.tsx
+│   │   │   └── entity-tabs.tsx
+│   │   ├── finance
+│   │   │   ├── BalanceCard.tsx
+│   │   │   ├── ConfirmationModal.tsx
+│   │   │   ├── SwapForm.tsx
+│   │   │   ├── TransactionItem.tsx
+│   │   │   ├── TransactionList.tsx
+│   │   │   ├── TransferForm.tsx
+│   │   │   └── WalletHeader.tsx
+│   │   ├── health
+│   │   │   ├── AIPrognosisRadar.tsx
+│   │   │   ├── BioProfileManager.tsx
+│   │   │   └── EmergencySOSButton.tsx
+│   │   ├── identity
+│   │   │   ├── AuthProvider.tsx
+│   │   │   ├── LoginForm.tsx
+│   │   │   ├── ProfileForm.tsx
+│   │   │   ├── RegisterForm.tsx
+│   │   │   ├── SessionCard.tsx
+│   │   │   ├── SessionsList.tsx
+│   │   │   └── WalletCard.tsx
+│   │   ├── insurance
+│   │   │   ├── ClaimCard.tsx
+│   │   │   ├── PensionCard.tsx
+│   │   │   ├── PolicyCard.tsx
+│   │   │   ├── ReviewClaimModal.tsx
+│   │   │   ├── SubmitClaimModal.tsx
+│   │   │   ├── SubscribeModal.tsx
+│   │   │   └── SubscriptionCard.tsx
+│   │   ├── invitations
+│   │   │   ├── AIAssistantChat.tsx
+│   │   │   ├── CampaignPerformanceChart.tsx
+│   │   │   ├── CampaignStatusBadge.tsx
+│   │   │   ├── LeadCard.tsx
+│   │   │   └── LeadStatusBadge.tsx
+│   │   ├── iot
+│   │   │   ├── AssetCard.tsx
+│   │   │   ├── AssetsManager.tsx
+│   │   │   ├── CarbonCreditPanel.tsx
+│   │   │   └── IoTDashboardStats.tsx
+│   │   ├── layout
+│   │   │   ├── navbar.tsx
+│   │   │   ├── sidebar.tsx
+│   │   │   └── theme-toggle.tsx
+│   │   ├── logistics
+│   │   │   ├── EquipmentCard.tsx
+│   │   │   ├── InventoryCard.tsx
+│   │   │   ├── InventoryStatusBadge.tsx
+│   │   │   └── WarehouseCard.tsx
+│   │   ├── manufacturing
+│   │   │   ├── MaintenanceRadar.tsx
+│   │   │   └── ProductionStatusBadge.tsx
+│   │   ├── marketplace
+│   │   │   ├── DeploymentStatusBadge.tsx
+│   │   │   ├── PurchaseModal.tsx
+│   │   │   ├── ServiceCard.tsx
+│   │   │   └── ServiceDetails.tsx
+│   │   ├── privacy
+│   │   │   ├── ErasureRequestCard.tsx
+│   │   │   ├── ErasureRequestForm.tsx
+│   │   │   ├── ErasureRequestList.tsx
+│   │   │   ├── PendingErasureRequests.tsx
+│   │   │   ├── PrivacySettingsForm.tsx
+│   │   │   └── ProcessErasureModal.tsx
+│   │   ├── projects
+│   │   │   ├── AdvancedMilestones.tsx
+│   │   │   ├── ContributionModal.tsx
+│   │   │   ├── MilestoneTimeline.tsx
+│   │   │   ├── ProjectAnalysisDashboard.tsx
+│   │   │   ├── ProjectAnalytics.tsx
+│   │   │   ├── ProjectCard.tsx
+│   │   │   ├── ProjectDetails.tsx
+│   │   │   └── ProjectUpdates.tsx
+│   │   ├── realestate
+│   │   │   ├── InvestorPortfolio.tsx
+│   │   │   ├── MasterPlanExplorer.tsx
+│   │   │   ├── PropertyUnitCard.tsx
+│   │   │   ├── SmartContractDashboard.tsx
+│   │   │   └── TokenizationExchange.tsx
+│   │   ├── saas
+│   │   │   ├── InvoiceCard.tsx
+│   │   │   ├── InvoiceDetailModal.tsx
+│   │   │   ├── PlanCard.tsx
+│   │   │   ├── PlanComparison.tsx
+│   │   │   ├── ServiceCard.tsx
+│   │   │   ├── SubscribeModal.tsx
+│   │   │   └── SubscriptionCard.tsx
+│   │   ├── social
+│   │   │   ├── AIRecommendationCard.tsx
+│   │   │   ├── ContractCard.tsx
+│   │   │   ├── CreateGroupModal.tsx
+│   │   │   ├── CreateOccasionModal.tsx
+│   │   │   ├── CreatePageModal.tsx
+│   │   │   ├── EventCard.tsx
+│   │   │   ├── GiftCard.tsx
+│   │   │   ├── GroupCard.tsx
+│   │   │   ├── OccasionCard.tsx
+│   │   │   ├── PageCard.tsx
+│   │   │   ├── PostCard.tsx
+│   │   │   ├── PostComposer.tsx
+│   │   │   └── SendGiftModal.tsx
+│   │   ├── sovereign-entities
+│   │   │   ├── BrandEditor.tsx
+│   │   │   ├── EntityCard.tsx
+│   │   │   ├── EntityForm.tsx
+│   │   │   ├── EntityTreeView.tsx
+│   │   │   ├── KYBDocumentUploader.tsx
+│   │   │   ├── RepresentativeList.tsx
+│   │   │   ├── WalletActions.tsx
+│   │   │   └── WalletBalance.tsx
+│   │   ├── tenders-auctions
+│   │   │   ├── AuctionCard.tsx
+│   │   │   ├── AuctionDetail.tsx
+│   │   │   ├── CloseAuctionModal.tsx
+│   │   │   ├── EvaluateBidModal.tsx
+│   │   │   ├── LiveBidCard.tsx
+│   │   │   ├── PlaceBidModal.tsx
+│   │   │   ├── SubmitBidModal.tsx
+│   │   │   ├── TenderCard.tsx
+│   │   │   └── TenderDetail.tsx
+│   │   ├── tourism-sports
+│   │   │   ├── DestinationCard.tsx
+│   │   │   ├── EventCard.tsx
+│   │   │   ├── ProgramCard.tsx
+│   │   │   └── TicketCard.tsx
+│   │   ├── translation
+│   │   │   ├── BatchTranslator.tsx
+│   │   │   ├── ChatTranslator.tsx
+│   │   │   ├── LanguageSelector.tsx
+│   │   │   └── TextTranslator.tsx
+│   │   ├── transport
+│   │   │   ├── CarbonFootprintBadge.tsx
+│   │   │   ├── RouteOptimizer.tsx
+│   │   │   ├── TransportStatsCards.tsx
+│   │   │   ├── TripStatusBadge.tsx
+│   │   │   └── VehicleStatusBadge.tsx
+│   │   ├── ui
+│   │   │   ├── ConfirmationModal.tsx
+│   │   │   ├── accordion.tsx
+│   │   │   ├── badge.tsx
+│   │   │   ├── button.tsx
+│   │   │   ├── card.tsx
+│   │   │   ├── dialog.tsx
+│   │   │   ├── dropdown-menu.tsx
+│   │   │   ├── form.tsx
+│   │   │   ├── input.tsx
+│   │   │   ├── label.tsx
+│   │   │   ├── select.tsx
+│   │   │   ├── skeleton.tsx
+│   │   │   ├── sonner.tsx
+│   │   │   ├── switch.tsx
+│   │   │   ├── table.tsx
+│   │   │   ├── tabs.tsx
+│   │   │   └── textarea.tsx
+│   │   ├── web3
+│   │   │   └── connect-wallet.tsx
+│   │   ├── websocket-provider.tsx
+│   │   └── zamakana
+│   │       ├── AIAnalysisReport.tsx
+│   │       ├── CampaignCard.tsx
+│   │       ├── NodeCard.tsx
+│   │       └── ScenarioCard.tsx
+│   ├── components.json
+│   ├── docs
+│   │   ├── RLS_POLICIES.md
+│   │   └── privacy-domain-docs.md
+│   ├── eslint.config.mjs
+│   ├── hooks
+│   │   ├── academy-queries.ts
+│   │   ├── affiliate
+│   │   │   └── useAffiliate.ts
+│   │   ├── agritech
+│   │   │   ├── useBioAssets.ts
+│   │   │   ├── useCertificates.ts
+│   │   │   ├── useCropCycles.ts
+│   │   │   ├── useFarms.ts
+│   │   │   ├── useHarvests.ts
+│   │   │   ├── useSensors.ts
+│   │   │   ├── useTraceability.ts
+│   │   │   └── useZones.ts
+│   │   ├── ai-agents
+│   │   │   └── useApprovalWebSocket.ts
+│   │   ├── arbitration-syndicates
+│   │   │   ├── useCases.ts
+│   │   │   ├── useElections.ts
+│   │   │   ├── useJuryVote.ts
+│   │   │   ├── useLicenses.ts
+│   │   │   └── useSyndicates.ts
+│   │   ├── auth
+│   │   │   └── useAuth.ts
+│   │   ├── automation
+│   │   │   └── useExecutionWebSocket.ts
+│   │   ├── command
+│   │   │   ├── useAlerts.ts
+│   │   │   ├── useBrands.ts
+│   │   │   └── useCommandStats.ts
+│   │   ├── commerce
+│   │   │   ├── useCheckout.ts
+│   │   │   └── useProducts.ts
+│   │   ├── communications
+│   │   │   └── useWebSocket.ts
+│   │   ├── finance
+│   │   │   ├── useSwap.ts
+│   │   │   ├── useTransactionHistory.ts
+│   │   │   ├── useTransfer.ts
+│   │   │   └── useWallet.ts
+│   │   ├── insurance
+│   │   │   ├── useClaims.ts
+│   │   │   ├── useEmployeeProfile.ts
+│   │   │   ├── useInsuranceStats.ts
+│   │   │   ├── usePensions.ts
+│   │   │   ├── usePolicies.ts
+│   │   │   └── useSubscriptions.ts
+│   │   ├── invitations
+│   │   │   ├── useCampaigns.ts
+│   │   │   ├── useChatWithAI.ts
+│   │   │   ├── useInteractions.ts
+│   │   │   ├── useInvitations.ts
+│   │   │   ├── useLeads.ts
+│   │   │   ├── useStats.ts
+│   │   │   └── useTickets.ts
+│   │   ├── logistics
+│   │   │   ├── useEquipment.ts
+│   │   │   ├── useForecast.ts
+│   │   │   ├── useInventory.ts
+│   │   │   └── useWarehouses.ts
+│   │   ├── manufacturing
+│   │   │   ├── useBatches.ts
+│   │   │   ├── useFacilities.ts
+│   │   │   └── useRawMaterials.ts
+│   │   ├── privacy
+│   │   │   ├── useConsentLog.ts
+│   │   │   ├── useCreateErasureRequest.ts
+│   │   │   ├── useErasureRequests.ts
+│   │   │   ├── usePrivacySettings.ts
+│   │   │   └── useProcessErasureRequest.ts
+│   │   ├── realestate
+│   │   │   ├── useMyOwnerships.ts
+│   │   │   ├── useProperties.ts
+│   │   │   ├── usePropertyOwnerships.ts
+│   │   │   └── useTokenization.ts
+│   │   ├── saas
+│   │   │   ├── useDashboard.ts
+│   │   │   ├── useFeatureFlags.ts
+│   │   │   ├── useInvoices.ts
+│   │   │   ├── usePlans.ts
+│   │   │   ├── useServices.ts
+│   │   │   └── useSubscriptions.ts
+│   │   ├── social
+│   │   │   ├── useConnections.ts
+│   │   │   ├── useContracts.ts
+│   │   │   ├── useEvents.ts
+│   │   │   ├── useGifts.ts
+│   │   │   ├── useGroups.ts
+│   │   │   ├── useMatchSuggestions.ts
+│   │   │   ├── useMatchmaking.ts
+│   │   │   ├── useOccasions.ts
+│   │   │   ├── usePages.ts
+│   │   │   ├── usePosts.ts
+│   │   │   └── useSubscriptions.ts
+│   │   ├── tenders-auctions
+│   │   │   ├── useAuctionBids.ts
+│   │   │   ├── useAuctions.ts
+│   │   │   ├── useBids.ts
+│   │   │   ├── useCloseAuction.ts
+│   │   │   ├── useEvaluateBid.ts
+│   │   │   ├── useLiveBids.ts
+│   │   │   ├── useMyBids.ts
+│   │   │   ├── useOpenTender.ts
+│   │   │   ├── usePlaceBid.ts
+│   │   │   ├── useStartAuction.ts
+│   │   │   ├── useSubmitBid.ts
+│   │   │   ├── useTenderBids.ts
+│   │   │   ├── useTenders.ts
+│   │   │   └── useUpdateTender.ts
+│   │   ├── tourism-sports
+│   │   │   ├── useDestinations.ts
+│   │   │   ├── useEvents.ts
+│   │   │   ├── useMatches.ts
+│   │   │   ├── useMyTickets.ts
+│   │   │   ├── usePlayers.ts
+│   │   │   ├── usePrograms.ts
+│   │   │   ├── useSportsOrganizations.ts
+│   │   │   ├── useTournaments.ts
+│   │   │   └── useTransfers.ts
+│   │   ├── transport
+│   │   │   ├── useBookings.ts
+│   │   │   ├── useDeliveries.ts
+│   │   │   ├── useLiveTracking.ts
+│   │   │   ├── useRoutes.ts
+│   │   │   ├── useTransportStats.ts
+│   │   │   ├── useTrips.ts
+│   │   │   └── useVehicles.ts
+│   │   ├── use-auth.ts
+│   │   ├── use-brand-builder.ts
+│   │   ├── use-enterprise.ts
+│   │   ├── use-entities.ts
+│   │   ├── use-finance.ts
+│   │   ├── useAcademyEntities.ts
+│   │   ├── useFleets.ts
+│   │   ├── useHubs.ts
+│   │   └── zamakana
+│   │       ├── useCampaigns.ts
+│   │       ├── useEdges.ts
+│   │       ├── useKnowledgeGraph.ts
+│   │       ├── useNodes.ts
+│   │       └── useScenarios.ts
+│   ├── lib
+│   │   ├── api-client.ts
+│   │   ├── error-handler.ts
+│   │   └── utils.ts
+│   ├── next-env.d.ts
+│   ├── next.config.ts
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── postcss.config.mjs
+│   ├── providers
+│   │   └── AuthProvider.tsx
+│   ├── proxy.ts
+│   ├── public
+│   │   ├── file.svg
+│   │   ├── globe.svg
+│   │   ├── next.svg
+│   │   ├── vercel.svg
+│   │   └── window.svg
+│   ├── services
+│   │   ├── academy.service.ts
+│   │   ├── affiliate.service.ts
+│   │   ├── agritech.ts
+│   │   ├── ai-agents.ts
+│   │   ├── ai-governance.ts
+│   │   ├── arbitration-syndicates.ts
+│   │   ├── auth.service.ts
+│   │   ├── automation.ts
+│   │   ├── command.ts
+│   │   ├── commerce.service.ts
+│   │   ├── communications.ts
+│   │   ├── digital-twin.ts
+│   │   ├── employment.ts
+│   │   ├── finance.service.ts
+│   │   ├── health.ts
+│   │   ├── identity.service.ts
+│   │   ├── insurance.ts
+│   │   ├── invitations.ts
+│   │   ├── iot.service.ts
+│   │   ├── logistics.ts
+│   │   ├── manufacturing.ts
+│   │   ├── marketplace.ts
+│   │   ├── privacy.service.ts
+│   │   ├── projects.ts
+│   │   ├── realestate.ts
+│   │   ├── saas.service.ts
+│   │   ├── social.ts
+│   │   ├── sovereign-entities.ts
+│   │   ├── tenders-auctions.ts
+│   │   ├── tourism-sports.ts
+│   │   ├── translation.service.ts
+│   │   ├── transport.ts
+│   │   └── zamakana.ts
+│   ├── store
+│   │   ├── academy-ui-store.ts
+│   │   ├── agentStore.ts
+│   │   ├── agritechStore.ts
+│   │   ├── aiGovernanceStore.ts
+│   │   ├── arbitrationSyndicatesStore.ts
+│   │   ├── auth-store.ts
+│   │   ├── automationStore.ts
+│   │   ├── brand-builder-store.ts
+│   │   ├── cart-store.ts
+│   │   ├── commandStore.ts
+│   │   ├── employmentStore.ts
+│   │   ├── enterprise-store.ts
+│   │   ├── entity-store.ts
+│   │   ├── entityStore.ts
+│   │   ├── finance-store.ts
+│   │   ├── healthStore.ts
+│   │   ├── insuranceStore.ts
+│   │   ├── invitationsStore.ts
+│   │   ├── iot-store.ts
+│   │   ├── logisticsStore.ts
+│   │   ├── manufacturingStore.ts
+│   │   ├── marketplaceStore.ts
+│   │   ├── notification-store.ts
+│   │   ├── notificationStore.ts
+│   │   ├── projectStore.ts
+│   │   ├── realestateStore.ts
+│   │   ├── saas-store.ts
+│   │   ├── socialStore.ts
+│   │   ├── student-store.ts
+│   │   ├── tendersAuctionsStore.ts
+│   │   ├── tourismSportsStore.ts
+│   │   ├── translation-store.ts
+│   │   ├── transportStore.ts
+│   │   ├── useAcademyUIStore.ts
+│   │   └── zamakanaStore.ts
+│   ├── tsconfig.json
+│   └── types
+│       ├── academy.ts
+│       ├── affiliate.ts
+│       ├── agritech.ts
+│       ├── ai-agents.ts
+│       ├── ai-governance.ts
+│       ├── arbitration-syndicates.ts
+│       ├── auth.ts
+│       ├── automation.ts
+│       ├── command.ts
+│       ├── commerce.ts
+│       ├── communications.ts
+│       ├── digital-twin.ts
+│       ├── employment.ts
+│       ├── entity.ts
+│       ├── finance.ts
+│       ├── health.ts
+│       ├── identity.ts
+│       ├── insurance.ts
+│       ├── invitations.ts
+│       ├── iot.ts
+│       ├── logistics.ts
+│       ├── manufacturing.ts
+│       ├── marketplace.ts
+│       ├── privacy.ts
+│       ├── projects.ts
+│       ├── realestate.ts
+│       ├── saas.ts
+│       ├── social.ts
+│       ├── sovereign-entities.ts
+│       ├── tenders-auctions.ts
+│       ├── tourism-sports.ts
+│       ├── translation.ts
+│       ├── transport.ts
+│       └── zamakana.ts
+├── fix_db.py
+└── project_tree.txt
