@@ -8,7 +8,14 @@ from app.api.deps import get_current_active_user, get_current_tenant, get_curren
 from app.domains.identity.models import User
 from app.domains.ai_agents.service import AIAgentsService
 from app.domains.ai_agents.repository import AIAgentsRepository
-from app.domains.ai_agents.schemas import *
+from app.domains.ai_agents.schemas import (
+    AIAgentCreate, 
+    AIAgentResponse, 
+    ApprovalResponse, 
+    ApprovalResolution,
+    AgentStatusUpdate,
+    AgentStatusResponse
+)
 from app.domains.academy.models import AcademyTenant
 from app.core.rate_limiter import rate_limit
 
@@ -20,10 +27,10 @@ router = APIRouter(prefix="/ai", tags=["Sovereign AI Agents"])
 # ============================================================
 
 @router.post("/agents", response_model=AIAgentResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_agent(
-    data: AIAgentCreate,
     request: Request,
+    data: AIAgentCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
@@ -74,12 +81,12 @@ async def get_agent(
 
 
 @router.post("/agents/{agent_id}/execute")
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def execute_agent_action(
+    request: Request,   
     agent_id: int,
     action_type: str,
     payload: dict,
-    request: Request,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
@@ -98,11 +105,11 @@ async def execute_agent_action(
 
 
 @router.patch("/agents/{agent_id}/status", response_model=AIAgentResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def update_agent_status(
+    request: Request,
     agent_id: int,
     status_data: AgentStatusUpdate,
-    request: Request,
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
@@ -118,11 +125,11 @@ async def update_agent_status(
 
 
 @router.delete("/agents/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def delete_agent(
+    request: Request,
     agent_id: int,
     soft: bool = True,
-    request: Request,
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
@@ -151,11 +158,11 @@ async def get_pending_approvals(
 
 
 @router.post("/approvals/{approval_id}/resolve")
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def resolve_approval(
+    request: Request,
     approval_id: int,
     resolution: ApprovalResolution,
-    request: Request,
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)

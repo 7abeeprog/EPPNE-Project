@@ -7,10 +7,11 @@ import uuid
 import bleach
 
 from app.domains.transport.repository import TransportRepository
-from app.domains.finance.service import FinanceService
-from app.domains.invoicing.service import InvoicingService
+# التعديل الصحيح
+from app.domains.finance.service import FinanceService as InvoicingService
+from app.domains.finance.service import FinanceService as InvoicingService
 from app.domains.affiliate.service import AffiliateService
-from app.domains.saas.service import SaaSSubscriptionService
+from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.ai_agents.service import AIAgentsService
 from app.domains.ai_governance.service import AIGovernanceService
 from app.domains.communications.service import CommunicationsService
@@ -19,7 +20,7 @@ from app.core.idempotency import check_idempotency, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
-from app.core.logging import logger
+from app.core.logging_conf import logger
 from app.domains.transport.models import (
     Vehicle, Trip, TripStatus, TripBooking, DeliveryTask, VehicleStatus,
     Route

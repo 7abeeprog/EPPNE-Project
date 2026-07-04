@@ -16,7 +16,7 @@ from app.domains.communications.service import CommunicationsService
 from app.domains.communications.repository import CommunicationsRepository
 from app.domains.communications.schemas import *
 from app.domains.academy.models import AcademyTenant
-from app.core.security import verify_token  # دالة للتحقق من JWT (موجودة في core/security)
+from app.core.security import decode_token as verify_token  # دالة للتحقق من JWT (موجودة في core/security)
 from app.core.rate_limiter import rate_limit  # تطبيق Rate Limiting (يمكن استخدام slowapi أو تنفيذ مخصص)
 from app.core.audit import audit_log  # خدمة تسجيل التدقيق السيادي
 from app.core.idempotency import check_idempotency, store_idempotency_result  # آليات Idempotency
@@ -99,7 +99,7 @@ async def broadcast_to_user_redis(user_id: int, message: dict):
 # ========== 1. الإشعارات ==========
 
 @router.post("/notifications/send", response_model=NotificationResponse, status_code=201)
-@rate_limit(max_requests=50, window=60)  # 50 طلب في الدقيقة
+@rate_limit(max_requests=50, window_seconds=60)  # 50 طلب في الدقيقة
 async def send_notification(
     data: NotificationCreate,
     request: Request,
@@ -150,7 +150,7 @@ async def send_notification(
 
 
 @router.get("/notifications/me", response_model=list[NotificationResponse])
-@rate_limit(max_requests=100, window=60)
+@rate_limit(max_requests=100, window_seconds=60)
 async def get_my_notifications(
     is_read: Optional[bool] = None,
     skip: int = 0,
@@ -164,7 +164,7 @@ async def get_my_notifications(
 
 
 @router.post("/notifications/{notification_id}/read", response_model=NotificationResponse)
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def mark_notification_read(
     notification_id: int,
     current_user: User = Depends(get_current_active_user),
@@ -178,7 +178,7 @@ async def mark_notification_read(
 # ========== 2. أجهزة الإشعارات (Push) ==========
 
 @router.post("/devices/register", response_model=dict)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def register_device(
     data: DeviceRegister,
     current_user: User = Depends(get_current_active_user),
@@ -204,7 +204,7 @@ async def register_device(
 # ========== 3. البريد الداخلي ==========
 
 @router.post("/mail/send", response_model=MailMessageResponse, status_code=201)
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def send_mail(
     data: MailMessageCreate,
     request: Request,
@@ -245,7 +245,7 @@ async def send_mail(
 
 
 @router.get("/mail/inbox", response_model=list[MailboxItemResponse])
-@rate_limit(max_requests=50, window=60)
+@rate_limit(max_requests=50, window_seconds=60)
 async def get_inbox(
     skip: int = 0,
     limit: int = 50,
@@ -258,7 +258,7 @@ async def get_inbox(
 
 
 @router.get("/mail/sent", response_model=list[MailboxItemResponse])
-@rate_limit(max_requests=50, window=60)
+@rate_limit(max_requests=50, window_seconds=60)
 async def get_sent(
     skip: int = 0,
     limit: int = 50,
@@ -271,7 +271,7 @@ async def get_sent(
 
 
 @router.post("/mail/move-to-trash/{item_id}")
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def move_to_trash(
     item_id: int,
     current_user: User = Depends(get_current_active_user),
@@ -290,7 +290,7 @@ async def move_to_trash(
 
 
 @router.post("/mail/restore/{item_id}")
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def restore_from_trash(
     item_id: int,
     current_user: User = Depends(get_current_active_user),
@@ -309,7 +309,7 @@ async def restore_from_trash(
 
 
 @router.post("/mail/archive/{item_id}")
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def archive_message(
     item_id: int,
     current_user: User = Depends(get_current_active_user),
@@ -328,7 +328,7 @@ async def archive_message(
 
 
 @router.post("/mail/star/{item_id}")
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def star_message(
     item_id: int,
     current_user: User = Depends(get_current_active_user),
@@ -340,7 +340,7 @@ async def star_message(
 
 
 @router.post("/mail/mark-read/{item_id}")
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def mark_read(
     item_id: int,
     current_user: User = Depends(get_current_active_user),
@@ -352,7 +352,7 @@ async def mark_read(
 
 
 @router.delete("/mail/permanent/{item_id}")
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def delete_permanently(
     item_id: int,
     current_user: User = Depends(get_current_active_user),
@@ -373,7 +373,7 @@ async def delete_permanently(
 # ========== 4. قوالب الاتصال (للإدارة) ==========
 
 @router.post("/templates", response_model=CommunicationTemplateResponse, status_code=201)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def create_template(
     data: CommunicationTemplateCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -401,7 +401,7 @@ async def create_template(
 
 
 @router.get("/templates", response_model=list[CommunicationTemplateResponse])
-@rate_limit(max_requests=50, window=60)
+@rate_limit(max_requests=50, window_seconds=60)
 async def list_templates(
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),

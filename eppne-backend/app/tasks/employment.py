@@ -4,10 +4,9 @@
 """
 from celery import Celery
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import async_session
-from app.domains.employment.service import EmploymentService
+from app.core.database import SessionLocal as async_session
 from app.domains.finance.service import FinanceService
-from app.core.logging import logger
+from app.core.logging_conf import logger
 import asyncio
 from decimal import Decimal
 from datetime import datetime, timedelta
@@ -18,6 +17,7 @@ celery_app = Celery("employment", broker="redis://localhost:6379/0")
 @celery_app.task(bind=True, max_retries=3)
 def generate_payroll_task(self, contract_id: int, month: str, employer_id: int, tenant_id: int, idempotency_key: str = None):
     """مهمة حساب كشف الراتب (غير متزامن)"""
+    from app.domains.employment.service import EmploymentService
     try:
         asyncio.run(_generate_payroll_internal(contract_id, month, employer_id, tenant_id, idempotency_key))
     except Exception as e:

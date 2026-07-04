@@ -82,7 +82,7 @@ async def get_ai_prognosis(
 # ============================================================
 
 @router.post("/appointments", response_model=MedicalAppointmentResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def book_appointment(
     data: MedicalAppointmentCreate,
     request: Request,
@@ -150,7 +150,7 @@ async def create_prescription(
 # ============================================================
 
 @router.post("/emergency", response_model=EmergencyDispatchResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def call_emergency(
     data: EmergencyDispatchCreate,
     request: Request,

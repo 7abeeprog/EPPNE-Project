@@ -5,10 +5,9 @@
 """
 from celery import Celery
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import async_session
-from app.domains.agritech.service import AgriTechService
+from app.core.database import SessionLocal as async_session
 from app.domains.agritech.repository import AgriTechRepository
-from app.core.logging import logger
+from app.core.logging_conf import logger
 import asyncio
 from decimal import Decimal
 
@@ -33,6 +32,8 @@ def process_soil_reading_high(reading_id: int):
 # ========== المسار متوسط الأولوية (المزارع العمودية والأكوابونيك) ==========
 @celery_app.task(queue="agritech.medium", max_retries=3)
 def process_soil_reading_medium(reading_id: int):
+    from app.domains.agritech.service import AgriTechService
+
     """
     معالجة قراءات المزارع العمودية والأكوابونيك (أولوية متوسطة)
     - مراقبة درجة الحرارة، الإضاءة، مستوى الماء

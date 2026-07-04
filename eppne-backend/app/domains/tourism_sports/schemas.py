@@ -1,13 +1,4 @@
-تم دمج الإضافة المطلوبة بالكامل داخل ملف `schemas.py` الخاص بقطاع السياحة والرياضة، مع الحفاظ على جميع النماذج والمسميات الأصلية، وإضافة:
 
-- **`field_validator`** في `TourismProgramCreate` للتحقق من أن `end_date` بعد `start_date`.
-- **`field_validator`** في `EventCreate` للتحقق من أن `end_time` بعد `start_time`.
-
-الملف النهائي جاهز للإنتاج (انظر أدناه)، يليه **تقرير مختصر من سطر واحد** عن جاهزيته.
-
----
-
-```python
 # app/domains/tourism_sports/schemas.py (الإصدار النهائي المتكامل)
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Optional, List, Dict, Any
@@ -195,9 +186,3 @@ class TournamentResponse(TournamentCreate):
     standings_json: Dict[str, Any]
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
-```
-
----
-
-**تقرير جاهزية الملف (سطر واحد):**  
-> ✅ الملف جاهز للإنتاج مع دمج `field_validator` للتحقق من صحة التواريخ في البرامج والفعاليات، والحفاظ على جميع النماذج والمسميات الأصلية، مع تحسين الأمان على مستوى التحقق من البيانات.

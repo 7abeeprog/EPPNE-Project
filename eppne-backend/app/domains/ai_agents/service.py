@@ -15,11 +15,11 @@ from app.core.errors import PermissionDeniedError, NotFoundError, IdempotencyErr
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
 from app.domains.ai_agents.models import AIAgent, AgentStatus, ApprovalStatus, AgentApprovalQueue
-
+from app.domains.ai_governance.service import AIGovernanceService
 # 🔥 إضافات جديدة
 from app.core.features import SystemFeatures
-from app.core.logging import logger
-from app.core.llm_factory import LLMFactory  # 🔥 مصنع النماذج اللغوية
+from app.core.logging_conf import logger
+from app.services.llm.factory import LLMFactory  # 🔥 مصنع النماذج اللغوية
 
 # قائمة الأنواع المسموح بها لتقليل خطر الـ Prompt Injection
 ALLOWED_ACTION_TYPES = {

@@ -1,0 +1,26 @@
+# .ai-generated/k8s/base/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: eppne-backend-service
+  namespace: eppne
+spec:
+  selector:
+    app: eppne-backend
+  ports:
+  - port: 80
+    targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: eppne-web-service
+  namespace: eppne
+spec:
+  selector:
+    app: eppne-web
+  ports:
+  - port: 80
+    targetPort: 3000
+  type: ClusterIP

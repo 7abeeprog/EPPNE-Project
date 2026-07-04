@@ -11,7 +11,7 @@ from app.domains.commerce.models import StoreProfile, Product, Order, PaymentReq
 from app.domains.commerce.schemas import ProductCreate, CheckoutRequest
 from app.domains.finance.service import FinanceService
 from app.core.errors import InsufficientBalanceError, NotFoundError, PermissionDeniedError, ValidationError
-from app.core.logging import logger
+from app.core.logging_conf import logger
 
 class CommerceService:
     def __init__(self, db: AsyncSession):

@@ -25,7 +25,7 @@ router = APIRouter(prefix="/invitations", tags=["Sovereign CRM & Invitations"])
 # ============================================================================
 
 @router.post("/", response_model=InvitationResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def create_invitation(
     data: InvitationCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -53,7 +53,7 @@ async def create_invitation(
 
 
 @router.get("/", response_model=List[InvitationResponse])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def list_invitations(
     status: Optional[InvitationStatus] = None,
     campaign_type: Optional[CampaignType] = None,
@@ -71,10 +71,10 @@ async def list_invitations(
 
 
 @router.get("/{invitation_id}", response_model=InvitationResponse)
-@rate_limit(max_requests=50, window=60)
+@rate_limit(max_requests=50, window_seconds=60)
 async def get_invitation(
-    invitation_id: int,
     request: Request,
+    invitation_id: int,
     background_tasks: BackgroundTasks,
     tenant: AcademyTenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
@@ -104,7 +104,7 @@ async def get_invitation(
 
 
 @router.put("/{invitation_id}", response_model=InvitationResponse)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def update_invitation(
     invitation_id: int,
     data: InvitationUpdate,
@@ -124,7 +124,7 @@ async def update_invitation(
 
 
 @router.delete("/{invitation_id}")
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def delete_invitation(
     invitation_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -143,7 +143,7 @@ async def delete_invitation(
 
 
 @router.post("/{invitation_id}/accept", response_model=InvitationAcceptResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def accept_invitation(
     invitation_id: int,
     data: InvitationAccept,
@@ -168,12 +168,12 @@ async def accept_invitation(
 
 
 @router.post("/{invitation_id}/chat", response_model=ConversationResponse)
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def chat_with_ai(
+    request: Request,
     invitation_id: int,
     data: ConversationMessage,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    request: Request,
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
@@ -196,7 +196,7 @@ async def chat_with_ai(
 
 
 @router.get("/{invitation_id}/tracking", response_model=List[InvitationTrackingResponse])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def get_invitation_tracking(
     invitation_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -211,7 +211,7 @@ async def get_invitation_tracking(
 
 
 @router.get("/{invitation_id}/conversations", response_model=List[ConversationResponse])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def get_invitation_conversations(
     invitation_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -226,7 +226,7 @@ async def get_invitation_conversations(
 
 
 @router.get("/{invitation_id}/insight", response_model=ClientInsightResponse)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_client_insight(
     invitation_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -243,7 +243,7 @@ async def get_client_insight(
 
 
 @router.get("/stats", response_model=InvitationStatsResponse)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_invitation_stats(
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
@@ -262,7 +262,7 @@ async def get_invitation_stats(
 # ============================================================================
 
 @router.post("/leads", response_model=LeadResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def create_lead(
     data: LeadCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -284,7 +284,7 @@ async def create_lead(
 
 
 @router.get("/leads", response_model=List[LeadResponse])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def list_leads(
     status: Optional[LeadStatus] = None,
     source: Optional[LeadSource] = None,
@@ -302,7 +302,7 @@ async def list_leads(
 
 
 @router.get("/leads/{lead_id}", response_model=LeadResponse)
-@rate_limit(max_requests=50, window=60)
+@rate_limit(max_requests=50, window_seconds=60)
 async def get_lead(
     lead_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -319,7 +319,7 @@ async def get_lead(
 
 
 @router.put("/leads/{lead_id}", response_model=LeadResponse)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def update_lead(
     lead_id: int,
     data: LeadUpdate,
@@ -339,7 +339,7 @@ async def update_lead(
 
 
 @router.delete("/leads/{lead_id}")
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def delete_lead(
     lead_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -362,7 +362,7 @@ async def delete_lead(
 # ============================================================================
 
 @router.post("/leads/{lead_id}/interactions", response_model=InteractionResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def create_interaction(
     lead_id: int,
     data: InteractionCreate,
@@ -386,7 +386,7 @@ async def create_interaction(
 
 
 @router.get("/leads/{lead_id}/interactions", response_model=List[InteractionResponse])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def get_lead_interactions(
     lead_id: int,
     limit: int = 50,
@@ -406,7 +406,7 @@ async def get_lead_interactions(
 # ============================================================================
 
 @router.post("/campaigns", response_model=CampaignResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_campaign(
     data: CampaignCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -428,7 +428,7 @@ async def create_campaign(
 
 
 @router.get("/campaigns", response_model=List[CampaignResponse])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def list_campaigns(
     status: Optional[CampaignStatus] = None,
     campaign_type: Optional[CampaignType] = None,
@@ -446,7 +446,7 @@ async def list_campaigns(
 
 
 @router.get("/campaigns/{campaign_id}", response_model=CampaignResponse)
-@rate_limit(max_requests=50, window=60)
+@rate_limit(max_requests=50, window_seconds=60)
 async def get_campaign(
     campaign_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -463,7 +463,7 @@ async def get_campaign(
 
 
 @router.put("/campaigns/{campaign_id}", response_model=CampaignResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def update_campaign(
     campaign_id: int,
     data: CampaignUpdate,
@@ -483,7 +483,7 @@ async def update_campaign(
 
 
 @router.delete("/campaigns/{campaign_id}")
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def delete_campaign(
     campaign_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -502,7 +502,7 @@ async def delete_campaign(
 
 
 @router.post("/campaigns/{campaign_id}/launch", response_model=CampaignResponse)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def launch_campaign(
     campaign_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -522,7 +522,7 @@ async def launch_campaign(
 # ============================================================================
 
 @router.post("/tickets", response_model=TicketResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def create_ticket(
     data: TicketCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -544,7 +544,7 @@ async def create_ticket(
 
 
 @router.get("/tickets", response_model=List[TicketResponse])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def list_tickets(
     status: Optional[TicketStatus] = None,
     assigned_to: Optional[int] = None,
@@ -562,7 +562,7 @@ async def list_tickets(
 
 
 @router.get("/tickets/{ticket_id}", response_model=TicketResponse)
-@rate_limit(max_requests=50, window=60)
+@rate_limit(max_requests=50, window_seconds=60)
 async def get_ticket(
     ticket_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -579,7 +579,7 @@ async def get_ticket(
 
 
 @router.put("/tickets/{ticket_id}", response_model=TicketResponse)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def update_ticket(
     ticket_id: int,
     data: TicketUpdate,
@@ -599,7 +599,7 @@ async def update_ticket(
 
 
 @router.post("/tickets/{ticket_id}/comments", response_model=TicketCommentResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def add_ticket_comment(
     ticket_id: int,
     data: TicketCommentCreate,
@@ -623,7 +623,7 @@ async def add_ticket_comment(
 
 
 @router.get("/tickets/{ticket_id}/comments", response_model=List[TicketCommentResponse])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def get_ticket_comments(
     ticket_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -642,10 +642,10 @@ async def get_ticket_comments(
 # ============================================================================
 
 @router.post("/tracking", response_model=InvitationTrackingResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=50, window=60)
+@rate_limit(max_requests=50, window_seconds=60)
 async def track_invitation(
-    data: InvitationTrackingCreate,
     request: Request,
+    data: InvitationTrackingCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):

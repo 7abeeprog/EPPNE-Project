@@ -15,8 +15,8 @@ from app.core.errors import (
     ValidationError,
     InsufficientBalanceError,
 )
-from app.core.logging import logger
-
+from app.core.logging_conf import logger
+from app.domains.saas.models import ServicePlan
 class SaaSControlService:
     def __init__(self, db: AsyncSession):
         self.db = db

@@ -48,7 +48,7 @@ async def create_program(
     return prog
 
 @router.post("/programs/{program_id}/book", response_model=ProgramBookingResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def book_program(
     program_id: int,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -78,7 +78,7 @@ async def create_event(
     return event
 
 @router.post("/tickets/purchase", response_model=TicketResponse)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def buy_ticket(
     data: TicketPurchase,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -123,7 +123,7 @@ async def create_player_profile(
     return profile
 
 @router.post("/sports/transfers/bid", response_model=TransferBidResponse)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def place_transfer_bid(
     data: TransferBidCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -142,7 +142,7 @@ async def place_transfer_bid(
     return transfer
 
 @router.post("/sports/tournaments", response_model=TournamentResponse)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def create_tournament(
     data: TournamentCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),

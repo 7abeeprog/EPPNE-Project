@@ -1,10 +1,10 @@
 # app/tasks/deployment.py
 from celery import Celery
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import async_session
+from app.core.database import SessionLocal as async_session
 from app.domains.service_marketplace.repository import ServiceMarketplaceRepository
 from app.domains.service_marketplace.models import DeploymentStatus
-from app.core.logging import logger
+from app.core.logging_conf import logger
 
 celery_app = Celery("deployment", broker="redis://localhost:6379/0")
 

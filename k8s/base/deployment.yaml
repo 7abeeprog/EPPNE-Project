@@ -1,0 +1,82 @@
+# .ai-generated/k8s/base/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eppne-backend
+  namespace: eppne
+  labels:
+    app: eppne-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: eppne-backend
+  template:
+    metadata:
+      labels:
+        app: eppne-backend
+    spec:
+      serviceAccountName: backend-sa  # سيتم ربطه بـ IRSA
+      containers:
+      - name: backend
+        image: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/eppne-backend:latest  # TODO: استبدل ACCOUNT_ID
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: eppne-config
+        - secretRef:
+            name: eppne-secrets  # سيتم إنشاؤه بواسطة External Secrets Operator
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eppne-web
+  namespace: eppne
+  labels:
+    app: eppne-web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: eppne-web
+  template:
+    metadata:
+      labels:
+        app: eppne-web
+    spec:
+      serviceAccountName: frontend-sa
+      containers:
+      - name: web
+        image: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/eppne-web:latest  # TODO: استبدل ACCOUNT_ID
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - configMapRef:
+            name: eppne-config
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"

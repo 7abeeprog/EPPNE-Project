@@ -11,7 +11,7 @@ from app.domains.iot.repository import IoTRepository
 from app.domains.iot.models import UtilityType, SmartAsset, UtilityGrid, UtilityReading, MaintenanceLog
 from app.domains.finance.service import FinanceService
 from app.core.config import settings
-from app.core.redis_client import get_redis_client
+from app.core.redis_client import redis_client as get_redis_client
 from app.core.errors import BusinessError, NotFoundError
 
 class IoTService:

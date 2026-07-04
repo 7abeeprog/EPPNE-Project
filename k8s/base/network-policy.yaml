@@ -1,0 +1,49 @@
+# .ai-generated/k8s/base/network-policy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all
+  namespace: eppne
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-rds
+  namespace: eppne
+spec:
+  podSelector:
+    matchLabels:
+      app: eppne-backend
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0  # سيتم تقييده بعنوان RDS الفعلي لاحقاً
+    ports:
+    - protocol: TCP
+      port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-web-to-backend
+  namespace: eppne
+spec:
+  podSelector:
+    matchLabels:
+      app: eppne-backend
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: eppne-web
+    ports:
+    - protocol: TCP
+      port: 8000

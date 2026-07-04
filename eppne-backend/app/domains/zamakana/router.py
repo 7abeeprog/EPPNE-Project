@@ -21,7 +21,7 @@ router = APIRouter(prefix="/zamakana", tags=["Zamakana - Time & Knowledge Engine
 # ========== 1. عقد المعرفة (Nodes & Edges) ==========
 
 @router.post("/nodes", response_model=ZamakanaNodeResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def create_node(
     data: ZamakanaNodeCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -63,7 +63,7 @@ async def get_node(
 
 
 @router.put("/nodes/{node_id}", response_model=ZamakanaNodeResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def update_node(
     node_id: int,
     data: ZamakanaNodeCreate,
@@ -81,7 +81,7 @@ async def update_node(
 
 
 @router.delete("/nodes/{node_id}")
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def delete_node(
     node_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -98,7 +98,7 @@ async def delete_node(
 
 
 @router.post("/edges", response_model=ZamakanaEdgeResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def create_edge(
     data: ZamakanaEdgeCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -133,7 +133,7 @@ async def get_knowledge_graph(
 # ========== 2. الحملات الكوكبية والتعهدات الزمنية ==========
 
 @router.post("/campaigns", response_model=PlanetaryCampaignResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_campaign(
     data: PlanetaryCampaignCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -175,7 +175,7 @@ async def get_campaign(
 
 
 @router.post("/pledges", response_model=TimePledgeResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def pledge_time(
     data: TimePledgeCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -195,7 +195,7 @@ async def pledge_time(
 
 
 @router.post("/pledges/{pledge_id}/fulfill", response_model=TimePledgeResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def fulfill_pledge(
     pledge_id: int,
     data: TimePledgeFulfill,
@@ -232,7 +232,7 @@ async def get_campaign_pledges(
 # ========== 3. المحاكاة المستقبلية ==========
 
 @router.post("/scenarios", response_model=FutureScenarioResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_scenario(
     data: FutureScenarioCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -274,7 +274,7 @@ async def get_scenario(
 
 
 @router.post("/scenarios/{scenario_id}/analyze", response_model=FutureScenarioResponse)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def analyze_scenario(
     scenario_id: int,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -296,7 +296,7 @@ async def analyze_scenario(
 
 
 @router.post("/scenarios/{scenario_id}/feedback", response_model=HumanFeedbackResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def add_feedback(
     scenario_id: int,
     data: HumanFeedbackCreate,
@@ -314,7 +314,7 @@ async def add_feedback(
 
 
 @router.post("/scenarios/{scenario_id}/confirm", response_model=FutureScenarioResponse)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def confirm_scenario(
     scenario_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),

@@ -17,7 +17,7 @@ router = APIRouter(prefix="/manufacturing", tags=["Sovereign Manufacturing"])
 
 # ========== المنشآت (مع Rate Limiting واستخدام الخدمة) ==========
 @router.post("/facilities", response_model=ManufacturingFacilityResponse, status_code=201)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_facility(
     data: ManufacturingFacilityCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -69,7 +69,7 @@ async def create_batch(
     return batch
 
 @router.post("/batches/{batch_id}/start", response_model=StartProductionResponse)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def start_production(
     batch_id: int,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -114,7 +114,7 @@ async def list_raw_materials(
     return materials
 
 @router.post("/batches/{batch_id}/consume-material")
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def consume_raw_material(
     batch_id: int,
     data: MaterialConsumptionCreate,
@@ -186,7 +186,7 @@ async def get_entity_certificates(
 
 # ========== الصيانة التنبؤية (مع Rate Limiting واستخدام الخدمة) ==========
 @router.post("/predictive-maintenance", response_model=PredictiveMaintenanceLogResponse, status_code=201)
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def analyze_maintenance(
     data: PredictiveMaintenanceLogCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),

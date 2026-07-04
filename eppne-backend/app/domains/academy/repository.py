@@ -23,7 +23,7 @@ try:
     from app.core.cache import redis_client  # نفترض وجود ملف cache.py مستقبلاً
 except ImportError:
     redis_client = None
-    print("⚠️ Redis not configured. Running without caching.")
+    print("Warning: Redis not configured. Running without caching.")
 
 class AcademyRepository:
     def __init__(self, db: AsyncSession, cache_ttl: int = 300):

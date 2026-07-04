@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.domains.finance.schemas import (
     TransferRequest, TransferResponse, SwapRequest, SwapResponse, 
     WalletBalanceResponse, TransactionResponse, CryptoModeToggle, 
-    ExchangeRatesUpdate, MintRequest, PaginatedTransactionResponse
+    ExchangeRatesUpdate, MintRequest, PaginatedTransactionResponse, MaxSupplyUpdate
 )
 from app.domains.finance.service import FinanceService
 from app.api.deps import get_current_active_user, get_current_superuser, require_roles

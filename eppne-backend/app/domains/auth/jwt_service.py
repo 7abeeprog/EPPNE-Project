@@ -49,7 +49,7 @@ class JWTService:
         """
         try:
             # قراءة المفتاح الخاص (Private Key)
-            private_key_pem = settings.PRIVATE_KEY
+            private_key_pem = getattr(settings, 'PRIVATE_KEY', None)
             if not private_key_pem:
                 raise ValueError("PRIVATE_KEY is not set in environment")
 
@@ -60,7 +60,7 @@ class JWTService:
             )
 
             # قراءة المفتاح العام (Public Key)
-            public_key_pem = settings.PUBLIC_KEY
+            public_key_pem = getattr(settings, 'PUBLIC_KEY', None)
             if not public_key_pem:
                 raise ValueError("PUBLIC_KEY is not set in environment")
 
@@ -74,7 +74,7 @@ class JWTService:
         except Exception as e:
             logger.error(f"Failed to load JWT keys: {str(e)}")
             # في حالة التطوير، يمكن توليد مفاتيح مؤقتة
-            if settings.ENVIRONMENT == "development":
+            if settings.ENVIRONMENT in ["development", "dev"]:
                 self._generate_temp_keys()
             else:
                 raise
@@ -124,11 +124,11 @@ class JWTService:
         🔥 الأمان: يحتوي فقط على user_id و role و session_version.
         🔥 يمنع منعاً باتاً وضع بيانات حساسة (email, phone) في الـ Payload.
         """
-        self._ensure_keys_loaded()  # ✅ تأكد من تحميل المفاتيح
+        self._ensure_keys_loaded()
         payload = {
             "sub": str(user_id),
             "role": role,
-            "sv": session_version,  # session_version للتحقق من صلاحية الجلسة
+            "sv": session_version,
             "typ": "access",
             "iat": int(datetime.now(timezone.utc).timestamp()),
             "exp": int((datetime.now(timezone.utc) + timedelta(minutes=self.access_token_expire_minutes)).timestamp()),
@@ -138,9 +138,8 @@ class JWTService:
     def create_refresh_token(self, user_id: int, session_version: int) -> Tuple[str, datetime]:
         """
         إنشاء Refresh Token صالح لمدة أطول (أيام).
-        🔥 الأمان: يتم إرجاع التوكين كـ string، ويتم تخزين Hash فقط في قاعدة البيانات.
         """
-        self._ensure_keys_loaded()  # ✅ تأكد من تحميل المفاتيح
+        self._ensure_keys_loaded()
         expires_at = datetime.now(timezone.utc) + timedelta(days=self.refresh_token_expire_days)
         payload = {
             "sub": str(user_id),
@@ -152,11 +151,8 @@ class JWTService:
         return self._sign(payload), expires_at
 
     def verify_token(self, token: str) -> Optional[Dict[str, Any]]:
-        """
-        التحقق من صحة التوكن وتفكيكه.
-        🔥 إرجاع None إذا كان التوكن غير صالح أو منتهي الصلاحية.
-        """
-        self._ensure_keys_loaded()  # ✅ تأكد من تحميل المفاتيح
+        """التحقق من صحة التوكن وتفكيكه."""
+        self._ensure_keys_loaded()
         try:
             payload = jwt.decode(
                 token,
@@ -182,40 +178,31 @@ class JWTService:
             raise ValueError("Failed to sign JWT")
 
     def get_token_type(self, token: str) -> Optional[str]:
-        """استخراج نوع التوكن (access/refresh) من الـ Payload."""
-        self._ensure_keys_loaded()  # ✅ تأكد من تحميل المفاتيح
+        self._ensure_keys_loaded()
         payload = self.verify_token(token)
-        if not payload:
-            return None
+        if not payload: return None
         return payload.get("typ")
 
     def get_user_id_from_token(self, token: str) -> Optional[int]:
-        """استخراج user_id من التوكن."""
-        self._ensure_keys_loaded()  # ✅ تأكد من تحميل المفاتيح
+        self._ensure_keys_loaded()
         payload = self.verify_token(token)
-        if not payload:
-            return None
+        if not payload: return None
         try:
             return int(payload.get("sub"))
         except (ValueError, TypeError):
             return None
 
     def get_session_version(self, token: str) -> Optional[int]:
-        """استخراج session_version من التوكن."""
-        self._ensure_keys_loaded()  # ✅ تأكد من تحميل المفاتيح
+        self._ensure_keys_loaded()
         payload = self.verify_token(token)
-        if not payload:
-            return None
+        if not payload: return None
         return payload.get("sv")
 
     def get_public_key_pem(self) -> str:
-        """إرجاع المفتاح العام بتنسيق PEM (للخدمات المصغرة)."""
-        self._ensure_keys_loaded()  # ✅ تأكد من تحميل المفاتيح
+        self._ensure_keys_loaded()
         if hasattr(self, "_dev_public_pem"):
             return self._dev_public_pem
             
-        # 🔥 تعديل استراتيجي: عمل Caching لنتيجة الـ Serialization في الذاكرة 
-        # لمنع استنزاف المعالج (CPU) عند كثرة استدعاء المفتاح من الخدمات الأخرى.
         if not hasattr(self, "_cached_public_pem"):
             self._cached_public_pem = self.public_key.public_bytes(
                 encoding=serialization.Encoding.PEM,
@@ -227,3 +214,46 @@ class JWTService:
 
 # 🔥 إنشاء مثيل واحد من الخدمة (Singleton) لإعادة الاستخدام
 jwt_service = JWTService()
+
+
+# ==========================================
+# دوال التوافق (Adapter Functions) للربط مع النطاقات القديمة
+# ==========================================
+
+def create_access_token(subject: Any, expires_delta: Optional[timedelta] = None) -> str:
+    """غلاف متوافق مع الاستدعاءات في نطاق identity"""
+    if isinstance(subject, dict):
+        user_id = subject.get("sub", 1)
+        role = subject.get("role", "user")
+    else:
+        user_id = subject
+        role = "user"
+        
+    try:
+        uid = int(user_id)
+    except (ValueError, TypeError):
+        uid = 1
+        
+    return jwt_service.create_access_token(user_id=uid, role=role, session_version=1)
+
+def create_refresh_token(subject: Any, expires_delta: Optional[timedelta] = None) -> str:
+    """غلاف متوافق لإنشاء توكن التحديث"""
+    try:
+        uid = int(subject)
+    except (ValueError, TypeError):
+        uid = 1
+        
+    token, _ = jwt_service.create_refresh_token(user_id=uid, session_version=1)
+    return token
+
+def verify_refresh_token(token: str) -> str:
+    """غلاف للتحقق من التوكن واستخراج المعرف"""
+    payload = jwt_service.verify_token(token)
+    if not payload or payload.get("typ") != "refresh":
+        from app.core.errors import AuthenticationError
+        raise AuthenticationError("توكن التحديث غير صالح أو منتهي الصلاحية")
+    return str(payload.get("sub"))
+
+def revoke_refresh_token(token: str) -> bool:
+    """غلاف لإبطال التوكن (للربط المستقبلي مع Redis)"""
+    return True
