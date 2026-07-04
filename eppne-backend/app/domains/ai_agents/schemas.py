@@ -45,3 +45,13 @@ class ApprovalResponse(BaseModel):
 class ApprovalResolution(BaseModel):
     status: ApprovalStatus  
     human_feedback: Optional[str] = None
+
+# ========== Status Updates ==========
+class AgentStatusUpdate(BaseModel):
+    status: AgentStatus
+
+class AgentStatusResponse(BaseModel):
+    agent_id: int
+    status: AgentStatus
+    last_active: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)

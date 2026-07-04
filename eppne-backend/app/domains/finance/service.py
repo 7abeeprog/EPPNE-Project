@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from app.domains.finance.repository import WalletRepository, TransactionRepository, SystemStateRepository
 from app.domains.finance.models import Wallet, AuditLog
 from app.core.errors import InsufficientBalanceError, PermissionDeniedError, NotFoundError, ValidationError
-from app.core.logging import logger
+from app.core.logging_conf import logger
 
 # ===== المود الجديد: استيراد EventBus =====
 from app.core.event_bus import EventBus

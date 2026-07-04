@@ -24,7 +24,7 @@ router = APIRouter(prefix="/employment", tags=["Sovereign Employment & Talent"])
 # ========== 1. الوظائف (Job Listings) ==========
 
 @router.post("/jobs", response_model=JobListingResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_job(
     data: JobListingCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -75,7 +75,7 @@ async def get_my_jobs(
 
 
 @router.put("/jobs/{job_id}", response_model=JobListingResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def update_job(
     job_id: int,
     data: JobListingCreate,
@@ -91,7 +91,7 @@ async def update_job(
 
 
 @router.delete("/jobs/{job_id}")
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def close_job(
     job_id: int,
     current_user: User = Depends(get_current_active_user),
@@ -108,7 +108,7 @@ async def close_job(
 # ========== 2. طلبات التوظيف (Applications) ==========
 
 @router.post("/applications", response_model=JobApplicationResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def apply_to_job(
     data: JobApplicationCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -164,7 +164,7 @@ async def get_job_applications(
 
 
 @router.post("/applications/{application_id}/review", response_model=JobApplicationResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def review_application(
     application_id: int,
     approve: bool = Query(..., description="true للموافقة، false للرفض"),
@@ -183,7 +183,7 @@ async def review_application(
 # ========== 3. عقود العمل (Contracts) ==========
 
 @router.post("/contracts", response_model=EmploymentContractResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_contract(
     data: EmploymentContractCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -220,7 +220,7 @@ async def get_my_active_contract(
 
 
 @router.post("/contracts/{contract_id}/sign")
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def sign_contract(
     contract_id: int,
     signature: ContractSignRequest,
@@ -245,7 +245,7 @@ async def sign_contract(
 # ========== 4. الحضور والانصراف ==========
 
 @router.post("/attendance/check-in")
-@rate_limit(max_requests=2, window=60)
+@rate_limit(max_requests=2, window_seconds=60)
 async def check_in(
     contract_id: int,
     location: AttendanceCheckIn,
@@ -267,7 +267,7 @@ async def check_in(
 
 
 @router.post("/attendance/check-out")
-@rate_limit(max_requests=2, window=60)
+@rate_limit(max_requests=2, window_seconds=60)
 async def check_out(
     contract_id: int,
     location: Optional[AttendanceCheckIn] = None,
@@ -315,7 +315,7 @@ async def get_my_attendance(
 # ========== 5. الإجازات ==========
 
 @router.post("/leaves/request", response_model=LeaveRequestResponse)
-@rate_limit(max_requests=3, window=60)
+@rate_limit(max_requests=3, window_seconds=60)
 async def request_leave(
     data: LeaveRequestCreate,
     current_user: User = Depends(get_current_active_user),
@@ -353,7 +353,7 @@ async def get_pending_leaves_for_employer(
 
 
 @router.post("/leaves/{leave_id}/approve")
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def approve_leave(
     leave_id: int,
     approve: bool = Query(..., description="true للموافقة، false للرفض"),
@@ -371,7 +371,7 @@ async def approve_leave(
 # ========== 6. الرواتب ==========
 
 @router.post("/payroll/generate", response_model=PayrollRecordResponse)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def generate_payroll(
     contract_id: int,
     month: str = Query(..., regex=r"^\d{4}-\d{2}$", description="شهر بصيغة YYYY-MM"),
@@ -395,7 +395,7 @@ async def generate_payroll(
 
 
 @router.post("/payroll/{payroll_id}/approve", response_model=PayrollRecordResponse)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def approve_payroll(
     payroll_id: int,
     current_user: User = Depends(get_current_active_user),
@@ -410,7 +410,7 @@ async def approve_payroll(
 
 
 @router.post("/payroll/{payroll_id}/pay", response_model=PayrollRecordResponse)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def pay_payroll(
     payroll_id: int,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),

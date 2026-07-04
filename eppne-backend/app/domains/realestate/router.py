@@ -101,7 +101,7 @@ async def list_units_for_sale(
     return units
 
 @router.post("/units/{unit_id}/buy", response_model=OwnershipResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def buy_fraction(
     unit_id: int,
     data: BuyFractionalOwnership,
@@ -131,7 +131,7 @@ async def get_my_ownerships(
 
 # ========== Rental ==========
 @router.post("/rentals", response_model=RentalContractResponse, status_code=201)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_rental_contract(
     data: RentalContractCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -153,7 +153,7 @@ async def create_rental_contract(
 
 # ========== Master Plans ==========
 @router.post("/master-plans", response_model=MasterPlanResponse, status_code=201)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def create_master_plan(
     data: MasterPlanCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -166,7 +166,7 @@ async def create_master_plan(
 
 # ========== Tokenization ==========
 @router.post("/tokenize/{unit_id}", response_model=TokenizationResponse, status_code=201)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def tokenize_asset(
     unit_id: int,
     data: TokenizationCreate,
@@ -185,7 +185,7 @@ async def tokenize_asset(
 
 # ========== Smart Contracts ==========
 @router.post("/smart-contracts", response_model=SmartContractResponse, status_code=201)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def deploy_smart_contract(
     data: SmartContractCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),

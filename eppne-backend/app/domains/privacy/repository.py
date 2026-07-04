@@ -120,7 +120,7 @@ class PrivacyRepository:
         skip: int = 0, 
         limit: int = 20,
         status: Optional[ErasureStatus] = None
-    ) -> PaginatedResponse[DataErasureRequest]:
+    ) -> PaginatedResponse[Any]:
         """
         جلب طلبات محو البيانات للمستخدم مع Pagination.
         """
@@ -147,7 +147,7 @@ class PrivacyRepository:
         self, 
         skip: int = 0, 
         limit: int = 20
-    ) -> PaginatedResponse[DataErasureRequest]:
+    ) -> PaginatedResponse[Any]:
         """
         جلب طلبات محو البيانات المعلقة (للمشرفين).
         """
@@ -211,7 +211,7 @@ class PrivacyRepository:
         user_id: int, 
         skip: int = 0, 
         limit: int = 20
-    ) -> PaginatedResponse[TombstoneRecord]:
+    ) -> PaginatedResponse[Any]:
         """جلب سجلات الشواهد للمستخدم مع Pagination."""
         query: Any = select(TombstoneRecord).where(TombstoneRecord.deleted_by_id == user_id)
         query = query.order_by(TombstoneRecord.created_at.desc())
@@ -306,7 +306,7 @@ class PrivacyRepository:
         user_id: int, 
         skip: int = 0, 
         limit: int = 20
-    ) -> PaginatedResponse[DataErasureRequest]:
+    ) -> PaginatedResponse[Any]:
         query: Any = select(DataErasureRequest)\
             .where(DataErasureRequest.user_id == user_id)\
             .options(selectinload(DataErasureRequest.tombstones))\

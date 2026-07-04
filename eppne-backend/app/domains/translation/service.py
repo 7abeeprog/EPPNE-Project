@@ -14,7 +14,7 @@ from app.domains.translation.schemas import (
     ChatTranslateResponse
 )
 from app.core.config import settings
-from app.core.redis_client import get_redis_client
+from app.core.redis_client import redis_client as get_redis_client
 
 # وهمي مؤقت لقطاع المالية (سيتم ربطه لاحقاً)
 class WalletServiceStub:

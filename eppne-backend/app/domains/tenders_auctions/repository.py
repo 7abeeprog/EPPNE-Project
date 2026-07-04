@@ -1,5 +1,5 @@
 """
-مستودع قطاع المزايدات والمناقصات
+مستودع قطاع المزايدات والمناقصات (تم تصحيح التوافق مع النماذج)
 """
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, func, and_, or_
@@ -36,15 +36,15 @@ class TendersAuctionsRepository:
         self,
         tenant_id: int,
         status: Optional[TenderStatus] = None,
-        entity_id: Optional[int] = None,
+        project_id: Optional[int] = None,  # تم التعديل من entity_id إلى project_id
         skip: int = 0,
         limit: int = 50
     ) -> List[SovereignTender]:
         query = select(SovereignTender).where(SovereignTender.tenant_id == tenant_id, SovereignTender.is_deleted == False)
         if status:
             query = query.where(SovereignTender.status == status)
-        if entity_id:
-            query = query.where(SovereignTender.entity_id == entity_id)
+        if project_id:
+            query = query.where(SovereignTender.project_id == project_id)
         query = query.order_by(SovereignTender.created_at.desc()).offset(skip).limit(limit)
         result = await self.db.execute(query)
         return result.scalars().all()
@@ -133,21 +133,12 @@ class TendersAuctionsRepository:
         await self.db.commit()
         return await self.get_auction(auction_id)
 
-    async def update_current_bid(self, auction_id: int, bid_amount: Decimal, winner_id: int) -> SovereignAuction:
-        await self.db.execute(
-            update(SovereignAuction).where(SovereignAuction.id == auction_id).values(
-                current_highest_bid_mrusdt=bid_amount,
-                current_winner_id=winner_id
-            )
-        )
-        await self.db.commit()
-        return await self.get_auction(auction_id)
-
-    async def close_auction(self, auction_id: int, has_winner: bool, winner_id: Optional[int] = None) -> SovereignAuction:
-        status = AuctionStatus.CLOSED_WITH_WINNER if has_winner else AuctionStatus.CLOSED_NO_WINNER
+    # تم تصحيح دالة الإغلاق لتتوافق مع الـ Enum والحقول الموجودة
+    async def close_auction(self, auction_id: int, has_winner: bool, winning_bid_id: Optional[int] = None) -> SovereignAuction:
+        status = AuctionStatus.SOLD if has_winner else AuctionStatus.CLOSED
         values = {"status": status}
-        if winner_id:
-            values["current_winner_id"] = winner_id
+        if winning_bid_id:
+            values["winning_bid_id"] = winning_bid_id
         await self.db.execute(update(SovereignAuction).where(SovereignAuction.id == auction_id).values(**values))
         await self.db.commit()
         return await self.get_auction(auction_id)

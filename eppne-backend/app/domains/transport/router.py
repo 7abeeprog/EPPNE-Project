@@ -63,7 +63,7 @@ async def create_vehicle(
     return vehicle
 
 @router.patch("/vehicles/{vehicle_id}/location")
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def update_vehicle_location(
     vehicle_id: int,
     location: Dict[str, float],
@@ -87,7 +87,7 @@ async def get_available_vehicles(
 
 # ========== Routes (مع Rate Limiting واستخدام الخدمة) ==========
 @router.post("/routes", response_model=RouteResponse, status_code=201)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def create_route(
     data: RouteCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -149,7 +149,7 @@ async def get_my_trips(
 
 # ========== Bookings (مع Idempotency و Rate Limiting) ==========
 @router.post("/bookings", response_model=TripBookingResponse, status_code=201)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def book_trip(
     data: TripBookingCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -178,7 +178,7 @@ async def get_my_bookings(
 
 # ========== Deliveries (مع Idempotency و Rate Limiting) ==========
 @router.post("/deliveries", response_model=DeliveryTaskResponse, status_code=201)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_delivery(
     data: DeliveryTaskCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -196,7 +196,7 @@ async def create_delivery(
     return task
 
 @router.post("/deliveries/{task_id}/pay", response_model=DeliveryTaskResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def pay_delivery(
     task_id: int,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),

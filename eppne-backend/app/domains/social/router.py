@@ -16,7 +16,7 @@ router = APIRouter(prefix="/social", tags=["Sovereign Social"])
 
 # ========== Posts ==========
 @router.post("/posts", response_model=PostResponse, status_code=201)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def create_post(
     data: PostCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -32,7 +32,7 @@ async def create_post(
     return post
 
 @router.get("/feed", response_model=list[PostResponse])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def get_feed(
     skip: int = 0,
     limit: int = 20,
@@ -44,7 +44,7 @@ async def get_feed(
     return posts
 
 @router.post("/posts/{post_id}/like")
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def like_post(
     post_id: int,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -62,7 +62,7 @@ async def like_post(
     return result
 
 @router.post("/posts/{post_id}/share")
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def share_post(
     post_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -79,7 +79,7 @@ async def share_post(
 
 # ========== Groups & Pages ==========
 @router.post("/groups", response_model=SocialGroupResponse, status_code=201)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_group(
     data: SocialGroupCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -91,7 +91,7 @@ async def create_group(
     return group
 
 @router.post("/groups/{group_id}/join")
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def join_group(
     group_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -104,7 +104,7 @@ async def join_group(
 
 # ========== Social Contracts ==========
 @router.post("/contracts", response_model=SocialContractResponse, status_code=201)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def create_contract(
     data: SocialContractCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -120,7 +120,7 @@ async def create_contract(
     return contract
 
 @router.post("/contracts/{contract_id}/sign")
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def sign_contract(
     contract_id: int,
     signature: ContractSignRequest,
@@ -139,7 +139,7 @@ async def sign_contract(
 
 # ========== AI Matchmaking ==========
 @router.post("/match/profile", response_model=AIMatchProfileResponse)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def setup_match_profile(
     data: AIMatchProfileCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -154,7 +154,7 @@ async def setup_match_profile(
     return profile
 
 @router.get("/match/suggestions", response_model=list[dict])
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def get_match_suggestions(
     limit: int = 20,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -170,7 +170,7 @@ async def get_match_suggestions(
     return suggestions
 
 @router.post("/connections/request", response_model=ConnectionResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def request_connection(
     data: ConnectionRequest,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -187,7 +187,7 @@ async def request_connection(
     return conn
 
 @router.get("/connections", response_model=list[ConnectionResponse])
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_my_connections(
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
@@ -199,7 +199,7 @@ async def get_my_connections(
 
 # ========== المناسبات والتذكيرات ==========
 @router.post("/occasions", response_model=UserOccasionResponse, status_code=201)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_occasion(
     data: UserOccasionCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -215,7 +215,7 @@ async def create_occasion(
     return occasion
 
 @router.get("/occasions/upcoming", response_model=list[UserOccasionResponse])
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_upcoming_occasions(
     days_ahead: int = 30,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -232,7 +232,7 @@ async def get_upcoming_occasions(
 
 # ========== الهدايا ==========
 @router.post("/gifts/digital", response_model=DigitalGiftResponse, status_code=201)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def send_digital_gift(
     data: DigitalGiftCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -255,7 +255,7 @@ async def send_digital_gift(
     return gift
 
 @router.post("/gifts/physical", response_model=PhysicalGiftResponse, status_code=201)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def request_physical_gift(
     data: PhysicalGiftCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -279,7 +279,7 @@ async def request_physical_gift(
 
 # ========== SaaS للمجموعات ==========
 @router.post("/groups/subscriptions/plans", response_model=GroupSubscriptionPlanResponse, status_code=201)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def create_subscription_plan(
     data: GroupSubscriptionPlanCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -294,7 +294,7 @@ async def create_subscription_plan(
     return plan
 
 @router.post("/groups/{group_id}/subscribe", response_model=GroupSubscriptionResponse, status_code=201)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def subscribe_group(
     group_id: int,
     data: GroupSubscriptionCreate,
@@ -314,7 +314,7 @@ async def subscribe_group(
     return sub
 
 @router.get("/groups/{group_id}/features", response_model=list[str])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def get_group_features(
     group_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),

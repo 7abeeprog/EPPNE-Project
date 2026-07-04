@@ -6,7 +6,7 @@ from datetime import datetime
 
 from app.domains.finance.models import Wallet, Transaction, SystemState, AuditLog
 from app.core.errors import NotFoundError
-from app.core.pagination import PaginatedResponse
+from app.domains.finance.schemas import PaginatedTransactionResponse, TransactionResponse
 
 class WalletRepository:
     def __init__(self, db: AsyncSession):
@@ -64,12 +64,12 @@ class TransactionRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_by_user_paginated(
+async def get_by_user_paginated(
         self,
         user_id: int,
         skip: int = 0,
         limit: int = 20
-    ) -> PaginatedResponse[Transaction]:
+    ) -> PaginatedTransactionResponse:
         """جلب المعاملات مع Pagination حقيقي وتحسين الأداء باستخدام load_only"""
         
         # Base Query
@@ -102,13 +102,17 @@ class TransactionRepository:
         result = await self.db.execute(paginated_query)
         items = result.scalars().all()
 
-        return PaginatedResponse(
-            data=items,
+        # 🔥 تحويل النماذج إلى Pydantic Schemas لمنع تسريب الـ DB Models
+        serialized_items = [
+            TransactionResponse.model_validate(item) for item in items
+        ]
+
+        return PaginatedTransactionResponse(
+            data=serialized_items,
             total=total,
             skip=skip,
             limit=limit
         )
-
 
 class SystemStateRepository:
     def __init__(self, db: AsyncSession):

@@ -5,7 +5,7 @@ from decimal import Decimal
 import uuid
 import random
 import hashlib
-
+from typing import Optional, List, Dict, Any
 from app.domains.affiliate.repository import AffiliateRepository
 from app.domains.affiliate.models import (
     AffiliateProfile,
@@ -29,7 +29,7 @@ from app.core.errors import (
     ValidationError,
     InsufficientBalanceError,
 )
-from app.core.logging import logger
+from app.core.logging_conf import logger
 
 class AffiliateService:
     def __init__(self, db: AsyncSession):

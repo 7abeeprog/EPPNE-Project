@@ -48,7 +48,7 @@ from app.domains.service_marketplace.router import router as marketplace_router
 # ==========================================
 # 1. تضمين قطاع المساعد الصوتي 🆕 (جديد)
 # ==========================================
-from app.domains.voice_assistant.router import router as voice_assistant_router
+#from app.domains.voice_assistant.router import router as voice_assistant_router
 
 # ==========================================
 # 2. إعداد نظام التسجيل (Logging)
@@ -234,7 +234,7 @@ routers = [
     translation_router,
     marketplace_router,
     # ⭐ القطاع الجديد (المساعد الصوتي)
-    voice_assistant_router,
+    #voice_assistant_router,
 ]
 
 for router in routers:

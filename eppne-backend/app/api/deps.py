@@ -1,16 +1,15 @@
-from typing import Optional, Annotated
-from fastapi import Depends, HTTPException, status, Cookie
+# app/api/deps.py
+from typing import Optional, Annotated, List
+from fastapi import Depends, HTTPException, status, Cookie, Header, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from jose import JWTError
 
 from app.core.database import get_db
 from app.core.security import decode_token
+from app.core.errors import PermissionDeniedError
 from app.domains.identity.repository import UserRepository
 from app.domains.identity.models import User
-from fastapi import Header
-from typing import Optional
-from fastapi import Request
 
 # استيراد خدمة الـ SaaS للتحكم في الاشتراكات
 from app.domains.saas.service import SaaSControlService
@@ -53,6 +52,38 @@ async def get_current_superuser(current_user: Annotated[User, Depends(get_curren
         raise HTTPException(status_code=403, detail="Not enough permissions")
     return current_user
 
+# ============================================================
+# ✅ Dependency للتحقق من الأدوار (Role-Based Access Control)
+# ============================================================
+def require_roles(allowed_roles: List[str]):
+    """
+    اعتمادية (Dependency) للتحقق من صلاحيات المستخدم بناءً على قائمة الأدوار المسموحة.
+    """
+    async def role_checker(current_user: User = Depends(get_current_active_user)):
+        # استخراج قيمة الدور (تجنباً لمشاكل الـ Enums)
+        current_role = getattr(current_user, "system_role", None)
+        role_value = current_role.value if hasattr(current_role, "value") else current_role
+        
+        if not role_value or role_value not in allowed_roles:
+            raise PermissionDeniedError("عذراً، لا تملك الصلاحيات الكافية للوصول إلى هذا المورد.")
+        
+        return current_user
+        
+    return role_checker
+async def get_current_instructor_or_admin(current_user: User = Depends(get_current_active_user)) -> User:
+    """
+    اعتمادية للتحقق من أن المستخدم الحالي هو مدرب (Instructor) أو عضو في الإدارة العليا.
+    """
+    current_role = getattr(current_user, "system_role", None)
+    role_value = current_role.value if hasattr(current_role, "value") else current_role
+    
+    # يمكنك إضافة أو تعديل الأدوار هنا بناءً على الـ Enum الخاص بك
+    allowed_roles = ["INSTRUCTOR", "SUPER_ADMIN", "EXECUTIVE_DIRECTOR", "ADMIN"]
+    
+    if not role_value or role_value not in allowed_roles:
+        raise PermissionDeniedError("عذراً، هذا الإجراء مخصص للمدربين والإدارة فقط.")
+    
+    return current_user
 # كلاس وهمي سريع لتمثيل المستأجر (الأكاديمية/الشركة) لتجنب تعقيدات الاستيراد المتبادل
 class SimpleTenant:
     id: int
@@ -79,22 +110,21 @@ async def get_current_user_optional(request: Request) -> Optional[any]:
 # ============================================================
 # ✅ Dependency محسّنة للتحقق من صلاحية الاشتراك في خدمة معينة
 # ============================================================
-async def require_subscription(
-    service_code: str,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
-):
+# ============================================================
+# ✅ Dependency محسّنة للتحقق من صلاحية الاشتراك في خدمة معينة
+# ============================================================
+def require_subscription(service_code: str):
     """
-    ✅ Dependency للتحقق من صلاحية الاشتراك في خدمة معينة.
+    ✅ مصنع اعتماديات (Dependency Factory) للتحقق من صلاحية الاشتراك.
     الاستخدام: @router.post("/endpoint", dependencies=[Depends(require_subscription("academy"))])
-    
-    تعتمد هذه الدالة على مستخدم نشط مُصادق، ثم تستدعي خدمة SaaS للتحقق من:
-    - وجود اشتراك فعّال للمستأجر (الـ Tenant) في الخدمة المطلوبة.
-    - صلاحية الاشتراك من حيث التاريخ والحدود المسموحة (عدد المستخدمين، العمليات، إلخ).
-    - في حال عدم توفر الصلاحية، يتم رفع استثناء HTTP 403 مع رسالة توضيحية.
-    
-    تُستخدم هذه الدالة كـ "Guard" على مستوى الـ endpoint لحماية الموارد الخاصة بالخدمات المدفوعة.
     """
-    service = SaaSControlService(db)
-    await service.check_and_enforce_access(current_user.tenant_id, service_code)
-    return current_user
+    async def subscription_checker(
+        current_user: User = Depends(get_current_active_user),
+        db: AsyncSession = Depends(get_db),
+    ):
+        from app.domains.saas.service import SaaSControlService
+        service = SaaSControlService(db)
+        await service.check_and_enforce_access(current_user.tenant_id, service_code)
+        return current_user
+        
+    return subscription_checker

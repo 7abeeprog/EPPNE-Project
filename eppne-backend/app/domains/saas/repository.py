@@ -4,7 +4,8 @@ from sqlalchemy import select, update, delete, func, and_, or_
 from sqlalchemy.orm import selectinload
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta, timezone
-
+# أضف هذا السطر مع باقي الاستيرادات في الأعلى
+from app.domains.saas.schemas import TenantSubscriptionResponse, InvoiceResponse
 from app.domains.saas.models import (
     ServiceCatalog,
     ServicePlan,
@@ -128,7 +129,7 @@ class SaaSRepository:
         tenant_id: int,
         skip: int = 0,
         limit: int = 20
-    ) -> PaginatedResponse[TenantSubscription]:
+    ) -> PaginatedResponse[TenantSubscriptionResponse]:
         query = select(TenantSubscription).where(TenantSubscription.tenant_id == tenant_id)
 
         count_query = select(func.count()).select_from(query.subquery())
@@ -243,7 +244,7 @@ class SaaSRepository:
         tenant_id: int,
         skip: int = 0,
         limit: int = 20
-    ) -> PaginatedResponse[Invoice]:
+    ) -> PaginatedResponse[InvoiceResponse]:
         query = select(Invoice).where(Invoice.tenant_id == tenant_id)
 
         count_query = select(func.count()).select_from(query.subquery())

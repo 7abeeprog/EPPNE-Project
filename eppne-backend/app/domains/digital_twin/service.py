@@ -8,7 +8,7 @@ from typing import Optional
 
 from app.domains.digital_twin.repository import DigitalTwinRepository
 from app.domains.finance.service import FinanceService
-from app.domains.saas.service import SaaSSubscriptionService
+from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.affiliate.service import AffiliateService  # 🔥 جديد
 from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError
 from app.core.idempotency import check_idempotency, store_idempotency_result

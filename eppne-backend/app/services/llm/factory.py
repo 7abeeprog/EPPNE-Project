@@ -1,9 +1,9 @@
 # app/services/llm/factory.py
-from .gemini_adapter import GeminiAdapter
-from .openai_adapter import OpenAIAdapter
-from .claude_adapter import ClaudeAdapter
+#from .gemini_adapter import GeminiAdapter
+#from .openai_adapter import OpenAIAdapter
+#from .claude_adapter import ClaudeAdapter
 from .kimi_adapter import KimiAdapter  # 🔥 جديد
-
+from .base import BaseLLMAdapter
 class LLMFactory:
     @staticmethod
     def get_llm(model_name: str) -> BaseLLMAdapter:

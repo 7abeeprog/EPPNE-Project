@@ -1,0 +1,43 @@
+# .ai-generated/.github/workflows/cd.yml
+name: CD - Deploy to EKS
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  AWS_REGION: us-east-1
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::ACCOUNT_ID:role/github-actions-role
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Update k8s manifests with new image tag
+      run: |
+        sed -i "s|:latest|:${{ github.sha }}|g" .ai-generated/k8s/base/deployment.yaml
+
+    - name: Install ArgoCD CLI
+      run: |
+        curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+        chmod +x /usr/local/bin/argocd
+
+    - name: Sync with ArgoCD
+      env:
+        ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+        ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN }}
+      run: |
+        argocd login $ARGOCD_SERVER --grpc-web --token $ARGOCD_TOKEN
+        argocd app sync eppne-app --grpc-web

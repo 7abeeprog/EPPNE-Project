@@ -12,7 +12,7 @@ import bleach
 from app.domains.insurance.repository import InsuranceRepository
 from app.domains.finance.service import FinanceService
 from app.domains.ai_agents.service import AIAgentsService
-from app.domains.saas.service import SaaSSubscriptionService
+from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
 from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, IdempotencyError
@@ -20,7 +20,7 @@ from app.core.idempotency import check_idempotency, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
-from app.core.logging import logger
+from app.core.logging_conf import logger
 from app.domains.insurance.models import (
     InsurancePolicy, InsuranceSubscription, InsuranceClaim,
     PensionRecord, EmployeeInsuranceProfile, ClaimStatus, PensionStatus

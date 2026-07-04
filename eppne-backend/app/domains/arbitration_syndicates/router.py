@@ -16,7 +16,7 @@ router = APIRouter(prefix="/arbitration-syndicates", tags=["Sovereign Arbitratio
 
 # ========== Arbitration ==========
 @router.post("/cases", response_model=ArbitrationCaseResponse, status_code=201)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_dispute(
     data: ArbitrationCaseCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -34,7 +34,7 @@ async def create_dispute(
     return case
 
 @router.get("/cases/me", response_model=list[ArbitrationCaseResponse])
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_my_cases(
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
@@ -45,7 +45,7 @@ async def get_my_cases(
     return cases
 
 @router.post("/cases/{case_id}/jury-vote", response_model=dict)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def cast_jury_vote(
     case_id: int,
     data: JuryVoteCreate,
@@ -66,7 +66,7 @@ async def cast_jury_vote(
     return {"message": "تم تسجيل صوت المحلف", "vote_id": vote.id}
 
 @router.post("/cases/{case_id}/verdict")
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def issue_verdict(
     case_id: int,
     data: VerdictCreate,
@@ -87,7 +87,7 @@ async def issue_verdict(
 
 # ========== Syndicates ==========
 @router.post("/syndicates", response_model=SyndicateResponse, status_code=201)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_syndicate(
     data: SyndicateCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -99,7 +99,7 @@ async def create_syndicate(
     return synd
 
 @router.get("/syndicates", response_model=list[SyndicateResponse])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def list_syndicates(
     tenant: AcademyTenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
@@ -109,7 +109,7 @@ async def list_syndicates(
     return syndicates
 
 @router.post("/syndicates/{syndicate_id}/join", response_model=SyndicateMembershipResponse)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def join_syndicate(
     syndicate_id: int,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -127,7 +127,7 @@ async def join_syndicate(
     return membership
 
 @router.post("/licenses", response_model=ProfessionalLicenseResponse, status_code=201)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def issue_license(
     data: ProfessionalLicenseCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -145,7 +145,7 @@ async def issue_license(
     return license
 
 @router.get("/licenses/me", response_model=list[ProfessionalLicenseResponse])
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_my_licenses(
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
@@ -157,7 +157,7 @@ async def get_my_licenses(
 
 # ========== Elections ==========
 @router.post("/elections", response_model=ElectionResponse, status_code=201)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def create_election(
     data: ElectionCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -169,7 +169,7 @@ async def create_election(
     return election
 
 @router.post("/elections/{election_id}/candidates", response_model=CandidateResponse)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def nominate_candidate(
     election_id: int,
     data: CandidateCreate,
@@ -187,7 +187,7 @@ async def nominate_candidate(
     return candidate
 
 @router.post("/elections/{election_id}/vote")
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def vote_in_election(
     election_id: int,
     data: VoteCast,

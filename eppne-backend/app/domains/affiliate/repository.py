@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-
+from app.domains.affiliate.schemas import CommissionResponse, AffiliateLinkResponse
 from app.domains.affiliate.models import (
     AffiliateProfile,
     ReferralTree,
@@ -135,7 +135,7 @@ class AffiliateRepository:
         status: Optional[str] = None,
         skip: int = 0,
         limit: int = 20,
-    ) -> PaginatedResponse[Commission]:
+    ) -> PaginatedResponse[CommissionResponse]:
         query = select(Commission).where(Commission.user_id == user_id)
         if status:
             query = query.where(Commission.status == status)
@@ -245,7 +245,7 @@ class AffiliateRepository:
         await self.db.refresh(link)
         return link
 
-    async def get_affiliate_links(self, affiliate_id: int, skip: int = 0, limit: int = 20) -> PaginatedResponse[AffiliateLink]:
+    async def get_affiliate_links(self, affiliate_id: int, skip: int = 0, limit: int = 20) -> PaginatedResponse[AffiliateLinkResponse]:
         query = select(AffiliateLink).where(AffiliateLink.affiliate_id == affiliate_id)
 
         count_query = select(func.count()).select_from(query.subquery())

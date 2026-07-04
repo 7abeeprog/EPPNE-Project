@@ -24,12 +24,12 @@ from app.core.audit import audit_log
 from app.core.redis_client import redis_client
 from app.core.event_bus import EventBus
 from app.core.cache import cache_result, invalidate_cache
-from app.domains.saas.service import SaaSSubscriptionService
+from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
 from app.domains.ai_governance.service import AIGovernanceService
 from app.tasks.deployment import deploy_service_task
-from app.core.logging import logger
+from app.core.logging_conf import logger
 
 
 class ServiceMarketplaceService:

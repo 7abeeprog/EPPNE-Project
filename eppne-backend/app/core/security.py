@@ -16,7 +16,7 @@ from app.domains.auth.jwt_service import jwt_service
 from app.domains.auth.repository import AuthRepository
 from app.domains.identity.models import User
 from app.domains.identity.repository import UserRepository
-from app.core.logging import logger
+from app.core.logging_conf import logger
 from app.core.errors import AuthenticationError, PermissionDeniedError
 
 

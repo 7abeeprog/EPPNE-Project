@@ -16,7 +16,7 @@ router = APIRouter(prefix="/agritech", tags=["Smart AgriTech"])
 
 # ========== Farms (مع Rate Limiting واستخدام الخدمة) ==========
 @router.post("/farms", response_model=SmartFarmResponse, status_code=201)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_farm(
     data: SmartFarmCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -69,7 +69,7 @@ async def start_crop_cycle(
 
 # ========== Harvest (مع Idempotency و Rate Limiting) ==========
 @router.post("/crop-cycles/{cycle_id}/harvest", response_model=HarvestBatchResponse)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def register_harvest(
     cycle_id: int,
     data: HarvestBatchCreate,
@@ -201,7 +201,7 @@ async def get_entity_certificates(
 
 # ========== IoT Soil Sensors (مع Rate Limiting واستخدام الخدمة) ==========
 @router.post("/soil-readings", response_model=SoilSensorReadingResponse, status_code=201)
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def record_soil_reading(
     data: SoilSensorReadingCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),

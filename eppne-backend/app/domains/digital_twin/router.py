@@ -33,7 +33,7 @@ async def get_my_twin_config(
 
 
 @router.put("/config", response_model=TwinConfigResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def update_twin_config(
     data: TwinConfigCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -46,7 +46,7 @@ async def update_twin_config(
 
 
 @router.post("/interact/{owner_id}", response_model=TwinInteractionResponse)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def interact_with_twin(
     owner_id: int,
     data: TwinInteractionCreate,
@@ -75,7 +75,7 @@ async def interact_with_twin(
 # ============================================================
 
 @router.post("/time-capsule", response_model=TimeCapsuleResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def create_time_capsule(
     data: TimeCapsuleCreate,
     beneficiaries: list[BeneficiaryCreate],
@@ -95,7 +95,7 @@ async def create_time_capsule(
 
 
 @router.post("/time-capsule/heartbeat")
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def send_heartbeat(
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
@@ -124,7 +124,7 @@ async def get_my_time_capsule(
 # ============================================================
 
 @router.post("/will", response_model=DigitalWillResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=3, window=60)
+@rate_limit(max_requests=3, window_seconds=60)
 async def create_digital_will(
     data: DigitalWillCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -150,7 +150,7 @@ async def create_digital_will(
 # ============================================================
 
 @router.post("/death-oracle/report-death")
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def report_death(
     data: DeathReport,
     request: Request,
@@ -171,7 +171,7 @@ async def report_death(
 
 
 @router.post("/death-oracle/confirm-death/{deceased_id}")
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def confirm_death(
     deceased_id: int,
     confirmers: list[int],
@@ -196,7 +196,7 @@ async def confirm_death(
 # ============================================================
 
 @router.post("/milestones", response_model=LifeMilestoneResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def add_life_milestone(
     data: LifeMilestoneCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -230,7 +230,7 @@ async def get_my_milestones(
 # ============================================================
 
 @router.post("/pre-birth", response_model=PreBirthRecordResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=3, window=60)
+@rate_limit(max_requests=3, window_seconds=60)
 async def reserve_pre_birth_identity(
     data: PreBirthRecordCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),

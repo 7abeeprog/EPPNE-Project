@@ -146,7 +146,7 @@ async def trigger_workflow_manual(
 # 🟢 Webhook Trigger – مع Rate Limiting و Idempotency
 # ============================================================
 @router.post("/webhook/{path}")
-@rate_limit(max_requests=100, window=60)  # 100 طلب في الدقيقة لكل مسار
+@rate_limit(max_requests=100, window_seconds=60)  # 100 طلب في الدقيقة لكل مسار
 async def webhook_trigger(
     path: str,
     request: Request,  # 🔥 إضافة request للحصول على IP و User-Agent

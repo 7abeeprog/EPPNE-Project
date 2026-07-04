@@ -1,7 +1,12 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func
 from typing import Optional, List
-from app.domains.tourism_sports.models import *
+from app.domains.tourism_sports.models import (
+    TourismDestination, AccommodationFacility, TourismProgram,
+    ProgramParticipant, EntertainmentVenue, EntertainmentEvent,
+    NFTTicket, SportsOrganization, PlayerProfile, 
+    PlayerTransfer, Tournament, SportsMatch
+)
 from app.core.errors import NotFoundError
 
 class TourismSportsRepository:

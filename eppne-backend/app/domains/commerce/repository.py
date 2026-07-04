@@ -4,6 +4,13 @@ from sqlalchemy import select, update, func
 from sqlalchemy.orm import selectinload, load_only
 from typing import Optional, List
 
+# ✅ تم استيراد جميع الـ Schemas المطلوبة للـ Pagination
+from app.domains.commerce.schemas import (
+    ProductResponse, 
+    AddressResponse, 
+    OrderResponse, 
+    CommissionResponse
+)
 from app.domains.commerce.models import *
 from app.core.errors import NotFoundError
 from app.core.pagination import PaginatedResponse
@@ -78,8 +85,8 @@ class CommerceRepository:
         skip: int = 0,
         limit: int = 20,
         only_published: bool = True
-    ) -> PaginatedResponse[Product]:
-        """✅ جلب المنتجات مع Pagination"""
+    ) -> PaginatedResponse[ProductResponse]:
+        """✅ جلب المنتجات مع Pagination وتحويلها إلى Schema"""
         query = select(Product).where(Product.store_id == store_id)
         if only_published:
             query = query.where(Product.is_published == True)
@@ -90,9 +97,12 @@ class CommerceRepository:
 
         paginated_query = query.offset(skip).limit(limit)
         result = await self.db.execute(paginated_query)
-        items = list(result.scalars().all())
+        items = result.scalars().all()
+        
+        # تحويل كائنات قاعدة البيانات إلى Pydantic
+        schema_items = [ProductResponse.model_validate(item) for item in items]
 
-        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
+        return PaginatedResponse(data=schema_items, total=total, skip=skip, limit=limit)
 
     # ---------- Address ----------
     async def create_address(self, **kwargs) -> Address:
@@ -102,15 +112,19 @@ class CommerceRepository:
         await self.db.refresh(addr)
         return addr
 
-    async def get_user_addresses(self, user_id: int, skip: int = 0, limit: int = 20) -> PaginatedResponse[Address]:
+    async def get_user_addresses(self, user_id: int, skip: int = 0, limit: int = 20) -> PaginatedResponse[AddressResponse]:
+        """✅ جلب العناوين مع Pagination وتحويلها إلى Schema"""
         query = select(Address).where(Address.user_id == user_id)
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
+        
         paginated_query = query.offset(skip).limit(limit)
         result = await self.db.execute(paginated_query)
-        items = list(result.scalars().all())
-        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
+        items = result.scalars().all()
+        
+        schema_items = [AddressResponse.model_validate(item) for item in items]
+        return PaginatedResponse(data=schema_items, total=total, skip=skip, limit=limit)
 
     # ---------- Orders (مع Pagination) ----------
     async def get_order_by_idempotency_key(self, idempotency_key: str) -> Order | None:
@@ -143,8 +157,8 @@ class CommerceRepository:
         user_id: int,
         skip: int = 0,
         limit: int = 20
-    ) -> PaginatedResponse[Order]:
-        """✅ جلب طلبات المستخدم مع Pagination و load_only"""
+    ) -> PaginatedResponse[OrderResponse]:
+        """✅ جلب طلبات المستخدم مع Pagination و Schema"""
         query = (
             select(Order)
             .where(Order.customer_id == user_id)
@@ -166,9 +180,10 @@ class CommerceRepository:
 
         paginated_query = query.offset(skip).limit(limit)
         result = await self.db.execute(paginated_query)
-        items = list(result.scalars().all())
-
-        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
+        items = result.scalars().all()
+        
+        schema_items = [OrderResponse.model_validate(item) for item in items]
+        return PaginatedResponse(data=schema_items, total=total, skip=skip, limit=limit)
 
     # ---------- Affiliate ----------
     async def get_affiliate_tree(self, user_id: int) -> AffiliateTree | None:
@@ -198,7 +213,8 @@ class CommerceRepository:
         await self.db.refresh(comm)
         return comm
 
-    async def get_pending_commissions(self, beneficiary_id: int, skip: int = 0, limit: int = 20) -> PaginatedResponse[CommissionRecord]:
+    async def get_pending_commissions(self, beneficiary_id: int, skip: int = 0, limit: int = 20) -> PaginatedResponse[CommissionResponse]:
+        """✅ جلب العمولات المعلقة مع Schema"""
         query = select(CommissionRecord).where(
             CommissionRecord.beneficiary_id == beneficiary_id,
             CommissionRecord.status == "PENDING"
@@ -206,10 +222,13 @@ class CommerceRepository:
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
+        
         paginated_query = query.offset(skip).limit(limit)
         result = await self.db.execute(paginated_query)
-        items = list(result.scalars().all())
-        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
+        items = result.scalars().all()
+        
+        schema_items = [CommissionResponse.model_validate(item) for item in items]
+        return PaginatedResponse(data=schema_items, total=total, skip=skip, limit=limit)
 
     async def release_commission(self, commission_id: int, tx_hash: str) -> CommissionRecord:
         await self.db.execute(

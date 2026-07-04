@@ -7,7 +7,7 @@ from app.domains.identity.service import UserService
 from app.api.deps import get_current_user
 from app.core.rate_limiter import rate_limit
 from app.core.config import settings
-from app.core.logging import logger
+from app.core.logging_conf import logger
 import uuid
 
 router = APIRouter(prefix="/identity", tags=["Sovereign Identity"])
@@ -123,7 +123,7 @@ async def update_me(
 
 @router.post("/logout")
 @rate_limit(max_requests=20, window_seconds=60)
-async def logout(response: Response):
+async def logout(request: Request, response: Response): # 👈 تمت إضافة request هنا
     """
     تسجيل الخروج مع تدمير الكوكيز.
     🔥 معدل الطلبات: 20 طلب لكل 60 ثانية.
@@ -131,7 +131,6 @@ async def logout(response: Response):
     response.delete_cookie("access_token", path="/", samesite="strict")
     response.delete_cookie("refresh_token", path="/", samesite="strict")
     return {"message": "تم تسجيل الخروج وتدمير الجلسة بنجاح"}
-
 
 @router.post("/refresh")
 @rate_limit(max_requests=15, window_seconds=60)
@@ -188,6 +187,7 @@ async def refresh_token_endpoint(
 @router.post("/revoke-all")
 @rate_limit(max_requests=5, window_seconds=300)  # 5 طلبات لكل 5 دقائق
 async def revoke_all_sessions(
+    request: Request, # 👈 تمت إضافة request هنا
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):

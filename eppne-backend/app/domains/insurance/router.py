@@ -20,7 +20,7 @@ router = APIRouter(prefix="/insurance", tags=["Sovereign Insurance"])
 
 # ========== Policies ==========
 @router.post("/policies", response_model=InsurancePolicyResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_policy(
     data: InsurancePolicyCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -33,7 +33,7 @@ async def create_policy(
 
 
 @router.get("/policies", response_model=List[InsurancePolicyResponse])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def list_policies(
     policy_type: Optional[PolicyType] = None,
     is_active: Optional[bool] = None,
@@ -48,7 +48,7 @@ async def list_policies(
 
 
 @router.get("/policies/{policy_id}", response_model=InsurancePolicyResponse)
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def get_policy(
     policy_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -63,7 +63,7 @@ async def get_policy(
 
 # ========== Subscriptions (مع Idempotency + Rate Limiting) ==========
 @router.post("/subscriptions", response_model=InsuranceSubscriptionResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def subscribe(
     data: InsuranceSubscriptionCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -82,7 +82,7 @@ async def subscribe(
 
 
 @router.get("/subscriptions/me", response_model=List[InsuranceSubscriptionResponse])
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_my_subscriptions(
     status: Optional[str] = None,
     skip: int = 0,
@@ -97,7 +97,7 @@ async def get_my_subscriptions(
 
 
 @router.post("/subscriptions/{subscription_id}/renew", response_model=InsuranceSubscriptionResponse)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def renew_subscription(
     subscription_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -111,7 +111,7 @@ async def renew_subscription(
 
 # ========== Claims (مع Idempotency + Rate Limiting) ==========
 @router.post("/claims", response_model=InsuranceClaimResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def submit_claim(
     data: InsuranceClaimCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -130,7 +130,7 @@ async def submit_claim(
 
 
 @router.get("/claims/me", response_model=List[InsuranceClaimResponse])
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_my_claims(
     status: Optional[ClaimStatus] = None,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -143,7 +143,7 @@ async def get_my_claims(
 
 
 @router.put("/claims/{claim_id}/review", response_model=InsuranceClaimResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def review_claim(
     claim_id: int,
     approve: bool,
@@ -169,7 +169,7 @@ async def review_claim(
 
 # ========== Pensions ==========
 @router.post("/pensions", response_model=PensionRecordResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def create_pension(
     data: PensionRecordCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -182,7 +182,7 @@ async def create_pension(
 
 
 @router.get("/pensions/me", response_model=List[PensionRecordResponse])
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_my_pensions(
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
@@ -195,7 +195,7 @@ async def get_my_pensions(
 
 # ========== Employee Insurance ==========
 @router.post("/employee-profiles", response_model=EmployeeInsuranceProfileResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def create_employee_profile(
     data: EmployeeInsuranceProfileCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -208,7 +208,7 @@ async def create_employee_profile(
 
 
 @router.get("/employee-profiles/me", response_model=EmployeeInsuranceProfileResponse)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_my_employee_profile(
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
@@ -223,7 +223,7 @@ async def get_my_employee_profile(
 
 # ========== Admin / Scheduled Jobs ==========
 @router.post("/admin/disburse-pensions")
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def disburse_pensions(
     background_tasks: BackgroundTasks,
     tenant: AcademyTenant = Depends(get_current_tenant),

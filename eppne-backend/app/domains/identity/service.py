@@ -7,9 +7,9 @@ from app.domains.identity.repository import UserRepository, WalletRepository
 from app.domains.identity.models import User, Wallet
 from app.domains.identity.schemas import UserCreate, UserUpdate
 from app.core.security import get_password_hash, verify_password
-from app.core.auth import create_access_token, create_refresh_token, verify_refresh_token, revoke_refresh_token
+from app.domains.auth.jwt_service import create_access_token, create_refresh_token, verify_refresh_token, revoke_refresh_token
 from app.core.errors import PermissionDeniedError, NotFoundError, ValidationError
-from app.core.logging import logger
+from app.core.logging_conf import logger
 
 class UserService:
     def __init__(self, db: AsyncSession):
