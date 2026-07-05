@@ -1,25 +1,57 @@
-// components/web3/connect-wallet.tsx
-"use client";
+// components/websocket-provider.tsx
+'use client';
 
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { motion } from "framer-motion";
+import { createContext, useContext, useEffect, useRef, ReactNode } from 'react';
+import { getWebSocketService } from '@/services/websocket.service';
+import { useAuth } from '@/hooks/auth/useAuth';
+import { useNotificationStore } from '@/store/notificationStore';
 
-export function ConnectWallet() {
-  return (
-    <div className="relative group">
-      {/* 🟢 إضاءة نيون خلفية للزر */}
-      <div className="absolute -inset-0.5 bg-gradient-to-r from-primary to-blue-600 rounded-full opacity-30 group-hover:opacity-75 blur transition duration-500" />
-      
-      <div className="relative bg-background/50 backdrop-blur-md rounded-full border border-white/10 shadow-inner">
-        <ConnectButton 
-          accountStatus={{
-            smallScreen: 'avatar',
-            largeScreen: 'full',
-          }}
-          chainStatus="icon"
-          showBalance={false}
-        />
-      </div>
-    </div>
-  );
+interface WebSocketContextType {
+  isConnected: boolean;
 }
+
+const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
+
+export const useWebSocket = () => {
+  const context = useContext(WebSocketContext);
+  if (!context) {
+    throw new Error('useWebSocket must be used within a WebSocketProvider');
+  }
+  return context;
+};
+
+export const WebSocketProvider = ({ children }: { children: ReactNode }) => {
+  const { user, isAuthenticated } = useAuth();
+  const wsService = useRef<any>(null);
+  const [isConnected, setIsConnected] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      // تهيئة WebSocket
+      wsService.current = getWebSocketService();
+      setIsConnected(true);
+
+      // الاشتراك في الإشعارات الفورية
+      const handleNotification = (data: any) => {
+        useNotificationStore.getState().addNotification(data);
+      };
+      wsService.current.subscribe('NOTIFICATION', handleNotification);
+
+      return () => {
+        wsService.current.unsubscribe('NOTIFICATION', handleNotification);
+        wsService.current.disconnect();
+        setIsConnected(false);
+      };
+    } else if (wsService.current) {
+      wsService.current.disconnect();
+      wsService.current = null;
+      setIsConnected(false);
+    }
+  }, [isAuthenticated, user]);
+
+  return (
+    <WebSocketContext.Provider value={{ isConnected }}>
+      {children}
+    </WebSocketContext.Provider>
+  );
+};

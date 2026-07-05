@@ -21,8 +21,8 @@ export interface TransferRequest {
   receiver_email: string;
   currency: string;
   amount: number;
-  notes?: string;
-  idempotency_key: string; // ✅ يُولد في الفرونت إند
+  notes?: string | null;
+  idempotency_key?: string | null; // ✅ اختياري وقابل للـ null
 }
 
 export interface TransferResponse {
@@ -41,6 +41,7 @@ export interface SwapRequest {
   from_currency: string;
   to_currency: string;
   amount_in: number;
+  idempotency_key?: string | null; // ✅ اختياري وقابل للـ null
 }
 
 export interface SwapResponse {
@@ -57,13 +58,16 @@ export interface SwapResponse {
 // ==========================================
 
 export interface Transaction {
+  id: number; // ✅ مطلوب حسب الطلب
   tx_hash: string;
   tx_type: string;
   amount: number;
   currency: string;
-  status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'REVERSED';
-  notes?: string;
+  status: string; // ✅ أصبح string بدلاً من union
+  notes?: string | null;
   created_at: string;
+  sender_id?: number | null; // ✅ اختياري
+  receiver_id?: number | null; // ✅ اختياري
 }
 
 export interface PaginatedResponse<T> {
@@ -91,11 +95,15 @@ export interface MintRequest {
 }
 
 export interface SystemState {
+  // الخصائص المطلوبة (مع تعديل total_supply لتكون اختيارية وإضافة active_users)
+  total_supply?: Record<string, number>;
+  active_users?: number;
+
+  // الخصائص الإضافية الموجودة فعلياً في النظام (محتفظ بها)
   crypto_mode: string;
   is_trading_active: boolean;
   exchange_rates: ExchangeRates;
   max_supply: ExchangeRates;
-  total_supply: ExchangeRates;
   updated_at: string;
 }
 

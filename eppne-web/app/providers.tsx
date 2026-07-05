@@ -4,10 +4,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 import { Toaster } from "sonner";
-import { WebSocketProvider } from "@/components/websocket-provider";
 import { Web3Provider } from "@/app/web3-provider";
+import { AuthProvider } from "@/providers/AuthProvider";
+import { getWebSocketService } from "@/services/websocket.service";
 import "@rainbow-me/rainbowkit/styles.css";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -24,6 +25,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
       })
   );
 
+  // تفعيل WebSocket عند تحميل التطبيق
+  useEffect(() => {
+    const ws = getWebSocketService();
+    ws.connect();
+
+    // إغلاق الاتصال عند مغادرة الصفحة
+    return () => {
+      ws.disconnect();
+    };
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <Web3Provider>
@@ -33,10 +45,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
           enableSystem
           disableTransitionOnChange
         >
-          <WebSocketProvider>
+          <AuthProvider>
             {children}
             <Toaster position="top-center" richColors closeButton />
-          </WebSocketProvider>
+          </AuthProvider>
         </NextThemesProvider>
       </Web3Provider>
       <ReactQueryDevtools initialIsOpen={false} />

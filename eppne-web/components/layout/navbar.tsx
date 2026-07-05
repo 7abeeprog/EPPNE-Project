@@ -17,6 +17,7 @@ import {
 import { useAuthStore } from "@/store/auth-store";
 import { useNotificationStore } from "@/store/notification-store";
 import { Badge } from "@/components/ui/badge";
+import { NotificationBell } from "@/components/communications/NotificationBell";
 
 export function Navbar() {
   const { user } = useAuthStore();
@@ -46,54 +47,8 @@ export function Navbar() {
             <ThemeToggle />
           </div>
 
-          {/* 🟢 مركز الإشعارات السيادية */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative rounded-full h-10 w-10 bg-background/50 border border-white/5 hover:bg-primary/10 hover:text-primary transition-all shadow-inner">
-                <Bell className="h-5 w-5" />
-                {unreadCount > 0 && (
-                  <Badge className="absolute -top-1 -right-1 px-1.5 min-w-5 h-5 flex items-center justify-center bg-rose-500 text-white rounded-full border-2 border-background animate-pulse shadow-[0_0_10px_rgba(244,63,94,0.6)]">
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </Badge>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[320px] md:w-[380px] rounded-3xl bg-card/80 backdrop-blur-3xl border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.2)] p-2 animate-in fade-in zoom-in-95 duration-200">
-              <DropdownMenuLabel className="flex items-center gap-2 px-3 py-3 text-lg font-black text-foreground">
-                <div className="p-1.5 bg-primary/10 rounded-lg border border-primary/20">
-                  <Bell className="h-4 w-4 text-primary" />
-                </div>
-                مركز الإشعارات السيادية
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator className="bg-white/5" />
-              
-              <div className="max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
-                {notifications.length === 0 ? (
-                  <div className="p-10 text-center flex flex-col items-center gap-3 opacity-70">
-                    <div className="p-4 bg-muted/20 rounded-full">
-                      <Bell className="h-8 w-8 text-muted-foreground/50" />
-                    </div>
-                    <span className="text-sm font-bold text-muted-foreground">لا توجد تحركات مسجلة حالياً</span>
-                  </div>
-                ) : (
-                  notifications.slice(0, 5).map((notif) => (
-                    <DropdownMenuItem key={notif.id} className="flex flex-col items-start p-3 mb-1.5 rounded-2xl focus:bg-primary/5 focus:text-foreground cursor-pointer transition-colors border border-transparent hover:border-white/5">
-                      <div className="flex items-center gap-2 font-black text-sm mb-1 text-foreground/90">
-                        <span className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_5px_rgba(var(--primary-rgb),0.8)]" />
-                        {notif.title}
-                      </div>
-                      <div className="text-xs font-medium text-muted-foreground line-clamp-2 pl-4 leading-relaxed">
-                        {notif.body}
-                      </div>
-                      <div className="text-[10px] font-bold text-muted-foreground/40 mt-2 pl-4 uppercase tracking-wider">
-                        {new Date(notif.createdAt).toLocaleString('ar-EG')}
-                      </div>
-                    </DropdownMenuItem>
-                  ))
-                )}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* 🟢 مركز الإشعارات السيادية - مكوّن مخصص */}
+          <NotificationBell />
 
           {/* 🟢 الحساب التعريفي (User Profile) */}
           <DropdownMenu>
