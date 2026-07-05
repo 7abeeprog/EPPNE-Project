@@ -1,100 +1,127 @@
-// store/aiAgentStore.ts
+// store/agentStore.ts
 import { create } from 'zustand';
-import type { AIAgent, ApprovalRequest } from '@/types/ai-agents';
+import { AIAgentsService, AIAgentResponse, ApprovalResponse, AIAgentCreate, ApprovalResolution } from '@/services/ai-agents.service';
+import { useNotificationStore } from './notificationStore';
 
-interface AIAgentStore {
-  // حالة الوكلاء
-  agents: AIAgent[];
-  selectedAgent: AIAgent | null;
-  selectedAgentId: number | null;
-
-  // حالة الموافقات
-  pendingApprovals: ApprovalRequest[];
-  pendingApprovalsCount: number;
-  selectedApproval: ApprovalRequest | null;
-
-  // إجراءات الوكلاء
-  setAgents: (agents: AIAgent[]) => void;
-  setSelectedAgent: (agent: AIAgent | null) => void;
-  clearSelectedAgent: () => void;
-
-  // إجراءات الموافقات
-  setPendingApprovals: (approvals: ApprovalRequest[]) => void;
-  setSelectedApproval: (approval: ApprovalRequest | null) => void;
-  addPendingApproval: (approval: ApprovalRequest) => void;
-  removePendingApproval: (approvalId: number) => void;
-  updateApprovalStatus: (approvalId: number, status: ApprovalRequest['status']) => void;
-
-  // إجراءات مساعدة
-  incrementPendingApprovals: () => void;
-  decrementPendingApprovals: () => void;
+interface AgentState {
+  agents: AIAgentResponse[];
+  approvals: ApprovalResponse[];
+  isLoading: boolean;
+  error: string | null;
+  fetchAgents: (params?: { role?: string; status?: string }) => Promise<void>;
+  createAgent: (payload: AIAgentCreate) => Promise<AIAgentResponse>;
+  updateAgentStatus: (agentId: number, status: string) => Promise<void>;
+  executeAgentAction: (agentId: number, actionType: string, payload: Record<string, any>) => Promise<any>;
+  fetchPendingApprovals: () => Promise<void>;
+  resolveApproval: (approvalId: number, resolution: ApprovalResolution) => Promise<void>;
+  addApproval: (approval: ApprovalResponse) => void; // للـ WebSocket
 }
 
-export const useAIAgentStore = create<AIAgentStore>((set) => ({
-  // الحالة الابتدائية
+export const useAgentStore = create<AgentState>((set, get) => ({
   agents: [],
-  selectedAgent: null,
-  selectedAgentId: null,
-  pendingApprovals: [],
-  pendingApprovalsCount: 0,
-  selectedApproval: null,
+  approvals: [],
+  isLoading: false,
+  error: null,
 
-  // إجراءات الوكلاء
-  setAgents: (agents) => set({ agents }),
-  
-  setSelectedAgent: (agent) =>
-    set({
-      selectedAgent: agent,
-      selectedAgentId: agent?.id ?? null,
-    }),
-  
-  clearSelectedAgent: () =>
-    set({
-      selectedAgent: null,
-      selectedAgentId: null,
-    }),
+  fetchAgents: async (params) => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await AIAgentsService.listAgents(params);
+      set({ agents: data, isLoading: false });
+    } catch (error: any) {
+      set({ isLoading: false, error: error.message });
+    }
+  },
 
-  // إجراءات الموافقات
-  setPendingApprovals: (approvals) =>
-    set({
-      pendingApprovals: approvals,
-      pendingApprovalsCount: approvals.length,
-    }),
+  createAgent: async (payload) => {
+    set({ isLoading: true, error: null });
+    try {
+      const newAgent = await AIAgentsService.createAgent(payload);
+      set((state) => ({ agents: [newAgent, ...state.agents], isLoading: false }));
 
-  setSelectedApproval: (approval) => set({ selectedApproval: approval }),
+      // إشعار للمشرفين
+      const notificationStore = useNotificationStore.getState();
+      notificationStore.addNotification({
+        id: Date.now(),
+        user_id: 0, // سيتم استبداله
+        title: '🤖 وكيل جديد',
+        body: `تم إنشاء وكيل "${payload.name}" بنجاح`,
+        data: { link: '/dashboard/ai-agents' },
+        is_read: false,
+        priority: 'NORMAL',
+        created_at: new Date().toISOString(),
+      });
 
-  addPendingApproval: (approval) =>
+      return newAgent;
+    } catch (error: any) {
+      set({ isLoading: false, error: error.message });
+      throw error;
+    }
+  },
+
+  updateAgentStatus: async (agentId, status) => {
+    try {
+      const updated = await AIAgentsService.updateAgentStatus(agentId, status as any);
+      set((state) => ({
+        agents: state.agents.map((a) => (a.id === agentId ? updated : a)),
+      }));
+    } catch (error: any) {
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
+  executeAgentAction: async (agentId, actionType, payload) => {
+    set({ isLoading: true });
+    try {
+      const result = await AIAgentsService.executeAgentAction(agentId, actionType, payload);
+      set({ isLoading: false });
+      return result;
+    } catch (error: any) {
+      set({ isLoading: false, error: error.message });
+      throw error;
+    }
+  },
+
+  fetchPendingApprovals: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const data = await AIAgentsService.getPendingApprovals();
+      set({ approvals: data, isLoading: false });
+    } catch (error: any) {
+      set({ isLoading: false, error: error.message });
+    }
+  },
+
+  resolveApproval: async (approvalId, resolution) => {
+    try {
+      await AIAgentsService.resolveApproval(approvalId, resolution);
+      // إزالة الموافقة من القائمة المعلقة
+      set((state) => ({
+        approvals: state.approvals.filter((a) => a.id !== approvalId),
+      }));
+
+      // إشعار
+      const notificationStore = useNotificationStore.getState();
+      notificationStore.addNotification({
+        id: Date.now(),
+        user_id: 0,
+        title: '✅ تم حل الموافقة',
+        body: `تم ${resolution.status === 'APPROVED' ? 'الموافقة على' : 'رفض'} الإجراء #${approvalId}`,
+        data: { link: '/dashboard/ai/approvals' },
+        is_read: false,
+        priority: 'NORMAL',
+        created_at: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
+  addApproval: (approval) => {
     set((state) => ({
-      pendingApprovals: [approval, ...state.pendingApprovals],
-      pendingApprovalsCount: state.pendingApprovalsCount + 1,
-    })),
-
-  removePendingApproval: (approvalId) =>
-    set((state) => ({
-      pendingApprovals: state.pendingApprovals.filter((a) => a.id !== approvalId),
-      pendingApprovalsCount: Math.max(0, state.pendingApprovalsCount - 1),
-    })),
-
-  updateApprovalStatus: (approvalId, status) =>
-    set((state) => {
-      const updatedApprovals = state.pendingApprovals.map((a) =>
-        a.id === approvalId ? { ...a, status } : a
-      );
-      const stillPending = updatedApprovals.filter((a) => a.status === 'PENDING');
-      return {
-        pendingApprovals: stillPending,
-        pendingApprovalsCount: stillPending.length,
-      };
-    }),
-
-  // إجراءات مساعدة
-  incrementPendingApprovals: () =>
-    set((state) => ({
-      pendingApprovalsCount: state.pendingApprovalsCount + 1,
-    })),
-
-  decrementPendingApprovals: () =>
-    set((state) => ({
-      pendingApprovalsCount: Math.max(0, state.pendingApprovalsCount - 1),
-    })),
+      approvals: [approval, ...state.approvals],
+    }));
+  },
 }));

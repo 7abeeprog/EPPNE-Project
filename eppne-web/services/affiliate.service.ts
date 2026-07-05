@@ -1,142 +1,206 @@
-// services/affiliate.service.ts
+// services/finance.service.ts
 import { apiClient } from "@/lib/api-client";
 import {
-  AffiliateProfile,
-  AffiliateLink,
-  Commission,
-  AffiliateStats,
-  WithdrawRequest,
-  WithdrawResponse,
-  AffiliateDashboardStats,
-  ReferralTree,
+  WalletBalance,
+  TransferRequest,
+  TransferResponse,
+  SwapRequest,
+  SwapResponse,
+  Transaction,
   PaginatedResponse,
-} from "@/types/affiliate";
+  CryptoMode,
+  ExchangeRates,
+  MintRequest,
+  SystemState,
+} from "@/types/finance";
 import { handleError } from "@/lib/error-handler";
+import { generateIdempotencyKey } from "@/lib/utils";
 
-export const AffiliateService = {
-  // ==========================================
-  // 1. ملف الداعي
-  // ==========================================
-  getProfile: async (): Promise<AffiliateProfile> => {
+export const FinanceService = {
+  /**
+   * جلب رصيد المحفظة للمستخدم الحالي
+   * @returns {Promise<WalletBalance>} كائن يحتوي على أرصدة العملات
+   */
+  getWallet: async (): Promise<WalletBalance> => {
     try {
-      const { data } = await apiClient.get('/affiliate/profile');
+      const { data } = await apiClient.get('/api/finance/balances');
       return data;
     } catch (error) {
-      throw handleError(error, 'فشل جلب ملف الداعي');
+      throw handleError(error, 'فشل جلب رصيد المحفظة');
     }
   },
 
-  updateProfile: async (payload: Partial<AffiliateProfile>): Promise<AffiliateProfile> => {
+  /**
+   * تحويل أموال إلى مستخدم آخر
+   * @param {TransferRequest} payload - بيانات التحويل (مع أو بدون idempotency_key)
+   * @returns {Promise<TransferResponse>} تفاصيل التحويل
+   */
+  transfer: async (payload: TransferRequest): Promise<TransferResponse> => {
     try {
-      const { data } = await apiClient.put('/affiliate/profile', payload);
+      const finalPayload = {
+        ...payload,
+        idempotency_key: payload.idempotency_key || generateIdempotencyKey(),
+      };
+      const { data } = await apiClient.post('/api/finance/transfer', finalPayload);
       return data;
     } catch (error) {
-      throw handleError(error, 'فشل تحديث ملف الداعي');
+      throw handleError(error, 'فشل إجراء التحويل');
     }
   },
 
-  // ==========================================
-  // 2. روابط الدعوة
-  // ==========================================
-  getLinks: async (skip: number = 0, limit: number = 20): Promise<PaginatedResponse<AffiliateLink>> => {
+  /**
+   * صرافة عملة إلى أخرى
+   * @param {SwapRequest} payload - بيانات الصرافة
+   * @returns {Promise<SwapResponse>} تفاصيل الصرافة
+   */
+  swap: async (payload: SwapRequest): Promise<SwapResponse> => {
     try {
-      const { data } = await apiClient.get('/affiliate/links', {
+      const finalPayload = {
+        ...payload,
+        idempotency_key: payload.idempotency_key || generateIdempotencyKey(),
+      };
+      const { data } = await apiClient.post('/api/finance/swap', finalPayload);
+      return data;
+    } catch (error) {
+      throw handleError(error, 'فشل إجراء الصرافة');
+    }
+  },
+
+  /**
+   * جلب سجل المعاملات مع Pagination
+   * @param {number} skip - عدد العناصر المتخطية
+   * @param {number} limit - عدد العناصر في الصفحة
+   * @returns {Promise<PaginatedResponse<Transaction>>} قائمة المعاملات
+   */
+  getTransactionHistory: async (
+    skip: number = 0,
+    limit: number = 20
+  ): Promise<PaginatedResponse<Transaction>> => {
+    try {
+      const { data } = await apiClient.get('/api/finance/history', {
         params: { skip, limit },
       });
       return data;
     } catch (error) {
-      throw handleError(error, 'فشل جلب روابط الدعوة');
+      throw handleError(error, 'فشل جلب سجل المعاملات');
     }
   },
 
-  createLink: async (payload: Omit<AffiliateLink, 'id' | 'affiliate_id' | 'clicks' | 'conversions' | 'created_at' | 'updated_at'>): Promise<AffiliateLink> => {
+  // ==========================================
+  // دوال المشرفين (Admin)
+  // ==========================================
+
+  /**
+   * جلب وضع العملات الحالي (FULL_CRYPTO أو POINTS_ONLY)
+   * @returns {Promise<{ crypto_mode: string }>}
+   */
+  getCryptoMode: async (): Promise<{ crypto_mode: string }> => {
     try {
-      const { data } = await apiClient.post('/affiliate/links', payload);
+      const { data } = await apiClient.get('/api/finance/admin/crypto-mode');
       return data;
     } catch (error) {
-      throw handleError(error, 'فشل إنشاء رابط الدعوة');
+      throw handleError(error, 'فشل جلب وضع العملات');
+    }
+  },
+
+  /**
+   * تحديث وضع العملات
+   * @param {string} mode - 'FULL_CRYPTO' أو 'POINTS_ONLY'
+   */
+  setCryptoMode: async (mode: string): Promise<void> => {
+    try {
+      await apiClient.post('/api/finance/admin/crypto-mode', { mode });
+    } catch (error) {
+      throw handleError(error, 'فشل تحديث وضع العملات');
+    }
+  },
+
+  /**
+   * تحديث أسعار الصرف بين العملات
+   * @param {ExchangeRates} rates - كائن يحتوي على أسعار الصرف
+   */
+  setExchangeRates: async (rates: ExchangeRates): Promise<void> => {
+    try {
+      await apiClient.post('/api/finance/admin/exchange-rates', { rates });
+    } catch (error) {
+      throw handleError(error, 'فشل تحديث أسعار الصرف');
+    }
+  },
+
+  /**
+   * طباعة عملات جديدة (للبنك المركزي فقط)
+   * @param {MintRequest} payload - العملة والمبلغ
+   */
+  mintCurrency: async (payload: MintRequest): Promise<void> => {
+    try {
+      const finalPayload = {
+        ...payload,
+        idempotency_key: generateIdempotencyKey(),
+      };
+      await apiClient.post('/api/finance/admin/mint', finalPayload);
+    } catch (error) {
+      throw handleError(error, 'فشل طباعة العملات');
+    }
+  },
+
+  /**
+   * تحديث الحد الأقصى للطباعة لكل عملة
+   * @param {Record<string, number>} maxSupply - كائن يحتوي على الحدود القصوى
+   */
+  setMaxSupply: async (maxSupply: Record<string, number>): Promise<void> => {
+    try {
+      await apiClient.post('/api/finance/admin/max-supply', { max_supply: maxSupply });
+    } catch (error) {
+      throw handleError(error, 'فشل تحديث الحد الأقصى للطباعة');
     }
   },
 
   // ==========================================
-  // 3. العمولات
+  // دوال مساعدة للقطاعات الأخرى (Integration Helpers)
   // ==========================================
-  getCommissions: async (skip: number = 0, limit: number = 20, status?: string): Promise<PaginatedResponse<Commission>> => {
-    try {
-      const { data } = await apiClient.get('/affiliate/commissions', {
-        params: { skip, limit, status },
-      });
-      return data;
-    } catch (error) {
-      throw handleError(error, 'فشل جلب العمولات');
-    }
+
+  /**
+   * دفع رسوم كورس (لقطاع التعليم)
+   * @param {number} courseId - معرف الكورس
+   * @param {number} amount - المبلغ
+   * @param {string} currency - العملة (افتراضي MR_USDT)
+   */
+  payForCourse: async (courseId: number, amount: number, currency: string = 'MR_USDT'): Promise<TransferResponse> => {
+    return FinanceService.transfer({
+      receiver_email: 'academy@eppne.com', // يجب أن يكون بريد الأكاديمية
+      currency,
+      amount,
+      notes: `دفع رسوم كورس #${courseId}`,
+    });
   },
 
-  releaseCommissions: async (): Promise<void> => {
-    try {
-      await apiClient.post('/affiliate/commissions/release');
-    } catch (error) {
-      throw handleError(error, 'فشل إفراج العمولات');
-    }
+  /**
+   * دفع رسوم خدمة (لقطاع السوق)
+   * @param {number} serviceId - معرف الخدمة
+   * @param {number} amount - المبلغ
+   * @param {string} currency - العملة (افتراضي MR_USDT)
+   */
+  payForService: async (serviceId: number, amount: number, currency: string = 'MR_USDT'): Promise<TransferResponse> => {
+    return FinanceService.transfer({
+      receiver_email: 'marketplace@eppne.com',
+      currency,
+      amount,
+      notes: `دفع رسوم خدمة #${serviceId}`,
+    });
   },
 
-  // ==========================================
-  // 4. سحب العمولات
-  // ==========================================
-  withdraw: async (payload: WithdrawRequest): Promise<WithdrawResponse> => {
-    try {
-      const { data } = await apiClient.post('/affiliate/withdraw', payload);
-      return data;
-    } catch (error) {
-      throw handleError(error, 'فشل سحب العمولات');
-    }
-  },
-
-  // ==========================================
-  // 5. الإحصائيات
-  // ==========================================
-  getStats: async (): Promise<AffiliateStats> => {
-    try {
-      const { data } = await apiClient.get('/affiliate/stats');
-      return data;
-    } catch (error) {
-      throw handleError(error, 'فشل جلب إحصائيات الداعي');
-    }
-  },
-
-  getDashboardStats: async (): Promise<AffiliateDashboardStats> => {
-    try {
-      const { data } = await apiClient.get('/affiliate/dashboard/stats');
-      return data;
-    } catch (error) {
-      throw handleError(error, 'فشل جلب إحصائيات لوحة التحكم');
-    }
-  },
-
-  // ==========================================
-  // 6. شجرة الإحالة
-  // ==========================================
-  getTree: async (maxDepth: number = 5): Promise<ReferralTree[]> => {
-    try {
-      const { data } = await apiClient.get('/affiliate/tree', {
-        params: { max_depth: maxDepth },
-      });
-      return data;
-    } catch (error) {
-      throw handleError(error, 'فشل جلب شجرة الإحالة');
-    }
-  },
-
-  // ==========================================
-  // 7. تتبع الإحالة (مسار عام)
-  // ==========================================
-  trackReferral: async (referralCode: string, target?: string, productId?: number): Promise<void> => {
-    try {
-      await apiClient.get(`/affiliate/track/${referralCode}`, {
-        params: { target, product_id: productId },
-      });
-    } catch (error) {
-      throw handleError(error, 'فشل تتبع الإحالة');
-    }
+  /**
+   * دفع راتب (لقطاع التوظيف)
+   * @param {number} employeeId - معرف الموظف
+   * @param {number} amount - المبلغ
+   * @param {string} currency - العملة (افتراضي MR_USDT)
+   */
+  paySalary: async (employeeId: number, amount: number, currency: string = 'MR_USDT'): Promise<TransferResponse> => {
+    return FinanceService.transfer({
+      receiver_email: `employee-${employeeId}@eppne.com`, // يجب أن يكون بريد الموظف
+      currency,
+      amount,
+      notes: `دفع راتب الموظف #${employeeId}`,
+    });
   },
 };

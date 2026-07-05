@@ -1,54 +1,42 @@
-// store/finance-store.ts
+// store/financeStore.ts
 import { create } from 'zustand';
 import { financeService, MintRequest, ExchangeRatesUpdate, MaxSupplyUpdate, CryptoModeToggle } from '@/services/finance.service';
 import { useNotificationStore } from './notificationStore';
 
-// تعريف الأنواع
-type CryptoMode = 'FULL_CRYPTO' | 'POINTS_ONLY';
-
 interface FinanceState {
-  // === حالة الخادم (API) ===
-  wallet: { balances: Record<string, number> } | null;   // تم تغيير الاسم من balances إلى wallet
+  balances: Record<string, number> | null;
   exchangeRates: Record<string, number> | null;
-  cryptoMode: CryptoMode | null;
+  cryptoMode: 'FULL_CRYPTO' | 'POINTS_ONLY' | null;
   isLoading: boolean;
   error: string | null;
-
-  // === حالة الواجهة (UI) ===
-  isWeb3Loading: boolean;
-
-  // === دوال المستخدم ===
-  fetchWallet: () => Promise<void>;          // جديدة، بدلاً من fetchBalances
+  
+  // دوال المستخدم
+  fetchBalances: () => Promise<void>;
   transferFunds: (data: any) => Promise<any>;
   swapCurrencies: (data: any) => Promise<any>;
   fetchHistory: (params?: any) => Promise<any>;
-
-  // === دوال المشرف ===
+  
+  // دوال المشرف
   mintFunds: (data: MintRequest) => Promise<void>;
   setExchangeRates: (data: ExchangeRatesUpdate) => Promise<void>;
   setMaxSupply: (data: MaxSupplyUpdate) => Promise<void>;
   fetchCryptoMode: () => Promise<void>;
   setCryptoMode: (data: CryptoModeToggle) => Promise<void>;
-
-  // === دوال UI ===
-  setWeb3Loading: (isLoading: boolean) => void;
 }
 
 export const useFinanceStore = create<FinanceState>((set, get) => ({
-  // الحالة الابتدائية
-  wallet: null,
+  balances: null,
   exchangeRates: null,
   cryptoMode: null,
   isLoading: false,
   error: null,
-  isWeb3Loading: false,
 
-  // === دوال المستخدم ===
-  fetchWallet: async () => {
-    set({ isLoading: true, error: null });
+  // --- دوال المستخدم ---
+  fetchBalances: async () => {
+    set({ isLoading: true });
     try {
-      const data = await financeService.getBalances(); // نفترض أن الخدمة تعيد { balances: ... }
-      set({ wallet: data, isLoading: false });        // نخزن في wallet بنفس الهيكل
+      const data = await financeService.getBalances();
+      set({ balances: data.balances, isLoading: false });
     } catch (error: any) {
       set({ isLoading: false, error: error.message });
     }
@@ -59,7 +47,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     try {
       const response = await financeService.transferFunds(data);
       set({ isLoading: false });
-      await get().fetchWallet(); // تحديث المحفظة بعد التحويل
+      // تحديث الرصيد بعد التحويل
+      await get().fetchBalances();
       return response;
     } catch (error: any) {
       set({ isLoading: false, error: error.message });
@@ -72,7 +61,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     try {
       const response = await financeService.swapCurrencies(data);
       set({ isLoading: false });
-      await get().fetchWallet();
+      await get().fetchBalances();
       return response;
     } catch (error: any) {
       set({ isLoading: false, error: error.message });
@@ -92,17 +81,18 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     }
   },
 
-  // === دوال المشرف ===
+  // --- دوال المشرف (Super Admin) ---
   mintFunds: async (data: MintRequest) => {
     set({ isLoading: true, error: null });
     try {
       await financeService.mintFunds(data);
       set({ isLoading: false });
-
+      
+      // 🔔 إرسال إشعار للمشرفين
       const notificationStore = useNotificationStore.getState();
       notificationStore.addNotification({
         id: Date.now(),
-        user_id: 0,
+        user_id: 0, // سيتم استبداله من الخادم
         title: '💰 تم طباعة عملات جديدة',
         body: `تم طباعة ${data.amount} من ${data.currency} بنجاح.`,
         data: { link: '/dashboard/finance/admin' },
@@ -110,8 +100,9 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         priority: 'HIGH',
         created_at: new Date().toISOString(),
       });
-
-      await get().fetchWallet();
+      
+      // تحديث الرصيد
+      await get().fetchBalances();
     } catch (error: any) {
       set({ isLoading: false, error: error.message });
       throw error;
@@ -123,7 +114,8 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     try {
       await financeService.setExchangeRates(data);
       set({ exchangeRates: data.rates, isLoading: false });
-
+      
+      // 🔔 إشعار بتحديث الأسعار
       const notificationStore = useNotificationStore.getState();
       notificationStore.addNotification({
         id: Date.now(),
@@ -146,7 +138,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     try {
       await financeService.setMaxSupply(data);
       set({ isLoading: false });
-
+      
       const notificationStore = useNotificationStore.getState();
       notificationStore.addNotification({
         id: Date.now(),
@@ -178,7 +170,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     try {
       await financeService.setCryptoMode(data);
       set({ cryptoMode: data.mode, isLoading: false });
-
+      
       const notificationStore = useNotificationStore.getState();
       notificationStore.addNotification({
         id: Date.now(),
@@ -195,7 +187,4 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       throw error;
     }
   },
-
-  // === دوال UI ===
-  setWeb3Loading: (isLoading) => set({ isWeb3Loading: isLoading }),
 }));
