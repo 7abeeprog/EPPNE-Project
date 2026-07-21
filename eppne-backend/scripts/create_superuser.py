@@ -33,7 +33,7 @@ async def create_superuser():
             sovereign_rank=SovereignRank.FOUNDER_L7,
             kyc_status=KYCStatus.VERIFIED,
             is_active=True,
-            balances={"MR_POUND": 1000000, "MR_USDT": 1000000, "MR7": 1000000, "NBT": 10000, "MRX": 1000}
+            #balances={"MR_POUND": 1000000, "MR_USDT": 1000000, "MR7": 1000000, "NBT": 10000, "MRX": 1000}
         )
         db.add(new_user)
         await db.commit()

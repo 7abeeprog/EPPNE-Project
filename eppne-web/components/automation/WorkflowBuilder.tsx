@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ReactFlow, Controls, Background, useNodesState, useEdgesState, addEdge, Connection, Node, Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { createWorkflow, updateWorkflow } from '@/services/automation';
+import { createWorkflow, updateWorkflow } from '@/services/automation.service';
 import { Loader2, Save, Play, X, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import DOMPurify from 'dompurify';
@@ -161,15 +161,15 @@ export default function WorkflowBuilder({ initialWorkflow, isNew }: WorkflowBuil
       nds.map(n =>
         n.id === selectedNodeId
           ? {
-              ...n,
-              data: {
-                ...n.data,
-                config: {
-                  ...n.data.config,
-                  [key]: value,
-                },
+            ...n,
+            data: {
+              ...n.data,
+              config: {
+                ...n.data.config,
+                [key]: value,
               },
-            }
+            },
+          }
           : n
       )
     );

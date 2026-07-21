@@ -1,97 +1,457 @@
 // services/employment.ts
-import api from '@/lib/axios';
-import type {
-  JobListing,
-  JobApplication,
-  EmploymentContract,
-  AttendanceRecord,
-  LeaveRequest,
-  PayrollRecord,
-} from '@/types/employment';
+import { apiClient } from "@/lib/api-client";
+import type { components } from "@/src/lib/api-types";
+import { handleError } from "@/lib/error-handler";
+import { generateIdempotencyKey } from "@/lib/utils";
 
-// ========== Jobs ==========
-export const getOpenJobs = (params?: { employment_type?: string; skip?: number; limit?: number }) =>
-  api.get<JobListing[]>('/employment/jobs/open', { params });
+type JobListingCreate = components['schemas']['JobListingCreate'];
+type JobListingResponse = components['schemas']['JobListingResponse'];
+type JobApplicationCreate = components['schemas']['JobApplicationCreate'];
+type JobApplicationResponse = components['schemas']['JobApplicationResponse'];
+type EmploymentContractCreate = components['schemas']['EmploymentContractCreate'];
+type EmploymentContractResponse = components['schemas']['EmploymentContractResponse'];
+type ContractSignRequest = components['schemas']['app__domains__employment__schemas__ContractSignRequest'];
+type AttendanceCheckIn = components['schemas']['AttendanceCheckIn'];
+type AttendanceRecordResponse = components['schemas']['AttendanceRecordResponse'];
+type LeaveRequestCreate = components['schemas']['LeaveRequestCreate'];
+type LeaveRequestResponse = components['schemas']['LeaveRequestResponse'];
+type PayrollRecordResponse = components['schemas']['PayrollRecordResponse'];
 
-export const getMyJobs = (params?: { skip?: number; limit?: number }) =>
-  api.get<JobListing[]>('/employment/jobs/my', { params });
+export const EmploymentService = {
+  /**
+   * إنشاء وظيفة جديدة (لأصحاب العمل)
+   * POST /employment/employment/jobs
+   * تدعم X-Tenant-ID
+   */
+  createJob: async (data: JobListingCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<JobListingResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<JobListingResponse>("/employment/employment/jobs", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء الوظيفة");
+    }
+  },
 
-export const getJob = (jobId: number) => api.get<JobListing>(`/employment/jobs/${jobId}`);
+  /**
+   * جلب الوظائف النشطة المتاحة للتقديم
+   * GET /employment/employment/jobs/open
+   * تدعم X-Tenant-ID
+   */
+  getOpenJobs: async (
+    params?: {
+      employment_type?: string | null;
+      skip?: number;
+      limit?: number;
+    },
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<JobListingResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<JobListingResponse[]>("/employment/employment/jobs/open", {
+        params,
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب الوظائف النشطة");
+    }
+  },
 
-export const createJob = (data: Partial<JobListing>) =>
-  api.post<JobListing>('/employment/jobs', data);
+  /**
+   * جلب الوظائف التي نشرها المستخدم (لأصحاب العمل)
+   * GET /employment/employment/jobs/my
+   */
+  getMyJobs: async (params?: { skip?: number; limit?: number }): Promise<JobListingResponse[]> => {
+    try {
+      const { data } = await apiClient.get<JobListingResponse[]>("/employment/employment/jobs/my", {
+        params,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب وظائفي");
+    }
+  },
 
-export const updateJob = (jobId: number, data: Partial<JobListing>) =>
-  api.put<JobListing>(`/employment/jobs/${jobId}`, data);
+  /**
+   * تحديث وظيفة موجودة (لصاحب العمل)
+   * PUT /employment/employment/jobs/{job_id}
+   */
+  updateJob: async (jobId: number, data: JobListingCreate): Promise<JobListingResponse> => {
+    try {
+      const id = Number(jobId);
+      if (isNaN(id)) throw new Error("معرف الوظيفة غير صحيح");
+      const { data: result } = await apiClient.put<JobListingResponse>(`/employment/employment/jobs/${id}`, data, {
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تحديث الوظيفة");
+    }
+  },
 
-export const closeJob = (jobId: number) => api.delete(`/employment/jobs/${jobId}`);
+  /**
+   * إغلاق وظيفة (وقف استقبال الطلبات)
+   * DELETE /employment/employment/jobs/{job_id}
+   */
+  closeJob: async (jobId: number): Promise<void> => {
+    try {
+      const id = Number(jobId);
+      if (isNaN(id)) throw new Error("معرف الوظيفة غير صحيح");
+      await apiClient.delete(`/employment/employment/jobs/${id}`, {
+        withCredentials: true,
+      });
+    } catch (error) {
+      throw handleError(error, "فشل إغلاق الوظيفة");
+    }
+  },
 
-// ========== Applications ==========
-export const applyToJob = (data: { job_id: number; cover_letter?: string; resume_url?: string }) =>
-  api.post<JobApplication>('/employment/applications', data);
+  /**
+   * تقديم طلب وظيفة (للمستخدمين العاديين)
+   * POST /employment/employment/applications
+   * تدعم X-Tenant-ID
+   */
+  applyToJob: async (data: JobApplicationCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<JobApplicationResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<JobApplicationResponse>("/employment/employment/applications", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تقديم طلب الوظيفة");
+    }
+  },
 
-export const getMyApplications = (params?: { skip?: number; limit?: number }) =>
-  api.get<JobApplication[]>('/employment/applications/my', { params });
+  /**
+   * جلب طلبات التوظيف الخاصة بي
+   * GET /employment/employment/applications/my
+   */
+  getMyApplications: async (params?: { skip?: number; limit?: number }): Promise<JobApplicationResponse[]> => {
+    try {
+      const { data } = await apiClient.get<JobApplicationResponse[]>("/employment/employment/applications/my", {
+        params,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب طلباتي");
+    }
+  },
 
-export const getJobApplications = (jobId: number, params?: { skip?: number; limit?: number }) =>
-  api.get<JobApplication[]>(`/employment/applications/job/${jobId}`, { params });
+  /**
+   * جلب طلبات التوظيف لوظيفة معينة (لصاحب العمل)
+   * GET /employment/employment/applications/job/{job_id}
+   */
+  getJobApplications: async (jobId: number, params?: { skip?: number; limit?: number }): Promise<JobApplicationResponse[]> => {
+    try {
+      const id = Number(jobId);
+      if (isNaN(id)) throw new Error("معرف الوظيفة غير صحيح");
+      const { data } = await apiClient.get<JobApplicationResponse[]>(`/employment/employment/applications/job/${id}`, {
+        params,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب طلبات الوظيفة");
+    }
+  },
 
-export const reviewApplication = (applicationId: number, approve: boolean) =>
-  api.post<JobApplication>(`/employment/applications/${applicationId}/review?approve=${approve}`);
+  /**
+   * قبول أو رفض طلب وظيفة (لصاحب العمل)
+   * POST /employment/employment/applications/{application_id}/review
+   */
+  reviewApplication: async (applicationId: number, approve: boolean): Promise<JobApplicationResponse> => {
+    try {
+      const id = Number(applicationId);
+      if (isNaN(id)) throw new Error("معرف الطلب غير صحيح");
+      const { data: result } = await apiClient.post<JobApplicationResponse>(
+        `/employment/employment/applications/${id}/review`,
+        undefined,
+        {
+          params: { approve },
+          withCredentials: true,
+        }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل مراجعة الطلب");
+    }
+  },
 
-// ========== Contracts ==========
-export const createContract = (data: Partial<EmploymentContract>, idempotencyKey?: string) =>
-  api.post<EmploymentContract>('/employment/contracts', data, {
-    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
-  });
+  /**
+   * إنشاء عقد عمل بعد قبول طلب التوظيف (لصاحب العمل)
+   * POST /employment/employment/contracts
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  createContract: async (
+    data: EmploymentContractCreate,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<EmploymentContractResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<EmploymentContractResponse>(
+        "/employment/employment/contracts",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء العقد");
+    }
+  },
 
-export const getMyContract = () => api.get<EmploymentContract>('/employment/contracts/me');
+  /**
+   * جلب العقد النشط للموظف الحالي
+   * GET /employment/employment/contracts/me
+   */
+  getMyActiveContract: async (): Promise<EmploymentContractResponse> => {
+    try {
+      const { data } = await apiClient.get<EmploymentContractResponse>("/employment/employment/contracts/me", {
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب العقد النشط");
+    }
+  },
 
-export const getContract = (contractId: number) =>
-  api.get<EmploymentContract>(`/employment/contracts/${contractId}`);
+  /**
+   * توقيع العقد (للموظف أو صاحب العمل)
+   * POST /employment/employment/contracts/{contract_id}/sign
+   */
+  signContract: async (contractId: number, data: ContractSignRequest): Promise<void> => {
+    try {
+      const id = Number(contractId);
+      if (isNaN(id)) throw new Error("معرف العقد غير صحيح");
+      await apiClient.post(`/employment/employment/contracts/${id}/sign`, data, {
+        withCredentials: true,
+      });
+    } catch (error) {
+      throw handleError(error, "فشل توقيع العقد");
+    }
+  },
 
-export const signContract = (contractId: number, signature_tx_hash: string) =>
-  api.post(`/employment/contracts/${contractId}/sign`, { contract_id: contractId, signature_tx_hash });
+  /**
+   * تسجيل حضور الموظف (مع التحقق من الموقع الجغرافي)
+   * POST /employment/employment/attendance/check-in
+   */
+  checkIn: async (contractId: number, data: AttendanceCheckIn): Promise<void> => {
+    try {
+      const id = Number(contractId);
+      if (isNaN(id)) throw new Error("معرف العقد غير صحيح");
+      await apiClient.post("/employment/employment/attendance/check-in", data, {
+        params: { contract_id: id },
+        withCredentials: true,
+      });
+    } catch (error) {
+      throw handleError(error, "فشل تسجيل الحضور");
+    }
+  },
 
-// ========== Attendance ==========
-export const checkIn = (contractId: number, data: { latitude: number; longitude: number; device_fingerprint?: string }) =>
-  api.post(`/employment/attendance/check-in?contract_id=${contractId}`, data);
+  /**
+   * تسجيل انصراف الموظف وحساب ساعات العمل
+   * POST /employment/employment/attendance/check-out
+   */
+  checkOut: async (contractId: number, location?: AttendanceCheckIn | null): Promise<void> => {
+    try {
+      const id = Number(contractId);
+      if (isNaN(id)) throw new Error("معرف العقد غير صحيح");
+      await apiClient.post("/employment/employment/attendance/check-out", location || undefined, {
+        params: { contract_id: id },
+        withCredentials: true,
+      });
+    } catch (error) {
+      throw handleError(error, "فشل تسجيل الانصراف");
+    }
+  },
 
-export const checkOut = (contractId: number, data?: { latitude?: number; longitude?: number }) =>
-  api.post(`/employment/attendance/check-out?contract_id=${contractId}`, data || {});
+  /**
+   * جلب سجل الحضور الخاص بي لعقد معين
+   * GET /employment/employment/attendance/my
+   */
+  getMyAttendance: async (contractId: number, params?: { skip?: number; limit?: number }): Promise<AttendanceRecordResponse[]> => {
+    try {
+      const id = Number(contractId);
+      if (isNaN(id)) throw new Error("معرف العقد غير صحيح");
+      const { data } = await apiClient.get<AttendanceRecordResponse[]>("/employment/employment/attendance/my", {
+        params: { ...params, contract_id: id },
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب سجل الحضور");
+    }
+  },
 
-export const getMyAttendance = (contractId: number, params?: { skip?: number; limit?: number }) =>
-  api.get<AttendanceRecord[]>(`/employment/attendance/my?contract_id=${contractId}`, { params });
+  /**
+   * تقديم طلب إجازة
+   * POST /employment/employment/leaves/request
+   */
+  requestLeave: async (data: LeaveRequestCreate): Promise<LeaveRequestResponse> => {
+    try {
+      const { data: result } = await apiClient.post<LeaveRequestResponse>("/employment/employment/leaves/request", data, {
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تقديم طلب الإجازة");
+    }
+  },
 
-// ========== Leave ==========
-export const requestLeave = (data: { leave_type: string; start_date: string; end_date: string; reason?: string }) =>
-  api.post<LeaveRequest>('/employment/leaves/request', data);
+  /**
+   * جلب طلبات الإجازات المعلقة لجميع عقود صاحب العمل
+   * GET /employment/employment/leaves/pending
+   */
+  getPendingLeavesForEmployer: async (): Promise<LeaveRequestResponse[]> => {
+    try {
+      const { data } = await apiClient.get<LeaveRequestResponse[]>("/employment/employment/leaves/pending", {
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب طلبات الإجازات المعلقة");
+    }
+  },
 
-export const getPendingLeaves = () => api.get<LeaveRequest[]>('/employment/leaves/pending');
+  /**
+   * الموافقة أو رفض طلب إجازة (لصاحب العمل)
+   * POST /employment/employment/leaves/{leave_id}/approve
+   */
+  approveLeave: async (leaveId: number, approve: boolean): Promise<void> => {
+    try {
+      const id = Number(leaveId);
+      if (isNaN(id)) throw new Error("معرف طلب الإجازة غير صحيح");
+      await apiClient.post(`/employment/employment/leaves/${id}/approve`, undefined, {
+        params: { approve },
+        withCredentials: true,
+      });
+    } catch (error) {
+      throw handleError(error, "فشل معالجة طلب الإجازة");
+    }
+  },
 
-export const approveLeave = (leaveId: number, approve: boolean) =>
-  api.post(`/employment/leaves/${leaveId}/approve?approve=${approve}`);
+  /**
+   * إنشاء كشف راتب لشهر محدد (لصاحب العمل)
+   * POST /employment/employment/payroll/generate
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  generatePayroll: async (
+    contractId: number,
+    month: string,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<PayrollRecordResponse> => {
+    try {
+      const id = Number(contractId);
+      if (isNaN(id)) throw new Error("معرف العقد غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<PayrollRecordResponse>(
+        "/employment/employment/payroll/generate",
+        undefined,
+        {
+          params: { contract_id: id, month },
+          headers: reqHeaders,
+          withCredentials: true,
+        }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء كشف الراتب");
+    }
+  },
 
-export const getMyLeaves = (params?: { skip?: number; limit?: number }) =>
-  api.get<LeaveRequest[]>('/employment/leaves/my', { params });
+  /**
+   * اعتماد كشف الراتب قبل الدفع
+   * POST /employment/employment/payroll/{payroll_id}/approve
+   */
+  approvePayroll: async (payrollId: number): Promise<PayrollRecordResponse> => {
+    try {
+      const id = Number(payrollId);
+      if (isNaN(id)) throw new Error("معرف كشف الراتب غير صحيح");
+      const { data: result } = await apiClient.post<PayrollRecordResponse>(
+        `/employment/employment/payroll/${id}/approve`,
+        undefined,
+        { withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل اعتماد كشف الراتب");
+    }
+  },
 
-// ========== Payroll ==========
-export const generatePayroll = (contractId: number, month: string, idempotencyKey?: string) =>
-  api.post<PayrollRecord>(
-    `/employment/payroll/generate?contract_id=${contractId}&month=${month}`,
-    {},
-    { headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {} }
-  );
+  /**
+   * دفع الراتب (تحويل من محفظة صاحب العمل إلى محفظة الموظف)
+   * POST /employment/employment/payroll/{payroll_id}/pay
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  payPayroll: async (
+    payrollId: number,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<PayrollRecordResponse> => {
+    try {
+      const id = Number(payrollId);
+      if (isNaN(id)) throw new Error("معرف كشف الراتب غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<PayrollRecordResponse>(
+        `/employment/employment/payroll/${id}/pay`,
+        undefined,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل دفع الراتب");
+    }
+  },
 
-export const approvePayroll = (payrollId: number) =>
-  api.post<PayrollRecord>(`/employment/payroll/${payrollId}/approve`);
-
-export const payPayroll = (payrollId: number, idempotencyKey?: string) =>
-  api.post<PayrollRecord>(
-    `/employment/payroll/${payrollId}/pay`,
-    {},
-    { headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {} }
-  );
-
-export const getMyPayrolls = (params?: { skip?: number; limit?: number }) =>
-  api.get<PayrollRecord[]>('/employment/payroll/my', { params });
+  /**
+   * جلب كشوف رواتب الموظف الحالي
+   * GET /employment/employment/payroll/my
+   */
+  getMyPayrolls: async (params?: { skip?: number; limit?: number }): Promise<PayrollRecordResponse[]> => {
+    try {
+      const { data } = await apiClient.get<PayrollRecordResponse[]>("/employment/employment/payroll/my", {
+        params,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب كشوف الرواتب");
+    }
+  },
+};

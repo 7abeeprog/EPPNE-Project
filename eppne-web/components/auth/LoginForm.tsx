@@ -1,8 +1,6 @@
-// components/auth/LoginForm.tsx
 "use client";
 
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useLogin } from "@/hooks/auth/useAuth";
 import { Button } from "@/components/ui/button";
@@ -28,11 +26,20 @@ export function LoginForm() {
     loginMutation.mutate({ username: username.trim(), password });
   };
 
-  // ✅ معالجة نجاح تسجيل الدخول (Toast مع مدة محددة)
-  if (loginMutation.isSuccess) {
-    toast.success("مرحباً بعودتك! 🚀", { duration: 3000 });
-    router.push("/dashboard");
-  }
+  // ✅ زرع الكوكيز والتوجيه الإجباري
+  useEffect(() => {
+    if (loginMutation.isSuccess) {
+      const responseData: any = loginMutation.data;
+      const token = responseData?.access_token || responseData?.data?.access_token;
+
+      if (token) {
+        document.cookie = `access_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+      }
+
+      toast.success("مرحباً بعودتك! 🚀", { duration: 3000 });
+      window.location.href = "/dashboard";
+    }
+  }, [loginMutation.isSuccess, loginMutation.data]);
 
   return (
     <Card className="border-white/10 bg-card/40 backdrop-blur-xl shadow-[0_0_50px_-15px_rgba(var(--primary-rgb),0.2)] rounded-[2rem] overflow-hidden">

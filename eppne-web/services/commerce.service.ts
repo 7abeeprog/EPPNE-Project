@@ -1,184 +1,217 @@
 // services/commerce.service.ts
 import { apiClient } from "@/lib/api-client";
-import {
-  Product,
-  ProductVariant,
-  Order,
-  CheckoutRequest,
-  CheckoutResponse,
-  Address,
-  PaymentRequest,
-  Commission,
-  AffiliateTree,
-  PaginatedResponse,
-  WalletBalance,
-} from "@/types/commerce";
+import type { components } from "@/src/lib/api-types";
 import { handleError } from "@/lib/error-handler";
+
+type StoreCreate = components['schemas']['StoreCreate'];
+type StoreResponse = components['schemas']['StoreResponse'];
+type ProductCreate = components['schemas']['ProductCreate'];
+type ProductResponse = components['schemas']['ProductResponse'];
+type CheckoutRequest = components['schemas']['CheckoutRequest'];
+type OrderResponse = components['schemas']['OrderResponse'];
+type PaymentRequestCreate = components['schemas']['PaymentRequestCreate'];
+type PaymentRequestResponse = components['schemas']['PaymentRequestResponse'];
+type AgentConfirmPayment = components['schemas']['AgentConfirmPayment'];
+type AffiliateTreeResponse = components['schemas']['AffiliateTreeResponse'];
+type CommissionResponse = components['schemas']['CommissionResponse'];
 
 export const CommerceService = {
   // ==========================================
-  // 1. المنتجات
+  // 1. المتاجر (Stores)
   // ==========================================
-  getProducts: async (
-    storeId: number,
-    skip: number = 0,
-    limit: number = 20
-  ): Promise<PaginatedResponse<Product>> => {
+  /**
+   * إنشاء متجر جديد
+   * POST /commerce/commerce/stores
+   */
+  createStore: async (data: StoreCreate): Promise<StoreResponse> => {
     try {
-      const { data } = await apiClient.get('/commerce/products', {
-        params: { store_id: storeId, skip, limit },
+      const { data: result } = await apiClient.post<StoreResponse>("/commerce/commerce/stores", data, {
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء المتجر");
+    }
+  },
+
+  // ==========================================
+  // 2. المنتجات (Products)
+  // ==========================================
+  /**
+   * جلب قائمة المنتجات
+   * GET /commerce/commerce/products
+   */
+  listProducts: async (params: { store_id: number; skip?: number; limit?: number }): Promise<ProductResponse[]> => {
+    try {
+      const { data } = await apiClient.get<ProductResponse[]>("/commerce/commerce/products", {
+        params,
+        withCredentials: true,
       });
       return data;
     } catch (error) {
-      throw handleError(error, 'فشل جلب المنتجات');
+      throw handleError(error, "فشل جلب المنتجات");
     }
   },
 
-  getProduct: async (productId: number): Promise<Product> => {
+  /**
+   * إنشاء منتج جديد
+   * POST /commerce/commerce/products
+   */
+  createProduct: async (data: ProductCreate): Promise<ProductResponse> => {
     try {
-      const { data } = await apiClient.get(`/commerce/products/${productId}`);
-      return data;
+      const { data: result } = await apiClient.post<ProductResponse>("/commerce/commerce/products", data, {
+        withCredentials: true,
+      });
+      return result;
     } catch (error) {
-      throw handleError(error, 'فشل جلب المنتج');
+      throw handleError(error, "فشل إنشاء المنتج");
     }
   },
 
   // ==========================================
-  // 2. الطلبات
+  // 3. الطلبات (Orders)
   // ==========================================
-  checkout: async (payload: CheckoutRequest): Promise<CheckoutResponse> => {
+  /**
+   * إتمام عملية الشراء (Checkout)
+   * POST /commerce/commerce/checkout
+   */
+  checkout: async (data: CheckoutRequest): Promise<OrderResponse> => {
     try {
-      const { data } = await apiClient.post('/commerce/checkout', payload);
-      return data;
+      const { data: result } = await apiClient.post<OrderResponse>("/commerce/commerce/checkout", data, {
+        withCredentials: true,
+      });
+      return result;
     } catch (error) {
-      throw handleError(error, 'فشل إتمام الشراء');
+      throw handleError(error, "فشل إتمام الشراء");
     }
   },
 
-  getOrders: async (
-    skip: number = 0,
-    limit: number = 20
-  ): Promise<PaginatedResponse<Order>> => {
+  /**
+   * جلب طلباتي
+   * GET /commerce/commerce/orders/me
+   */
+  getMyOrders: async (): Promise<OrderResponse[]> => {
     try {
-      const { data } = await apiClient.get('/commerce/orders/me', {
-        params: { skip, limit },
+      const { data } = await apiClient.get<OrderResponse[]>("/commerce/commerce/orders/me", {
+        withCredentials: true,
       });
       return data;
     } catch (error) {
-      throw handleError(error, 'فشل جلب الطلبات');
+      throw handleError(error, "فشل جلب الطلبات");
     }
   },
 
-  getOrder: async (orderId: number): Promise<Order> => {
+  // ==========================================
+  // 4. نظام الإحالات (Affiliate)
+  // ==========================================
+  /**
+   * تعيين الراعي (Sponsor)
+   * POST /commerce/commerce/affiliate/link
+   */
+  setAffiliateSponsor: async (sponsorCode: string): Promise<AffiliateTreeResponse> => {
     try {
-      const { data } = await apiClient.get(`/commerce/orders/${orderId}`);
-      return data;
+      const { data: result } = await apiClient.post<AffiliateTreeResponse>(
+        "/commerce/commerce/affiliate/link",
+        undefined,
+        {
+          params: { sponsor_code: sponsorCode },
+          withCredentials: true,
+        }
+      );
+      return result;
     } catch (error) {
-      throw handleError(error, 'فشل جلب تفاصيل الطلب');
+      throw handleError(error, "فشل تعيين الراعي");
     }
   },
 
-  // ==========================================
-  // 3. العناوين
-  // ==========================================
-  getAddresses: async (): Promise<Address[]> => {
+  /**
+   * جلب عمولاتي
+   * GET /commerce/commerce/affiliate/commissions
+   */
+  getMyCommissions: async (): Promise<CommissionResponse[]> => {
     try {
-      const { data } = await apiClient.get('/commerce/addresses');
-      return data;
-    } catch (error) {
-      throw handleError(error, 'فشل جلب العناوين');
-    }
-  },
-
-  createAddress: async (payload: Omit<Address, 'id' | 'user_id' | 'created_at'>): Promise<Address> => {
-    try {
-      const { data } = await apiClient.post('/commerce/addresses', payload);
-      return data;
-    } catch (error) {
-      throw handleError(error, 'فشل إنشاء العنوان');
-    }
-  },
-
-  // ==========================================
-  // 4. الدفع
-  // ==========================================
-  createPaymentRequest: async (orderId: number, paymentMethod: string): Promise<PaymentRequest> => {
-    try {
-      const { data } = await apiClient.post('/commerce/payment-request', {
-        order_id: orderId,
-        payment_method: paymentMethod,
+      const { data } = await apiClient.get<CommissionResponse[]>("/commerce/commerce/affiliate/commissions", {
+        withCredentials: true,
       });
       return data;
     } catch (error) {
-      throw handleError(error, 'فشل طلب الدفع');
+      throw handleError(error, "فشل جلب العمولات");
     }
   },
 
-  confirmAgentPayment: async (agentCode: string): Promise<Order> => {
+  /**
+   * تحرير العمولات المستحقة
+   * POST /commerce/commerce/affiliate/commissions/release
+   */
+  releaseMyCommissions: async (): Promise<void> => {
     try {
-      const { data } = await apiClient.post('/commerce/payment/agent/confirm', {
-        agent_code: agentCode,
+      await apiClient.post("/commerce/commerce/affiliate/commissions/release", undefined, {
+        withCredentials: true,
+      });
+    } catch (error) {
+      throw handleError(error, "فشل تحرير العمولات");
+    }
+  },
+
+  // ==========================================
+  // 5. الدفع (Payment)
+  // ==========================================
+  /**
+   * إنشاء طلب دفع
+   * POST /commerce/commerce/payment-request
+   */
+  createPaymentRequest: async (data: PaymentRequestCreate): Promise<PaymentRequestResponse> => {
+    try {
+      const { data: result } = await apiClient.post<PaymentRequestResponse>("/commerce/commerce/payment-request", data, {
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل طلب الدفع");
+    }
+  },
+
+  /**
+   * تأكيد الدفع عبر الوكيل
+   * POST /commerce/commerce/payment/agent/confirm
+   */
+  confirmAgentPayment: async (data: AgentConfirmPayment): Promise<OrderResponse> => {
+    try {
+      const { data: result } = await apiClient.post<OrderResponse>("/commerce/commerce/payment/agent/confirm", data, {
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تأكيد الدفع عبر الوكيل");
+    }
+  },
+
+  /**
+   * Webhook من بوابة الفيزا (خارجي، لا يحتاج توكن)
+   * POST /commerce/commerce/payment/visa/webhook
+   */
+  visaWebhook: async (payload: any, signature: string): Promise<void> => {
+    try {
+      await apiClient.post("/commerce/commerce/payment/visa/webhook", payload, {
+        headers: { signature },
+      });
+    } catch (error) {
+      throw handleError(error, "فشل معالجة Webhook");
+    }
+  },
+
+  /**
+   * جلب حالة الدفع لطلب معين
+   * GET /commerce/commerce/payment/status/{order_id}
+   */
+  getPaymentStatus: async (orderId: number): Promise<any> => {
+    try {
+      const { data } = await apiClient.get(`/commerce/commerce/payment/status/${orderId}`, {
+        withCredentials: true,
       });
       return data;
     } catch (error) {
-      throw handleError(error, 'فشل تأكيد الدفع عبر الوكيل');
-    }
-  },
-
-  // ==========================================
-  // 5. الإحالة (Affiliate)
-  // ==========================================
-  getAffiliateTree: async (): Promise<AffiliateTree> => {
-    try {
-      const { data } = await apiClient.get('/commerce/affiliate/tree');
-      return data;
-    } catch (error) {
-      throw handleError(error, 'فشل جلب شجرة الإحالة');
-    }
-  },
-
-  getCommissions: async (
-    skip: number = 0,
-    limit: number = 20
-  ): Promise<PaginatedResponse<Commission>> => {
-    try {
-      const { data } = await apiClient.get('/commerce/affiliate/commissions', {
-        params: { skip, limit },
-      });
-      return data;
-    } catch (error) {
-      throw handleError(error, 'فشل جلب العمولات');
-    }
-  },
-
-  releaseCommissions: async (): Promise<void> => {
-    try {
-      await apiClient.post('/commerce/affiliate/commissions/release');
-    } catch (error) {
-      throw handleError(error, 'فشل تحرير العمولات');
-    }
-  },
-
-  setAffiliateSponsor: async (sponsorCode: string): Promise<AffiliateTree> => {
-    try {
-      const { data } = await apiClient.post('/commerce/affiliate/link', {
-        sponsor_code: sponsorCode,
-      });
-      return data;
-    } catch (error) {
-      throw handleError(error, 'فشل ربط الداعي');
-    }
-  },
-
-  // ==========================================
-  // 6. المحفظة (للتحقق من الرصيد)
-  // ==========================================
-  getWallet: async (): Promise<WalletBalance> => {
-    try {
-      const { data } = await apiClient.get('/finance/balances');
-      return data;
-    } catch (error) {
-      throw handleError(error, 'فشل جلب رصيد المحفظة');
+      throw handleError(error, "فشل جلب حالة الدفع");
     }
   },
 };

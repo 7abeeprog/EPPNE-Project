@@ -1,129 +1,260 @@
 // services/tourism-sports.ts
-import api from '@/lib/axios';
-import type {
-  TourismDestination,
-  TourismProgram,
-  ProgramParticipant,
-  EntertainmentEvent,
-  NFTTicket,
-  SportsOrganization,
-  PlayerProfile,
-  PlayerTransfer,
-  Tournament,
-  SportsMatch,
-  TourismSportsStats,
-  DestinationType,
-  ProgramTier,
-  EventType,
-  TicketTier,
-  SportCategory,
-  SportsEntityType,
-  TournamentFormat,
-} from '@/types/tourism-sports';
+import { apiClient } from "@/lib/api-client";
+import type { components } from "@/src/lib/api-types";
+import { handleError } from "@/lib/error-handler";
+import { generateIdempotencyKey } from "@/lib/utils";
 
-// ========== Destinations ==========
-export const getDestinations = (params?: { destination_type?: DestinationType }) =>
-  api.get<TourismDestination[]>('/tourism-sports/destinations', { params });
+type DestinationCreate = components['schemas']['DestinationCreate'];
+type DestinationResponse = components['schemas']['DestinationResponse'];
+type TourismProgramCreate = components['schemas']['TourismProgramCreate'];
+type TourismProgramResponse = components['schemas']['TourismProgramResponse'];
+type ProgramBookingResponse = components['schemas']['ProgramBookingResponse'];
+type EventCreate = components['schemas']['EventCreate'];
+type EventResponse = components['schemas']['EventResponse'];
+type TicketPurchase = components['schemas']['TicketPurchase'];
+type TicketResponse = components['schemas']['app__domains__tourism_sports__schemas__TicketResponse'];
+type SportsOrgCreate = components['schemas']['SportsOrgCreate'];
+type SportsOrgResponse = components['schemas']['SportsOrgResponse'];
+type PlayerProfileCreate = components['schemas']['PlayerProfileCreate'];
+type PlayerProfileResponse = components['schemas']['PlayerProfileResponse'];
+type TransferBidCreate = components['schemas']['TransferBidCreate'];
+type TransferBidResponse = components['schemas']['TransferBidResponse'];
+type TournamentCreate = components['schemas']['TournamentCreate'];
+type TournamentResponse = components['schemas']['TournamentResponse'];
 
-export const getDestination = (id: number) => api.get<TourismDestination>(`/tourism-sports/destinations/${id}`);
-
-export const createDestination = (data: {
-  name: string;
-  destination_type: DestinationType;
-  planet_body?: string;
-  gps_location?: { lat: number; lng: number };
-  description?: string;
-}) => api.post<TourismDestination>('/tourism-sports/destinations', data);
-
-// ========== Programs ==========
-export const getPrograms = () => api.get<TourismProgram[]>('/tourism-sports/programs');
-
-export const getProgram = (id: number) => api.get<TourismProgram>(`/tourism-sports/programs/${id}`);
-
-export const bookProgram = (programId: number, idempotencyKey?: string) =>
-  api.post<ProgramParticipant>(
-    `/tourism-sports/programs/${programId}/book`,
-    {},
-    { headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {} }
-  );
-
-// ========== Events ==========
-export const getEvents = () => api.get<EntertainmentEvent[]>('/tourism-sports/events');
-
-export const getEvent = (id: number) => api.get<EntertainmentEvent>(`/tourism-sports/events/${id}`);
-
-export const purchaseTicket = (
-  data: { event_id: number; tier: TicketTier; require_vip_transport?: boolean },
-  idempotencyKey?: string
-) =>
-  api.post<NFTTicket>('/tourism-sports/tickets/purchase', data, {
-    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
-  });
-
-// ========== Tickets ==========
-export const getMyTickets = () => api.get<NFTTicket[]>('/tourism-sports/tickets/my');
-
-// ========== Sports Organizations ==========
-export const getSportsOrganizations = (params?: { org_type?: SportsEntityType }) =>
-  api.get<SportsOrganization[]>('/tourism-sports/sports/organizations', { params });
-
-export const getSportsOrg = (id: number) => api.get<SportsOrganization>(`/tourism-sports/sports/organizations/${id}`);
-
-export const createSportsOrg = (data: {
-  name: string;
-  org_type: SportsEntityType;
-  main_sport?: string;
-}) => api.post<SportsOrganization>('/tourism-sports/sports/organizations', data);
-
-// ========== Players ==========
-export const getPlayers = (params?: { club_id?: number; sport_category?: SportCategory }) =>
-  api.get<PlayerProfile[]>('/tourism-sports/sports/players', { params });
-
-export const getPlayer = (id: number) => api.get<PlayerProfile>(`/tourism-sports/sports/players/${id}`);
-
-export const createPlayerProfile = (data: {
-  sport_category: SportCategory;
-  position_or_role?: string;
-  market_value_mrusdt?: number;
-}) => api.post<PlayerProfile>('/tourism-sports/sports/players/profile', data);
-
-// ========== Transfers ==========
-export const getTransfers = (params?: { status?: TransferStatus }) =>
-  api.get<PlayerTransfer[]>('/tourism-sports/sports/transfers', { params });
-
-export const placeTransferBid = (
-  data: {
-    player_id: number;
-    from_club_id: number;
-    to_club_id: number;
-    facilitating_agency_id?: number;
-    bid_amount_mrusdt: number;
-    agency_fee_percentage?: number;
-    contract_duration_months: number;
+export const TourismSportsService = {
+  /**
+   * جلب قائمة الوجهات
+   * GET /tourism-sports/tourism-sports/destinations
+   * تدعم X-Tenant-ID
+   */
+  listDestinations: async (params?: { destination_type?: string | null }, headers?: { 'X-Tenant-ID'?: number }): Promise<DestinationResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<DestinationResponse[]>("/tourism-sports/tourism-sports/destinations", {
+        params,
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب الوجهات");
+    }
   },
-  idempotencyKey?: string
-) =>
-  api.post<PlayerTransfer>('/tourism-sports/sports/transfers/bid', data, {
-    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
-  });
 
-// ========== Tournaments ==========
-export const getTournaments = () => api.get<Tournament[]>('/tourism-sports/sports/tournaments');
+  /**
+   * إنشاء وجهة جديدة
+   * POST /tourism-sports/tourism-sports/destinations
+   * تدعم X-Tenant-ID
+   */
+  createDestination: async (data: DestinationCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<DestinationResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<DestinationResponse>("/tourism-sports/tourism-sports/destinations", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء الوجهة");
+    }
+  },
 
-export const getTournament = (id: number) => api.get<Tournament>(`/tourism-sports/sports/tournaments/${id}`);
+  /**
+   * إنشاء برنامج سياحي جديد
+   * POST /tourism-sports/tourism-sports/programs
+   * تدعم X-Tenant-ID
+   */
+  createProgram: async (data: TourismProgramCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<TourismProgramResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<TourismProgramResponse>("/tourism-sports/tourism-sports/programs", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء البرنامج السياحي");
+    }
+  },
 
-export const createTournament = (data: {
-  name: string;
-  sport_category: SportCategory;
-  format: TournamentFormat;
-  prize_pool_mrusdt?: number;
-  start_date: string;
-  organizer_agency_id?: number;
-}) => api.post<Tournament>('/tourism-sports/sports/tournaments', data);
+  /**
+   * حجز برنامج سياحي
+   * POST /tourism-sports/tourism-sports/programs/{program_id}/book
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  bookProgram: async (
+    programId: number,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<ProgramBookingResponse> => {
+    try {
+      const id = Number(programId);
+      if (isNaN(id)) throw new Error("معرف البرنامج غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<ProgramBookingResponse>(
+        `/tourism-sports/tourism-sports/programs/${id}/book`,
+        undefined,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل حجز البرنامج السياحي");
+    }
+  },
 
-// ========== Matches ==========
-export const getMatches = (params?: { tournament_id?: number; status?: MatchStatus }) =>
-  api.get<SportsMatch[]>('/tourism-sports/sports/matches', { params });
+  /**
+   * إنشاء فعالية جديدة
+   * POST /tourism-sports/tourism-sports/events
+   * تدعم X-Tenant-ID
+   */
+  createEvent: async (data: EventCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<EventResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<EventResponse>("/tourism-sports/tourism-sports/events", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء الفعالية");
+    }
+  },
 
-// ========== Stats ==========
-export const getTourismSportsStats = () => api.get<TourismSportsStats>('/tourism-sports/stats');
+  /**
+   * شراء تذكرة
+   * POST /tourism-sports/tourism-sports/tickets/purchase
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  buyTicket: async (
+    data: TicketPurchase,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<TicketResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<TicketResponse>(
+        "/tourism-sports/tourism-sports/tickets/purchase",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل شراء التذكرة");
+    }
+  },
+
+  /**
+   * إنشاء منظمة رياضية جديدة
+   * POST /tourism-sports/tourism-sports/sports/organizations
+   * تدعم X-Tenant-ID
+   */
+  createSportsOrg: async (data: SportsOrgCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<SportsOrgResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<SportsOrgResponse>(
+        "/tourism-sports/tourism-sports/sports/organizations",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء المنظمة الرياضية");
+    }
+  },
+
+  /**
+   * إنشاء ملف لاعب جديد
+   * POST /tourism-sports/tourism-sports/sports/players/profile
+   */
+  createPlayerProfile: async (data: PlayerProfileCreate): Promise<PlayerProfileResponse> => {
+    try {
+      const { data: result } = await apiClient.post<PlayerProfileResponse>(
+        "/tourism-sports/tourism-sports/sports/players/profile",
+        data,
+        { withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء ملف اللاعب");
+    }
+  },
+
+  /**
+   * تقديم عرض انتقال لاعب
+   * POST /tourism-sports/tourism-sports/sports/transfers/bid
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  placeTransferBid: async (
+    data: TransferBidCreate,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<TransferBidResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<TransferBidResponse>(
+        "/tourism-sports/tourism-sports/sports/transfers/bid",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تقديم عرض الانتقال");
+    }
+  },
+
+  /**
+   * إنشاء بطولة جديدة
+   * POST /tourism-sports/tourism-sports/sports/tournaments
+   * تدعم X-Tenant-ID
+   */
+  createTournament: async (data: TournamentCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<TournamentResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<TournamentResponse>(
+        "/tourism-sports/tourism-sports/sports/tournaments",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء البطولة");
+    }
+  },
+};

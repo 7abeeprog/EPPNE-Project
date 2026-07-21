@@ -4,11 +4,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { getWorkflows, deleteWorkflow, triggerWorkflowManual } from '@/services/automation';
+import { AutomationService } from '@/services/automation.service'; // ✅ تغيير الاستيراد
 import { Play, Trash2, Edit, Plus, Power, PowerOff, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ConfirmationModal from '@/components/ui/ConfirmationModal';
-import type { Workflow } from '@/types/automation';
+import type { components } from '@/src/lib/api-types';
+
+type Workflow = components['schemas']['WorkflowResponse'];
 
 export default function WorkflowsListPage() {
   const queryClient = useQueryClient();
@@ -16,22 +18,21 @@ export default function WorkflowsListPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['workflows'],
-    queryFn: () => getWorkflows({ limit: 50 }).then(res => res.data),
+    queryFn: () => AutomationService.listWorkflows({ limit: 50 }), // ✅ استخدام AutomationService
     staleTime: 2 * 60 * 1000,
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => deleteWorkflow(id, true),
+    mutationFn: (id: number) => AutomationService.deleteWorkflow(id, true), // ✅ استخدام AutomationService
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflows'] }),
   });
 
   const triggerMutation = useMutation({
-    mutationFn: (id: number) => triggerWorkflowManual(id, {}),
+    mutationFn: (id: number) => AutomationService.triggerWorkflowManual(id, {}), // ✅ استخدام AutomationService
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workflows'] }),
   });
 
   const toggleActive = (workflow: Workflow) => {
-    // سيتم تنفيذ التحديث عبر useMutation منفصل
     // يمكن إضافة نقطة نهاية لتحديث is_active
   };
 
@@ -85,7 +86,7 @@ export default function WorkflowsListPage() {
                   </span>
                 </div>
                 <p className="text-sm text-muted-foreground/60 truncate mt-0.5">
-                  {wf.description || 'بدون وصف'} • {wf.nodes.length} عقدة • webhook: {wf.webhook_path || '—'}
+                  {wf.description || 'بدون وصف'} • {wf.nodes?.length || 0} عقدة • webhook: {wf.webhook_path || '—'}
                 </p>
               </div>
 

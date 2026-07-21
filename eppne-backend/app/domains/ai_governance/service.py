@@ -1,12 +1,14 @@
 # app/domains/ai_governance/service.py
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, cast
 from decimal import Decimal
 from datetime import datetime
 
 from app.domains.ai_governance.repository import AIGovernanceRepository
+from app.domains.ai_governance.models import AgentQuota, AgentRateLimit, AgentAuditLog
 from app.core.errors import PermissionDeniedError, NotFoundError, QuotaExceededError
 from app.core.logging_conf import logger
+
 
 class AIGovernanceService:
     """
@@ -27,33 +29,121 @@ class AIGovernanceService:
         tenant_id: int,
         agent_id: int,
         quota_data: dict,
-        ip_address: str
-    ) -> Any:
+        ip_address: Optional[str] = None
+    ) -> AgentQuota:
         """
         تعيين أو تحديث حصة وكيل معين (Quota) مع تسجيل إجراء التدقيق (Audit Log).
+        🔥 معاملة ذرية لضمان اتساق البيانات.
         """
-        # 1. إنشاء أو تحديث الحصة
-        quota = await self.repo.create_or_update_quota(
-            tenant_id=tenant_id,
-            agent_id=agent_id,
-            **quota_data
-        )
+        async with self.db.begin_nested():
+            # 1. إنشاء أو تحديث الحصة
+            quota = await self.repo.create_or_update_quota(
+                tenant_id=tenant_id,
+                agent_id=agent_id,
+                **quota_data
+            )
 
-        # 2. تسجيل العملية في سجلات التدقيق (لأغراض الأمان والشفافية)
-        await self.repo.create_audit_log(
-            tenant_id=tenant_id,
-            agent_id=agent_id,
-            admin_user_id=admin_id,
-            action="CHANGE_QUOTA",
-            new_value=quota_data,
-            ip_address=ip_address
-        )
+            # 2. تسجيل العملية في سجلات التدقيق
+            await self.repo.create_audit_log(
+                tenant_id=tenant_id,
+                agent_id=agent_id,
+                admin_user_id=admin_id,
+                action="CHANGE_QUOTA",
+                new_value=quota_data,
+                ip_address=ip_address
+            )
 
         logger.info(f"Admin {admin_id} updated quota for agent {agent_id} in tenant {tenant_id}")
         return quota
 
+    async def get_agent_quotas(self, agent_id: int, tenant_id: int) -> List[AgentQuota]:
+        """جلب جميع الحصص النشطة لوكيل معين."""
+        return await self.repo.get_active_quotas(agent_id=agent_id, tenant_id=tenant_id)
+
     # ============================================================
-    # 2. نقطة الخنق والتنفيذ (Choke-Point & Execution Validation)
+    # 2. حدود المعدل (Rate Limits)
+    # ============================================================
+
+    async def update_rate_limits(
+        self,
+        agent_id: int,
+        tenant_id: int,
+        admin_id: int,
+        data: dict,
+        ip_address: Optional[str] = None
+    ) -> AgentRateLimit:
+        """تحديث حدود المعدل للوكيل مع تسجيل التدقيق."""
+        async with self.db.begin_nested():
+            # جلب الحدود الحالية لتسجيل old_value
+            old_limits = await self.repo.get_rate_limits(agent_id, tenant_id)
+
+            limits = await self.repo.update_rate_limits(
+                agent_id=agent_id,
+                tenant_id=tenant_id,
+                data=data
+            )
+
+            # تسجيل التدقيق
+            await self.repo.create_audit_log(
+                tenant_id=tenant_id,
+                agent_id=agent_id,
+                admin_user_id=admin_id,
+                action="CHANGE_RATE_LIMIT",
+                old_value={"requests_per_minute": old_limits.requests_per_minute, "requests_per_hour": old_limits.requests_per_hour, "concurrent_limit": old_limits.concurrent_limit} if old_limits else None,
+                new_value=data,
+                ip_address=ip_address
+            )
+
+        return limits
+
+    async def get_rate_limits(self, agent_id: int, tenant_id: int) -> Optional[AgentRateLimit]:
+        """جلب حدود المعدل للوكيل."""
+        return await self.repo.get_rate_limits(agent_id, tenant_id)
+
+    # ============================================================
+    # 3. سجلات التدقيق (Audit Logs)
+    # ============================================================
+
+    async def get_audit_logs(
+        self,
+        agent_id: int,
+        tenant_id: int,
+        skip: int = 0,
+        limit: int = 100
+    ) -> List[AgentAuditLog]:
+        """جلب سجلات التدقيق لوكيل معين."""
+        return await self.repo.get_audit_logs(agent_id, tenant_id, skip, limit)
+
+    # ============================================================
+    # 4. ملخص الاستخدام (Usage Summary)
+    # ============================================================
+
+    async def get_usage_summary(
+        self,
+        agent_id: int,
+        tenant_id: int,
+        start_date: datetime,
+        end_date: datetime,
+        period: str = "MONTHLY"
+    ) -> dict:
+        """جلب ملخص الاستخدام للوكيل في فترة زمنية محددة."""
+        summary = await self.repo.get_usage_summary(
+            agent_id=agent_id,
+            tenant_id=tenant_id,
+            start_date=start_date,
+            end_date=end_date
+        )
+        return {
+            "agent_id": agent_id,
+            "total_requests": summary["total_requests"],
+            "total_tokens": summary["total_tokens"],
+            "total_cost_mrusdt": summary["total_cost"],
+            "avg_response_time_ms": summary["avg_response_time"],
+            "period": period
+        }
+
+    # ============================================================
+    # 5. نقطة الخنق والتنفيذ (Choke-Point & Execution Validation)
     # ============================================================
 
     async def check_and_consume(
@@ -71,6 +161,7 @@ class AIGovernanceService:
         """
         التحقق من الحصص المتاحة وتسجيل الاستهلاك.
         تُستدعى هذه الدالة قبل أي عملية تنفيذ للذكاء الاصطناعي لضمان عدم تجاوز الحدود.
+        🔥 معاملة ذرية لمنع تسجيل الاستهلاك المزدوج.
         """
         # 1. التحقق من Idempotency لمنع احتساب الاستهلاك مرتين لنفس الطلب
         if idempotency_key:
@@ -82,44 +173,74 @@ class AIGovernanceService:
         # 2. جلب جميع الحصص النشطة للوكيل
         active_quotas = await self.repo.get_active_quotas(agent_id=agent_id, tenant_id=tenant_id)
 
-        # 3. التحقق من كل حصة (Tokens, Requests, Cost)
-        for quota in active_quotas:
-            usage_to_add = Decimal(0)
-            
-            if quota.limit_type.value == "REQUEST_COUNT":
-                usage_to_add = Decimal(1)
-            elif quota.limit_type.value == "TOKEN_COUNT":
-                usage_to_add = Decimal(tokens)
-            elif quota.limit_type.value == "COST_MRUSDT":
-                usage_to_add = cost
+        # 3. 🔥 معاملة ذرية لتحديث الحصص وتسجيل الاستهلاك
+        async with self.db.begin_nested():
+            for quota in active_quotas:
+                usage_to_add = Decimal(0)
 
-            # التحقق مما إذا كان الاستهلاك الجديد سيتجاوز الحد المسموح
-            if (quota.current_usage + usage_to_add) > quota.limit_value:
-                logger.warning(
-                    f"Agent {agent_id} exceeded {quota.limit_type} quota. "
-                    f"Limit: {quota.limit_value}, Usage: {quota.current_usage + usage_to_add}"
+                limit_type_str = quota.limit_type.value if hasattr(quota.limit_type, 'value') else str(quota.limit_type)  # type: ignore
+
+                if limit_type_str == "REQUEST_COUNT":
+                    usage_to_add = Decimal('1')
+                elif limit_type_str == "TOKEN_COUNT":
+                    usage_to_add = Decimal(str(tokens))
+                elif limit_type_str == "COST_MRUSDT":
+                    usage_to_add = cost
+
+                # التحقق مما إذا كان الاستهلاك الجديد سيتجاوز الحد المسموح
+                current_usage = quota.current_usage  # type: ignore
+                if (current_usage + usage_to_add) > quota.limit_value:  # type: ignore
+                    logger.warning(
+                        f"Agent {agent_id} exceeded {limit_type_str} quota. "
+                        f"Limit: {quota.limit_value}, Usage: {current_usage + usage_to_add}"
+                    )
+                    return False  # تم تجاوز الحصة المسموح بها
+
+                # تحديث الاستهلاك الحالي
+                await self.repo.create_or_update_quota(
+                    tenant_id=tenant_id,
+                    agent_id=agent_id,
+                    current_usage=current_usage + usage_to_add
                 )
-                return False  # تم تجاوز الحصة المسموح بها
 
-            # تحديث الاستهلاك الحالي
-            await self.repo.create_or_update_quota(
+            # 4. تسجيل الاستهلاك الفعلي في الـ Logs
+            await self.repo.create_usage_log(
                 tenant_id=tenant_id,
                 agent_id=agent_id,
-                current_usage=quota.current_usage + usage_to_add
+                user_id=user_id,
+                action_type=action_type,
+                request_tokens=request_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=tokens,
+                cost_mrusdt=cost,
+                idempotency_key=idempotency_key,
+                status="SUCCESS"
             )
 
-        # 4. تسجيل الاستهلاك الفعلي في الـ Logs
-        await self.repo.create_usage_log(
-            tenant_id=tenant_id,
-            agent_id=agent_id,
-            user_id=user_id,
-            action_type=action_type,
-            request_tokens=request_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=tokens,
-            cost_mrusdt=cost,
-            idempotency_key=idempotency_key,
-            status="SUCCESS"
-        )
-
         return True
+
+    # ============================================================
+    # 6. إعادة تعيين الحصص (للإدارة)
+    # ============================================================
+
+    async def reset_quotas(
+        self,
+        agent_id: int,
+        tenant_id: int,
+        admin_id: int,
+        ip_address: Optional[str] = None
+    ) -> None:
+        """إعادة تعيين استهلاك الحصص إلى الصفر مع تسجيل التدقيق."""
+        async with self.db.begin_nested():
+            await self.repo.reset_quota_usage(agent_id, tenant_id)
+
+            await self.repo.create_audit_log(
+                tenant_id=tenant_id,
+                agent_id=agent_id,
+                admin_user_id=admin_id,
+                action="RESET_QUOTA",
+                new_value={"current_usage": 0},
+                ip_address=ip_address
+            )
+
+        logger.info(f"Admin {admin_id} reset quotas for agent {agent_id} in tenant {tenant_id}")

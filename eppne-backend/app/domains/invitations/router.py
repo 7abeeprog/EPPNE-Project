@@ -1,18 +1,16 @@
 # app/domains/invitations/router.py (الإصدار النهائي المتكامل)
 """
 مسارات (Endpoints) قطاع الدعوات وخدمة العملاء – النسخة الذهبية
-تدعم: الدعوات، العملاء المحتملين (Leads)، الحملات التسويقية، تذاكر الدعم، التفاعلات، والمحادثات الذكية
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks, Header, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional, List
+from typing import Optional, List, cast
 import uuid
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user, get_current_tenant, get_current_user_optional
 from app.domains.identity.models import User
 from app.domains.invitations.service import InvitationsService
-from app.domains.invitations.repository import InvitationsRepository
 from app.domains.invitations.schemas import *
 from app.domains.academy.models import AcademyTenant
 from app.core.rate_limiter import rate_limit
@@ -20,9 +18,9 @@ from app.core.rate_limiter import rate_limit
 router = APIRouter(prefix="/invitations", tags=["Sovereign CRM & Invitations"])
 
 
-# ============================================================================
+# ============================================================
 # 1. الدعوات (Invitations)
-# ============================================================================
+# ============================================================
 
 @router.post("/", response_model=InvitationResponse, status_code=status.HTTP_201_CREATED)
 @rate_limit(max_requests=20, window_seconds=60)
@@ -33,18 +31,14 @@ async def create_invitation(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    إنشاء دعوة جديدة مع تحليل الذكاء الاصطناعي للهدف.
-    """
     service = InvitationsService(db)
     invitation = await service.create_invitation(
-        sender_id=current_user.id,
-        tenant_id=tenant.id,
+        sender_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
         data=data.model_dump(),
         idempotency_key=idempotency_key,
         analyze_target=True
     )
-    # توليد رابط الدعوة
     invite_url = f"https://{tenant.domain}/invite/{invitation.id}"
     return {
         **invitation.__dict__,
@@ -55,18 +49,22 @@ async def create_invitation(
 @router.get("/", response_model=List[InvitationResponse])
 @rate_limit(max_requests=30, window_seconds=60)
 async def list_invitations(
-    status: Optional[InvitationStatus] = None,
-    campaign_type: Optional[CampaignType] = None,
-    skip: int = 0,
-    limit: int = 50,
+    status: Optional[InvitationStatus] = Query(None, description="حالة الدعوة"),
+    campaign_type: Optional[CampaignType] = Query(None, description="نوع الحملة"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    قائمة الدعوات الخاصة بالمستأجر الحالي.
-    """
-    repo = InvitationsRepository(db)
-    invitations = await repo.list_invitations(tenant.id, status, campaign_type, skip, min(limit, 200))
+    service = InvitationsService(db)
+    invitations = await service.list_invitations(
+        tenant_id=cast(int, tenant.id),
+        status=status,
+        campaign_type=campaign_type,
+        skip=skip,
+        limit=limit
+    )
     return invitations
 
 
@@ -77,23 +75,23 @@ async def get_invitation(
     invitation_id: int,
     background_tasks: BackgroundTasks,
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب تفاصيل دعوة محددة مع تتبع الزيارة.
-    """
     service = InvitationsService(db)
-    invitation = await service.repo.get_invitation(invitation_id, tenant.id)
+    invitation = await service.get_invitation(
+        invitation_id=invitation_id,
+        tenant_id=cast(int, tenant.id)
+    )
     if not invitation:
         raise HTTPException(status_code=404, detail="Invitation not found")
-    
-    # تتبع الزيارة في الخلفية (للصفحة العامة)
+
     background_tasks.add_task(
         service.track_behavior,
         invitation_id,
-        tenant.id,
+        cast(int, tenant.id),
         {
-            "ip_address": request.client.host,
+            "ip_address": request.client.host if request.client else None,
             "user_agent": request.headers.get("user-agent"),
             "device_type": request.headers.get("sec-ch-ua-platform", "web"),
             "page_visited": "/invite",
@@ -112,14 +110,13 @@ async def update_invitation(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    تحديث دعوة موجودة (يتطلب أن يكون المستخدم هو منشئها).
-    """
     service = InvitationsService(db)
-    invitation = await service.repo.get_invitation(invitation_id, tenant.id)
-    if not invitation or invitation.sender_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    updated = await service.repo.update_invitation(invitation_id, tenant.id, **data.model_dump(exclude_unset=True))
+    updated = await service.update_invitation(
+        invitation_id=invitation_id,
+        tenant_id=cast(int, tenant.id),
+        user_id=cast(int, current_user.id),
+        data=data.model_dump(exclude_unset=True)
+    )
     return updated
 
 
@@ -131,14 +128,12 @@ async def delete_invitation(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    حذف دعوة (يتطلب أن يكون المستخدم هو منشئها).
-    """
     service = InvitationsService(db)
-    invitation = await service.repo.get_invitation(invitation_id, tenant.id)
-    if not invitation or invitation.sender_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    await service.repo.delete_invitation(invitation_id, tenant.id)
+    await service.delete_invitation(
+        invitation_id=invitation_id,
+        tenant_id=cast(int, tenant.id),
+        user_id=cast(int, current_user.id)
+    )
     return {"message": "Invitation deleted"}
 
 
@@ -152,14 +147,11 @@ async def accept_invitation(
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    قبول الدعوة (تحويل العميل إلى Lead).
-    """
     service = InvitationsService(db)
-    user_id = current_user.id if current_user else None
+    user_id = cast(int, current_user.id) if current_user else None
     result = await service.accept_invitation(
         invitation_id=invitation_id,
-        tenant_id=tenant.id,
+        tenant_id=cast(int, tenant.id),
         accept_data=data.model_dump(),
         user_id=user_id,
         idempotency_key=idempotency_key
@@ -178,15 +170,12 @@ async def chat_with_ai(
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    محادثة مع وكيل الذكاء الاصطناعي (مدعوم بـ AI Governance).
-    """
     service = InvitationsService(db)
-    user_id = current_user.id if current_user else None
+    user_id = cast(int, current_user.id) if current_user else None
     visitor_session_id = request.headers.get("X-Session-ID", str(uuid.uuid4()))
     response = await service.chat_with_ai(
         invitation_id=invitation_id,
-        tenant_id=tenant.id,
+        tenant_id=cast(int, tenant.id),
         visitor_session_id=visitor_session_id,
         user_message=data.message,
         user_id=user_id,
@@ -200,13 +189,14 @@ async def chat_with_ai(
 async def get_invitation_tracking(
     invitation_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب بيانات تتبع سلوك المدعو.
-    """
-    repo = InvitationsRepository(db)
-    tracking = await repo.list_tracking(invitation_id, tenant.id)
+    service = InvitationsService(db)
+    tracking = await service.get_invitation_tracking(
+        invitation_id=invitation_id,
+        tenant_id=cast(int, tenant.id)
+    )
     return tracking
 
 
@@ -215,13 +205,14 @@ async def get_invitation_tracking(
 async def get_invitation_conversations(
     invitation_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب محادثات العميل مع وكيل الذكاء الاصطناعي.
-    """
-    repo = InvitationsRepository(db)
-    conversations = await repo.get_conversations(invitation_id, tenant.id)
+    service = InvitationsService(db)
+    conversations = await service.get_invitation_conversations(
+        invitation_id=invitation_id,
+        tenant_id=cast(int, tenant.id)
+    )
     return conversations
 
 
@@ -230,13 +221,14 @@ async def get_invitation_conversations(
 async def get_client_insight(
     invitation_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب تحليلات الذكاء الاصطناعي للعميل المستهدف.
-    """
-    repo = InvitationsRepository(db)
-    insight = await repo.get_client_insight(invitation_id, tenant.id)
+    service = InvitationsService(db)
+    insight = await service.get_client_insight(
+        invitation_id=invitation_id,
+        tenant_id=cast(int, tenant.id)
+    )
     if not insight:
         raise HTTPException(status_code=404, detail="Insight not found")
     return insight
@@ -249,17 +241,17 @@ async def get_invitation_stats(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    إحصائيات الدعوات والحملات والعملاء.
-    """
     service = InvitationsService(db)
-    stats = await service.get_stats(tenant.id, current_user.id)
+    stats = await service.get_stats(
+        tenant_id=cast(int, tenant.id),
+        user_id=cast(int, current_user.id)
+    )
     return stats
 
 
-# ============================================================================
-# 2. العملاء المحتملون (Leads) – CRM Core
-# ============================================================================
+# ============================================================
+# 2. العملاء المحتملون (Leads)
+# ============================================================
 
 @router.post("/leads", response_model=LeadResponse, status_code=status.HTTP_201_CREATED)
 @rate_limit(max_requests=20, window_seconds=60)
@@ -270,13 +262,10 @@ async def create_lead(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    إضافة عميل محتمل جديد (يدوياً أو من مصدر خارجي).
-    """
     service = InvitationsService(db)
     lead = await service.create_lead(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
+        user_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
@@ -286,18 +275,22 @@ async def create_lead(
 @router.get("/leads", response_model=List[LeadResponse])
 @rate_limit(max_requests=30, window_seconds=60)
 async def list_leads(
-    status: Optional[LeadStatus] = None,
-    source: Optional[LeadSource] = None,
-    skip: int = 0,
-    limit: int = 50,
+    status: Optional[LeadStatus] = Query(None, description="حالة العميل المحتمل"),
+    source: Optional[LeadSource] = Query(None, description="مصدر العميل المحتمل"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    قائمة العملاء المحتملين مع التصفية حسب الحالة والمصدر.
-    """
-    repo = InvitationsRepository(db)
-    leads = await repo.list_leads(tenant.id, status, source, skip, min(limit, 200))
+    service = InvitationsService(db)
+    leads = await service.list_leads(
+        tenant_id=cast(int, tenant.id),
+        status=status,
+        source=source,
+        skip=skip,
+        limit=limit
+    )
     return leads
 
 
@@ -306,13 +299,14 @@ async def list_leads(
 async def get_lead(
     lead_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب تفاصيل عميل محتمل مع جميع التفاعلات.
-    """
-    repo = InvitationsRepository(db)
-    lead = await repo.get_lead(lead_id, tenant.id)
+    service = InvitationsService(db)
+    lead = await service.get_lead(
+        lead_id=lead_id,
+        tenant_id=cast(int, tenant.id)
+    )
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     return lead
@@ -327,14 +321,12 @@ async def update_lead(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    تحديث بيانات العميل المحتمل أو حالته.
-    """
-    repo = InvitationsRepository(db)
-    lead = await repo.get_lead(lead_id, tenant.id)
-    if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
-    updated = await repo.update_lead(lead_id, tenant.id, **data.model_dump(exclude_unset=True))
+    service = InvitationsService(db)
+    updated = await service.update_lead(
+        lead_id=lead_id,
+        tenant_id=cast(int, tenant.id),
+        data=data.model_dump(exclude_unset=True)
+    )
     return updated
 
 
@@ -346,20 +338,13 @@ async def delete_lead(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    حذف عميل محتمل (حذف منطقي).
-    """
-    repo = InvitationsRepository(db)
-    lead = await repo.get_lead(lead_id, tenant.id)
-    if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
-    await repo.delete_lead(lead_id, tenant.id)
+    service = InvitationsService(db)
+    await service.delete_lead(
+        lead_id=lead_id,
+        tenant_id=cast(int, tenant.id)
+    )
     return {"message": "Lead deleted"}
 
-
-# ============================================================================
-# 3. تفاعلات العملاء (Interactions)
-# ============================================================================
 
 @router.post("/leads/{lead_id}/interactions", response_model=InteractionResponse, status_code=status.HTTP_201_CREATED)
 @rate_limit(max_requests=30, window_seconds=60)
@@ -371,14 +356,11 @@ async def create_interaction(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    تسجيل تفاعل جديد مع العميل (مكالمة، بريد، اجتماع، إلخ).
-    """
     service = InvitationsService(db)
     interaction = await service.create_interaction(
         lead_id=lead_id,
-        user_id=current_user.id,
-        tenant_id=tenant.id,
+        user_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
@@ -389,21 +371,23 @@ async def create_interaction(
 @rate_limit(max_requests=30, window_seconds=60)
 async def get_lead_interactions(
     lead_id: int,
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=200),
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب جميع تفاعلات العميل (مرتبة تنازلياً حسب التاريخ).
-    """
-    repo = InvitationsRepository(db)
-    interactions = await repo.list_interactions(lead_id, tenant.id, min(limit, 200))
+    service = InvitationsService(db)
+    interactions = await service.get_lead_interactions(
+        lead_id=lead_id,
+        tenant_id=cast(int, tenant.id),
+        limit=limit
+    )
     return interactions
 
 
-# ============================================================================
-# 4. الحملات التسويقية (Campaigns)
-# ============================================================================
+# ============================================================
+# 3. الحملات التسويقية (Campaigns)
+# ============================================================
 
 @router.post("/campaigns", response_model=CampaignResponse, status_code=status.HTTP_201_CREATED)
 @rate_limit(max_requests=10, window_seconds=60)
@@ -414,13 +398,10 @@ async def create_campaign(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    إنشاء حملة تسويقية جديدة (مع دفع الميزانية المطلوبة).
-    """
     service = InvitationsService(db)
     campaign = await service.create_campaign(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
+        user_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
@@ -430,18 +411,22 @@ async def create_campaign(
 @router.get("/campaigns", response_model=List[CampaignResponse])
 @rate_limit(max_requests=30, window_seconds=60)
 async def list_campaigns(
-    status: Optional[CampaignStatus] = None,
-    campaign_type: Optional[CampaignType] = None,
-    skip: int = 0,
-    limit: int = 50,
+    status: Optional[CampaignStatus] = Query(None, description="حالة الحملة"),
+    campaign_type: Optional[CampaignType] = Query(None, description="نوع الحملة"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    قائمة الحملات التسويقية مع التصفية حسب الحالة والنوع.
-    """
-    repo = InvitationsRepository(db)
-    campaigns = await repo.list_campaigns(tenant.id, status, campaign_type, skip, min(limit, 200))
+    service = InvitationsService(db)
+    campaigns = await service.list_campaigns(
+        tenant_id=cast(int, tenant.id),
+        status=status,
+        campaign_type=campaign_type,
+        skip=skip,
+        limit=limit
+    )
     return campaigns
 
 
@@ -450,13 +435,14 @@ async def list_campaigns(
 async def get_campaign(
     campaign_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب تفاصيل حملة تسويقية محددة مع إحصائيات الأداء.
-    """
-    repo = InvitationsRepository(db)
-    campaign = await repo.get_campaign(campaign_id, tenant.id)
+    service = InvitationsService(db)
+    campaign = await service.get_campaign(
+        campaign_id=campaign_id,
+        tenant_id=cast(int, tenant.id)
+    )
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     return campaign
@@ -471,15 +457,14 @@ async def update_campaign(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    تحديث حملة تسويقية (يتطلب أن يكون المستخدم هو منشئها).
-    """
-    repo = InvitationsRepository(db)
-    campaign = await repo.get_campaign(campaign_id, tenant.id)
-    if not campaign or campaign.created_by != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    updated = await repo.update_campaign(campaign_id, tenant.id, **data.model_dump(exclude_unset=True))
-    return updated
+    service = InvitationsService(db)
+    campaign = await service.update_campaign(
+        campaign_id=campaign_id,
+        tenant_id=cast(int, tenant.id),
+        user_id=cast(int, current_user.id),
+        data=data.model_dump(exclude_unset=True)
+    )
+    return campaign
 
 
 @router.delete("/campaigns/{campaign_id}")
@@ -490,14 +475,12 @@ async def delete_campaign(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    حذف حملة تسويقية (يتطلب أن يكون المستخدم هو منشئها).
-    """
-    repo = InvitationsRepository(db)
-    campaign = await repo.get_campaign(campaign_id, tenant.id)
-    if not campaign or campaign.created_by != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    await repo.delete_campaign(campaign_id, tenant.id)
+    service = InvitationsService(db)
+    await service.delete_campaign(
+        campaign_id=campaign_id,
+        tenant_id=cast(int, tenant.id),
+        user_id=cast(int, current_user.id)
+    )
     return {"message": "Campaign deleted"}
 
 
@@ -509,17 +492,18 @@ async def launch_campaign(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    إطلاق حملة (تغيير الحالة إلى ACTIVE).
-    """
     service = InvitationsService(db)
-    campaign = await service.launch_campaign(campaign_id, tenant.id, current_user.id)
+    campaign = await service.launch_campaign(
+        campaign_id=campaign_id,
+        tenant_id=cast(int, tenant.id),
+        user_id=cast(int, current_user.id)
+    )
     return campaign
 
 
-# ============================================================================
-# 5. تذاكر الدعم (Support Tickets)
-# ============================================================================
+# ============================================================
+# 4. تذاكر الدعم (Support Tickets)
+# ============================================================
 
 @router.post("/tickets", response_model=TicketResponse, status_code=status.HTTP_201_CREATED)
 @rate_limit(max_requests=20, window_seconds=60)
@@ -530,14 +514,12 @@ async def create_ticket(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    إنشاء تذكرة دعم جديدة.
-    """
     service = InvitationsService(db)
     ticket = await service.create_ticket(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
+        user_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
         data=data.model_dump(),
+        lead_id=data.lead_id,
         idempotency_key=idempotency_key
     )
     return ticket
@@ -546,18 +528,22 @@ async def create_ticket(
 @router.get("/tickets", response_model=List[TicketResponse])
 @rate_limit(max_requests=30, window_seconds=60)
 async def list_tickets(
-    status: Optional[TicketStatus] = None,
-    assigned_to: Optional[int] = None,
-    skip: int = 0,
-    limit: int = 50,
+    status: Optional[TicketStatus] = Query(None, description="حالة التذكرة"),
+    assigned_to: Optional[int] = Query(None, description="معرف المسؤول المعين"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    قائمة تذاكر الدعم مع التصفية حسب الحالة والمسؤول.
-    """
-    repo = InvitationsRepository(db)
-    tickets = await repo.list_tickets(tenant.id, status, assigned_to, skip, min(limit, 200))
+    service = InvitationsService(db)
+    tickets = await service.list_tickets(
+        tenant_id=cast(int, tenant.id),
+        status=status,
+        assigned_to=assigned_to,
+        skip=skip,
+        limit=limit
+    )
     return tickets
 
 
@@ -566,13 +552,14 @@ async def list_tickets(
 async def get_ticket(
     ticket_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب تفاصيل تذكرة دعم مع جميع التعليقات.
-    """
-    repo = InvitationsRepository(db)
-    ticket = await repo.get_ticket(ticket_id, tenant.id)
+    service = InvitationsService(db)
+    ticket = await service.get_ticket(
+        ticket_id=ticket_id,
+        tenant_id=cast(int, tenant.id)
+    )
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
     return ticket
@@ -587,14 +574,12 @@ async def update_ticket(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    تحديث تذكرة دعم (تغيير الحالة، الأولوية، المسؤول).
-    """
-    repo = InvitationsRepository(db)
-    ticket = await repo.get_ticket(ticket_id, tenant.id)
-    if not ticket:
-        raise HTTPException(status_code=404, detail="Ticket not found")
-    updated = await repo.update_ticket(ticket_id, tenant.id, **data.model_dump(exclude_unset=True))
+    service = InvitationsService(db)
+    updated = await service.update_ticket(
+        ticket_id=ticket_id,
+        tenant_id=cast(int, tenant.id),
+        data=data.model_dump(exclude_unset=True)
+    )
     return updated
 
 
@@ -608,14 +593,11 @@ async def add_ticket_comment(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    إضافة تعليق على تذكرة (داخلي أو خارجي).
-    """
     service = InvitationsService(db)
     comment = await service.add_ticket_comment(
         ticket_id=ticket_id,
-        user_id=current_user.id,
-        tenant_id=tenant.id,
+        user_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
@@ -627,41 +609,42 @@ async def add_ticket_comment(
 async def get_ticket_comments(
     ticket_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب جميع تعليقات التذكرة.
-    """
-    repo = InvitationsRepository(db)
-    comments = await repo.list_ticket_comments(ticket_id, tenant.id)
+    service = InvitationsService(db)
+    comments = await service.get_ticket_comments(
+        ticket_id=ticket_id,
+        tenant_id=cast(int, tenant.id)
+    )
     return comments
 
 
-# ============================================================================
-# 6. التتبع والتحليلات (Tracking & Analytics)
-# ============================================================================
+# ============================================================
+# 5. التتبع والتحليلات (Tracking & Analytics)
+# ============================================================
 
 @router.post("/tracking", response_model=InvitationTrackingResponse, status_code=status.HTTP_201_CREATED)
 @rate_limit(max_requests=50, window_seconds=60)
 async def track_invitation(
     request: Request,
     data: InvitationTrackingCreate,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    تتبع سلوك الزائر على صفحة الدعوة (يُستدعى من frontend عبر AJAX).
-    """
     service = InvitationsService(db)
     tracking = await service.track_behavior(
         invitation_id=data.invitation_id,
-        tenant_id=tenant.id,
+        tenant_id=cast(int, tenant.id),
         request_data={
-            "ip_address": request.client.host,
+            "ip_address": request.client.host if request.client else None,
             "user_agent": request.headers.get("user-agent"),
             "device_type": request.headers.get("sec-ch-ua-platform", "web"),
             "page_visited": data.page_visited or "/invite",
             "actions": data.actions or []
-        }
+        },
+        idempotency_key=idempotency_key
     )
     return tracking

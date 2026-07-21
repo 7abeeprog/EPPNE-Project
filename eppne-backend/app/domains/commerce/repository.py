@@ -164,11 +164,11 @@ class CommerceRepository:
             .where(Order.customer_id == user_id)
             .options(
                 load_only(
-                    Order.id,
-                    Order.total_amount_mrusdt,
-                    Order.status,
-                    Order.settlement_type,
-                    Order.created_at,
+                    Order.id,  # type: ignore
+                    Order.total_amount_mrusdt,  # type: ignore
+                    Order.status,  # type: ignore
+                    Order.settlement_type,  # type: ignore
+                    Order.created_at,  # type: ignore
                 )
             )
             .order_by(Order.created_at.desc())
@@ -202,7 +202,7 @@ class CommerceRepository:
         current = await self.get_affiliate_tree(user_id)
         while current and len(chain) < max_depth:
             chain.append(current.sponsor_id)
-            current = await self.get_affiliate_tree(current.sponsor_id)
+            current = await self.get_affiliate_tree(current.sponsor_id)  # type: ignore
         return chain
 
     # ---------- Commissions ----------

@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, func, and_, or_
-from sqlalchemy.orm import selectinload, joinedload  # ✅ إضافة الواردات الجديدة
-from typing import Optional, List, Dict, Any
+from sqlalchemy.orm import selectinload, joinedload
+from typing import Optional, List, Dict, Any, cast
 from datetime import datetime
 from app.domains.sovereign_entities.models import (
     SovereignEntity, EntityRepresentative, EntityPage, EntityPageTemplate,
@@ -49,7 +49,7 @@ class SovereignEntitiesRepository:
             query = query.where(SovereignEntity.kyb_status == kyb_status)
         query = query.order_by(SovereignEntity.created_at.desc()).offset(skip).limit(limit)
         result = await self.db.execute(query)
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def update_entity(self, entity_id: int, **kwargs) -> SovereignEntity:
         await self.db.execute(update(SovereignEntity).where(SovereignEntity.id == entity_id).values(**kwargs))
@@ -76,7 +76,7 @@ class SovereignEntitiesRepository:
 
     async def get_representatives(self, entity_id: int) -> List[EntityRepresentative]:
         result = await self.db.execute(select(EntityRepresentative).where(EntityRepresentative.entity_id == entity_id, EntityRepresentative.is_active == True))
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def remove_representative(self, entity_id: int, user_id: int) -> None:
         await self.db.execute(delete(EntityRepresentative).where(EntityRepresentative.entity_id == entity_id, EntityRepresentative.user_id == user_id))
@@ -92,9 +92,9 @@ class SovereignEntitiesRepository:
 
     async def get_documents(self, entity_id: int) -> List[EntityDocument]:
         result = await self.db.execute(select(EntityDocument).where(EntityDocument.entity_id == entity_id))
-        return result.scalars().all()
+        return list(result.scalars().all())
 
-    async def update_document_status(self, doc_id: int, status: str, verifier_id: int, reason: str = None) -> EntityDocument:
+    async def update_document_status(self, doc_id: int, status: str, verifier_id: int, reason: Optional[str] = None) -> EntityDocument:
         values = {"status": status, "verified_by": verifier_id, "verified_at": func.now()}
         if reason:
             values["rejection_reason"] = reason
@@ -139,11 +139,11 @@ class SovereignEntitiesRepository:
 
     async def list_templates(self, tenant_id: int) -> List[EntityPageTemplate]:
         result = await self.db.execute(select(EntityPageTemplate).where(EntityPageTemplate.tenant_id == tenant_id))
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def list_components(self, tenant_id: int) -> List[PageComponent]:
         result = await self.db.execute(select(PageComponent).where(PageComponent.tenant_id == tenant_id, PageComponent.is_active == True))
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     # ========== دوال تم استئصال ألغامها (Missing Functions) ==========
     async def get_entity_by_registration(self, registration_number: str) -> Optional[SovereignEntity]:
@@ -159,7 +159,7 @@ class SovereignEntitiesRepository:
                 EntityRepresentative.is_active == True
             )
         )
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def list_entities_by_ids(self, entity_ids: List[int]) -> List[SovereignEntity]:
         if not entity_ids:
@@ -170,7 +170,7 @@ class SovereignEntitiesRepository:
                 SovereignEntity.is_deleted == False
             )
         )
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def get_entity_page_by_slug(self, slug: str) -> Optional[EntityPage]:
         result = await self.db.execute(
@@ -200,12 +200,12 @@ class SovereignEntitiesRepository:
         result = await self.db.execute(
             select(EntityPage)
             .where(EntityPage.entity_id == entity_id)
-            .options(selectinload(EntityPage.entity))  # تحميل الكيان المرتبط
+            .options(selectinload(EntityPage.entity))
         )
         page = result.scalar_one_or_none()
         if page:
             return page, page.entity
-        return None, None
+        return None
 
     async def get_entity_page_by_slug_with_entity(self, slug: str) -> Optional[tuple[EntityPage, SovereignEntity]]:
         """
@@ -219,10 +219,10 @@ class SovereignEntitiesRepository:
         page = result.scalar_one_or_none()
         if page:
             return page, page.entity
-        return None, None
+        return None
 
     # 🟢 دالة استرجاع الشجرة (Hierarchical Tree)
-    async def get_entity_tree(self, root_entity_id: int) -> dict:
+    async def get_entity_tree(self, root_entity_id: int) -> Optional[dict]:
         """
         استرجاع شجرة الكيان بالكامل (الأب مع جميع الأبناء والأحفاد) باستخدام استعلام واحد.
         يتم البناء في الذاكرة لتجنب استعلامات متكررة للـ DB.
@@ -240,8 +240,8 @@ class SovereignEntitiesRepository:
         )
         entities = result.scalars().all()
         
-        # بناء شجرة (Map)
-        entity_map = {e.id: e for e in entities}
+        # ✅ بناء شجرة (Map) باستخدام cast على المفاتيح
+        entity_map = {cast(int, e.id): e for e in entities}
         tree = []
         
         # ربط الأبناء بآبائهم
@@ -249,14 +249,15 @@ class SovereignEntitiesRepository:
             if entity.parent_id is None:
                 tree.append(entity)  # الجذر
             else:
-                parent = entity_map.get(entity.parent_id)
+                # ✅ استخدام cast عند الوصول إلى entity_map
+                parent = entity_map.get(cast(int, entity.parent_id))
                 if parent:
                     if not hasattr(parent, 'children'):
                         parent.children = []
                     parent.children.append(entity)
         
         # إرجاع الكائن الجذر مع أبنائه
-        root = entity_map.get(root_entity_id)
+        root = entity_map.get(root_entity_id)  # root_entity_id هو int بالفعل
         if root:
             return self._build_tree_dict(root)
         return None

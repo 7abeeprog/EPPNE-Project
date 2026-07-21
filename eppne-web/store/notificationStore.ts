@@ -1,6 +1,10 @@
 // store/notificationStore.ts
 import { create } from 'zustand';
-import { communicationsService, NotificationResponse } from '@/services/communications.service';
+import { CommunicationsService } from '@/services/communications.service';
+import { components } from '@/src/lib/api-types';
+
+// استيراد النوع من api-types لأنه لم يعد مُصدَّراً من communications.service
+type NotificationResponse = components['schemas']['NotificationResponse'];
 
 interface NotificationState {
   notifications: NotificationResponse[];
@@ -21,11 +25,11 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     set({ isLoading: true });
     try {
       // نجلب أول 50 إشعار غير مقروءة لعرضها في الجرس، ونستخدم is_read=false
-      const data = await communicationsService.getMyNotifications({ is_read: false, limit: 50 });
-      set({ 
-        notifications: data, 
+      const data = await CommunicationsService.getMyNotifications({ is_read: false, limit: 50 });
+      set({
+        notifications: data,
         unreadCount: data.filter(n => !n.is_read).length,
-        isLoading: false 
+        isLoading: false
       });
     } catch (error) {
       set({ isLoading: false });
@@ -35,10 +39,11 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
   markAsRead: async (id: number) => {
     try {
-      await communicationsService.markAsRead(id);
+      // تم تغيير اسم الدالة إلى markMailRead كما هو موضح في الخطأ
+      await CommunicationsService.markMailRead(id);
       // تحديث الحالة محلياً بدون إعادة جلب البيانات (Optimistic Update)
       set((state) => ({
-        notifications: state.notifications.map(n => 
+        notifications: state.notifications.map(n =>
           n.id === id ? { ...n, is_read: true } : n
         ),
         unreadCount: Math.max(0, state.unreadCount - 1),
@@ -52,7 +57,8 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     // نمر على جميع الإشعارات غير المقروءة ونحدثها (يُفضل عمل API واحد، لكن لو غير موجود ننفذها حلقة)
     const unread = get().notifications.filter(n => !n.is_read);
     for (const n of unread) {
-      await communicationsService.markAsRead(n.id);
+      // تم تغيير اسم الدالة إلى markMailRead هنا أيضاً
+      await CommunicationsService.markMailRead(n.id);
     }
     // تحديث الحالة
     set((state) => ({

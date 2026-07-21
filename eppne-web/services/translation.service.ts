@@ -1,47 +1,94 @@
-import apiClient from '@/lib/axios'; // افترض وجود عميل Axios مسبق الإعداد
-import {
-  TranslateRequest,
-  TranslateResponse,
-  BatchTranslateRequest,
-  ChatTranslateRequest,
-  ChatTranslateResponse,
-  SupportedLanguage,
-} from '@/types/translation';
+// services/translation.service.ts
+import { apiClient } from "@/lib/api-client";
+import type { components } from "@/src/lib/api-types";
+import { handleError } from "@/lib/error-handler";
+import { generateIdempotencyKey } from "@/lib/utils";
 
-// دالة مساعدة لتوليد Idempotency Key بناءً على المحتوى (لتجنب تكرار الطلبات)
-async function generateIdempotencyKey(text: string, target: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(`${text}:${target}`);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
+type TranslateRequest = components['schemas']['TranslateRequest'];
+type TranslateResponse = components['schemas']['TranslateResponse'];
+type BatchTranslateRequest = components['schemas']['BatchTranslateRequest'];
+type ChatTranslateRequest = components['schemas']['ChatTranslateRequest'];
+type ChatTranslateResponse = components['schemas']['ChatTranslateResponse'];
+type SupportedLanguageResponse = components['schemas']['SupportedLanguageResponse'];
 
-export const translationService = {
+export const TranslationService = {
+  // ==========================================
   // 1. الترجمة الفردية
-  translate: async (request: TranslateRequest): Promise<TranslateResponse> => {
-    // توليد مفتاح التكرار تلقائياً (Idempotency) لتخفيف الضغط عن الخادم
-    const key = await generateIdempotencyKey(request.text, request.target_lang);
-    const payload = { ...request, idempotency_key: key };
-    const response = await apiClient.post<TranslateResponse>('/translation/translate', payload);
-    return response.data;
+  // ==========================================
+  /**
+   * ترجمة نص فردي
+   * POST /translation/translation/translate
+   * تدعم X-Tenant-ID
+   */
+  translate: async (data: TranslateRequest, headers?: { 'X-Tenant-ID'?: number }): Promise<TranslateResponse> => {
+    try {
+      const finalData = { ...data };
+      if (!finalData.idempotency_key) {
+        finalData.idempotency_key = generateIdempotencyKey();
+      }
+      const { data: result } = await apiClient.post<TranslateResponse>("/translation/translation/translate", finalData, {
+        headers,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل الترجمة");
+    }
   },
 
+  // ==========================================
   // 2. الترجمة الجماعية
-  batchTranslate: async (request: BatchTranslateRequest): Promise<string[]> => {
-    const response = await apiClient.post<string[]>('/translation/batch-translate', request);
-    return response.data;
+  // ==========================================
+  /**
+   * ترجمة نصوص متعددة دفعة واحدة
+   * POST /translation/translation/batch-translate
+   * تدعم X-Tenant-ID
+   */
+  batchTranslate: async (data: BatchTranslateRequest, headers?: { 'X-Tenant-ID'?: number }): Promise<string[]> => {
+    try {
+      const { data: result } = await apiClient.post<string[]>("/translation/translation/batch-translate", data, {
+        headers,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل الترجمة الجماعية");
+    }
   },
 
+  // ==========================================
   // 3. ترجمة المحادثات
-  chatTranslate: async (request: ChatTranslateRequest): Promise<ChatTranslateResponse> => {
-    const response = await apiClient.post<ChatTranslateResponse>('/translation/chat-translate', request);
-    return response.data;
+  // ==========================================
+  /**
+   * ترجمة محادثة (مع سياق)
+   * POST /translation/translation/chat-translate
+   * تدعم X-Tenant-ID
+   */
+  chatTranslate: async (data: ChatTranslateRequest, headers?: { 'X-Tenant-ID'?: number }): Promise<ChatTranslateResponse> => {
+    try {
+      const { data: result } = await apiClient.post<ChatTranslateResponse>("/translation/translation/chat-translate", data, {
+        headers,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل ترجمة المحادثة");
+    }
   },
 
-  // 4. جلب اللغات المدعومة
-  getSupportedLanguages: async (): Promise<SupportedLanguage[]> => {
-    const response = await apiClient.get<SupportedLanguage[]>('/translation/languages');
-    return response.data;
+  // ==========================================
+  // 4. اللغات المدعومة
+  // ==========================================
+  /**
+   * جلب قائمة اللغات المدعومة
+   * GET /translation/translation/languages
+   */
+  getSupportedLanguages: async (): Promise<SupportedLanguageResponse[]> => {
+    try {
+      const { data } = await apiClient.get<SupportedLanguageResponse[]>("/translation/translation/languages");
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب اللغات المدعومة");
+    }
   },
 };

@@ -1,141 +1,146 @@
 // services/privacy.service.ts
 import { apiClient } from "@/lib/api-client";
-import {
-    PrivacySettings,
-    ErasureRequest,
-    PaginatedResponse,
-    UpdatePrivacySettingsPayload,
-    CreateErasureRequestPayload,
-} from "@/types/privacy";
+import type { components } from "@/src/lib/api-types";
 import { handleError } from "@/lib/error-handler";
+
+type PrivacySettingResponse = components['schemas']['PrivacySettingResponse'];
+type PrivacySettingUpdate = components['schemas']['PrivacySettingUpdate'];
+type DataErasureRequestCreate = components['schemas']['DataErasureRequestCreate'];
+type DataErasureRequestResponse = components['schemas']['DataErasureRequestResponse'];
+type PaginatedErasureRequestResponse = components['schemas']['PaginatedErasureRequestResponse'];
 
 export const PrivacyService = {
     // ==========================================
     // 1. إعدادات الخصوصية (Privacy Settings)
     // ==========================================
-
     /**
      * جلب إعدادات الخصوصية للمستخدم الحالي
+     * GET /privacy/privacy/settings
      */
-    getPrivacySettings: async (): Promise<PrivacySettings> => {
+    getPrivacySettings: async (): Promise<PrivacySettingResponse> => {
         try {
-            const { data } = await apiClient.get<PrivacySettings>('/privacy/settings');
+            const { data } = await apiClient.get<PrivacySettingResponse>("/privacy/privacy/settings", {
+                withCredentials: true,
+            });
             return data;
         } catch (error) {
-            throw handleError(error, 'فشل جلب إعدادات الخصوصية');
+            throw handleError(error, "فشل جلب إعدادات الخصوصية");
         }
     },
 
     /**
      * تحديث إعدادات الخصوصية للمستخدم الحالي
+     * PUT /privacy/privacy/settings
      */
-    updatePrivacySettings: async (
-        payload: UpdatePrivacySettingsPayload
-    ): Promise<PrivacySettings> => {
+    updatePrivacySettings: async (data: PrivacySettingUpdate): Promise<PrivacySettingResponse> => {
         try {
-            const { data } = await apiClient.put<PrivacySettings>('/privacy/settings', payload);
-            return data;
-        } catch (error) {
-            throw handleError(error, 'فشل تحديث إعدادات الخصوصية');
-        }
-    },
-
-    // ==========================================
-    // 2. طلبات محو البيانات (Erasure Requests)
-    // ==========================================
-
-    /**
-     * جلب طلبات محو البيانات الخاصة بالمستخدم (مع Pagination)
-     */
-    getErasureRequests: async (
-        skip: number = 0,
-        limit: number = 20,
-        status?: string
-    ): Promise<PaginatedResponse<ErasureRequest>> => {
-        try {
-            const { data } = await apiClient.get<PaginatedResponse<ErasureRequest>>('/privacy/erasure/requests', {
-                params: { skip, limit, status },
+            const { data: result } = await apiClient.put<PrivacySettingResponse>("/privacy/privacy/settings", data, {
+                withCredentials: true,
             });
-            return data;
+            return result;
         } catch (error) {
-            throw handleError(error, 'فشل جلب طلبات المحو');
+            throw handleError(error, "فشل تحديث إعدادات الخصوصية");
         }
     },
 
+    // ==========================================
+    // 2. سجلات الموافقات (Consent Logs)
+    // ==========================================
+    /**
+     * تسجيل موافقة المستخدم على معالجة البيانات
+     * POST /privacy/privacy/consent/log
+     */
+    logConsent: async (type: string, granted: boolean): Promise<void> => {
+        try {
+            await apiClient.post("/privacy/privacy/consent/log", undefined, {
+                params: { type, granted },
+                withCredentials: true,
+            });
+        } catch (error) {
+            throw handleError(error, "فشل تسجيل الموافقة");
+        }
+    },
+
+    // ==========================================
+    // 3. طلبات محو البيانات (Erasure Requests)
+    // ==========================================
     /**
      * إنشاء طلب محو بيانات جديد
+     * POST /privacy/privacy/erasure/request
      */
-    createErasureRequest: async (
-        payload: CreateErasureRequestPayload
-    ): Promise<ErasureRequest> => {
+    createErasureRequest: async (data: DataErasureRequestCreate): Promise<DataErasureRequestResponse> => {
         try {
-            const { data } = await apiClient.post<ErasureRequest>('/privacy/erasure/request', payload);
-            return data;
+            const { data: result } = await apiClient.post<DataErasureRequestResponse>(
+                "/privacy/privacy/erasure/request",
+                data,
+                { withCredentials: true }
+            );
+            return result;
         } catch (error) {
-            throw handleError(error, 'فشل إنشاء طلب المحو');
-        }
-    },
-
-    // ==========================================
-    // 3. إدارة المشرفين (Admin Only)
-    // ==========================================
-
-    /**
-     * جلب طلبات المحو المعلقة (للمشرفين فقط)
-     */
-    getPendingErasureRequests: async (
-        skip: number = 0,
-        limit: number = 50
-    ): Promise<PaginatedResponse<ErasureRequest>> => {
-        try {
-            const { data } = await apiClient.get<PaginatedResponse<ErasureRequest>>('/privacy/admin/erasure/pending', {
-                params: { skip, limit },
-            });
-            return data;
-        } catch (error) {
-            throw handleError(error, 'فشل جلب الطلبات المعلقة');
+            throw handleError(error, "فشل إنشاء طلب المحو");
         }
     },
 
     /**
-     * معالجة طلب محو بيانات (قبول/رفض) – للمشرفين فقط
-     * @param requestId معرف الطلب المراد معالجته
-     * @param approve قرار المشرف: صحيح (قبول) أو خطأ (رفض)
-     * @param notes سجل التدقيق: ملاحظات المشرف على القرار
+     * جلب طلبات محو البيانات الخاصة بي (مع Pagination)
+     * GET /privacy/privacy/erasure/requests
      */
-    processErasureRequest: async (
-        requestId: number,
-        approve: boolean,
-        notes?: string
-    ): Promise<{ status: string; receipt_tx?: string; message: string }> => {
+    listMyErasureRequests: async (
+        params?: {
+            offset?: number;
+            size?: number;
+            state?: string | null;
+        }
+    ): Promise<PaginatedErasureRequestResponse> => {
         try {
-            const { data } = await apiClient.post<{ status: string; receipt_tx?: string; message: string }>(
-                `/privacy/admin/erasure/${requestId}/process`,
-                null,
-                {
-                    params: { approve, notes },
-                }
+            const { data } = await apiClient.get<PaginatedErasureRequestResponse>(
+                "/privacy/privacy/erasure/requests",
+                { params, withCredentials: true }
             );
             return data;
         } catch (error) {
-            throw handleError(error, 'فشل معالجة الطلب');
+            throw handleError(error, "فشل جلب طلبات المحو");
         }
     },
 
     // ==========================================
-    // 4. سجلات الموافقات (Consent Logs)
+    // 4. إدارة المشرفين (Admin Only)
     // ==========================================
+    /**
+     * جلب طلبات المحو المعلقة (للمشرفين فقط)
+     * GET /privacy/privacy/admin/erasure/pending
+     */
+    getPendingErasureRequests: async (
+        params?: { offset?: number; size?: number }
+    ): Promise<PaginatedErasureRequestResponse> => {
+        try {
+            const { data } = await apiClient.get<PaginatedErasureRequestResponse>(
+                "/privacy/privacy/admin/erasure/pending",
+                { params, withCredentials: true }
+            );
+            return data;
+        } catch (error) {
+            throw handleError(error, "فشل جلب الطلبات المعلقة");
+        }
+    },
 
     /**
-     * تسجيل موافقة المستخدم على معالجة البيانات
+     * معالجة طلب محو بيانات (للمشرفين فقط)
+     * POST /privacy/privacy/admin/erasure/{request_id}/process
      */
-    logConsent: async (consent_type: string, granted: boolean): Promise<void> => {
+    processErasureRequest: async (
+        requestId: number,
+        params: { approved: boolean; comment?: string | null }
+    ): Promise<void> => {
         try {
-            await apiClient.post('/privacy/consent/log', null, {
-                params: { consent_type, granted },
+            const id = Number(requestId);
+            if (isNaN(id)) throw new Error("معرف الطلب غير صحيح");
+            await apiClient.post(`/privacy/privacy/admin/erasure/${id}/process`, undefined, {
+                params,
+                withCredentials: true,
             });
         } catch (error) {
-            throw handleError(error, 'فشل تسجيل الموافقة');
+            throw handleError(error, "فشل معالجة الطلب");
         }
     },
 };

@@ -44,6 +44,7 @@ const cardVariants: Variants = {
 };
 
 export default function InstructorDashboard() {
+  // ✅ 1. استدعاء جميع الـ Hooks أولاً (بدون أي return)
   const {
     data: stats,
     isLoading: isStatsLoading,
@@ -57,29 +58,9 @@ export default function InstructorDashboard() {
   } = useInstructorCourses(0, 10);
 
   const courses = coursesData?.data || [];
-
-  if (statsError) {
-    const error = handleError(statsError, "جلب إحصائيات المدرب");
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
-        <div className="p-6 bg-destructive/10 rounded-full mb-6 border border-destructive/20">
-          <AlertCircle className="h-16 w-16 text-destructive" />
-        </div>
-        <h2 className="text-3xl font-bold mb-2">فشل في تحميل البيانات</h2>
-        <p className="text-muted-foreground text-lg mb-8 max-w-md">{error.message}</p>
-        <Button
-          onClick={() => window.location.reload()}
-          size="lg"
-          className="rounded-xl h-14 px-8"
-        >
-          إعادة المحاولة
-        </Button>
-      </div>
-    );
-  }
-
   const isLoading = isStatsLoading || isCoursesLoading;
 
+  // ✅ 2. useMemo يتم استدعاؤه هنا (قبل أي return)
   const statCards = useMemo(
     () => [
       {
@@ -117,6 +98,27 @@ export default function InstructorDashboard() {
     ],
     [stats]
   );
+
+  // ✅ 3. الآن الـ return المبكر بأمان بعد انتهاء جميع الـ Hooks
+  if (statsError) {
+    const error = handleError(statsError, "جلب إحصائيات المدرب");
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
+        <div className="p-6 bg-destructive/10 rounded-full mb-6 border border-destructive/20">
+          <AlertCircle className="h-16 w-16 text-destructive" />
+        </div>
+        <h2 className="text-3xl font-bold mb-2">فشل في تحميل البيانات</h2>
+        <p className="text-muted-foreground text-lg mb-8 max-w-md">{error.message}</p>
+        <Button
+          onClick={() => window.location.reload()}
+          size="lg"
+          className="rounded-xl h-14 px-8"
+        >
+          إعادة المحاولة
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -228,11 +230,10 @@ export default function InstructorDashboard() {
                           {course.tasks_count || 0} تكليف
                         </Badge>
                         <Badge
-                          className={`text-xs ${
-                            course.is_published
-                              ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                              : "bg-orange-500/10 text-orange-500 border-orange-500/20"
-                          } border font-bold`}
+                          className={`text-xs ${course.is_published
+                            ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                            : "bg-orange-500/10 text-orange-500 border-orange-500/20"
+                            } border font-bold`}
                         >
                           {course.is_published ? "منشور" : "مسودة"}
                         </Badge>

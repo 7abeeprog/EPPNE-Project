@@ -142,7 +142,9 @@ class SystemAlert(Base):
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
     source = Column(String(255), nullable=True)      # القطاع أو الخدمة المسببة
-    metadata = Column(JSON, default=dict)            # بيانات إضافية (مثل: {"cpu": 95, "memory": 80})
+    
+    # ✅ تم تغيير اسم الحقل من metadata إلى meta_data لحل التعارض مع Base.metadata
+    meta_data = Column(JSON, default=dict)            # بيانات إضافية (مثل: {"cpu": 95, "memory": 80})
 
     status = Column(SQLEnum(AlertStatus), default=AlertStatus.ACTIVE)
     acknowledged_by = Column(Integer, ForeignKey("users.id"), nullable=True)

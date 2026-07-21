@@ -1,3 +1,4 @@
+# app/domains/manufacturing/models.py
 from sqlalchemy import (
     Column, Integer, BigInteger, String, ForeignKey, DateTime, Text,
     Boolean, Numeric, JSON, Enum as SQLEnum, Index, CheckConstraint
@@ -116,7 +117,9 @@ class SmartProductItem(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    # ========== توسعة التصنيع: سلسلة الإمداد الصناعية ==========
+
+
+# ========== توسعة التصنيع: سلسلة الإمداد الصناعية ==========
 class RawMaterialBatch(Base):
     __tablename__ = "raw_material_batches"
 
@@ -124,7 +127,8 @@ class RawMaterialBatch(Base):
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
 
     material_name = Column(String(255), nullable=False)
-    supplier_id = Column(Integer, ForeignKey("financial_partners.id"), nullable=True)
+    # ✅ تم تغيير الـ ForeignKey من financial_partners.id إلى sovereign_entities_v2.id
+    supplier_id = Column(Integer, ForeignKey("sovereign_entities_v2.id"), nullable=True)
     source_traceability = Column(String(255), nullable=True)  # من زراعة، منجم، إلخ
 
     quantity_kg = Column(Numeric(15, 2), nullable=False)
@@ -237,53 +241,17 @@ class SparePart(Base):
     min_stock_threshold = Column(Integer, default=5)
     unit_price_mrusdt = Column(Numeric(30, 8), nullable=False)
 
-    supplier_id = Column(Integer, ForeignKey("financial_partners.id"), nullable=True)
+    # ✅ تم تغيير الـ ForeignKey من financial_partners.id إلى sovereign_entities_v2.id
+    supplier_id = Column(Integer, ForeignKey("sovereign_entities_v2.id"), nullable=True)
     last_restocked_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     deleted_at = Column(DateTime(timezone=True), nullable=True)
-    is_deleted = Column(Boolean, default=False)# app/domains/manufacturing/models.py (الإصدار النهائي المتكامل)
-from sqlalchemy import (
-    Column, Integer, BigInteger, String, ForeignKey, DateTime, Text,
-    Boolean, Numeric, JSON, Enum as SQLEnum, Index, CheckConstraint
-)
-from sqlalchemy.sql import func
-from app.core.database import Base
-import enum
+    is_deleted = Column(Boolean, default=False)
 
-class FacilityType(str, enum.Enum):
-    HEAVY_FACTORY = "HEAVY_FACTORY"
-    ASSEMBLY_LINE = "ASSEMBLY_LINE"
-    BIO_REFINERY = "BIO_REFINERY"
-    FARM_PROCESSING = "FARM_PROCESSING"
 
-class ProductionStatus(str, enum.Enum):
-    PLANNED = "PLANNED"
-    IN_PROGRESS = "IN_PROGRESS"
-    QC_TESTING = "QC_TESTING"
-    COMPLETED = "COMPLETED"
-    REJECTED = "REJECTED"
-
-class ProductCategory(str, enum.Enum):
-    FOOD_AND_BEVERAGE = "FOOD_AND_BEVERAGE"
-    AUTOMOTIVE = "AUTOMOTIVE"
-    ELECTRONICS = "ELECTRONICS"
-    ROBOTICS_AI = "ROBOTICS_AI"
-    TEXTILES_APPAREL = "TEXTILES_APPAREL"
-    TOYS_AND_GAMES = "TOYS_AND_GAMES"
-    HOME_APPLIANCES = "HOME_APPLIANCES"
-    OFFICE_SUPPLIES = "OFFICE_SUPPLIES"
-    HEAVY_MACHINERY = "HEAVY_MACHINERY"
-    SMART_BIO_UNITS = "SMART_BIO_UNITS"
-
-class TrackingStatus(str, enum.Enum):
-    IN_FACTORY = "IN_FACTORY"
-    IN_TRANSIT = "IN_TRANSIT"
-    DELIVERED = "DELIVERED"
-    RECALLED = "RECALLED"
-
-# ========== المنشآت الصناعية ==========
+# ========== توسعة التصنيع: المنشآت (تم إضافتها لتكتمل العلاقات) ==========
 class ManufacturingFacility(Base):
     __tablename__ = "manufacturing_facilities"
 
@@ -304,21 +272,13 @@ class ManufacturingFacility(Base):
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     is_deleted = Column(Boolean, default=False)
 
-# ========== خطوط الإنتاج (مع Multi-Tenancy) ==========
-# ========== النماذج/المنتجات ==========
-# ========== دفعات الإنتاج (مع Multi-Tenancy + Idempotency) ==========
-# ========== المنتجات النهائية (مع Multi-Tenancy) ==========
-# ========== استهلاك المواد (مع Multi-Tenancy + Idempotency) ==========
 
-# ========== التوأم الرقمي للمنتج (مع Multi-Tenancy) ==========
-
-# ========== شهادات الجودة ==========
-# ========== الصيانة التنبؤية (مع Multi-Tenancy) ==========
+# ========== سجل الصيانة التنبؤية (مع Multi-Tenancy) ==========
 class PredictiveMaintenanceLog(Base):
     __tablename__ = "predictive_maintenance_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     production_line_id = Column(Integer, ForeignKey("production_lines.id"), nullable=False, index=True)
 
     sensor_data = Column(JSON, nullable=False)
@@ -334,5 +294,3 @@ class PredictiveMaintenanceLog(Base):
     __table_args__ = (
         Index("ix_maintenance_tenant_line", "tenant_id", "production_line_id"),
     )
-
-# ========== قطع الغيار ==========

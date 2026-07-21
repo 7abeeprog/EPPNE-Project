@@ -1,19 +1,13 @@
 # app/domains/employment/router.py (الإصدار النهائي المتكامل)
-"""
-مسارات (Endpoints) قطاع التوظيف والموارد البشرية
-تدعم: الوظائف، طلبات التوظيف، العقود، الحضور، الإجازات، الرواتب
-مع إضافة: Idempotency-Key، Rate Limiting، SaaS Tenant
-"""
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional, List
+from typing import Optional, List, cast
 from datetime import datetime
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user, get_current_superuser, get_current_tenant
 from app.domains.identity.models import User
 from app.domains.employment.service import EmploymentService
-from app.domains.employment.repository import EmploymentRepository
 from app.domains.employment.schemas import *
 from app.domains.academy.models import AcademyTenant
 from app.core.rate_limiter import rate_limit
@@ -21,7 +15,9 @@ from app.core.rate_limiter import rate_limit
 router = APIRouter(prefix="/employment", tags=["Sovereign Employment & Talent"])
 
 
-# ========== 1. الوظائف (Job Listings) ==========
+# ============================================================
+# 1. الوظائف (Job Listings)
+# ============================================================
 
 @router.post("/jobs", response_model=JobListingResponse, status_code=status.HTTP_201_CREATED)
 @rate_limit(max_requests=10, window_seconds=60)
@@ -31,14 +27,11 @@ async def create_job(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    إنشاء وظيفة جديدة (لأصحاب العمل فقط).
-    """
     service = EmploymentService(db)
     job = await service.create_job(
-        employer_id=current_user.id,
-        tenant_id=tenant.id,
-        data={**data.model_dump(), "tenant_id": tenant.id}
+        employer_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
+        data=data.model_dump()
     )
     return job
 
@@ -49,13 +42,16 @@ async def get_open_jobs(
     skip: int = 0,
     limit: int = 50,
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب الوظائف النشطة المتاحة للتقديم.
-    """
-    repo = EmploymentRepository(db)
-    jobs = await repo.list_active_jobs(tenant.id, skip, limit, employment_type)
+    service = EmploymentService(db)
+    jobs = await service.list_open_jobs(
+        tenant_id=cast(int, tenant.id),
+        employment_type=employment_type,
+        skip=skip,
+        limit=limit
+    )
     return jobs
 
 
@@ -66,11 +62,12 @@ async def get_my_jobs(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب الوظائف التي نشرها المستخدم (لأصحاب العمل).
-    """
-    repo = EmploymentRepository(db)
-    jobs = await repo.list_employer_jobs(current_user.id, skip, limit)
+    service = EmploymentService(db)
+    jobs = await service.get_my_jobs(
+        employer_id=cast(int, current_user.id),
+        skip=skip,
+        limit=limit
+    )
     return jobs
 
 
@@ -82,11 +79,12 @@ async def update_job(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    تحديث وظيفة موجودة (لصاحب العمل فقط).
-    """
     service = EmploymentService(db)
-    job = await service.update_job(current_user.id, job_id, data.model_dump(exclude_unset=True))
+    job = await service.update_job(
+        employer_id=cast(int, current_user.id),
+        job_id=job_id,
+        data=data.model_dump(exclude_unset=True)
+    )
     return job
 
 
@@ -97,15 +95,17 @@ async def close_job(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    إغلاق وظيفة (وقف استقبال الطلبات).
-    """
     service = EmploymentService(db)
-    await service.close_job(current_user.id, job_id)
+    await service.close_job(
+        employer_id=cast(int, current_user.id),
+        job_id=job_id
+    )
     return {"message": "تم إغلاق الوظيفة"}
 
 
-# ========== 2. طلبات التوظيف (Applications) ==========
+# ============================================================
+# 2. طلبات التوظيف (Applications)
+# ============================================================
 
 @router.post("/applications", response_model=JobApplicationResponse, status_code=status.HTTP_201_CREATED)
 @rate_limit(max_requests=5, window_seconds=60)
@@ -115,13 +115,10 @@ async def apply_to_job(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    تقديم طلب وظيفة (للمستخدمين العاديين).
-    """
     service = EmploymentService(db)
     application = await service.apply_for_job(
-        applicant_id=current_user.id,
-        tenant_id=tenant.id,
+        applicant_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
         job_id=data.job_id,
         cover_letter=data.cover_letter,
         resume_url=data.resume_url
@@ -136,11 +133,12 @@ async def get_my_applications(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب طلبات التوظيف الخاصة بي.
-    """
-    repo = EmploymentRepository(db)
-    apps = await repo.list_applications_for_applicant(current_user.id, skip, limit)
+    service = EmploymentService(db)
+    apps = await service.get_my_applications(
+        applicant_id=cast(int, current_user.id),
+        skip=skip,
+        limit=limit
+    )
     return apps
 
 
@@ -152,14 +150,13 @@ async def get_job_applications(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب طلبات التوظيف لوظيفة معينة (لصاحب العمل فقط).
-    """
-    repo = EmploymentRepository(db)
-    job = await repo.get_job_listing_by_employer(job_id, current_user.id)
-    if not job:
-        raise HTTPException(status_code=403, detail="ليس لديك صلاحية لعرض هذه الطلبات")
-    apps = await repo.list_applications_for_job(job_id, skip, limit)
+    service = EmploymentService(db)
+    apps = await service.get_job_applications(
+        employer_id=cast(int, current_user.id),
+        job_id=job_id,
+        skip=skip,
+        limit=limit
+    )
     return apps
 
 
@@ -171,16 +168,19 @@ async def review_application(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    قبول أو رفض طلب وظيفة (لصاحب العمل).
-    """
     service = EmploymentService(db)
     status_val = "APPROVED" if approve else "REJECTED"
-    application = await service.review_application(current_user.id, application_id, status_val)
+    application = await service.review_application(
+        employer_id=cast(int, current_user.id),
+        application_id=application_id,
+        status=status_val
+    )
     return application
 
 
-# ========== 3. عقود العمل (Contracts) ==========
+# ============================================================
+# 3. عقود العمل (Contracts)
+# ============================================================
 
 @router.post("/contracts", response_model=EmploymentContractResponse, status_code=status.HTTP_201_CREATED)
 @rate_limit(max_requests=10, window_seconds=60)
@@ -191,15 +191,12 @@ async def create_contract(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    إنشاء عقد عمل بعد قبول طلب التوظيف (لصاحب العمل) مع دعم Idempotency.
-    """
     service = EmploymentService(db)
     contract = await service.create_contract(
-        employer_id=current_user.id,
-        tenant_id=tenant.id,
+        employer_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
         data=data.model_dump(),
-        idempotency_key=idempotency_key
+        idempotency_key=idempotency_key or data.idempotency_key
     )
     return contract
 
@@ -209,11 +206,8 @@ async def get_my_active_contract(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب العقد النشط للموظف الحالي.
-    """
     service = EmploymentService(db)
-    contract = await service.get_my_active_contract(current_user.id)
+    contract = await service.get_my_active_contract(user_id=cast(int, current_user.id))
     if not contract:
         raise HTTPException(status_code=404, detail="لا يوجد عقد نشط")
     return contract
@@ -227,22 +221,25 @@ async def sign_contract(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    توقيع العقد (للموظف أو صاحب العمل).
-    """
     service = EmploymentService(db)
-    # تحديد ما إذا كان المستخدم هو الموظف أم صاحب العمل
     contract = await service.repo.get_contract(contract_id)
     if not contract:
         raise HTTPException(status_code=404, detail="العقد غير موجود")
-    is_employee = (contract.employee_id == current_user.id)
-    if not is_employee and contract.employer_id != current_user.id:
+    is_employee = (cast(int, contract.employee_id) == current_user.id)
+    if not is_employee and contract.employer_id != current_user.id:  # type: ignore
         raise HTTPException(status_code=403, detail="لا تملك صلاحية توقيع هذا العقد")
-    updated = await service.sign_contract(current_user.id, contract_id, signature.signature_tx_hash, is_employee)
+    updated = await service.sign_contract(
+        user_id=cast(int, current_user.id),
+        contract_id=contract_id,
+        signature_tx_hash=signature.signature_tx_hash,
+        is_employee=is_employee
+    )
     return {"message": "تم توقيع العقد", "status": updated.status}
 
 
-# ========== 4. الحضور والانصراف ==========
+# ============================================================
+# 4. الحضور والانصراف (Attendance)
+# ============================================================
 
 @router.post("/attendance/check-in")
 @rate_limit(max_requests=2, window_seconds=60)
@@ -252,12 +249,9 @@ async def check_in(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    تسجيل حضور الموظف (مع التحقق من الموقع الجغرافي).
-    """
     service = EmploymentService(db)
     record = await service.check_in(
-        user_id=current_user.id,
+        user_id=cast(int, current_user.id),
         contract_id=contract_id,
         latitude=location.latitude,
         longitude=location.longitude,
@@ -274,13 +268,15 @@ async def check_out(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    تسجيل انصراف الموظف وحساب ساعات العمل.
-    """
     service = EmploymentService(db)
     lat = location.latitude if location else None
     lng = location.longitude if location else None
-    record = await service.check_out(current_user.id, contract_id, lat, lng)
+    record = await service.check_out(
+        user_id=cast(int, current_user.id),
+        contract_id=contract_id,
+        latitude=lat,
+        longitude=lng
+    )
     return {
         "message": "تم تسجيل الانصراف",
         "check_out": record.check_out,
@@ -297,22 +293,19 @@ async def get_my_attendance(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب سجل الحضور الخاص بي لعقد معين.
-    """
-    repo = EmploymentRepository(db)
-    # التحقق من أن العقد يخص المستخدم
-    contract = await repo.get_contract(contract_id)
-    if not contract or contract.employee_id != current_user.id:
-        raise HTTPException(status_code=403, detail="لا تملك صلاحية الاطلاع على هذا السجل")
-    year = datetime.utcnow().year
-    month = datetime.utcnow().month
-    records = await repo.get_attendance_for_month(contract_id, year, month)
-    # التبسيط: نعيد آخر 30 سجلاً (يمكن تحسينه لاحقاً)
-    return records[-limit:]
+    service = EmploymentService(db)
+    records = await service.get_my_attendance(
+        user_id=cast(int, current_user.id),
+        contract_id=contract_id,
+        skip=skip,
+        limit=limit
+    )
+    return records
 
 
-# ========== 5. الإجازات ==========
+# ============================================================
+# 5. الإجازات (Leave Requests)
+# ============================================================
 
 @router.post("/leaves/request", response_model=LeaveRequestResponse)
 @rate_limit(max_requests=3, window_seconds=60)
@@ -321,16 +314,13 @@ async def request_leave(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    تقديم طلب إجازة.
-    """
     service = EmploymentService(db)
-    contract = await service.get_my_active_contract(current_user.id)
+    contract = await service.get_my_active_contract(user_id=cast(int, current_user.id))
     if not contract:
         raise HTTPException(status_code=404, detail="لا يوجد عقد نشط")
     leave = await service.request_leave(
-        user_id=current_user.id,
-        contract_id=contract.id,
+        user_id=cast(int, current_user.id),
+        contract_id=cast(int, contract.id),
         leave_type=data.leave_type,
         start_date=data.start_date,
         end_date=data.end_date,
@@ -344,11 +334,10 @@ async def get_pending_leaves_for_employer(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب طلبات الإجازات المعلقة لجميع عقود صاحب العمل.
-    """
-    repo = EmploymentRepository(db)
-    leaves = await repo.list_pending_leave_requests_for_employer(current_user.id)
+    service = EmploymentService(db)
+    leaves = await service.get_pending_leaves_for_employer(
+        employer_id=cast(int, current_user.id)
+    )
     return leaves
 
 
@@ -360,15 +349,18 @@ async def approve_leave(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    الموافقة أو رفض طلب إجازة (لصاحب العمل).
-    """
     service = EmploymentService(db)
-    await service.approve_leave(current_user.id, leave_id, approve)
+    await service.approve_leave(
+        employer_id=cast(int, current_user.id),
+        leave_id=leave_id,
+        approve=approve
+    )
     return {"message": "تم تحديث طلب الإجازة"}
 
 
-# ========== 6. الرواتب ==========
+# ============================================================
+# 6. الرواتب (Payroll)
+# ============================================================
 
 @router.post("/payroll/generate", response_model=PayrollRecordResponse)
 @rate_limit(max_requests=5, window_seconds=60)
@@ -380,15 +372,12 @@ async def generate_payroll(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    إنشاء كشف راتب لشهر محدد (لصاحب العمل) مع دعم Idempotency.
-    """
     service = EmploymentService(db)
     payroll = await service.generate_payroll(
         contract_id=contract_id,
         month=month,
-        employer_id=current_user.id,
-        tenant_id=tenant.id,
+        employer_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
         idempotency_key=idempotency_key
     )
     return payroll
@@ -401,11 +390,11 @@ async def approve_payroll(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    اعتماد كشف الراتب قبل الدفع.
-    """
     service = EmploymentService(db)
-    payroll = await service.approve_payroll(payroll_id, current_user.id)
+    payroll = await service.approve_payroll(
+        payroll_id=payroll_id,
+        employer_id=cast(int, current_user.id)
+    )
     return payroll
 
 
@@ -418,14 +407,11 @@ async def pay_payroll(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    دفع الراتب (تحويل من محفظة صاحب العمل إلى محفظة الموظف) مع دعم Idempotency.
-    """
     service = EmploymentService(db)
     payroll = await service.pay_payroll(
         payroll_id=payroll_id,
-        employer_id=current_user.id,
-        tenant_id=tenant.id,
+        employer_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
         idempotency_key=idempotency_key
     )
     return payroll
@@ -438,12 +424,10 @@ async def get_my_payrolls(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب كشوف رواتب الموظف الحالي.
-    """
-    repo = EmploymentRepository(db)
-    contract = await repo.get_contract_by_employee(current_user.id, active_only=False)
-    if not contract:
-        raise HTTPException(status_code=404, detail="لا يوجد عقد عمل مسجل")
-    payrolls = await repo.list_payrolls_for_contract(contract.id, skip, limit)
+    service = EmploymentService(db)
+    payrolls = await service.get_my_payrolls(
+        user_id=cast(int, current_user.id),
+        skip=skip,
+        limit=limit
+    )
     return payrolls

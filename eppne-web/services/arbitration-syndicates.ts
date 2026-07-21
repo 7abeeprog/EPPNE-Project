@@ -1,119 +1,338 @@
 // services/arbitration-syndicates.ts
-import api from '@/lib/axios';
-import type {
-  ArbitrationCase,
-  CrowdJury,
-  SovereignSyndicate,
-  SyndicateMembership,
-  ProfessionalLicense,
-  SyndicateElection,
-  ElectionCandidate,
-  ElectionVote,
-  DisputeStatus,
-  JudgingMode,
-  SyndicateType,
-  ElectionStatus,
-} from '@/types/arbitration-syndicates';
+import { apiClient } from "@/lib/api-client";
+import type { components } from "@/src/lib/api-types";
+import { handleError } from "@/lib/error-handler";
+import { generateIdempotencyKey } from "@/lib/utils";
 
-// ========== Arbitration Cases ==========
-export const getMyCases = () => api.get<ArbitrationCase[]>('/arbitration-syndicates/cases/me');
+type ArbitrationCaseCreate = components['schemas']['ArbitrationCaseCreate'];
+type ArbitrationCaseResponse = components['schemas']['ArbitrationCaseResponse'];
+type JuryVoteCreate = components['schemas']['JuryVoteCreate'];
+type VerdictCreate = components['schemas']['VerdictCreate'];
+type SyndicateCreate = components['schemas']['SyndicateCreate'];
+type SyndicateResponse = components['schemas']['SyndicateResponse'];
+type SyndicateMembershipResponse = components['schemas']['SyndicateMembershipResponse'];
+type ProfessionalLicenseCreate = components['schemas']['ProfessionalLicenseCreate'];
+type ProfessionalLicenseResponse = components['schemas']['ProfessionalLicenseResponse'];
+type ElectionCreate = components['schemas']['ElectionCreate'];
+type ElectionResponse = components['schemas']['ElectionResponse'];
+type CandidateCreate = components['schemas']['CandidateCreate'];
+type CandidateResponse = components['schemas']['CandidateResponse'];
+type VoteCast = components['schemas']['VoteCast'];
 
-export const getCase = (id: number) => api.get<ArbitrationCase>(`/arbitration-syndicates/cases/${id}`);
-
-export const createCase = (
-  data: {
-    contract_id?: string;
-    respondent_id: number;
-    dispute_reason: string;
-    evidence_hashes?: string[];
-    judging_mode?: JudgingMode;
+export const ArbitrationSyndicatesService = {
+  /**
+   * جلب قائمة القضايا الخاصة بي
+   * GET /arbitration/arbitration-syndicates/cases/me
+   * تدعم X-Tenant-ID
+   */
+  getMyCases: async (headers?: { 'X-Tenant-ID'?: number }): Promise<ArbitrationCaseResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<ArbitrationCaseResponse[]>("/arbitration/arbitration-syndicates/cases/me", {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب قضاياي");
+    }
   },
-  idempotencyKey?: string
-) =>
-  api.post<ArbitrationCase>('/arbitration-syndicates/cases', data, {
-    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
-  });
 
-export const castJuryVote = (
-  caseId: number,
-  data: { vote: boolean; justification?: string },
-  idempotencyKey?: string
-) =>
-  api.post<CrowdJury>(`/arbitration-syndicates/cases/${caseId}/jury-vote`, data, {
-    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
-  });
-
-// ========== Syndicates ==========
-export const getSyndicates = () => api.get<SovereignSyndicate[]>('/arbitration-syndicates/syndicates');
-
-export const getSyndicate = (id: number) => api.get<SovereignSyndicate>(`/arbitration-syndicates/syndicates/${id}`);
-
-export const createSyndicate = (data: {
-  name: string;
-  syndicate_type: SyndicateType;
-  description?: string;
-  annual_fee_mrusdt?: number;
-  dao_contract_address?: string;
-  treasury_wallet_address?: string;
-  governance_token?: string;
-}) => api.post<SovereignSyndicate>('/arbitration-syndicates/syndicates', data);
-
-export const joinSyndicate = (syndicateId: number, idempotencyKey?: string) =>
-  api.post<SyndicateMembership>(
-    `/arbitration-syndicates/syndicates/${syndicateId}/join`,
-    {},
-    { headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {} }
-  );
-
-// ========== Licenses ==========
-export const getMyLicenses = () => api.get<ProfessionalLicense[]>('/arbitration-syndicates/licenses/me');
-
-export const issueLicense = (
-  data: {
-    syndicate_id: number;
-    license_name: string;
-    required_certificate_id?: number;
-    qualifies_for_job_id?: number;
+  /**
+   * إنشاء قضية تحكيم جديدة (نزاع)
+   * POST /arbitration/arbitration-syndicates/cases
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  createDispute: async (
+    data: ArbitrationCaseCreate,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<ArbitrationCaseResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<ArbitrationCaseResponse>(
+        "/arbitration/arbitration-syndicates/cases",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء القضية");
+    }
   },
-  idempotencyKey?: string
-) =>
-  api.post<ProfessionalLicense>('/arbitration-syndicates/licenses', data, {
-    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
-  });
 
-// ========== Elections ==========
-export const getElections = (params?: { syndicate_id?: number; status?: ElectionStatus }) =>
-  api.get<SyndicateElection[]>('/arbitration-syndicates/elections', { params });
+  /**
+   * التصويت كعضو في هيئة المحلفين على قضية
+   * POST /arbitration/arbitration-syndicates/cases/{case_id}/jury-vote
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  castJuryVote: async (
+    caseId: number,
+    data: JuryVoteCreate,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<Record<string, any>> => {
+    try {
+      const id = Number(caseId);
+      if (isNaN(id)) throw new Error("معرف القضية غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<Record<string, any>>(
+        `/arbitration/arbitration-syndicates/cases/${id}/jury-vote`,
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل التصويت في هيئة المحلفين");
+    }
+  },
 
-export const getElection = (id: number) => api.get<SyndicateElection>(`/arbitration-syndicates/elections/${id}`);
+  /**
+   * إصدار حكم في قضية (للمحكمين أو المشرفين)
+   * POST /arbitration/arbitration-syndicates/cases/{case_id}/verdict
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  issueVerdict: async (
+    caseId: number,
+    data: VerdictCreate,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<void> => {
+    try {
+      const id = Number(caseId);
+      if (isNaN(id)) throw new Error("معرف القضية غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      await apiClient.post(`/arbitration/arbitration-syndicates/cases/${id}/verdict`, data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+    } catch (error) {
+      throw handleError(error, "فشل إصدار الحكم");
+    }
+  },
 
-export const createElection = (data: {
-  syndicate_id: number;
-  title: string;
-  election_type: string;
-  election_year: number;
-  nomination_start: string;
-  nomination_end: string;
-  voting_start: string;
-  voting_end: string;
-}) => api.post<SyndicateElection>('/arbitration-syndicates/elections', data);
+  /**
+   * جلب قائمة النقابات
+   * GET /arbitration/arbitration-syndicates/syndicates
+   * تدعم X-Tenant-ID
+   */
+  listSyndicates: async (headers?: { 'X-Tenant-ID'?: number }): Promise<SyndicateResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<SyndicateResponse[]>("/arbitration/arbitration-syndicates/syndicates", {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب النقابات");
+    }
+  },
 
-export const nominateCandidate = (
-  electionId: number,
-  data: { manifesto: string },
-  idempotencyKey?: string
-) =>
-  api.post<ElectionCandidate>(`/arbitration-syndicates/elections/${electionId}/candidates`, data, {
-    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
-  });
+  /**
+   * إنشاء نقابة جديدة
+   * POST /arbitration/arbitration-syndicates/syndicates
+   * تدعم X-Tenant-ID
+   */
+  createSyndicate: async (data: SyndicateCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<SyndicateResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<SyndicateResponse>(
+        "/arbitration/arbitration-syndicates/syndicates",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء النقابة");
+    }
+  },
 
-export const castVote = (
-  electionId: number,
-  data: { candidate_id: number },
-  idempotencyKey?: string
-) =>
-  api.post<{ message: string; vote_hash: string }>(
-    `/arbitration-syndicates/elections/${electionId}/vote`,
-    data,
-    { headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {} }
-  );
+  /**
+   * الانضمام إلى نقابة
+   * POST /arbitration/arbitration-syndicates/syndicates/{syndicate_id}/join
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  joinSyndicate: async (
+    syndicateId: number,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<SyndicateMembershipResponse> => {
+    try {
+      const id = Number(syndicateId);
+      if (isNaN(id)) throw new Error("معرف النقابة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<SyndicateMembershipResponse>(
+        `/arbitration/arbitration-syndicates/syndicates/${id}/join`,
+        undefined,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل الانضمام إلى النقابة");
+    }
+  },
+
+  /**
+   * جلب تراخيصي المهنية
+   * GET /arbitration/arbitration-syndicates/licenses/me
+   * تدعم X-Tenant-ID
+   */
+  getMyLicenses: async (headers?: { 'X-Tenant-ID'?: number }): Promise<ProfessionalLicenseResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<ProfessionalLicenseResponse[]>(
+        "/arbitration/arbitration-syndicates/licenses/me",
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب تراخيصي");
+    }
+  },
+
+  /**
+   * إصدار ترخيص مهني جديد
+   * POST /arbitration/arbitration-syndicates/licenses
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  issueLicense: async (
+    data: ProfessionalLicenseCreate,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<ProfessionalLicenseResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<ProfessionalLicenseResponse>(
+        "/arbitration/arbitration-syndicates/licenses",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إصدار الترخيص");
+    }
+  },
+
+  /**
+   * إنشاء انتخابات جديدة
+   * POST /arbitration/arbitration-syndicates/elections
+   * تدعم X-Tenant-ID
+   */
+  createElection: async (data: ElectionCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<ElectionResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<ElectionResponse>(
+        "/arbitration/arbitration-syndicates/elections",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء الانتخابات");
+    }
+  },
+
+  /**
+   * ترشيح مرشح في انتخابات
+   * POST /arbitration/arbitration-syndicates/elections/{election_id}/candidates
+   * تدعم X-Tenant-ID
+   */
+  nominateCandidate: async (
+    electionId: number,
+    data: CandidateCreate,
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<CandidateResponse> => {
+    try {
+      const id = Number(electionId);
+      if (isNaN(id)) throw new Error("معرف الانتخابات غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<CandidateResponse>(
+        `/arbitration/arbitration-syndicates/elections/${id}/candidates`,
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل ترشيح المرشح");
+    }
+  },
+
+  /**
+   * التصويت في انتخابات
+   * POST /arbitration/arbitration-syndicates/elections/{election_id}/vote
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  voteInElection: async (
+    electionId: number,
+    data: VoteCast,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<void> => {
+    try {
+      const id = Number(electionId);
+      if (isNaN(id)) throw new Error("معرف الانتخابات غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      await apiClient.post(`/arbitration/arbitration-syndicates/elections/${id}/vote`, data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+    } catch (error) {
+      throw handleError(error, "فشل التصويت في الانتخابات");
+    }
+  },
+};

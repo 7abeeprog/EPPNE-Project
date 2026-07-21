@@ -1,24 +1,24 @@
 """
 مسارات (Endpoints) قطاع الكيانات السيادية والهوية المؤسسية
 """
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Header  # ✅ إضافة Header
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import List, Optional, cast
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user, get_current_tenant, get_current_superuser, get_current_user_optional
 from app.domains.identity.models import User
 from app.domains.sovereign_entities.service import SovereignEntitiesService
-from app.domains.sovereign_entities.repository import SovereignEntitiesRepository
 from app.domains.sovereign_entities.schemas import *
 from app.domains.academy.models import AcademyTenant
-from decimal import Decimal
+from app.core.rate_limiter import rate_limit
 
 router = APIRouter(prefix="/sovereign-entities", tags=["Sovereign Entities & Brand Builder"])
 
 
 # ========== 1. إدارة الكيانات ==========
 @router.post("/", response_model=SovereignEntityResponse, status_code=status.HTTP_201_CREATED)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_entity(
     data: SovereignEntityCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -26,10 +26,11 @@ async def create_entity(
     db: AsyncSession = Depends(get_db)
 ):
     service = SovereignEntitiesService(db)
-    entity = await service.create_entity(current_user.id, tenant.id, data.model_dump())
+    user_id = cast(int, current_user.id)
+    entity = await service.create_entity(user_id, cast(int, tenant.id), data.model_dump())  # ✅ cast
     # إضافة المستخدم كممثل (مالك) للكيان
-    await service.add_representative(entity.id, current_user.id, {
-        "user_id": current_user.id,
+    await service.add_representative(cast(int, entity.id), user_id, {  # ✅ cast
+        "user_id": user_id,
         "role": EntityRole.OWNER,
         "can_sign_contracts": True
     })
@@ -37,6 +38,7 @@ async def create_entity(
 
 
 @router.get("/", response_model=List[SovereignEntityResponse])
+@rate_limit(max_requests=30, window_seconds=60)
 async def list_entities(
     entity_type: Optional[SovereignEntityType] = None,
     kyb_status: Optional[KYBStatus] = None,
@@ -45,8 +47,8 @@ async def list_entities(
     tenant: AcademyTenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = SovereignEntitiesRepository(db)
-    entities = await repo.list_entities(tenant.id, entity_type, kyb_status, skip, limit)
+    service = SovereignEntitiesService(db)
+    entities = await service.list_entities(cast(int, tenant.id), entity_type, kyb_status, skip, limit)  # ✅ cast
     return entities
 
 
@@ -56,30 +58,37 @@ async def get_my_entities(
     db: AsyncSession = Depends(get_db)
 ):
     service = SovereignEntitiesService(db)
-    entities = await service.get_my_entities(current_user.id)
+    user_id = cast(int, current_user.id)
+    entities = await service.get_my_entities(user_id)
     return entities
 
 
 @router.get("/{entity_id}", response_model=SovereignEntityResponse)
-async def get_entity(entity_id: int, db: AsyncSession = Depends(get_db)):
+async def get_entity(
+    entity_id: int,
+    db: AsyncSession = Depends(get_db)
+):
     service = SovereignEntitiesService(db)
     entity = await service.get_entity(entity_id)
     return entity
 
 
-@router.put("/{entity_id}/page")
-async def update_entity_page(
+@router.put("/{entity_id}", response_model=SovereignEntityResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def update_entity(
     entity_id: int,
-    data: EntityPageUpdate, 
+    data: SovereignEntityUpdate,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = SovereignEntitiesService(db)
-    page = await service.update_entity_page(entity_id, current_user.id, data.model_dump(exclude_unset=True))
-    return page
+    user_id = cast(int, current_user.id)
+    entity = await service.update_entity(entity_id, user_id, data.model_dump(exclude_unset=True))
+    return entity
 
 
 @router.delete("/{entity_id}")
+@rate_limit(max_requests=5, window_seconds=60)
 async def delete_entity(
     entity_id: int,
     soft: bool = True,
@@ -87,12 +96,14 @@ async def delete_entity(
     db: AsyncSession = Depends(get_db)
 ):
     service = SovereignEntitiesService(db)
-    await service.delete_entity(entity_id, current_user.id, soft)
+    user_id = cast(int, current_user.id)
+    await service.delete_entity(entity_id, user_id, soft)
     return {"message": "Entity deleted"}
 
 
 # ========== 2. إدارة الممثلين ==========
 @router.post("/{entity_id}/representatives", response_model=EntityRepresentativeResponse, status_code=201)
+@rate_limit(max_requests=10, window_seconds=60)
 async def add_representative(
     entity_id: int,
     data: EntityRepresentativeCreate,
@@ -100,7 +111,8 @@ async def add_representative(
     db: AsyncSession = Depends(get_db)
 ):
     service = SovereignEntitiesService(db)
-    rep = await service.add_representative(entity_id, current_user.id, data.model_dump())
+    user_id = cast(int, current_user.id)
+    rep = await service.add_representative(entity_id, user_id, data.model_dump())
     return rep
 
 
@@ -110,12 +122,13 @@ async def get_representatives(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = SovereignEntitiesRepository(db)
-    reps = await repo.get_representatives(entity_id)
+    service = SovereignEntitiesService(db)
+    reps = await service.get_representatives(entity_id)
     return reps
 
 
 @router.delete("/{entity_id}/representatives/{user_id}")
+@rate_limit(max_requests=5, window_seconds=60)
 async def remove_representative(
     entity_id: int,
     user_id: int,
@@ -123,20 +136,30 @@ async def remove_representative(
     db: AsyncSession = Depends(get_db)
 ):
     service = SovereignEntitiesService(db)
-    await service.remove_representative(entity_id, current_user.id, user_id)
+    admin_user_id = cast(int, current_user.id)
+    await service.remove_representative(entity_id, admin_user_id, user_id)
     return {"message": "Representative removed"}
 
 
 # ========== 3. KYB (Know Your Business) ==========
 @router.post("/{entity_id}/kyb/documents", response_model=dict)
+@rate_limit(max_requests=5, window_seconds=60)
 async def upload_kyb_document(
     entity_id: int,
     data: KYBDocumentUpload,
+    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = SovereignEntitiesService(db)
-    doc = await service.upload_kyb_document(entity_id, current_user.id, data.document_type, data.document_url)
+    user_id = cast(int, current_user.id)
+    doc = await service.upload_kyb_document(
+        entity_id=entity_id,
+        user_id=user_id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
+        document_type=data.document_type,
+        document_url=data.document_url
+    )
     return {"message": "Document uploaded", "document_id": doc.id}
 
 
@@ -146,12 +169,14 @@ async def get_kyb_documents(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = SovereignEntitiesRepository(db)
-    docs = await repo.get_documents(entity_id)
+    service = SovereignEntitiesService(db)
+    user_id = cast(int, current_user.id)
+    docs = await service.get_kyb_documents(entity_id, user_id)
     return docs
 
 
 @router.put("/{entity_id}/kyb/status", response_model=SovereignEntityResponse)
+@rate_limit(max_requests=10, window_seconds=60)
 async def review_kyb(
     entity_id: int,
     data: KYBUpdateStatus,
@@ -159,7 +184,13 @@ async def review_kyb(
     db: AsyncSession = Depends(get_db)
 ):
     service = SovereignEntitiesService(db)
-    entity = await service.review_kyb(entity_id, current_user.id, data.status.value, data.rejection_reason)
+    admin_id = cast(int, current_user.id)
+    entity = await service.review_kyb(
+        entity_id=entity_id,
+        admin_id=admin_id,
+        status=data.status.value,
+        rejection_reason=data.rejection_reason
+    )
     return entity
 
 
@@ -175,27 +206,31 @@ async def get_entity_page(
     return page_data
 
 
-@router.put("/{entity_id}/page")
+@router.put("/{entity_id}/page", response_model=EntityPageResponse)
+@rate_limit(max_requests=10, window_seconds=60)
 async def update_entity_page(
     entity_id: int,
-    data: EntityPageCreate,
+    data: EntityPageUpdate,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = SovereignEntitiesService(db)
-    page = await service.update_entity_page(entity_id, current_user.id, data.model_dump(exclude_unset=True))
+    user_id = cast(int, current_user.id)
+    page = await service.update_entity_page(entity_id, user_id, data.model_dump(exclude_unset=True))
     return page
 
 
-@router.post("/{entity_id}/page/publish")
+@router.post("/{entity_id}/page/publish", response_model=EntityPageResponse)
+@rate_limit(max_requests=5, window_seconds=60)
 async def publish_entity_page(
     entity_id: int,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = SovereignEntitiesService(db)
-    page = await service.publish_entity_page(entity_id, current_user.id)
-    return {"message": "Page published", "published_at": page.published_at}
+    user_id = cast(int, current_user.id)
+    page = await service.publish_entity_page(entity_id, user_id)
+    return page
 
 
 # ========== 5. الصفحة العامة (بدون مصادقة) ==========
@@ -221,19 +256,42 @@ async def get_entity_balance(
     return {"entity_id": entity_id, "balance_mrusdt": float(balance)}
 
 
-# 🟢 تحديث نقطة التحويل لدعم Idempotency (باستخدام Request Body)
-@router.post("/{entity_id}/transfer")
-async def transfer_from_entity(
+@router.post("/{entity_id}/deposit")
+@rate_limit(max_requests=10, window_seconds=60)
+async def deposit_to_entity(
     entity_id: int,
-    data: EntityTransferRequest,  # يجب تعريفه في schemas
+    data: EntityDepositRequest,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = SovereignEntitiesService(db)
+    user_id = cast(int, current_user.id)
+    result = await service.deposit_to_entity_wallet(
+        entity_id=entity_id,
+        admin_user_id=user_id,
+        amount=data.amount,
+        currency=data.currency,
+        notes=data.notes,
+        idempotency_key=idempotency_key
+    )
+    return result
+
+
+@router.post("/{entity_id}/transfer")
+@rate_limit(max_requests=5, window_seconds=60)
+async def transfer_from_entity(
+    entity_id: int,
+    data: EntityTransferRequest,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = SovereignEntitiesService(db)
+    user_id = cast(int, current_user.id)
     tx_hash = await service.transfer_from_entity(
         entity_id=entity_id,
-        from_representative_id=current_user.id,
+        from_representative_id=user_id,
         to_address=data.to_address,
         amount=data.amount,
         currency=data.currency,
@@ -243,16 +301,18 @@ async def transfer_from_entity(
     return {"transaction_hash": tx_hash, "amount": float(data.amount), "currency": data.currency}
 
 
-# ========== 7. قوالب ومكونات الصفحات (للإدارة) ==========
+# ========== 7. قوالب ومكونات الصفحات (للمشرفين) ==========
 @router.post("/templates", response_model=PageTemplateResponse, status_code=201)
+@rate_limit(max_requests=5, window_seconds=60)
 async def create_page_template(
     data: PageTemplateCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = SovereignEntitiesRepository(db)
-    template = await repo.create_template(tenant_id=tenant.id, **data.model_dump())
+    service = SovereignEntitiesService(db)
+    user_id = cast(int, current_user.id)
+    template = await service.create_page_template(cast(int, tenant.id), user_id, data.model_dump())  # ✅ cast
     return template
 
 
@@ -261,8 +321,8 @@ async def list_templates(
     tenant: AcademyTenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = SovereignEntitiesRepository(db)
-    templates = await repo.list_templates(tenant.id)
+    service = SovereignEntitiesService(db)
+    templates = await service.list_templates(cast(int, tenant.id))  # ✅ cast
     return templates
 
 
@@ -271,16 +331,12 @@ async def list_components(
     tenant: AcademyTenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = SovereignEntitiesRepository(db)
-    components = await repo.list_components(tenant.id)
+    service = SovereignEntitiesService(db)
+    components = await service.list_components(cast(int, tenant.id))  # ✅ cast
     return components
 
 
-# ============================================================
-# 🆕 الإضافات الجديدة
-# ============================================================
-
-# 🟢 استرجاع شجرة الكيان (التسلسل الهرمي)
+# ========== 8. الهيكل التنظيمي (Tree) ==========
 @router.get("/{entity_id}/tree")
 async def get_entity_tree(
     entity_id: int,
@@ -290,24 +346,3 @@ async def get_entity_tree(
     service = SovereignEntitiesService(db)
     tree = await service.get_entity_tree(entity_id)
     return tree
-
-
-# 🟢 الإيداع في محفظة الكيان (مع Idempotency)
-@router.post("/{entity_id}/deposit", response_model=dict)
-async def deposit_to_entity(
-    entity_id: int,
-    data: EntityDepositRequest,  # يجب تعريفه في schemas
-    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    service = SovereignEntitiesService(db)
-    result = await service.deposit_to_entity_wallet(
-        entity_id=entity_id,
-        admin_user_id=current_user.id,
-        amount=data.amount,
-        currency=data.currency,
-        notes=data.notes,
-        idempotency_key=idempotency_key
-    )
-    return result

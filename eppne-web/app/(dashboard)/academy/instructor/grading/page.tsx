@@ -1,16 +1,13 @@
 // app/(dashboard)/academy/instructor/grading/page.tsx
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState, useCallback } from "react";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useParams } from "next/navigation";
 import { motion, Variants } from "framer-motion";
 
-// ✅ الهوكات الجديدة من academy-queries
-import {
-  useInstructorTasks,
-  usePendingSubmissions,
-  useGradeSubmission,
-} from "@/hooks/academy-queries";
+import { useTasks, useGradeSubmissionMutation } from "@/hooks/academy-queries";
+import { AcademyService } from "@/services/academy.service";
 import { AcademyTask, TaskSubmission } from "@/types/academy";
 import { handleError } from "@/lib/error-handler";
 
@@ -30,7 +27,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-// ✅ تعريف الحركات باستخدام Variants
 const containerVariants: Variants = {
   hidden: { opacity: 0 },
   show: {
@@ -51,38 +47,46 @@ const cardVariants: Variants = {
 
 export default function InstructorGradingCenter() {
   const queryClient = useQueryClient();
+  const params = useParams();
+  const courseId = Number(params.courseId) || 1;
+
   const [selectedTaskId, setSelectedTaskId] = useState<number | "">("");
   const [gradingData, setGradingData] = useState<{
     [key: number]: { grade: string; feedback: string };
   }>({});
 
-  // ✅ 1. جلب تكليفات المدرب (مع Pagination)
   const {
-    data: tasksData,
+    data: tasks,
     isLoading: isTasksLoading,
     error: tasksError,
-  } = useInstructorTasks(0, 100);
+  } = useTasks(courseId, 0, 100);
 
-  const tasks = tasksData?.data || [];
-
-  // ✅ 2. جلب التسليمات المعلقة (مع Pagination و enabled)
+  // ✅ الحل الجذري للخطأ
   const {
-    data: submissionsData,
+    data: submissions,
     isLoading: isSubmissionsLoading,
     error: submissionsError,
-  } = usePendingSubmissions(
-    selectedTaskId as number,
-    0,
-    50,
-    !!selectedTaskId
-  );
+  } = useQuery<TaskSubmission[]>({
+    queryKey: ["academy", "instructor", "submissions", selectedTaskId],
+    queryFn: async () => {
+      const result = await AcademyService.getTaskSubmissions(
+        Number(selectedTaskId),
+        0,
+        50
+      );
+      // التعامل مع كلا الاحتمالين
+      if (Array.isArray(result)) return result;
+      if (result && typeof result === 'object' && 'data' in result) {
+        return (result as any).data || [];
+      }
+      return [];
+    },
+    enabled: !!selectedTaskId,
+    staleTime: 2 * 60 * 1000,
+  });
 
-  const submissions = submissionsData?.data || [];
+  const gradeSubmissionMutation = useGradeSubmissionMutation();
 
-  // ✅ 3. محرك تقييم التسليمات (Mutation)
-  const gradeSubmissionMutation = useGradeSubmission();
-
-  // ✅ 4. معالجة الأخطاء
   if (tasksError) {
     const error = handleError(tasksError, "جلب تكليفات المدرب");
     return (
@@ -92,18 +96,13 @@ export default function InstructorGradingCenter() {
         </div>
         <h2 className="text-3xl font-bold mb-2">فشل في تحميل التكليفات</h2>
         <p className="text-muted-foreground text-lg mb-8 max-w-md">{error.message}</p>
-        <Button
-          onClick={() => window.location.reload()}
-          size="lg"
-          className="rounded-xl h-14 px-8"
-        >
+        <Button onClick={() => window.location.reload()} size="lg" className="rounded-xl h-14 px-8">
           إعادة المحاولة
         </Button>
       </div>
     );
   }
 
-  // ✅ 5. دالة تقييم التسليم (useCallback)
   const handleGradeSubmit = useCallback(
     (submissionId: number) => {
       const data = gradingData[submissionId];
@@ -112,7 +111,7 @@ export default function InstructorGradingCenter() {
         return;
       }
 
-      const selectedTask = tasks.find((t: AcademyTask) => t.id === Number(selectedTaskId));
+      const selectedTask = tasks?.find((t: AcademyTask) => t.id === Number(selectedTaskId));
       const maxScore = selectedTask?.max_score || 100;
       const gradeNum = Number(data.grade);
 
@@ -136,7 +135,6 @@ export default function InstructorGradingCenter() {
             queryClient.invalidateQueries({
               queryKey: ["academy", "instructor", "submissions", selectedTaskId],
             });
-            // حذف بيانات التقييم لهذا التسليم
             setGradingData((prev) => {
               const newData = { ...prev };
               delete newData[submissionId];
@@ -153,7 +151,6 @@ export default function InstructorGradingCenter() {
     [gradingData, selectedTaskId, tasks, gradeSubmissionMutation, queryClient]
   );
 
-  // ✅ 6. دالة تحديث بيانات التقييم
   const updateGradingData = useCallback(
     (submissionId: number, field: "grade" | "feedback", value: string) => {
       setGradingData((prev) => ({
@@ -172,12 +169,10 @@ export default function InstructorGradingCenter() {
       variants={containerVariants}
       initial="hidden"
       animate="show"
-      className="flex flex-col w-full min-w-0 space-y-8 p-4 md:p-8 max-w-7xl mx-auto relative animate-in fade-in slide-in-from-bottom-4 duration-700"
+      className="flex flex-col w-full min-w-0 space-y-8 p-4 md:p-8 max-w-7xl mx-auto relative"
     >
-      {/* تأثير النيون الخلفي */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(var(--primary-rgb),0.04),_transparent_75%)] pointer-events-none -z-10" />
 
-      {/* رأس الصفحة */}
       <motion.div
         variants={cardVariants}
         className="relative overflow-hidden rounded-[2rem] bg-card/40 backdrop-blur-2xl border border-white/10 shadow-[0_0_50px_-15px_rgba(var(--primary-rgb),0.3)] p-8 md:p-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 w-full"
@@ -196,7 +191,6 @@ export default function InstructorGradingCenter() {
         </div>
       </motion.div>
 
-      {/* شريط اختيار التكليف المستهدف */}
       <motion.div variants={cardVariants}>
         <Card className="w-full border-white/10 bg-card/40 backdrop-blur-xl shadow-lg rounded-[2rem] overflow-hidden">
           <CardContent className="p-8">
@@ -212,10 +206,8 @@ export default function InstructorGradingCenter() {
                 value={selectedTaskId}
                 onChange={(e) => setSelectedTaskId(Number(e.target.value))}
               >
-                <option value="" disabled>
-                  -- قائمة التكليفات النشطة في ترسانتك --
-                </option>
-                {tasks.map((t: AcademyTask) => (
+                <option value="" disabled>-- قائمة التكليفات النشطة --</option>
+                {tasks?.map((t: AcademyTask) => (
                   <option key={t.id} value={t.id}>
                     {t.title} (الدرجة القصوى: {t.max_score} نقطة)
                   </option>
@@ -226,10 +218,9 @@ export default function InstructorGradingCenter() {
         </Card>
       </motion.div>
 
-      {/* معالجة الحالات الفارغة */}
-      {selectedTaskId && !isSubmissionsLoading && submissions.length === 0 && (
+      {selectedTaskId && !isSubmissionsLoading && (!submissions || submissions.length === 0) && (
         <motion.div variants={cardVariants}>
-          <div className="text-center py-24 bg-card/20 backdrop-blur-sm rounded-[2rem] border border-dashed border-primary/20 animate-in zoom-in-95 duration-300">
+          <div className="text-center py-24 bg-card/20 backdrop-blur-sm rounded-[2rem] border border-dashed border-primary/20">
             <CheckCircle className="mx-auto h-20 w-20 text-emerald-500/30 mb-4 animate-bounce" />
             <h2 className="text-3xl font-black text-foreground">لا توجد تسليمات معلقة!</h2>
             <p className="text-muted-foreground mt-2 text-lg">
@@ -245,30 +236,24 @@ export default function InstructorGradingCenter() {
             <p className="text-destructive font-bold">
               {handleError(submissionsError, "جلب تسليمات الطلاب").message}
             </p>
-            <Button
-              variant="outline"
-              className="mt-4"
-              onClick={() => window.location.reload()}
-            >
+            <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
               إعادة المحاولة
             </Button>
           </div>
         </motion.div>
       )}
 
-      {/* شبكة عرض تذاكر وحلول الطلاب المعلقة */}
       <motion.div variants={cardVariants} className="space-y-6">
         {isSubmissionsLoading ? (
           [1, 2].map((i) => (
             <Skeleton key={i} className="h-48 w-full rounded-[2rem] bg-card/30 border border-white/5" />
           ))
         ) : (
-          submissions.map((sub: TaskSubmission) => (
+          submissions?.map((sub: TaskSubmission) => (
             <Card
               key={sub.id}
-              className="border-white/10 bg-card/40 backdrop-blur-md rounded-[2rem] hover:border-primary/40 hover:shadow-[0_0_30px_rgba(var(--primary-rgb),0.15)] transition-all overflow-hidden flex flex-col md:flex-row group animate-in fade-in duration-300"
+              className="border-white/10 bg-card/40 backdrop-blur-md rounded-[2rem] hover:border-primary/40 hover:shadow-[0_0_30px_rgba(var(--primary-rgb),0.15)] transition-all overflow-hidden flex flex-col md:flex-row group"
             >
-              {/* بيانات الطالب والمستند المرفوع */}
               <div className="p-8 md:w-1/3 bg-background/30 backdrop-blur-sm border-l border-white/5 flex flex-col justify-center relative">
                 <div className="absolute top-0 right-0 w-1.5 h-full bg-primary/40 group-hover:bg-primary transition-colors" />
                 <div className="flex items-center gap-4 mb-6">
@@ -297,29 +282,22 @@ export default function InstructorGradingCenter() {
                 )}
                 {sub.student_notes && (
                   <div className="mt-4 p-4 bg-background/50 rounded-xl border border-white/5 text-sm font-medium shadow-inner">
-                    <span className="font-bold text-primary block mb-1">
-                      ملاحظة الطالب المرفقة:
-                    </span>
+                    <span className="font-bold text-primary block mb-1">ملاحظة الطالب المرفقة:</span>
                     {sub.student_notes}
                   </div>
                 )}
               </div>
 
-              {/* منطقة وضع الملاحظات والدرجة النهائية */}
               <CardContent className="p-8 flex-1 flex flex-col md:flex-row gap-6 items-end relative z-10">
                 <div className="flex-1 space-y-4 w-full">
                   <div className="flex flex-col gap-2">
-                    <Label className="font-bold text-md text-muted-foreground">
-                      ملاحظات التقييم والتوجيه (Feedback)
-                    </Label>
+                    <Label className="font-bold text-md text-muted-foreground">ملاحظات التقييم والتوجيه</Label>
                     <textarea
                       rows={3}
                       className="w-full p-4 bg-background/40 border border-white/10 rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 text-md font-medium transition-colors shadow-inner resize-none"
-                      placeholder="اكتب توجيهاتك المعرفية، كفؤ ولكن يرجى هندسة..."
+                      placeholder="اكتب توجيهاتك المعرفية..."
                       value={gradingData[sub.id]?.feedback || ""}
-                      onChange={(e) =>
-                        updateGradingData(sub.id, "feedback", e.target.value)
-                      }
+                      onChange={(e) => updateGradingData(sub.id, "feedback", e.target.value)}
                     />
                   </div>
                 </div>
@@ -332,19 +310,11 @@ export default function InstructorGradingCenter() {
                     <Input
                       type="number"
                       className="h-14 text-center text-2xl font-black bg-background/40 border-white/10 rounded-xl focus:border-primary shadow-inner font-mono"
-                      placeholder={`0 - ${
-                        tasks.find((t: AcademyTask) => t.id === Number(selectedTaskId))
-                          ?.max_score || 100
-                      }`}
+                      placeholder={`0 - ${tasks?.find((t: AcademyTask) => t.id === Number(selectedTaskId))?.max_score || 100}`}
                       value={gradingData[sub.id]?.grade || ""}
-                      onChange={(e) =>
-                        updateGradingData(sub.id, "grade", e.target.value)
-                      }
+                      onChange={(e) => updateGradingData(sub.id, "grade", e.target.value)}
                       min={0}
-                      max={
-                        tasks.find((t: AcademyTask) => t.id === Number(selectedTaskId))
-                          ?.max_score || 100
-                      }
+                      max={tasks?.find((t: AcademyTask) => t.id === Number(selectedTaskId))?.max_score || 100}
                     />
                   </div>
                   <Button
@@ -356,12 +326,10 @@ export default function InstructorGradingCenter() {
                     className="w-full h-14 bg-emerald-600 hover:bg-emerald-500 font-black text-md shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:scale-105 transition-all rounded-xl"
                   >
                     {gradeSubmissionMutation.isPending &&
-                    gradeSubmissionMutation.variables?.submissionId === sub.id ? (
+                      gradeSubmissionMutation.variables?.submissionId === sub.id ? (
                       <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
-                      <>
-                        اعتماد التقييم <CheckCircle className="mr-2 h-5 w-5" />
-                      </>
+                      <>اعتماد التقييم <CheckCircle className="mr-2 h-5 w-5" /></>
                     )}
                   </Button>
                 </div>

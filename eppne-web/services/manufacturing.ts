@@ -1,170 +1,420 @@
 // services/manufacturing.ts
-import api from '@/lib/axios';
-import type {
-  ManufacturingFacility,
-  ProductionLine,
-  ProductBlueprint,
-  ProductionBatch,
-  SmartProductItem,
-  RawMaterialBatch,
-  MaterialConsumptionLog,
-  ProductDigitalTwin,
-  QualityCertificate,
-  PredictiveMaintenanceLog,
-  SparePart,
-  ManufacturingStats,
-  FacilityType,
-  ProductionStatus,
-  ProductCategory,
-  TrackingStatus,
-} from '@/types/manufacturing';
+import { apiClient } from "@/lib/api-client";
+import type { components } from "@/src/lib/api-types";
+import { handleError } from "@/lib/error-handler";
+import { generateIdempotencyKey } from "@/lib/utils";
 
-// ========== Facilities ==========
-export const getFacilities = (params?: { skip?: number; limit?: number }) =>
-  api.get<ManufacturingFacility[]>('/manufacturing/facilities', { params });
+type ManufacturingFacilityCreate = components['schemas']['ManufacturingFacilityCreate'];
+type ManufacturingFacilityResponse = components['schemas']['ManufacturingFacilityResponse'];
+type ProductionLineCreate = components['schemas']['ProductionLineCreate'];
+type ProductionLineResponse = components['schemas']['ProductionLineResponse'];
+type ProductBlueprintCreate = components['schemas']['ProductBlueprintCreate'];
+type ProductBlueprintResponse = components['schemas']['ProductBlueprintResponse'];
+type ProductionBatchCreate = components['schemas']['ProductionBatchCreate'];
+type ProductionBatchResponse = components['schemas']['ProductionBatchResponse'];
+type StartProductionResponse = components['schemas']['StartProductionResponse'];
+type RawMaterialBatchCreate = components['schemas']['RawMaterialBatchCreate'];
+type RawMaterialBatchResponse = components['schemas']['RawMaterialBatchResponse'];
+type MaterialConsumptionCreate = components['schemas']['MaterialConsumptionCreate'];
+type ProductDigitalTwinResponse = components['schemas']['ProductDigitalTwinResponse'];
+type QualityCertificateCreate = components['schemas']['QualityCertificateCreate'];
+type QualityCertificateResponse = components['schemas']['QualityCertificateResponse'];
+type PredictiveMaintenanceLogCreate = components['schemas']['PredictiveMaintenanceLogCreate'];
+type PredictiveMaintenanceLogResponse = components['schemas']['PredictiveMaintenanceLogResponse'];
+type SparePartCreate = components['schemas']['SparePartCreate'];
+type SparePartResponse = components['schemas']['SparePartResponse'];
+type SparePartRestock = components['schemas']['SparePartRestock'];
 
-export const getFacility = (id: number) => api.get<ManufacturingFacility>(`/manufacturing/facilities/${id}`);
+export const ManufacturingService = {
+  /**
+   * إنشاء مرفق تصنيع جديد
+   * POST /manufacturing/manufacturing/facilities
+   * تدعم X-Tenant-ID
+   */
+  createFacility: async (data: ManufacturingFacilityCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<ManufacturingFacilityResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<ManufacturingFacilityResponse>(
+        "/manufacturing/manufacturing/facilities",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء المرفق");
+    }
+  },
 
-export const createFacility = (data: {
-  name: string;
-  facility_type: FacilityType;
-  location_gps?: { lat: number; lng: number };
-  real_estate_unit_id?: number;
-}) => api.post<ManufacturingFacility>('/manufacturing/facilities', data);
+  /**
+   * إضافة خط إنتاج داخل مرفق
+   * POST /manufacturing/manufacturing/facilities/{facility_id}/lines
+   */
+  addProductionLine: async (facilityId: number, data: ProductionLineCreate): Promise<ProductionLineResponse> => {
+    try {
+      const id = Number(facilityId);
+      if (isNaN(id)) throw new Error("معرف المرفق غير صحيح");
+      const { data: result } = await apiClient.post<ProductionLineResponse>(
+        `/manufacturing/manufacturing/facilities/${id}/lines`,
+        data,
+        { withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إضافة خط الإنتاج");
+    }
+  },
 
-export const updateFacility = (id: number, data: Partial<{ name: string; is_active: boolean }>) =>
-  api.put<ManufacturingFacility>(`/manufacturing/facilities/${id}`, data);
+  /**
+   * إنشاء مخطط منتج جديد
+   * POST /manufacturing/manufacturing/blueprints
+   * تدعم X-Tenant-ID
+   */
+  createBlueprint: async (data: ProductBlueprintCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<ProductBlueprintResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<ProductBlueprintResponse>(
+        "/manufacturing/manufacturing/blueprints",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء المخطط");
+    }
+  },
 
-export const deleteFacility = (id: number) => api.delete(`/manufacturing/facilities/${id}`);
+  /**
+   * إنشاء دفعة إنتاج جديدة
+   * POST /manufacturing/manufacturing/batches
+   * تدعم X-Tenant-ID
+   */
+  createBatch: async (data: ProductionBatchCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<ProductionBatchResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<ProductionBatchResponse>(
+        "/manufacturing/manufacturing/batches",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء دفعة الإنتاج");
+    }
+  },
 
-// ========== Production Lines ==========
-export const getProductionLines = (facilityId: number) =>
-  api.get<ProductionLine[]>(`/manufacturing/facilities/${facilityId}/lines`);
+  /**
+   * بدء الإنتاج (تشغيل الدفعة)
+   * POST /manufacturing/manufacturing/batches/{batch_id}/start
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  startProduction: async (
+    batchId: number,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<StartProductionResponse> => {
+    try {
+      const id = Number(batchId);
+      if (isNaN(id)) throw new Error("معرف الدفعة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<StartProductionResponse>(
+        `/manufacturing/manufacturing/batches/${id}/start`,
+        undefined,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل بدء الإنتاج");
+    }
+  },
 
-export const createProductionLine = (
-  facilityId: number,
-  data: { name: string; hourly_capacity: number; smart_asset_id?: number }
-) => api.post<ProductionLine>(`/manufacturing/facilities/${facilityId}/lines`, data);
+  /**
+   * جلب قائمة المواد الخام
+   * GET /manufacturing/manufacturing/raw-materials
+   * تدعم X-Tenant-ID
+   */
+  listRawMaterials: async (params?: { skip?: number; limit?: number }, headers?: { 'X-Tenant-ID'?: number }): Promise<RawMaterialBatchResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<RawMaterialBatchResponse[]>("/manufacturing/manufacturing/raw-materials", {
+        params,
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب المواد الخام");
+    }
+  },
 
-// ========== Blueprints ==========
-export const getBlueprints = (params?: { facility_id?: number; skip?: number; limit?: number }) =>
-  api.get<ProductBlueprint[]>('/manufacturing/blueprints', { params });
+  /**
+   * تسجيل دفعة مواد خام جديدة
+   * POST /manufacturing/manufacturing/raw-materials
+   * تدعم X-Tenant-ID
+   */
+  registerRawMaterial: async (data: RawMaterialBatchCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<RawMaterialBatchResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<RawMaterialBatchResponse>(
+        "/manufacturing/manufacturing/raw-materials",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تسجيل المواد الخام");
+    }
+  },
 
-export const createBlueprint = (data: {
-  facility_id: number;
-  sku: string;
-  name: string;
-  product_category: ProductCategory;
-  description?: string;
-  bill_of_materials: Record<string, any>;
-  base_price_mrusdt: number;
-  is_perishable?: boolean;
-  shelf_life_days?: number;
-  warranty_months?: number;
-  has_digital_twin?: boolean;
-}) => api.post<ProductBlueprint>('/manufacturing/blueprints', data);
+  /**
+   * استهلاك مادة خام في دفعة إنتاج
+   * POST /manufacturing/manufacturing/batches/{batch_id}/consume-material
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  consumeRawMaterial: async (
+    batchId: number,
+    data: MaterialConsumptionCreate,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<void> => {
+    try {
+      const id = Number(batchId);
+      if (isNaN(id)) throw new Error("معرف الدفعة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      await apiClient.post(
+        `/manufacturing/manufacturing/batches/${id}/consume-material`,
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+    } catch (error) {
+      throw handleError(error, "فشل استهلاك المادة الخام");
+    }
+  },
 
-// ========== Batches ==========
-export const createBatch = (data: {
-  product_blueprint_id: number;
-  line_id: number;
-  batch_number: string;
-  source_tracking_number?: string;
-  target_quantity: number;
-}) => api.post<ProductionBatch>('/manufacturing/batches', data);
+  /**
+   * إنشاء توأم رقمي لمنتج
+   * POST /manufacturing/manufacturing/product-items/{product_item_id}/digital-twin
+   */
+  createDigitalTwin: async (
+    productItemId: number,
+    params: { batch_id: number; production_line_id?: number | null }
+  ): Promise<ProductDigitalTwinResponse> => {
+    try {
+      const id = Number(productItemId);
+      if (isNaN(id)) throw new Error("معرف المنتج غير صحيح");
+      const { data: result } = await apiClient.post<ProductDigitalTwinResponse>(
+        `/manufacturing/manufacturing/product-items/${id}/digital-twin`,
+        undefined,
+        { params, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء التوأم الرقمي");
+    }
+  },
 
-export const getBatchItems = (batchId: number) =>
-  api.get<SmartProductItem[]>(`/manufacturing/batches/${batchId}/items`);
+  /**
+   * جلب التوأم الرقمي لمنتج
+   * GET /manufacturing/manufacturing/product-items/{product_item_id}/digital-twin
+   */
+  getDigitalTwin: async (productItemId: number): Promise<ProductDigitalTwinResponse> => {
+    try {
+      const id = Number(productItemId);
+      if (isNaN(id)) throw new Error("معرف المنتج غير صحيح");
+      const { data } = await apiClient.get<ProductDigitalTwinResponse>(
+        `/manufacturing/manufacturing/product-items/${id}/digital-twin`,
+        { withCredentials: true }
+      );
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب التوأم الرقمي");
+    }
+  },
 
-export const startProduction = (batchId: number, idempotencyKey?: string) =>
-  api.post<{ message: string; batch_number: string; items_generated: number; status: string }>(
-    `/manufacturing/batches/${batchId}/start`,
-    {},
-    { headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {} }
-  );
+  /**
+   * إصدار شهادة جودة
+   * POST /manufacturing/manufacturing/quality-certificates
+   * تدعم X-Tenant-ID
+   */
+  issueQualityCertificate: async (data: QualityCertificateCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<QualityCertificateResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<QualityCertificateResponse>(
+        "/manufacturing/manufacturing/quality-certificates",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إصدار شهادة الجودة");
+    }
+  },
 
-// ========== Raw Materials ==========
-export const getRawMaterials = (params?: { skip?: number; limit?: number }) =>
-  api.get<RawMaterialBatch[]>('/manufacturing/raw-materials', { params });
+  /**
+   * جلب شهادات الجودة لكيان معين
+   * GET /manufacturing/manufacturing/quality-certificates/{entity_type}/{entity_id}
+   */
+  getEntityCertificates: async (entityType: string, entityId: number): Promise<QualityCertificateResponse[]> => {
+    try {
+      const id = Number(entityId);
+      if (isNaN(id)) throw new Error("معرف الكيان غير صحيح");
+      const { data } = await apiClient.get<QualityCertificateResponse[]>(
+        `/manufacturing/manufacturing/quality-certificates/${entityType}/${id}`,
+        { withCredentials: true }
+      );
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب شهادات الجودة");
+    }
+  },
 
-export const registerRawMaterial = (data: {
-  material_name: string;
-  supplier_id?: number;
-  source_traceability?: string;
-  quantity_kg: number;
-  unit_price_mrusdt: number;
-  received_date: string;
-  quality_check_passed?: boolean;
-  quality_certificate_hash?: string;
-}) => api.post<RawMaterialBatch>('/manufacturing/raw-materials', data);
+  /**
+   * تحليل الصيانة التنبؤية
+   * POST /manufacturing/manufacturing/predictive-maintenance
+   * تدعم X-Tenant-ID
+   */
+  analyzeMaintenance: async (data: PredictiveMaintenanceLogCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<PredictiveMaintenanceLogResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<PredictiveMaintenanceLogResponse>(
+        "/manufacturing/manufacturing/predictive-maintenance",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تحليل الصيانة التنبؤية");
+    }
+  },
 
-export const consumeRawMaterial = (
-  batchId: number,
-  data: { raw_material_batch_id: number; quantity_used_kg: number },
-  idempotencyKey?: string
-) =>
-  api.post<MaterialConsumptionLog>(`/manufacturing/batches/${batchId}/consume-material`, data, {
-    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
-  });
+  /**
+   * جلب طلبات الصيانة المعلقة لخط إنتاج
+   * GET /manufacturing/manufacturing/production-lines/{line_id}/pending-maintenance
+   */
+  getPendingMaintenance: async (lineId: number): Promise<PredictiveMaintenanceLogResponse[]> => {
+    try {
+      const id = Number(lineId);
+      if (isNaN(id)) throw new Error("معرف خط الإنتاج غير صحيح");
+      const { data } = await apiClient.get<PredictiveMaintenanceLogResponse[]>(
+        `/manufacturing/manufacturing/production-lines/${id}/pending-maintenance`,
+        { withCredentials: true }
+      );
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب طلبات الصيانة المعلقة");
+    }
+  },
 
-// ========== Digital Twin ==========
-export const getDigitalTwin = (productItemId: number) =>
-  api.get<ProductDigitalTwin>(`/manufacturing/product-items/${productItemId}/digital-twin`);
+  /**
+   * جدولة صيانة
+   * POST /manufacturing/manufacturing/maintenance/{log_id}/schedule
+   */
+  scheduleMaintenance: async (logId: number, scheduledAt: string): Promise<void> => {
+    try {
+      const id = Number(logId);
+      if (isNaN(id)) throw new Error("معرف طلب الصيانة غير صحيح");
+      await apiClient.post(
+        `/manufacturing/manufacturing/maintenance/${id}/schedule`,
+        undefined,
+        { params: { scheduled_at: scheduledAt }, withCredentials: true }
+      );
+    } catch (error) {
+      throw handleError(error, "فشل جدولة الصيانة");
+    }
+  },
 
-export const createDigitalTwin = (
-  productItemId: number,
-  data: { batch_id: number; production_line_id?: number }
-) =>
-  api.post<ProductDigitalTwin>(
-    `/manufacturing/product-items/${productItemId}/digital-twin`,
-    data
-  );
+  /**
+   * إنشاء قطعة غيار جديدة
+   * POST /manufacturing/manufacturing/spare-parts
+   * تدعم X-Tenant-ID
+   */
+  createSparePart: async (data: SparePartCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<SparePartResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<SparePartResponse>(
+        "/manufacturing/manufacturing/spare-parts",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء قطعة الغيار");
+    }
+  },
 
-// ========== Quality Certificates ==========
-export const issueQualityCertificate = (data: {
-  certificate_type: string;
-  certificate_name: string;
-  issuing_body: string;
-  certified_entity_type: string;
-  certified_entity_id: number;
-  issue_date: string;
-  expiry_date: string;
-  ipfs_document_hash?: string;
-}) => api.post<QualityCertificate>('/manufacturing/quality-certificates', data);
+  /**
+   * جلب قائمة قطع الغيار
+   * GET /manufacturing/manufacturing/spare-parts
+   * تدعم X-Tenant-ID
+   */
+  listSpareParts: async (params?: { skip?: number; limit?: number }, headers?: { 'X-Tenant-ID'?: number }): Promise<SparePartResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<SparePartResponse[]>("/manufacturing/manufacturing/spare-parts", {
+        params,
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب قطع الغيار");
+    }
+  },
 
-export const getEntityCertificates = (entityType: string, entityId: number) =>
-  api.get<QualityCertificate[]>(`/manufacturing/quality-certificates/${entityType}/${entityId}`);
-
-// ========== Predictive Maintenance ==========
-export const createMaintenanceLog = (data: {
-  production_line_id: number;
-  sensor_data: Record<string, any>;
-  ai_prediction: Record<string, any>;
-  recommended_action?: string;
-}) => api.post<PredictiveMaintenanceLog>('/manufacturing/predictive-maintenance', data);
-
-export const getPendingMaintenance = (lineId: number) =>
-  api.get<PredictiveMaintenanceLog[]>(`/manufacturing/production-lines/${lineId}/pending-maintenance`);
-
-export const scheduleMaintenance = (logId: number, scheduled_at: string) =>
-  api.post(`/manufacturing/maintenance/${logId}/schedule`, { scheduled_at });
-
-// ========== Spare Parts ==========
-export const getSpareParts = (params?: { skip?: number; limit?: number }) =>
-  api.get<SparePart[]>('/manufacturing/spare-parts', { params });
-
-export const createSparePart = (data: {
-  part_name: string;
-  part_number: string;
-  compatible_machines?: number[];
-  stock_quantity?: number;
-  min_stock_threshold?: number;
-  unit_price_mrusdt: number;
-  supplier_id?: number;
-}) => api.post<SparePart>('/manufacturing/spare-parts', data);
-
-export const restockSparePart = (partId: number, data: { quantity_added: number; unit_price_paid?: number }) =>
-  api.post<SparePart>(`/manufacturing/spare-parts/${partId}/restock`, data);
-
-// ========== Stats ==========
-export const getManufacturingStats = () => api.get<ManufacturingStats>('/manufacturing/stats');
+  /**
+   * إعادة تخزين قطعة غيار
+   * POST /manufacturing/manufacturing/spare-parts/{part_id}/restock
+   */
+  restockSparePart: async (partId: number, data: SparePartRestock): Promise<SparePartResponse> => {
+    try {
+      const id = Number(partId);
+      if (isNaN(id)) throw new Error("معرف قطعة الغيار غير صحيح");
+      const { data: result } = await apiClient.post<SparePartResponse>(
+        `/manufacturing/manufacturing/spare-parts/${id}/restock`,
+        data,
+        { withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إعادة تخزين قطعة الغيار");
+    }
+  },
+};

@@ -1,17 +1,16 @@
 # app/domains/privacy/router.py
 from fastapi import APIRouter, Depends, Request, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
-import logging  # 🔥 استخدام Logger القياسي لحل مشكلة الاستيراد
+from typing import Optional, cast
+import logging
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user
 from app.domains.identity.models import User
 from app.domains.privacy.service import PrivacyService
-from app.domains.privacy.repository import PrivacyRepository
 from app.domains.privacy.schemas import *
+from app.domains.privacy.models import ErasureStatus
 
-# 🔥 إعداد Logger خاص بالـ Router
 logger = logging.getLogger("eppne.privacy.router")
 
 router = APIRouter(prefix="/privacy", tags=["Sovereign Privacy & Data Erasure"])
@@ -25,16 +24,15 @@ router = APIRouter(prefix="/privacy", tags=["Sovereign Privacy & Data Erasure"])
     response_model=PrivacySettingResponse,
     summary="جلب إعدادات الخصوصية"
 )
-# @rate_limit(max_requests=60, window_seconds=60) # TODO: إعادة التفعيل بعد اكتمال Rate Limiter Core
+# @rate_limit(max_requests=60, window_seconds=60)
 async def get_privacy_settings(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """جلب إعدادات الخصوصية للمستخدم الحالي."""
-    repo = PrivacyRepository(db)
-    # 🔥 استخراج الـ ID بأمان لإرضاء Pylance Type-Hinting
-    user_id = int(getattr(current_user, 'id', 0))
-    settings = await repo.get_privacy_settings(user_id)
+    service = PrivacyService(db)
+    user_id = cast(int, current_user.id)
+    settings = await service.get_privacy_settings(user_id)
     return settings
 
 
@@ -51,10 +49,10 @@ async def update_privacy_settings(
 ):
     """تحديث إعدادات الخصوصية للمستخدم الحالي."""
     service = PrivacyService(db)
-    user_id = int(getattr(current_user, 'id', 0))
+    user_id = cast(int, current_user.id)
     try:
         settings = await service.update_privacy_settings(
-            user_id, 
+            user_id,
             data.model_dump(exclude_unset=True)
         )
         return settings
@@ -84,17 +82,17 @@ async def log_consent(
     db: AsyncSession = Depends(get_db)
 ):
     """تسجيل موافقة المستخدم على معالجة البيانات."""
-    user_id = int(getattr(current_user, 'id', 0))
+    user_id = cast(int, current_user.id)
     try:
         service = PrivacyService(db)
         ip = request.client.host if request.client else None
         ua = request.headers.get("user-agent")
-        
+
         await service.record_consent(
-            user_id, 
-            consent_type, 
-            granted, 
-            ip, 
+            user_id,
+            consent_type,
+            granted,
+            ip,
             ua
         )
         return {"message": "تم تسجيل الموافقة بنجاح"}
@@ -124,11 +122,11 @@ async def request_data_erasure(
 ):
     """إنشاء طلب محو بيانات جديد."""
     service = PrivacyService(db)
-    user_id = int(getattr(current_user, 'id', 0))
+    user_id = cast(int, current_user.id)
     try:
         request_obj = await service.request_data_erasure(
-            user_id, 
-            data.target_module, 
+            user_id,
+            data.target_module,
             data.reason
         )
         return request_obj
@@ -154,23 +152,22 @@ async def list_my_erasure_requests(
     db: AsyncSession = Depends(get_db)
 ):
     """جلب طلبات محو البيانات الخاصة بالمستخدم الحالي مع Pagination."""
-    repo = PrivacyRepository(db)
-    user_id = int(getattr(current_user, 'id', 0))
-    
+    service = PrivacyService(db)
+    user_id = cast(int, current_user.id)
+
     status_enum = None
     if request_status:
         try:
-            from app.domains.privacy.models import ErasureStatus
             status_enum = ErasureStatus(request_status.upper())
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="حالة غير صالحة. القيم المسموحة: PENDING, COMPLETED, REJECTED"
             )
-    
-    result = await repo.list_erasure_requests(
-        user_id, 
-        skip=skip, 
+
+    result = await service.list_erasure_requests(
+        user_id,
+        skip=skip,
         limit=limit,
         status=status_enum
     )
@@ -196,12 +193,12 @@ async def process_erasure_request(
 ):
     """معالجة طلب محو البيانات (للمشرفين فقط)."""
     service = PrivacyService(db)
-    admin_id = int(getattr(current_user, 'id', 0))
+    admin_id = cast(int, current_user.id)
     try:
         processed = await service.process_erasure_request(
-            request_id, 
-            admin_id, 
-            approve, 
+            request_id,
+            admin_id,
+            approve,
             notes
         )
         return {
@@ -230,14 +227,14 @@ async def get_pending_erasure_requests(
     db: AsyncSession = Depends(get_db)
 ):
     """جلب طلبات محو البيانات المعلقة (للمشرفين فقط)."""
-    admin_id = int(getattr(current_user, 'id', 0))
+    admin_id = cast(int, current_user.id)
     from app.core.security import is_privacy_officer
     if not await is_privacy_officer(admin_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="غير مصرح لك بالوصول")
 
-    repo = PrivacyRepository(db)
-    result = await repo.get_pending_erasure_requests_for_admin(
-        skip=skip, 
+    service = PrivacyService(db)
+    result = await service.get_pending_erasure_requests_for_admin(
+        skip=skip,
         limit=limit
     )
     return result

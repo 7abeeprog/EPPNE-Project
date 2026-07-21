@@ -3,25 +3,25 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from decimal import Decimal
-from app.domains.employment.models import EmploymentStatus, LeaveType, PayrollStatus
-from app.domains.employment.models import (
-    JobListing, JobApplication, EmploymentContract, AttendanceRecord,
-    LeaveRequest, PayrollRecord, EmploymentStatus, AttendanceStatus,
-    LeaveType, PayrollStatus
-)
+from app.domains.employment.models import EmploymentStatus, LeaveType, PayrollStatus, AttendanceStatus
 
-# ========== Job Listings ==========
+
+# ============================================================
+# الوظائف (Job Listings)
+# ============================================================
+
 class JobListingCreate(BaseModel):
-    title: str
-    description: Optional[str] = None
-    required_skills: List[str] = []
-    required_certificate_ids: List[int] = []
-    required_rank: Optional[str] = None
-    salary_min: Optional[Decimal] = None
-    salary_max: Optional[Decimal] = None
-    currency: str = "MR_USDT"
-    location: Optional[str] = None
-    employment_type: str = "FULL_TIME"
+    title: str = Field(description="عنوان الوظيفة")
+    description: Optional[str] = Field(default=None, description="وصف الوظيفة")
+    required_skills: List[str] = Field(default_factory=list, description="المهارات المطلوبة")
+    required_certificate_ids: List[int] = Field(default_factory=list, description="معرفات الشهادات المطلوبة")
+    required_rank: Optional[str] = Field(default=None, description="الرتبة السيادية المطلوبة")
+    salary_min: Optional[Decimal] = Field(default=None, description="الحد الأدنى للراتب")
+    salary_max: Optional[Decimal] = Field(default=None, description="الحد الأقصى للراتب")
+    currency: str = Field(default="MR_USDT", description="العملة")
+    location: Optional[str] = Field(default=None, description="الموقع")
+    employment_type: str = Field(default="FULL_TIME", description="نوع التوظيف")
+
 
 class JobListingResponse(JobListingCreate):
     id: int
@@ -30,11 +30,16 @@ class JobListingResponse(JobListingCreate):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# ========== Job Applications ==========
+
+# ============================================================
+# طلبات التوظيف (Job Applications)
+# ============================================================
+
 class JobApplicationCreate(BaseModel):
-    job_id: int
-    cover_letter: Optional[str] = None
-    resume_url: Optional[str] = None
+    job_id: int = Field(description="معرف الوظيفة")
+    cover_letter: Optional[str] = Field(default=None, description="رسالة التعريف")
+    resume_url: Optional[str] = Field(default=None, description="رابط السيرة الذاتية")
+
 
 class JobApplicationResponse(BaseModel):
     id: int
@@ -49,18 +54,23 @@ class JobApplicationResponse(BaseModel):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# ========== Employment Contracts ==========
+
+# ============================================================
+# عقود العمل (Employment Contracts)
+# ============================================================
+
 class EmploymentContractCreate(BaseModel):
-    application_id: int
-    job_title: str
-    base_salary: Decimal
-    allowances: Dict[str, Decimal] = {}
-    currency: str = "MR_USDT"
-    start_date: datetime
-    end_date: Optional[datetime] = None
-    probation_days: int = 90
-    annual_leave_days: int = 21
-    idempotency_key: Optional[str] = None  # 🔥 دعم Idempotency
+    application_id: int = Field(description="معرف طلب التوظيف")
+    job_title: str = Field(description="المسمى الوظيفي")
+    base_salary: Decimal = Field(description="الراتب الأساسي")
+    allowances: Dict[str, Decimal] = Field(default_factory=dict, description="البدلات الإضافية")
+    currency: str = Field(default="MR_USDT", description="العملة")
+    start_date: datetime = Field(description="تاريخ البدء")
+    end_date: Optional[datetime] = Field(default=None, description="تاريخ الانتهاء (إن وجد)")
+    probation_days: int = Field(default=90, description="مدة التجربة بالأيام")
+    annual_leave_days: int = Field(default=21, description="أيام الإجازة السنوية")
+    idempotency_key: Optional[str] = Field(default=None, description="مفتاح عدم التكرار")
+
 
 class EmploymentContractResponse(EmploymentContractCreate):
     id: int
@@ -73,15 +83,20 @@ class EmploymentContractResponse(EmploymentContractCreate):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-class ContractSignRequest(BaseModel):
-    contract_id: int
-    signature_tx_hash: str
 
-# ========== Attendance ==========
+class ContractSignRequest(BaseModel):
+    signature_tx_hash: str = Field(description="هاش التوقيع")
+
+
+# ============================================================
+# الحضور والانصراف (Attendance)
+# ============================================================
+
 class AttendanceCheckIn(BaseModel):
-    latitude: float
-    longitude: float
-    device_fingerprint: Optional[str] = None
+    latitude: float = Field(description="خط العرض")
+    longitude: float = Field(description="خط الطول")
+    device_fingerprint: Optional[str] = Field(default=None, description="بصمة الجهاز")
+
 
 class AttendanceRecordResponse(BaseModel):
     id: int
@@ -91,15 +106,20 @@ class AttendanceRecordResponse(BaseModel):
     check_out: Optional[datetime]
     hours_worked: float
     overtime_hours: float
-    status: str
+    status: AttendanceStatus
     model_config = ConfigDict(from_attributes=True)
 
-# ========== Leave Requests ==========
+
+# ============================================================
+# الإجازات (Leave Requests)
+# ============================================================
+
 class LeaveRequestCreate(BaseModel):
-    leave_type: LeaveType
-    start_date: datetime
-    end_date: datetime
-    reason: Optional[str] = None
+    leave_type: LeaveType = Field(description="نوع الإجازة")
+    start_date: datetime = Field(description="تاريخ البدء")
+    end_date: datetime = Field(description="تاريخ الانتهاء")
+    reason: Optional[str] = Field(default=None, description="سبب الإجازة")
+
 
 class LeaveRequestResponse(LeaveRequestCreate):
     id: int
@@ -110,7 +130,11 @@ class LeaveRequestResponse(LeaveRequestCreate):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# ========== Payroll ==========
+
+# ============================================================
+# الرواتب (Payroll)
+# ============================================================
+
 class PayrollRecordResponse(BaseModel):
     id: int
     contract_id: int

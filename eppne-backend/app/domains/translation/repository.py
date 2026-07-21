@@ -4,6 +4,7 @@ from sqlalchemy import select, update, func as sa_func
 from typing import Optional, List
 from app.domains.translation.models import TranslationCache, TranslationRequestLog, SupportedLanguage
 
+
 class TranslationRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -18,14 +19,20 @@ class TranslationRepository:
         )
         return result.scalar_one_or_none()
 
-    async def save_cache(self, tenant_id: int, text_hash: str, original: str, 
+    async def save_cache(self, tenant_id: int, text_hash: str, original: str,
                          source_lang: str, target_lang: str, translated: str):
         # التحقق من وجود الكائن أولاً (لتجنب سباق التحديثات)
         cache = await self.get_cache_by_hash(tenant_id, text_hash)
         if cache:
-            translations_dict = dict(cache.translations)
-            translations_dict[target_lang] = translated
-            cache.translations = translations_dict
+            # ✅ استخدام getattr للحصول على القيمة الفعلية
+            current_translations = getattr(cache, 'translations', {})
+            # التأكد من أنها قاموس
+            if not isinstance(current_translations, dict):
+                current_translations = {}
+            # تحديث القاموس
+            current_translations[target_lang] = translated
+            # تعيين القيمة الجديدة مع تجاهل تحذير النوع
+            setattr(cache, 'translations', current_translations)  # type: ignore[reportAttributeAccessIssue]
         else:
             cache = TranslationCache(
                 tenant_id=tenant_id,
@@ -35,28 +42,27 @@ class TranslationRepository:
                 translations={target_lang: translated}
             )
             self.db.add(cache)
-        # لا نقوم بـ commit() هنا، يُترك للـ Service
 
     async def increment_hit_count(self, cache_id: int):
         # تحديث ذري بدون الحاجة لجلب الكائن أولاً
         await self.db.execute(
             update(TranslationCache)
             .where(TranslationCache.id == cache_id)
-            .values(hit_count=TranslationCache.hit_count + 1)
+            .values(hit_count=TranslationCache.hit_count + 1)  # type: ignore
         )
 
     # --- سجلات التدقيق (بدون Commit) ---
-    async def log_request(self, tenant_id: int, user_id: Optional[int], 
-                          source: str, target: str, length: int, 
-                          used_cache: bool, ip: Optional[str], 
+    async def log_request(self, tenant_id: int, user_id: Optional[int],
+                          source: str, target: str, length: int,
+                          used_cache: bool, ip: Optional[str],
                           ua: Optional[str], idempotency_key: Optional[str],
                           cost: str = "0"):
         log = TranslationRequestLog(
-            tenant_id=tenant_id, 
-            user_id=user_id, 
-            source_lang=source, 
+            tenant_id=tenant_id,
+            user_id=user_id,
+            source_lang=source,
             target_lang=target,
-            text_length=length, 
+            text_length=length,
             used_cache=used_cache,
             ip_address=ip,
             user_agent=ua,
@@ -70,4 +76,4 @@ class TranslationRepository:
         result = await self.db.execute(
             select(SupportedLanguage).where(SupportedLanguage.is_active == True)
         )
-        return result.scalars().all()
+        return list(result.scalars().all())

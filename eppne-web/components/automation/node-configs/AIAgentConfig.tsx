@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getAvailableAgents } from '@/services/automation';
+import { getAvailableAgents } from '@/services/automation.service';
 import { Loader2, AlertTriangle, Shield, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -25,7 +25,7 @@ export default function AIAgentConfig({ config, onChange }: AIAgentConfigProps) 
   const handleAgentChange = (agentId: string) => {
     setSelectedAgent(agentId);
     onChange('agent_id', parseInt(agentId));
-    
+
     // تحديث الإعدادات الافتراضية بناءً على قدرات الوكيل
     const agent = agents?.find(a => a.id === parseInt(agentId));
     if (agent) {

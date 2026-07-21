@@ -2,16 +2,16 @@
 مسارات (Endpoints) قطاع الأتمتة – إنشاء وإدارة سير العمل، التشغيل اليدوي،
 webhook، وجلب سجلات التنفيذ.
 """
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, status, Header
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, status, Header, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import List, Optional, cast
 import uuid
 
+from app.core.errors import PermissionDeniedError, NotFoundError, ValidationError
 from app.core.database import get_db
 from app.api.deps import get_current_active_user, get_current_tenant
 from app.domains.identity.models import User
-from app.domains.automation.repository import AutomationRepository
-from app.domains.automation.service import run_workflow_background
+from app.domains.automation.service import AutomationService, run_workflow_background
 from app.domains.automation.schemas import (
     WorkflowCreate, WorkflowUpdate, WorkflowResponse,
     ExecutionTrigger, ExecutionResponse, NodeLogResponse,
@@ -27,6 +27,7 @@ router = APIRouter(prefix="/automation", tags=["Automation Workflows"])
 # ========== 1. إدارة سير العمل (Workflows) ==========
 
 @router.post("/workflows", response_model=WorkflowResponse, status_code=status.HTTP_201_CREATED)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_workflow(
     data: WorkflowCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -34,51 +35,57 @@ async def create_workflow(
     db: AsyncSession = Depends(get_db)
 ):
     """إنشاء سير عمل جديد (Workflow)."""
-    repo = AutomationRepository(db)
-    webhook_path = None
-    if data.trigger_type == "WEBHOOK":
-        webhook_path = f"/webhook/{uuid.uuid4().hex}"
-    workflow = await repo.create_workflow(
-        tenant_id=tenant.id,
-        created_by=current_user.id,
-        webhook_path=webhook_path,
-        **data.model_dump()
+    service = AutomationService(db)
+    workflow = await service.create_workflow(
+        user_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
+        data=data.model_dump()
     )
     return workflow
 
 
 @router.get("/workflows", response_model=List[WorkflowResponse])
+@rate_limit(max_requests=20, window_seconds=60)
 async def list_workflows(
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     include_inactive: bool = False,
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """قائمة سير العمل الخاصة بالمستأجر الحالي."""
-    repo = AutomationRepository(db)
-    workflows = await repo.list_workflows(tenant.id, skip, limit, include_inactive)
+    service = AutomationService(db)
+    workflows = await service.list_workflows(
+        tenant_id=cast(int, tenant.id),
+        user_id=cast(int, current_user.id),
+        skip=skip,
+        limit=limit,
+        include_inactive=include_inactive
+    )
     return workflows
 
 
 @router.get("/workflows/{workflow_id}", response_model=WorkflowResponse)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_workflow(
     workflow_id: int,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """جلب تفاصيل سير عمل معين."""
-    repo = AutomationRepository(db)
-    workflow = await repo.get_workflow(workflow_id)
+    service = AutomationService(db)
+    workflow = await service.get_workflow(
+        workflow_id=workflow_id,
+        user_id=cast(int, current_user.id)
+    )
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    if workflow.created_by != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
     return workflow
 
 
 @router.put("/workflows/{workflow_id}", response_model=WorkflowResponse)
+@rate_limit(max_requests=10, window_seconds=60)
 async def update_workflow(
     workflow_id: int,
     data: WorkflowUpdate,
@@ -86,15 +93,22 @@ async def update_workflow(
     db: AsyncSession = Depends(get_db)
 ):
     """تحديث سير عمل (الاسم، العقد، الإعدادات)."""
-    repo = AutomationRepository(db)
-    workflow = await repo.get_workflow(workflow_id)
-    if not workflow or workflow.created_by != current_user.id:
+    service = AutomationService(db)
+    try:
+        updated = await service.update_workflow(
+            workflow_id=workflow_id,
+            user_id=cast(int, current_user.id),
+            data=data.model_dump(exclude_unset=True)
+        )
+        return updated
+    except PermissionDeniedError:
         raise HTTPException(status_code=403, detail="Not authorized")
-    updated = await repo.update_workflow(workflow_id, **data.model_dump(exclude_unset=True))
-    return updated
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Workflow not found")
 
 
 @router.delete("/workflows/{workflow_id}")
+@rate_limit(max_requests=5, window_seconds=60)
 async def delete_workflow(
     workflow_id: int,
     soft: bool = True,
@@ -102,54 +116,67 @@ async def delete_workflow(
     db: AsyncSession = Depends(get_db)
 ):
     """حذف سير عمل (حذف منطقي أو دائم)."""
-    repo = AutomationRepository(db)
-    workflow = await repo.get_workflow(workflow_id)
-    if not workflow or workflow.created_by != current_user.id:
+    service = AutomationService(db)
+    try:
+        await service.delete_workflow(
+            workflow_id=workflow_id,
+            user_id=cast(int, current_user.id),
+            soft=soft
+        )
+    except PermissionDeniedError:
         raise HTTPException(status_code=403, detail="Not authorized")
-    await repo.delete_workflow(workflow_id, soft=soft)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Workflow not found")
     return {"message": "Workflow deleted"}
 
 
 # ========== 2. تشغيل سير العمل (Triggers) ==========
 
 @router.post("/workflows/{workflow_id}/trigger")
+@rate_limit(max_requests=10, window_seconds=60)
 async def trigger_workflow_manual(
     workflow_id: int,
     data: ExecutionTrigger,
-    request: Request,  # 🔥 إضافة request للحصول على IP و User-Agent
+    request: Request,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """تشغيل سير العمل يدوياً (MANUAL trigger)."""
-    repo = AutomationRepository(db)
-    workflow = await repo.get_workflow(workflow_id)
-    if not workflow or workflow.created_by != current_user.id:
+    service = AutomationService(db)
+    try:
+        execution = await service.trigger_workflow_manual(
+            workflow_id=workflow_id,
+            user_id=cast(int, current_user.id),
+            payload=data.trigger_payload or {},
+            request_ip=request.client.host if request.client else None,
+            request_user_agent=request.headers.get("user-agent")
+        )
+        # التنفيذ الفعلي في الخلفية
+        background_tasks.add_task(
+            run_workflow_background,
+            db,
+            workflow_id,
+            "manual",
+            data.trigger_payload or {},
+            request.client.host if request.client else None,
+            request.headers.get("user-agent")
+        )
+        return {"message": "Workflow triggered manually", "workflow_id": workflow_id, "execution_id": execution.id}
+    except PermissionDeniedError:
         raise HTTPException(status_code=403, detail="Not authorized")
-    if workflow.trigger_type != "MANUAL":
-        raise HTTPException(status_code=400, detail="This workflow is not configured for manual trigger")
-    
-    # 🔥 تمرير IP و User-Agent إلى الخلفية
-    background_tasks.add_task(
-        run_workflow_background,
-        db,
-        workflow_id,
-        "manual",
-        data.trigger_payload or {},
-        request.client.host if request.client else None,
-        request.headers.get("user-agent")
-    )
-    return {"message": "Workflow triggered manually", "workflow_id": workflow_id}
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # ============================================================
 # 🟢 Webhook Trigger – مع Rate Limiting و Idempotency
 # ============================================================
 @router.post("/webhook/{path}")
-@rate_limit(max_requests=100, window_seconds=60)  # 100 طلب في الدقيقة لكل مسار
+@rate_limit(max_requests=100, window_seconds=60)
 async def webhook_trigger(
     path: str,
-    request: Request,  # 🔥 إضافة request للحصول على IP و User-Agent
+    request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key")
@@ -158,49 +185,40 @@ async def webhook_trigger(
     نقطة نهاية Webhook لتشغيل سير العمل (يتم تحديد المسار تلقائياً عند الإنشاء).
     تدعم Idempotency عبر Header اختياري.
     """
-    # التحقق من Idempotency (اختياري)
-    if idempotency_key:
-        cached = await check_idempotency(idempotency_key)
-        if cached:
-            return cached
-
-    repo = AutomationRepository(db)
-    full_path = f"/webhook/{path}"
-    workflow = await repo.get_workflow_by_webhook_path(full_path)
-    if not workflow:
-        raise HTTPException(status_code=404, detail="Workflow not found for this webhook path")
+    service = AutomationService(db)
     
-    # قراءة payload (JSON)
     try:
         payload = await request.json()
     except:
         payload = {}
 
-    # 🔥 تمرير IP و User-Agent إلى الخلفية
+    result = await service.handle_webhook_trigger(
+        path=path,
+        payload=payload,
+        request_ip=request.client.host if request.client else None,
+        request_user_agent=request.headers.get("user-agent"),
+        idempotency_key=idempotency_key
+    )
+
+    # تشغيل سير العمل في الخلفية
     background_tasks.add_task(
         run_workflow_background,
         db,
-        workflow.id,
+        cast(int, result.get("workflow_id")),
         "webhook",
         payload,
         request.client.host if request.client else None,
         request.headers.get("user-agent")
     )
 
-    # تحضير الاستجابة
-    response_data = {"message": "Webhook received", "workflow_id": workflow.id}
-
-    # تخزين نتيجة Idempotency (إن وُجد مفتاح)
-    if idempotency_key:
-        await store_idempotency_result(idempotency_key, response_data)
-
-    return response_data
+    return result
 
 
 # ============================================================
 # 🆕 نقطة نهاية جلب الوكلاء المتاحين (للعقدة AI_AGENT)
 # ============================================================
 @router.get("/ai-agents")
+@rate_limit(max_requests=20, window_seconds=60)
 async def list_available_agents(
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
@@ -209,83 +227,83 @@ async def list_available_agents(
     """
     جلب قائمة الوكلاء المتاحين للمستخدم الحالي لاستخدامها في عقدة AI_AGENT.
     """
-    from app.domains.ai_agents.repository import AIAgentsRepository
-    repo = AIAgentsRepository(db)
-    agents = await repo.list_agents(
-        tenant_id=tenant.id,
-        owner_id=current_user.id,
-        status="ACTIVE"
+    service = AutomationService(db)
+    return await service.list_available_agents(
+        tenant_id=cast(int, tenant.id),
+        user_id=cast(int, current_user.id)
     )
-    return [
-        {
-            "id": agent.id,
-            "name": agent.name,
-            "role": agent.role.value,
-            "can_execute_payments": agent.can_execute_payments,
-            "can_sign_contracts": agent.can_sign_contracts,
-        }
-        for agent in agents
-    ]
 
 
 # ========== 3. سجلات التنفيذ (Executions & Logs) ==========
 
 @router.get("/workflows/{workflow_id}/executions", response_model=List[ExecutionResponse])
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_workflow_executions(
     workflow_id: int,
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     status_filter: Optional[str] = None,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """جلب جميع تنفيذات سير العمل."""
-    repo = AutomationRepository(db)
-    workflow = await repo.get_workflow(workflow_id)
-    if not workflow or workflow.created_by != current_user.id:
+    service = AutomationService(db)
+    try:
+        executions = await service.list_executions(
+            workflow_id=workflow_id,
+            user_id=cast(int, current_user.id),
+            skip=skip,
+            limit=limit,
+            status_filter=status_filter
+        )
+        return executions
+    except PermissionDeniedError:
         raise HTTPException(status_code=403, detail="Not authorized")
-    executions = await repo.list_executions(workflow_id, skip, limit, status_filter)
-    return executions
 
 
 @router.get("/executions/{execution_id}", response_model=ExecutionResponse)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_execution(
     execution_id: int,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """جلب تفاصيل تنفيذ معين."""
-    repo = AutomationRepository(db)
-    execution = await repo.get_execution(execution_id)
+    service = AutomationService(db)
+    execution = await service.get_execution(
+        execution_id=execution_id,
+        user_id=cast(int, current_user.id)
+    )
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
-    workflow = await repo.get_workflow(execution.workflow_id)
-    if workflow.created_by != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
     return execution
 
 
 @router.get("/executions/{execution_id}/logs", response_model=List[NodeLogResponse])
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_execution_logs(
     execution_id: int,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """جلب سجلات العقد لتنفيذ معين."""
-    repo = AutomationRepository(db)
-    execution = await repo.get_execution(execution_id)
-    if not execution:
-        raise HTTPException(status_code=404, detail="Execution not found")
-    workflow = await repo.get_workflow(execution.workflow_id)
-    if workflow.created_by != current_user.id:
+    service = AutomationService(db)
+    try:
+        logs = await service.get_execution_logs(
+            execution_id=execution_id,
+            user_id=cast(int, current_user.id)
+        )
+        return logs
+    except PermissionDeniedError:
         raise HTTPException(status_code=403, detail="Not authorized")
-    logs = await repo.list_node_logs(execution_id)
-    return logs
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Execution not found")
 
 
 # ========== 4. إدارة الأسرار (Secrets) ==========
 
 @router.post("/secrets", response_model=SecretResponse, status_code=status.HTTP_201_CREATED)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_secret(
     data: SecretCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -293,31 +311,30 @@ async def create_secret(
     db: AsyncSession = Depends(get_db)
 ):
     """تخزين سر (مثل API key) مشفر داخل قاعدة البيانات."""
-    repo = AutomationRepository(db)
-    existing = await repo.get_secret(tenant.id, data.name)
-    if existing:
-        raise HTTPException(status_code=400, detail="Secret with this name already exists")
-    secret = await repo.create_secret(
-        tenant_id=tenant.id,
+    service = AutomationService(db)
+    secret = await service.create_secret(
+        tenant_id=cast(int, tenant.id),
         name=data.name,
-        value_encrypted=data.value
+        value=data.value
     )
     return secret
 
 
 @router.get("/secrets", response_model=List[SecretResponse])
+@rate_limit(max_requests=20, window_seconds=60)
 async def list_secrets(
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """قائمة الأسرار (بدون الكشف عن القيم)."""
-    repo = AutomationRepository(db)
-    secrets = await repo.list_secrets(tenant.id)
+    service = AutomationService(db)
+    secrets = await service.list_secrets(tenant_id=cast(int, tenant.id))
     return secrets
 
 
 @router.delete("/secrets/{secret_name}")
+@rate_limit(max_requests=10, window_seconds=60)
 async def delete_secret(
     secret_name: str,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -325,6 +342,9 @@ async def delete_secret(
     db: AsyncSession = Depends(get_db)
 ):
     """حذف سر."""
-    repo = AutomationRepository(db)
-    await repo.delete_secret(tenant.id, secret_name)
+    service = AutomationService(db)
+    await service.delete_secret(
+        tenant_id=cast(int, tenant.id),
+        name=secret_name
+    )
     return {"message": "Secret deleted"}

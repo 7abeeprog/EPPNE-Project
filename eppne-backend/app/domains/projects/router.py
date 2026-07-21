@@ -1,17 +1,17 @@
 # app/domains/projects/router.py
 from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
+from typing import Optional, cast
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user, get_current_tenant
 from app.domains.identity.models import User
 from app.domains.projects.service import ProjectService
 from app.domains.projects.schemas import *
+from app.domains.projects.models import ProjectType, ProjectStatus
 from app.domains.academy.models import AcademyTenant
 from app.core.rate_limiter import rate_limit
 from app.core.pagination import PaginatedResponse
-from app.domains.commerce.repository import CommerceRepository
 
 router = APIRouter(prefix="/projects", tags=["Sovereign Projects & Crowdfunding"])
 
@@ -29,17 +29,31 @@ async def create_project(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    return await service.create_project(owner_id=current_user.id, tenant_id=tenant.id, data=data)
+    user_id = cast(int, current_user.id)
+    return await service.create_project(owner_id=user_id, tenant_id=cast(int, tenant.id), data=data)
 
-@router.get("/products", response_model=PaginatedResponse[ProjectResponse])
+
+@router.get("/products", response_model=PaginatedResponse)
 async def list_products(
     store_id: int,
     skip: int = 0,
     limit: int = 50,
+    tenant: AcademyTenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = CommerceRepository(db)
-    return await repo.get_products_by_store(store_id, skip, limit)
+    service = ProjectService(db)
+    return await service.list_products(store_id, skip, min(limit, 200))
+
+
+@router.get("/{project_id}", response_model=ProjectResponse)
+async def get_project(
+    project_id: int,
+    tenant: AcademyTenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    service = ProjectService(db)
+    return await service.get_project(project_id, cast(int, tenant.id))
+
 
 @router.put("/{project_id}", response_model=ProjectResponse)
 @rate_limit(max_requests=20, window_seconds=60)
@@ -52,10 +66,11 @@ async def update_project(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    project = await service.repo.get_project(project_id, tenant.id)
-    if not project or project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    return await service.repo.update_project(project_id, tenant.id, **data.model_dump(exclude_unset=True))
+    user_id = cast(int, current_user.id)
+    return await service.update_project(
+        project_id, cast(int, tenant.id), user_id, data.model_dump(exclude_unset=True)
+    )
+
 
 @router.post("/{project_id}/publish", response_model=ProjectResponse)
 @rate_limit(max_requests=5, window_seconds=60)
@@ -67,7 +82,9 @@ async def publish_project(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    return await service.publish_project(project_id, current_user.id, tenant.id)
+    user_id = cast(int, current_user.id)
+    return await service.publish_project(project_id, user_id, cast(int, tenant.id))
+
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 @rate_limit(max_requests=10, window_seconds=60)
@@ -80,11 +97,10 @@ async def delete_project(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    project = await service.repo.get_project(project_id, tenant.id)
-    if not project or project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    await service.repo.delete_project(project_id, tenant.id, soft=soft)
+    user_id = cast(int, current_user.id)
+    await service.delete_project(project_id, cast(int, tenant.id), user_id, soft=soft)
     return None
+
 
 # ==========================================
 # 2. قوائم المشاريع (Listings)
@@ -101,7 +117,15 @@ async def list_projects(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    return await service.repo.list_projects(tenant.id, project_type, status, country, skip, min(limit, 200))
+    return await service.list_projects(
+        cast(int, tenant.id),
+        project_type.value if project_type else None,
+        status.value if status else None,
+        country,
+        skip,
+        min(limit, 200)
+    )
+
 
 # ==========================================
 # 3. المساهمات (Contributions)
@@ -118,7 +142,19 @@ async def add_contribution(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    return await service.add_contribution(current_user.id, tenant.id, data, idempotency_key)
+    user_id = cast(int, current_user.id)
+    return await service.add_contribution(user_id, cast(int, tenant.id), data, idempotency_key)
+
+
+@router.get("/contributions/{contribution_id}", response_model=ContributionResponse)
+async def get_contribution(
+    contribution_id: int,
+    tenant: AcademyTenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    service = ProjectService(db)
+    return await service.get_contribution(contribution_id, cast(int, tenant.id))
+
 
 @router.post("/contributions/{contribution_id}/approve", response_model=ContributionResponse)
 @rate_limit(max_requests=10, window_seconds=60)
@@ -131,20 +167,11 @@ async def approve_contribution(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    return await service.approve_contribution(contribution_id, current_user.id, tenant.id, approve_data.approved, approve_data.notes)
+    user_id = cast(int, current_user.id)
+    return await service.approve_contribution(
+        contribution_id, user_id, cast(int, tenant.id), approve_data.approved, approve_data.notes
+    )
 
-@router.get("/contributions/{contribution_id}", response_model=ContributionResponse)
-async def get_contribution(
-    contribution_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    service = ProjectService(db)
-    contrib = await service.repo.get_contribution(contribution_id, tenant.id)
-    if not contrib:
-        raise HTTPException(status_code=404, detail="Contribution not found")
-    return contrib
 
 # ==========================================
 # 4. المراحل (Milestones)
@@ -161,10 +188,9 @@ async def add_milestone(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    project = await service.repo.get_project(project_id, tenant.id)
-    if not project or project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    return await service.repo.create_milestone(tenant_id=tenant.id, project_id=project_id, **data.model_dump())
+    user_id = cast(int, current_user.id)
+    return await service.add_milestone(project_id, user_id, cast(int, tenant.id), data)
+
 
 @router.post("/milestones/{milestone_id}/complete", response_model=MilestoneResponse)
 @rate_limit(max_requests=5, window_seconds=60)
@@ -177,7 +203,9 @@ async def complete_milestone(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    return await service.complete_milestone(milestone_id, current_user.id, tenant.id, complete_data)
+    user_id = cast(int, current_user.id)
+    return await service.complete_milestone(milestone_id, user_id, cast(int, tenant.id), complete_data)
+
 
 @router.get("/{project_id}/milestones", response_model=list[MilestoneResponse])
 async def get_milestones(
@@ -186,7 +214,8 @@ async def get_milestones(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    return await service.repo.get_milestones(project_id, tenant.id)
+    return await service.get_milestones(project_id, cast(int, tenant.id))
+
 
 # ==========================================
 # 5. المتابعة (Follow)
@@ -202,8 +231,10 @@ async def follow_project(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    await service.follow_project(current_user.id, project_id, tenant.id)
-    return {"message": "Project followed successfully"}
+    user_id = cast(int, current_user.id)
+    await service.follow_project(user_id, project_id, cast(int, tenant.id))
+    return {"user_id": user_id, "project_id": project_id, "created_at": datetime.utcnow()}
+
 
 @router.delete("/{project_id}/follow", status_code=status.HTTP_204_NO_CONTENT)
 @rate_limit(max_requests=20, window_seconds=60)
@@ -215,8 +246,10 @@ async def unfollow_project(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    await service.unfollow_project(current_user.id, project_id, tenant.id)
+    user_id = cast(int, current_user.id)
+    await service.unfollow_project(user_id, project_id, cast(int, tenant.id))
     return None
+
 
 @router.get("/{project_id}/followers", response_model=list[dict])
 async def get_followers(
@@ -227,8 +260,8 @@ async def get_followers(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    followers = await service.repo.get_followers(project_id, tenant.id, skip, min(limit, 200))
-    return [{"user_id": f.user_id, "followed_at": f.created_at.isoformat() if f.created_at else None} for f in followers]
+    return await service.get_followers(project_id, cast(int, tenant.id), skip, min(limit, 200))
+
 
 # ==========================================
 # 6. تحديثات المشروع (Updates)
@@ -245,7 +278,11 @@ async def add_project_update(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    return await service.add_project_update(project_id, current_user.id, tenant.id, data.title, data.content)
+    user_id = cast(int, current_user.id)
+    return await service.add_project_update(
+        project_id, user_id, cast(int, tenant.id), data.title, data.content, data.media_urls
+    )
+
 
 @router.get("/{project_id}/updates", response_model=list[ProjectUpdateResponse])
 async def get_project_updates(
@@ -256,7 +293,8 @@ async def get_project_updates(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    return await service.repo.get_project_updates(project_id, tenant.id, skip, min(limit, 200))
+    return await service.get_project_updates(project_id, cast(int, tenant.id), skip, min(limit, 200))
+
 
 # ==========================================
 # 7. التحليلات
@@ -269,4 +307,5 @@ async def get_analytics(
     db: AsyncSession = Depends(get_db)
 ):
     service = ProjectService(db)
-    return await service.get_project_analytics(project_id, tenant.id)
+    analytics = await service.get_project_analytics(project_id, cast(int, tenant.id))
+    return ProjectAnalyticsResponse(**analytics)
