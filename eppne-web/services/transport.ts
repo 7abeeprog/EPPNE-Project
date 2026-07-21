@@ -1,158 +1,403 @@
 // services/transport.ts
-import api from '@/lib/axios';
-import type {
-  TransportHub,
-  Fleet,
-  Vehicle,
-  Route,
-  Trip,
-  TripBooking,
-  DeliveryTask,
-  TransportStats,
-  TripFormData,
-  DeliveryFormData,
-  HubFormData,
-  VehicleFormData,
-  RouteFormData,
-  TransportType,
-  TripCategory,
-  VehicleStatus,
-  HubType,
-} from '@/types/transport';
+import { apiClient } from "@/lib/api-client";
+import type { components } from "@/src/lib/api-types";
+import { handleError } from "@/lib/error-handler";
+import { generateIdempotencyKey } from "@/lib/utils";
 
-// ========== Hubs ==========
-export const getHubs = (params?: { hub_type?: HubType; skip?: number; limit?: number }) =>
-  api.get<TransportHub[]>('/transport/hubs', { params });
+type TransportHubCreate = components['schemas']['TransportHubCreate'];
+type TransportHubResponse = components['schemas']['TransportHubResponse'];
+type FleetCreate = components['schemas']['FleetCreate'];
+type FleetResponse = components['schemas']['FleetResponse'];
+type VehicleCreate = components['schemas']['VehicleCreate'];
+type VehicleResponse = components['schemas']['VehicleResponse'];
+type RouteCreate = components['schemas']['RouteCreate'];
+type RouteResponse = components['schemas']['RouteResponse'];
+type TripCreate = components['schemas']['TripCreate'];
+type TripResponse = components['schemas']['TripResponse'];
+type TripStartRequest = components['schemas']['TripStartRequest'];
+type TripCompleteRequest = components['schemas']['TripCompleteRequest'];
+type TripBookingCreate = components['schemas']['TripBookingCreate'];
+type TripBookingResponse = components['schemas']['TripBookingResponse'];
+type DeliveryTaskCreate = components['schemas']['DeliveryTaskCreate'];
+type DeliveryTaskResponse = components['schemas']['DeliveryTaskResponse'];
+type DeliveryProof = components['schemas']['DeliveryProof'];
 
-export const createHub = (data: HubFormData) =>
-  api.post<TransportHub>('/transport/hubs', data);
-
-export const updateHub = (id: number, data: Partial<HubFormData>) =>
-  api.put<TransportHub>(`/transport/hubs/${id}`, data);
-
-export const deleteHub = (id: number) => api.delete(`/transport/hubs/${id}`);
-
-// ========== Fleets ==========
-export const getFleets = () => api.get<Fleet[]>('/transport/fleets');
-
-export const createFleet = (data: { name: string }) =>
-  api.post<Fleet>('/transport/fleets', data);
-
-export const updateFleet = (id: number, data: { name: string }) =>
-  api.put<Fleet>(`/transport/fleets/${id}`, data);
-
-export const deleteFleet = (id: number) => api.delete(`/transport/fleets/${id}`);
-
-// ========== Vehicles ==========
-export const getVehicles = (params?: { fleet_id?: number; status?: VehicleStatus; skip?: number; limit?: number }) =>
-  api.get<Vehicle[]>('/transport/vehicles', { params });
-
-export const getAvailableVehicles = (params?: { fleet_id?: number }) =>
-  api.get<Vehicle[]>('/transport/vehicles/available', { params });
-
-export const getVehicle = (id: number) => api.get<Vehicle>(`/transport/vehicles/${id}`);
-
-export const createVehicle = (data: VehicleFormData) =>
-  api.post<Vehicle>('/transport/vehicles', data);
-
-export const updateVehicle = (id: number, data: Partial<VehicleFormData>) =>
-  api.put<Vehicle>(`/transport/vehicles/${id}`, data);
-
-export const deleteVehicle = (id: number) => api.delete(`/transport/vehicles/${id}`);
-
-export const updateVehicleLocation = (vehicleId: number, location: { lat: number; lng: number }) =>
-  api.patch(`/transport/vehicles/${vehicleId}/location`, location);
-
-export const getVehicleLocation = (vehicleId: number) =>
-  api.get<{ lat: number; lng: number; updated_at: string }>(`/transport/vehicles/${vehicleId}/location`);
-
-// ========== Routes ==========
-export const getRoutes = (params?: { is_active?: boolean; skip?: number; limit?: number }) =>
-  api.get<Route[]>('/transport/routes', { params });
-
-export const getRoute = (id: number) => api.get<Route>(`/transport/routes/${id}`);
-
-export const createRoute = (data: RouteFormData) =>
-  api.post<Route>('/transport/routes', data);
-
-export const updateRoute = (id: number, data: Partial<RouteFormData>) =>
-  api.put<Route>(`/transport/routes/${id}`, data);
-
-export const deleteRoute = (id: number) => api.delete(`/transport/routes/${id}`);
-
-export const optimizeRoute = (startHubId: number, endHubId: number) =>
-  api.post<Route>('/transport/routes/optimize', { start_hub_id: startHubId, end_hub_id: endHubId });
-
-// ========== Trips ==========
-export const getTrips = (params?: { status?: TripStatus; driver_id?: number; skip?: number; limit?: number }) =>
-  api.get<Trip[]>('/transport/trips', { params });
-
-export const getTrip = (id: number) => api.get<Trip>(`/transport/trips/${id}`);
-
-export const createTrip = (data: TripFormData) =>
-  api.post<Trip>('/transport/trips', data);
-
-export const startTrip = (tripId: number, actual_start: string) =>
-  api.patch<Trip>(`/transport/trips/${tripId}/start`, { actual_start });
-
-export const completeTrip = (tripId: number, actual_end: string, total_distance_km: number) =>
-  api.patch<Trip>(`/transport/trips/${tripId}/complete`, { actual_end, total_distance_km });
-
-export const cancelTrip = (tripId: number) =>
-  api.patch<Trip>(`/transport/trips/${tripId}/cancel`);
-
-export const getMyTrips = (params?: { status?: TripStatus; skip?: number; limit?: number }) =>
-  api.get<Trip[]>('/transport/trips/my', { params });
-
-// ========== Bookings ==========
-export const getBookings = (params?: { trip_id?: number; passenger_id?: number; skip?: number; limit?: number }) =>
-  api.get<TripBooking[]>('/transport/bookings', { params });
-
-export const getMyBookings = () => api.get<TripBooking[]>('/transport/bookings/my');
-
-export const bookTrip = (
-  data: {
-    trip_id: number;
-    passenger_id?: number;
-    company_id?: number;
-    booking_type: 'PASSENGER' | 'FREIGHT';
-    seats_count?: number;
-    weight_kg?: number;
+export const TransportService = {
+  /**
+   * إنشاء مركز نقل جديد
+   * POST /transport/transport/hubs
+   * تدعم X-Tenant-ID
+   */
+  createHub: async (data: TransportHubCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<TransportHubResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<TransportHubResponse>("/transport/transport/hubs", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء المركز");
+    }
   },
-  idempotencyKey?: string
-) =>
-  api.post<TripBooking>('/transport/bookings', data, {
-    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
-  });
 
-export const cancelBooking = (bookingId: number) =>
-  api.patch<TripBooking>(`/transport/bookings/${bookingId}/cancel`);
+  /**
+   * جلب قائمة المراكز مع التصفية
+   * GET /transport/transport/hubs
+   * تدعم X-Tenant-ID
+   */
+  listHubs: async (params?: { hub_type?: string | null; skip?: number; limit?: number }, headers?: { 'X-Tenant-ID'?: number }): Promise<TransportHubResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<TransportHubResponse[]>("/transport/transport/hubs", {
+        params,
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب المراكز");
+    }
+  },
 
-// ========== Deliveries ==========
-export const getDeliveries = (params?: { status?: string; skip?: number; limit?: number }) =>
-  api.get<DeliveryTask[]>('/transport/deliveries', { params });
+  /**
+   * إنشاء أسطول جديد
+   * POST /transport/transport/fleets
+   * تدعم X-Tenant-ID
+   */
+  createFleet: async (data: FleetCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<FleetResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<FleetResponse>("/transport/transport/fleets", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء الأسطول");
+    }
+  },
 
-export const getMyDeliveries = () => api.get<DeliveryTask[]>('/transport/deliveries/my');
+  /**
+   * إنشاء مركبة جديدة
+   * POST /transport/transport/vehicles
+   * تدعم X-Tenant-ID
+   */
+  createVehicle: async (data: VehicleCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<VehicleResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<VehicleResponse>("/transport/transport/vehicles", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء المركبة");
+    }
+  },
 
-export const createDelivery = (data: DeliveryFormData) =>
-  api.post<DeliveryTask>('/transport/deliveries', data);
+  /**
+   * تحديث موقع المركبة
+   * PATCH /transport/transport/vehicles/{vehicle_id}/location
+   * تدعم X-Tenant-ID
+   */
+  updateVehicleLocation: async (
+    vehicleId: number,
+    location: Record<string, number>,
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<void> => {
+    try {
+      const id = Number(vehicleId);
+      if (isNaN(id)) throw new Error("معرف المركبة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      await apiClient.patch(`/transport/transport/vehicles/${id}/location`, location, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+    } catch (error) {
+      throw handleError(error, "فشل تحديث موقع المركبة");
+    }
+  },
 
-export const payDelivery = (taskId: number, idempotencyKey?: string) =>
-  api.post<DeliveryTask>(
-    `/transport/deliveries/${taskId}/pay`,
-    {},
-    { headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {} }
-  );
+  /**
+   * جلب المركبات المتاحة
+   * GET /transport/transport/vehicles/available
+   * تدعم X-Tenant-ID
+   */
+  getAvailableVehicles: async (params?: { fleet_id?: number | null }, headers?: { 'X-Tenant-ID'?: number }): Promise<VehicleResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<VehicleResponse[]>("/transport/transport/vehicles/available", {
+        params,
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب المركبات المتاحة");
+    }
+  },
 
-export const completeDelivery = (taskId: number, proof_hash: string) =>
-  api.post<DeliveryTask>(`/transport/deliveries/${taskId}/complete`, { proof_hash });
+  /**
+   * إنشاء مسار جديد
+   * POST /transport/transport/routes
+   * تدعم X-Tenant-ID
+   */
+  createRoute: async (data: RouteCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<RouteResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<RouteResponse>("/transport/transport/routes", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء المسار");
+    }
+  },
 
-export const assignDeliveryToTrip = (taskId: number, tripId: number) =>
-  api.patch<DeliveryTask>(`/transport/deliveries/${taskId}/assign`, { trip_id: tripId });
+  /**
+   * إنشاء رحلة جديدة
+   * POST /transport/transport/trips
+   * تدعم X-Tenant-ID
+   */
+  createTrip: async (data: TripCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<TripResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<TripResponse>("/transport/transport/trips", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء الرحلة");
+    }
+  },
 
-// ========== Stats ==========
-export const getTransportStats = () => api.get<TransportStats>('/transport/stats');
+  /**
+   * بدء الرحلة
+   * PATCH /transport/transport/trips/{trip_id}/start
+   * تدعم X-Tenant-ID
+   */
+  startTrip: async (tripId: number, data: TripStartRequest, headers?: { 'X-Tenant-ID'?: number }): Promise<TripResponse> => {
+    try {
+      const id = Number(tripId);
+      if (isNaN(id)) throw new Error("معرف الرحلة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.patch<TripResponse>(`/transport/transport/trips/${id}/start`, data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل بدء الرحلة");
+    }
+  },
 
-// ========== Drivers ==========
-export const getDrivers = (params?: { is_active?: boolean; skip?: number; limit?: number }) =>
-  api.get<User[]>('/transport/drivers', { params });
+  /**
+   * إكمال الرحلة
+   * PATCH /transport/transport/trips/{trip_id}/complete
+   * تدعم X-Tenant-ID
+   */
+  completeTrip: async (tripId: number, data: TripCompleteRequest, headers?: { 'X-Tenant-ID'?: number }): Promise<TripResponse> => {
+    try {
+      const id = Number(tripId);
+      if (isNaN(id)) throw new Error("معرف الرحلة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.patch<TripResponse>(`/transport/transport/trips/${id}/complete`, data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إكمال الرحلة");
+    }
+  },
+
+  /**
+   * جلب رحلاتي
+   * GET /transport/transport/trips/my
+   * تدعم X-Tenant-ID
+   */
+  getMyTrips: async (
+    params?: { status_filter?: string | null; skip?: number; limit?: number },
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<TripResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<TripResponse[]>("/transport/transport/trips/my", {
+        params,
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب رحلاتي");
+    }
+  },
+
+  /**
+   * حجز رحلة
+   * POST /transport/transport/bookings
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  bookTrip: async (
+    data: TripBookingCreate,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<TripBookingResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<TripBookingResponse>("/transport/transport/bookings", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل حجز الرحلة");
+    }
+  },
+
+  /**
+   * جلب حجوزاتي
+   * GET /transport/transport/bookings/my
+   * تدعم X-Tenant-ID
+   */
+  getMyBookings: async (headers?: { 'X-Tenant-ID'?: number }): Promise<TripBookingResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<TripBookingResponse[]>("/transport/transport/bookings/my", {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب حجوزاتي");
+    }
+  },
+
+  /**
+   * إنشاء مهمة توصيل جديدة
+   * POST /transport/transport/deliveries
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  createDelivery: async (
+    data: DeliveryTaskCreate,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<DeliveryTaskResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<DeliveryTaskResponse>("/transport/transport/deliveries", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء مهمة التوصيل");
+    }
+  },
+
+  /**
+   * دفع تكلفة التوصيل
+   * POST /transport/transport/deliveries/{task_id}/pay
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  payDelivery: async (
+    taskId: number,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<DeliveryTaskResponse> => {
+    try {
+      const id = Number(taskId);
+      if (isNaN(id)) throw new Error("معرف المهمة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<DeliveryTaskResponse>(
+        `/transport/transport/deliveries/${id}/pay`,
+        undefined,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل دفع التوصيل");
+    }
+  },
+
+  /**
+   * إكمال مهمة التوصيل
+   * POST /transport/transport/deliveries/{task_id}/complete
+   * تدعم X-Tenant-ID
+   */
+  completeDelivery: async (taskId: number, data: DeliveryProof, headers?: { 'X-Tenant-ID'?: number }): Promise<DeliveryTaskResponse> => {
+    try {
+      const id = Number(taskId);
+      if (isNaN(id)) throw new Error("معرف المهمة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<DeliveryTaskResponse>(
+        `/transport/transport/deliveries/${id}/complete`,
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إكمال التوصيل");
+    }
+  },
+};

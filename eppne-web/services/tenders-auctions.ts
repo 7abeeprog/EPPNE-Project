@@ -1,103 +1,150 @@
 // services/tenders-auctions.ts
-import api from '@/lib/axios';
-import type {
-  SovereignTender,
-  TenderBid,
-  SovereignAuction,
-  LiveBid,
-  TenderStatus,
-  BidStatus,
-  AuctionStatus,
-} from '@/types/tenders-auctions';
+import { apiClient } from "@/lib/api-client";
+import type { components } from "@/src/lib/api-types";
+import { handleError } from "@/lib/error-handler";
+import { generateIdempotencyKey } from "@/lib/utils";
 
-// ========== Tenders ==========
-export const getTenders = (params?: { status?: TenderStatus; entity_id?: number; skip?: number; limit?: number }) =>
-  api.get<SovereignTender[]>('/tenders-auctions/tenders', { params });
+type TenderCreate = components['schemas']['TenderCreate'];
+type TenderResponse = components['schemas']['TenderResponse'];
+type TenderBidCreate = components['schemas']['TenderBidCreate'];
+type TenderBidResponse = components['schemas']['TenderBidResponse'];
+type TenderBidEvaluate = components['schemas']['TenderBidEvaluate'];
+type LiveBidCreate = components['schemas']['LiveBidCreate'];
+type LiveBidResponse = components['schemas']['LiveBidResponse'];
 
-export const getTender = (id: number) => api.get<SovereignTender>(`/tenders-auctions/tenders/${id}`);
-
-export const createTender = (data: {
-  entity_id: number;
-  title: string;
-  description: string;
-  opening_date: string;
-  closing_date: string;
-  booklet_price_mrusdt?: number;
-  bid_bond_mrusdt: number;
-  estimated_value_mrusdt?: number;
-  settlement_type?: string;
-  min_sovereign_rank_required?: string;
-}) => api.post<SovereignTender>('/tenders-auctions/tenders', data);
-
-export const updateTender = (id: number, data: Partial<{
-  title: string;
-  description: string;
-  closing_date: string;
-  status: TenderStatus;
-  estimated_value_mrusdt: number;
-}>) => api.put<SovereignTender>(`/tenders-auctions/tenders/${id}`, data);
-
-export const openTender = (id: number) => api.post(`/tenders-auctions/tenders/${id}/open`);
-
-// ========== Bids ==========
-export const submitBid = (
-  data: {
-    tender_id: number;
-    technical_envelope: Record<string, any>;
-    encrypted_financial_envelope: string;
+export const TendersAuctionsService = {
+  /**
+   * إنشاء مناقصة جديدة
+   * POST /tenders/social/tenders
+   * تدعم X-Tenant-ID
+   */
+  createTender: async (data: TenderCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<TenderResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<TenderResponse>("/tenders/social/tenders", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء المناقصة");
+    }
   },
-  idempotencyKey?: string
-) =>
-  api.post<TenderBid>('/tenders-auctions/bids', data, {
-    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
-  });
 
-export const getTenderBids = (tenderId: number) =>
-  api.get<TenderBid[]>(`/tenders-auctions/tenders/${tenderId}/bids`);
+  /**
+   * تقديم عرض في مناقصة
+   * POST /tenders/social/bids
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  submitBid: async (
+    data: TenderBidCreate,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<TenderBidResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<TenderBidResponse>("/tenders/social/bids", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تقديم العرض");
+    }
+  },
 
-export const evaluateBid = (
-  bidId: number,
-  data: { technical_score: number },
-  idempotencyKey?: string
-) =>
-  api.post<TenderBid>(`/tenders-auctions/bids/${bidId}/evaluate`, data, {
-    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
-  });
+  /**
+   * تقييم عرض (لصاحب المناقصة)
+   * POST /tenders/social/bids/{bid_id}/evaluate
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  evaluateBid: async (
+    bidId: number,
+    data: TenderBidEvaluate,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<TenderBidResponse> => {
+    try {
+      const id = Number(bidId);
+      if (isNaN(id)) throw new Error("معرف العرض غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<TenderBidResponse>(
+        `/tenders/social/bids/${id}/evaluate`,
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تقييم العرض");
+    }
+  },
 
-// ========== Auctions ==========
-export const getAuctions = (params?: { status?: AuctionStatus; asset_type?: string; skip?: number; limit?: number }) =>
-  api.get<SovereignAuction[]>('/tenders-auctions/auctions', { params });
+  /**
+   * تقديم عرض في مزاد
+   * POST /tenders/social/auctions/{auction_id}/bids
+   * تدعم Idempotency-Key و X-Tenant-ID
+   */
+  placeBid: async (
+    auctionId: number,
+    data: LiveBidCreate,
+    headers?: { 'Idempotency-Key'?: string | null; 'X-Tenant-ID'?: number }
+  ): Promise<LiveBidResponse> => {
+    try {
+      const id = Number(auctionId);
+      if (isNaN(id)) throw new Error("معرف المزاد غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const idempotencyKey = headers?.['Idempotency-Key'] ?? generateIdempotencyKey();
+      if (idempotencyKey) {
+        reqHeaders['Idempotency-Key'] = idempotencyKey;
+      }
+      const { data: result } = await apiClient.post<LiveBidResponse>(
+        `/tenders/social/auctions/${id}/bids`,
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تقديم العرض في المزاد");
+    }
+  },
 
-export const getAuction = (id: number) => api.get<SovereignAuction>(`/tenders-auctions/auctions/${id}`);
-
-export const createAuction = (data: {
-  entity_id: number;
-  title: string;
-  description?: string;
-  start_time: string;
-  end_time: string;
-  starting_price_mrusdt: number;
-  minimum_increment_mrusdt: number;
-  reserve_price_mrusdt?: number;
-  asset_type: string;
-  asset_id: number;
-}) => api.post<SovereignAuction>('/tenders-auctions/auctions', data);
-
-export const startAuction = (id: number) => api.post(`/tenders-auctions/auctions/${id}/start`);
-
-export const closeAuction = (id: number) => api.post(`/tenders-auctions/auctions/${id}/close`);
-
-export const getAuctionBids = (auctionId: number, params?: { limit?: number }) =>
-  api.get<LiveBid[]>(`/tenders-auctions/auctions/${auctionId}/bids`, { params });
-
-export const placeBid = (
-  auctionId: number,
-  data: { bid_amount_mrusdt: number },
-  idempotencyKey?: string
-) =>
-  api.post<LiveBid>(`/tenders-auctions/auctions/${auctionId}/bids`, data, {
-    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
-  });
-
-// ========== My Bids ==========
-export const getMyBids = () => api.get<TenderBid[]>('/tenders-auctions/my-bids');
+  /**
+   * إغلاق مزاد
+   * POST /tenders/social/auctions/{auction_id}/close
+   * تدعم X-Tenant-ID
+   */
+  closeAuction: async (auctionId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<void> => {
+    try {
+      const id = Number(auctionId);
+      if (isNaN(id)) throw new Error("معرف المزاد غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      await apiClient.post(`/tenders/social/auctions/${id}/close`, undefined, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+    } catch (error) {
+      throw handleError(error, "فشل إغلاق المزاد");
+    }
+  },
+};

@@ -3,7 +3,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { getExecution, getExecutionLogs } from '@/services/automation';
+import { getExecution, getExecutionLogs } from '@/services/automation.service';
 import { useExecutionWebSocket } from '@/hooks/automation/useExecutionWebSocket';
 import ExecutionStatusBadge from '@/components/automation/ExecutionStatusBadge';
 import { ArrowLeft, Loader2, Clock, Database, Zap } from 'lucide-react';
@@ -122,7 +122,7 @@ export default function ExecutionDetailsPage() {
         <div className="p-4 rounded-2xl bg-card/20 backdrop-blur-xl border border-white/10 text-center">
           <div className="text-xs text-muted-foreground/50">المدة</div>
           <div className="text-sm font-medium text-foreground/80 mt-1">
-            {execution.finished_at 
+            {execution.finished_at
               ? formatDistanceToNow(new Date(execution.finished_at), { addSuffix: true })
               : 'جاري...'}
           </div>
@@ -155,7 +155,7 @@ export default function ExecutionDetailsPage() {
           {logs?.map((log) => {
             const liveStatus = liveNodeStatus[log.node_id] || log.status;
             const isRunning = liveStatus === 'RUNNING' || (execution.status === 'RUNNING' && log.status === 'PENDING');
-            
+
             return (
               <div
                 key={log.id}
@@ -180,8 +180,8 @@ export default function ExecutionDetailsPage() {
                         <span className="text-xs text-muted-foreground/40 mr-2">({log.node_type})</span>
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <ExecutionStatusBadge 
-                          status={isRunning ? 'RUNNING' : liveStatus as any} 
+                        <ExecutionStatusBadge
+                          status={isRunning ? 'RUNNING' : liveStatus as any}
                           showLabel={false}
                         />
                         <span className="text-[10px] text-muted-foreground/40">
@@ -191,7 +191,7 @@ export default function ExecutionDetailsPage() {
                     </div>
                   </div>
                 </div>
-                
+
                 {/* إظهار المدخلات/المخرجات عند التوسيع (اختياري) */}
                 {(log.input_data || log.output_data || log.error_message) && (
                   <div className="mt-3 pt-3 border-t border-white/10 text-xs space-y-1 font-mono">

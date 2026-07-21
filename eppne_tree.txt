@@ -1,0 +1,1155 @@
+﻿cc
+ظ¤£ظ¤ظ¤ eppne-backend
+ظ¤é   ظ¤£ظ¤ظ¤ app
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ api
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ deps.py
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ core
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ai_engine.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ audit.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ cache.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ celery_app.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ celery_config.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ config.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ database.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ database_indexes.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ enums.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ errors.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ event_bus.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ features.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ idempotency.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ logging_conf.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ metrics.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ pagination.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ rate_limiter.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ redis_client.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ security.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ storage.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ task_queue.py
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ domains
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ academy
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ admin
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ affiliate
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ agritech
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ai_agents
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ai_governance
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ arbitration_syndicates
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ auth
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ jwt_service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ automation
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ command
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ commerce
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ communications
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ tasks.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ employment
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ finance
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ _init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ health
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ identity
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tests
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ insurance
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ invitations
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ invoicing
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ iot
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ _init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ logistics
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ manufacturing
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ privacy
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ tasks.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ projects
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ _init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ realestate
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ _init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ saas
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ service_marketplace
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ social
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ sovereign_entities
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tenders_auctions
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tourism_sports
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ translation
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ transport
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ zamakana
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ repository.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ schemas.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ service.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ services
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ai
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ cache.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ cost_tracker.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ engine.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ models.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ router.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ llm
+ظ¤é   ظ¤é   ظ¤é       ظ¤£ظ¤ظ¤ base.py
+ظ¤é   ظ¤é   ظ¤é       ظ¤£ظ¤ظ¤ factory.py
+ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ kimi_adapter.py
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tasks
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ affiliate.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ affiliate_tasks.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ agritech.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ billing.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ commerce.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ deployment.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ employment.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ governance.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ saas_tasks.py
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ __init__.py
+ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ main.py
+ظ¤é   ظ¤£ظ¤ظ¤ migrations
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ versions
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ 07832f6c4879_eppne_absolute_baseline.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ 26f67011f40b_make_name_en_optional.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ 36a5b5dce829_add_user_idempotency_key.py
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ 5c9c85700c6a_make_name_ar_optional.py
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ README
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ env.py
+ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ script.py.mako
+ظ¤é   ظ¤£ظ¤ظ¤ scripts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ create_superuser.py
+ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ seed_tenant.py
+ظ¤é   ظ¤£ظ¤ظ¤ Dockerfile
+ظ¤é   ظ¤£ظ¤ظ¤ docker-compose.yml
+ظ¤é   ظ¤£ظ¤ظ¤ openapi.json
+ظ¤é   ظ¤£ظ¤ظ¤ prometheus.yml
+ظ¤é   ظ¤¤ظ¤ظ¤ requirements.txt
+ظ¤£ظ¤ظ¤ eppne-web
+ظ¤é   ظ¤£ظ¤ظ¤ app
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ (auth)
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ login
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ register
+ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ (dashboard)
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ academy
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ [id]
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ learn
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ admin
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ai-center
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ bootcamps
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ certificates
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ cohorts
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ courses
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ entities
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ live-sessions
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ organization
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ sovereign-ops
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ studio
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ tasks
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ai-hub
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ catalog
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ certificates
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ [courseId]
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ enterprise
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ instructor
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ dashboard
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ grading
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ leaderboard
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ my-learning
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ profile
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ quiz-results
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ [quizId]
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ store
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ layout.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ affiliate
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ agritech
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ farms
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ [id]
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ai
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ approvals
+ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ai-agents
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ create
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ai-governance
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ arbitration-syndicates
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ cases
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ elections
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ licenses
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ syndicates
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ automation
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ secrets
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ workflows
+ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤£ظ¤ظ¤ [id]
+ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤é   ظ¤£ظ¤ظ¤ executions
+ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ [executionId]
+ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ command
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ alerts
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ brands
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ communications
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ mail
+ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ inbox
+ظ¤é   ظ¤é   ظ¤é   ظ¤é           ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ dashboard
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ employment
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ jobs
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ [jobId]
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ entities
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ [id]
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ create
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ finance
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ admin
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ history
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ wallet
+ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ health
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ emergency
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ [dispatchId]
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ insurance
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ claims
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ employee-profile
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ pensions
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ policies
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ subscriptions
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ invitations
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ campaigns
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ invitations
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ leads
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tickets
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ iot
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ logistics
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ equipment
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ inventory
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ warehouses
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ manufacturing
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ facilities
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ [id]
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ marketplace
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ payroll
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ privacy
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ admin
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ erasure
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ erasure
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ settings
+ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ profile
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ projects
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ [id]
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ realestate
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ownerships
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ property
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ [id]
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tokenization
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ saas
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ feature-flags
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ invoices
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ plans
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ services
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ subscriptions
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ settings
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ sessions
+ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ social
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ contracts
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ events
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ gifts
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ groups
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ occasions
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ pages
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ sovereign-entities
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ store
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ cart
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ checkout
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ orders
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tenders-auctions
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ auctions
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ [id]
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tenders
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ [id]
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tourism-sports
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ destinations
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ events
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ programs
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ sports
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ transfers
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tickets
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ translation
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ transport
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ bookings
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ deliveries
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ fleets
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ hubs
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ routes
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ trips
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ vehicles
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ wallet
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ zamakana
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ campaigns
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ [id]
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ nodes
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ scenarios
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ layout.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ (public)
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ public
+ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ [slug]
+ظ¤é   ظ¤é   ظ¤é           ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ public-entity
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ [id]
+ظ¤é   ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ favicon.ico
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ globals.css
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ layout.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ page.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ providers.tsx
+ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ web3-provider.tsx
+ظ¤é   ظ¤£ظ¤ظ¤ components
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ academy
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CourseActionButton.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ EnrollButton.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ OrgTree.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ tenant-provider.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ affiliate
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ ShareButton.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ agritech
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AIRecommendationCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ HarvestBadge.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ SoilSensorWidget.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ai-agents
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AgentCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AgentForm.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ ApprovalResolver.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ai-governance
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AuditLogViewer.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ QuotaManager.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ UsageDashboard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ UsageGauge.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ arbitration-syndicates
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CaseCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ElectionCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ JuryVoteModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ SyndicateCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ VoteModal.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ auth
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ LoginForm.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ RegisterForm.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ SessionCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ SessionsList.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ automation
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ node-configs
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AIAgentConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ConditionConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CreateEntityConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CreateInvoiceConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CreateOrderConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CreateUserConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ DelayConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ EmailConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ EnrollCourseConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ FileUploadConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ HTTPConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ LoopConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ NotificationConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ SQLConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ TransferFundsConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ TransformConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ WebSocketConfig.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CronInput.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ExecutionStatusBadge.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ NodeSettingsPanel.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ SecretForm.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ TriggerSettings.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ WorkflowBuilder.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ command
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AlertList.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ BrandCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ MetricCard.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ commerce
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CheckoutForm.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ OrderCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ OrderList.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ProductCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ ProductGrid.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ communications
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ MailSidebar.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ NotificationBell.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ NotificationList.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ employment
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AttendanceWidget.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ StatusBadge.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ entities
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ entity-basic-info.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ entity-brand-settings.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ entity-card.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ entity-documents.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ entity-form.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ entity-representatives.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ entity-tabs.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ finance
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ BalanceCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ConfirmationModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ SwapForm.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ TransactionItem.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ TransactionList.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ TransferForm.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ WalletHeader.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ health
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AIPrognosisRadar.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ BioProfileManager.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ EmergencySOSButton.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ identity
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AuthProvider.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ LoginForm.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ProfileForm.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ RegisterForm.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ SessionCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ SessionsList.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ WalletCard.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ insurance
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ClaimCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ PensionCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ PolicyCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ReviewClaimModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ SubmitClaimModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ SubscribeModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ SubscriptionCard.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ invitations
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AIAssistantChat.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CampaignPerformanceChart.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CampaignStatusBadge.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ LeadCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ LeadStatusBadge.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ iot
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AssetCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AssetsManager.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CarbonCreditPanel.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ IoTDashboardStats.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ layout
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ navbar.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ sidebar.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ theme-toggle.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ logistics
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ EquipmentCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ InventoryCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ InventoryStatusBadge.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ WarehouseCard.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ manufacturing
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ MaintenanceRadar.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ ProductionStatusBadge.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ marketplace
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ DeploymentStatusBadge.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ PurchaseModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ServiceCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ ServiceDetails.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ privacy
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ErasureRequestCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ErasureRequestForm.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ErasureRequestList.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ PendingErasureRequests.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ PrivacySettingsForm.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ ProcessErasureModal.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ projects
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AdvancedMilestones.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ContributionModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ MilestoneTimeline.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ProjectAnalysisDashboard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ProjectAnalytics.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ProjectCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ProjectDetails.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ ProjectUpdates.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ realestate
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ InvestorPortfolio.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ MasterPlanExplorer.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ PropertyUnitCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ SmartContractDashboard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ TokenizationExchange.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ saas
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ InvoiceCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ InvoiceDetailModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ PlanCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ PlanComparison.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ServiceCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ SubscribeModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ SubscriptionCard.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ social
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AIRecommendationCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ContractCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CreateGroupModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CreateOccasionModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CreatePageModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ EventCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ GiftCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ GroupCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ OccasionCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ PageCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ PostCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ PostComposer.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ SendGiftModal.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ sovereign-entities
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ BrandEditor.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ EntityCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ EntityForm.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ EntityTreeView.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ KYBDocumentUploader.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ RepresentativeList.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ WalletActions.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ WalletBalance.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tenders-auctions
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AuctionCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AuctionDetail.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CloseAuctionModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ EvaluateBidModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ LiveBidCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ PlaceBidModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ SubmitBidModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ TenderCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ TenderDetail.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tourism-sports
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ DestinationCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ EventCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ProgramCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ TicketCard.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ translation
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ BatchTranslator.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ChatTranslator.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ LanguageSelector.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ TextTranslator.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ transport
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CarbonFootprintBadge.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ RouteOptimizer.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ TransportStatsCards.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ TripStatusBadge.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ VehicleStatusBadge.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ui
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ConfirmationModal.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ accordion.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ badge.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ button.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ card.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ dialog.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ dropdown-menu.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ form.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ input.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ label.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ select.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ skeleton.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ sonner.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ switch.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ table.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tabs.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ textarea.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ web3
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ connect-wallet.tsx
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ zamakana
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ AIAnalysisReport.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ CampaignCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ NodeCard.tsx
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ ScenarioCard.tsx
+ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ websocket-provider.tsx
+ظ¤é   ظ¤£ظ¤ظ¤ docs
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ RLS_POLICIES.md
+ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ privacy-domain-docs.md
+ظ¤é   ظ¤£ظ¤ظ¤ hooks
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ affiliate
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useAffiliate.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ agritech
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useBioAssets.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useCertificates.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useCropCycles.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useFarms.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useHarvests.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useSensors.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useTraceability.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useZones.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ai-agents
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useApprovalWebSocket.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ arbitration-syndicates
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useCases.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useElections.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useJuryVote.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useLicenses.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useSyndicates.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ auth
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useAuth.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ automation
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useExecutionWebSocket.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ command
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useAlerts.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useBrands.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useCommandStats.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ commerce
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useCheckout.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useProducts.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ communications
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useWebSocket.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ finance
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useSwap.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useTransactionHistory.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useTransfer.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useWallet.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ insurance
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useClaims.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useEmployeeProfile.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useInsuranceStats.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ usePensions.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ usePolicies.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useSubscriptions.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ invitations
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useCampaigns.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useChatWithAI.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useInteractions.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useInvitations.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useLeads.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useStats.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useTickets.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ logistics
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useEquipment.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useForecast.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useInventory.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useWarehouses.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ manufacturing
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useBatches.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useFacilities.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useRawMaterials.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ privacy
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useConsentLog.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useCreateErasureRequest.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useErasureRequests.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ usePrivacySettings.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useProcessErasureRequest.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ realestate
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useMyOwnerships.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useProperties.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ usePropertyOwnerships.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useTokenization.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ saas
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useDashboard.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useFeatureFlags.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useInvoices.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ usePlans.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useServices.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useSubscriptions.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ social
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useConnections.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useContracts.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useEvents.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useGifts.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useGroups.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useMatchSuggestions.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useMatchmaking.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useOccasions.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ usePages.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ usePosts.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useSubscriptions.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tenders-auctions
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useAuctionBids.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useAuctions.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useBids.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useCloseAuction.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useEvaluateBid.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useLiveBids.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useMyBids.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useOpenTender.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ usePlaceBid.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useStartAuction.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useSubmitBid.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useTenderBids.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useTenders.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useUpdateTender.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tourism-sports
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useDestinations.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useEvents.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useMatches.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useMyTickets.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ usePlayers.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ usePrograms.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useSportsOrganizations.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useTournaments.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useTransfers.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ transport
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useBookings.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useDeliveries.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useLiveTracking.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useRoutes.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useTransportStats.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useTrips.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useVehicles.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ zamakana
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useCampaigns.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useEdges.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useKnowledgeGraph.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useNodes.ts
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useScenarios.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ academy-queries.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ use-auth.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ use-enterprise.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ use-entities.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ use-finance.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useAcademyEntities.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useFleets.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useGeolocation.ts
+ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ useHubs.ts
+ظ¤é   ظ¤£ظ¤ظ¤ lib
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ api-client.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ error-handler.ts
+ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ utils.ts
+ظ¤é   ظ¤£ظ¤ظ¤ providers
+ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ AuthProvider.tsx
+ظ¤é   ظ¤£ظ¤ظ¤ public
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ file.svg
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ globe.svg
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ vercel.svg
+ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ window.svg
+ظ¤é   ظ¤£ظ¤ظ¤ services
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ academy.service.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ affiliate.service.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ agritech.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ai-agents.service.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ arbitration-syndicates.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ auth.service.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ automation.service.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ command.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ commerce.service.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ communications.service.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ communications.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ employment.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ finance.service.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ health.service.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ health.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ identity.service.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ insurance.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ invitations.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ iot.service.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ logistics.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ manufacturing.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ marketplace.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ privacy.service.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ projects.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ realestate.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ saas.service.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ social.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ sovereign-entities.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tenders-auctions.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tourism-sports.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ translation.service.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ transport.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ websocket.service.ts
+ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ zamakana.ts
+ظ¤é   ظ¤£ظ¤ظ¤ src
+ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ lib
+ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ api-types.ts
+ظ¤é   ظ¤£ظ¤ظ¤ store
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ academy-ui-store.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ agentStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ agritechStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ aiGovernanceStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ arbitrationSyndicatesStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ auth-store.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ automationStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ cart-store.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ commandStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ employmentStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ enterprise-store.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ entity-store.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ entityStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ finance-store.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ financeStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ healthStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ insuranceStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ invitationsStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ iot-store.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ logisticsStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ manufacturingStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ marketplaceStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ notificationStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ projectStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ realestateStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ saas-store.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ socialStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ student-store.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tendersAuctionsStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tourismSportsStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ translation-store.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ transportStore.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ useAcademyUIStore.ts
+ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ zamakanaStore.ts
+ظ¤é   ظ¤£ظ¤ظ¤ types
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ academy.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ affiliate.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ agritech.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ai-agents.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ ai-governance.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ arbitration-syndicates.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ auth.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ automation.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ command.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ commerce.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ communications.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ employment.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ entity.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ finance.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ health.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ identity.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ insurance.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ invitations.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ iot.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ logistics.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ manufacturing.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ marketplace.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ privacy.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ projects.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ realestate.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ saas.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ social.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ sovereign-entities.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tenders-auctions.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ tourism-sports.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ translation.ts
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ transport.ts
+ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ zamakana.ts
+ظ¤é   ظ¤£ظ¤ظ¤ AGENTS.md
+ظ¤é   ظ¤£ظ¤ظ¤ CLAUDE.md
+ظ¤é   ظ¤£ظ¤ظ¤ README.md
+ظ¤é   ظ¤£ظ¤ظ¤ components.json
+ظ¤é   ظ¤£ظ¤ظ¤ eslint.config.mjs
+ظ¤é   ظ¤£ظ¤ظ¤ package-lock.json
+ظ¤é   ظ¤£ظ¤ظ¤ package.json
+ظ¤é   ظ¤£ظ¤ظ¤ postcss.config.mjs
+ظ¤é   ظ¤£ظ¤ظ¤ proxy.ts
+ظ¤é   ظ¤¤ظ¤ظ¤ tsconfig.json
+ظ¤£ظ¤ظ¤ k8s
+ظ¤é   ظ¤¤ظ¤ظ¤ base
+ظ¤é       ظ¤£ظ¤ظ¤ configmap.yaml
+ظ¤é       ظ¤£ظ¤ظ¤ deployment.yaml
+ظ¤é       ظ¤£ظ¤ظ¤ external-secret.yaml
+ظ¤é       ظ¤£ظ¤ظ¤ hpa.yaml
+ظ¤é       ظ¤£ظ¤ظ¤ kustomization.yaml
+ظ¤é       ظ¤£ظ¤ظ¤ namespace.yaml
+ظ¤é       ظ¤£ظ¤ظ¤ network-policy.yaml
+ظ¤é       ظ¤¤ظ¤ظ¤ service.yaml
+ظ¤£ظ¤ظ¤ terraform
+ظ¤é   ظ¤£ظ¤ظ¤ modules
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ eks
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ main.tf
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ iam
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ main.tf
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ networking
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ main.tf
+ظ¤é   ظ¤é   ظ¤£ظ¤ظ¤ rds
+ظ¤é   ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ main.tf
+ظ¤é   ظ¤é   ظ¤¤ظ¤ظ¤ secrets
+ظ¤é   ظ¤é       ظ¤¤ظ¤ظ¤ main.tf
+ظ¤é   ظ¤¤ظ¤ظ¤ main.tf
+ظ¤£ظ¤ظ¤ CODING_STANDARDS.md
+ظ¤£ظ¤ظ¤ alembic.ini
+ظ¤£ظ¤ظ¤ eppne_tree.txt
+ظ¤£ظ¤ظ¤ fix_db.py
+ظ¤£ظ¤ظ¤ generate_tree.py
+ظ¤¤ظ¤ظ¤ openapi.yaml

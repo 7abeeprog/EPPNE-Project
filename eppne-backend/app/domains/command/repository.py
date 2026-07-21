@@ -61,7 +61,7 @@ class CommandRepository:
             select(BrandSettings).where(BrandSettings.tenant_id == tenant_id, BrandSettings.is_deleted == False)
             .order_by(BrandSettings.created_at.desc()).offset(skip).limit(limit)
         )
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def update_brand(self, tenant_id: int, **kwargs) -> BrandSettings:
         await self.db.execute(
@@ -104,7 +104,7 @@ class CommandRepository:
             query = query.where(SystemAlert.severity == severity)
         query = query.order_by(SystemAlert.created_at.desc()).limit(limit)
         result = await self.db.execute(query)
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def update_alert(self, alert_id: int, tenant_id: int, **kwargs) -> SystemAlert:
         await self.db.execute(
@@ -138,7 +138,7 @@ class CommandRepository:
             query = query.where(PlatformMetric.recorded_at <= end_date)
         query = query.order_by(PlatformMetric.recorded_at.desc()).limit(limit)
         result = await self.db.execute(query)
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     # ========== Reports ==========
     async def create_report(self, **kwargs) -> CommandReport:
@@ -166,7 +166,7 @@ class CommandRepository:
             query = query.where(CommandReport.report_type == report_type)
         query = query.order_by(CommandReport.created_at.desc()).offset(skip).limit(limit)
         result = await self.db.execute(query)
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def update_report(self, report_id: int, tenant_id: int, **kwargs) -> CommandReport:
         await self.db.execute(
@@ -203,7 +203,7 @@ class CommandRepository:
             query = query.where(AIRecommendation.recommendation_type == recommendation_type)
         query = query.order_by(AIRecommendation.created_at.desc()).limit(limit)
         result = await self.db.execute(query)
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def update_recommendation(self, rec_id: int, tenant_id: int, **kwargs) -> AIRecommendation:
         await self.db.execute(

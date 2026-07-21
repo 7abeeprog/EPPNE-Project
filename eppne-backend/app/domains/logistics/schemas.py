@@ -11,26 +11,26 @@ from app.domains.logistics.models import (
 )
 
 
-# ========================================================================
+# ============================================================
 # 1. المخازن (Warehouses)
-# ========================================================================
+# ============================================================
 
 class WarehouseCreate(BaseModel):
-    name: str = Field(..., min_length=3, max_length=255)
-    warehouse_type: WarehouseType
-    location: str
-    gps_location: Optional[Dict[str, float]] = None
-    total_capacity_sqm: Decimal = Field(..., gt=0)
-    total_capacity_units: int = Field(..., gt=0)
-    manager_id: Optional[int] = None
+    name: str = Field(..., min_length=3, max_length=255, description="اسم المخزن")
+    warehouse_type: WarehouseType = Field(description="نوع المخزن")
+    location: str = Field(description="الموقع")
+    gps_location: Optional[Dict[str, float]] = Field(default=None, description="الموقع الجغرافي")
+    total_capacity_sqm: Decimal = Field(..., gt=0, description="السعة الإجمالية بالمتر المربع")
+    total_capacity_units: int = Field(..., gt=0, description="السعة الإجمالية بالوحدات")
+    manager_id: Optional[int] = Field(default=None, description="معرف المدير")
 
 
 class WarehouseUpdate(BaseModel):
-    name: Optional[str] = None
-    location: Optional[str] = None
-    gps_location: Optional[Dict[str, float]] = None
-    is_active: Optional[bool] = None
-    manager_id: Optional[int] = None
+    name: Optional[str] = Field(default=None, description="اسم المخزن")
+    location: Optional[str] = Field(default=None, description="الموقع")
+    gps_location: Optional[Dict[str, float]] = Field(default=None, description="الموقع الجغرافي")
+    is_active: Optional[bool] = Field(default=None, description="هل المخزن نشط؟")
+    manager_id: Optional[int] = Field(default=None, description="معرف المدير")
 
 
 class WarehouseResponse(WarehouseCreate):
@@ -46,9 +46,9 @@ class WarehouseResponse(WarehouseCreate):
 
 
 class WarehouseZoneCreate(BaseModel):
-    zone_code: str = Field(..., min_length=1, max_length=50)
-    zone_type: str
-    capacity_units: int = Field(..., gt=0)
+    zone_code: str = Field(..., min_length=1, max_length=50, description="رمز المنطقة")
+    zone_type: str = Field(description="نوع المنطقة")
+    capacity_units: int = Field(..., gt=0, description="سعة المنطقة بالوحدات")
 
 
 class WarehouseZoneResponse(WarehouseZoneCreate):
@@ -61,30 +61,31 @@ class WarehouseZoneResponse(WarehouseZoneCreate):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ========================================================================
+# ============================================================
 # 2. المخزون (Inventory)
-# ========================================================================
+# ============================================================
 
 class InventoryReceive(BaseModel):
-    warehouse_id: int
-    zone_id: Optional[int] = None
-    product_id: Optional[int] = None
-    product_name: str = Field(..., min_length=1)
-    product_sku: Optional[str] = None
-    product_category: Optional[str] = None
-    quantity: int = Field(..., gt=0)
-    unit: str = "UNIT"
-    unit_price_mrusdt: Decimal = 0
-    batch_number: Optional[str] = None
-    manufacture_date: Optional[datetime] = None
-    expiry_date: Optional[datetime] = None
-    supplier_id: Optional[int] = None
-    source_order_id: Optional[int] = None
-    reference_type: Optional[str] = None
-    reference_id: Optional[int] = None
+    warehouse_id: int = Field(description="معرف المخزن")
+    zone_id: Optional[int] = Field(default=None, description="معرف المنطقة")
+    product_id: Optional[int] = Field(default=None, description="معرف المنتج")
+    product_name: str = Field(..., min_length=1, description="اسم المنتج")
+    product_sku: Optional[str] = Field(default=None, description="رمز المنتج")
+    product_category: Optional[str] = Field(default=None, description="تصنيف المنتج")
+    quantity: int = Field(..., gt=0, description="الكمية")
+    unit: str = Field(default="UNIT", description="وحدة القياس")
+    unit_price_mrusdt: Decimal = Field(default=Decimal("0.0"), description="سعر الوحدة")
+    batch_number: Optional[str] = Field(default=None, description="رقم الدفعة")
+    manufacture_date: Optional[datetime] = Field(default=None, description="تاريخ التصنيع")
+    expiry_date: Optional[datetime] = Field(default=None, description="تاريخ الانتهاء")
+    supplier_id: Optional[int] = Field(default=None, description="معرف المورد")
+    source_order_id: Optional[int] = Field(default=None, description="معرف الطلب المصدر")
+    reference_type: Optional[str] = Field(default=None, description="نوع المرجع")
+    reference_id: Optional[int] = Field(default=None, description="معرف المرجع")
 
     @field_validator("expiry_date")
-    def validate_expiry(cls, v, info):
+    @classmethod
+    def validate_expiry(cls, v: Optional[datetime], info) -> Optional[datetime]:
         if v and "manufacture_date" in info.data:
             man_date = info.data.get("manufacture_date")
             if man_date and v <= man_date:
@@ -93,16 +94,16 @@ class InventoryReceive(BaseModel):
 
 
 class InventoryIssue(BaseModel):
-    inventory_item_id: int
-    quantity: int = Field(..., gt=0)
-    destination_warehouse_id: Optional[int] = None
-    reference_type: Optional[str] = None
-    reference_id: Optional[int] = None
+    inventory_item_id: int = Field(description="معرف عنصر المخزون")
+    quantity: int = Field(..., gt=0, description="الكمية")
+    destination_warehouse_id: Optional[int] = Field(default=None, description="معرف المخزن الوجهة")
+    reference_type: Optional[str] = Field(default=None, description="نوع المرجع")
+    reference_id: Optional[int] = Field(default=None, description="معرف المرجع")
 
 
 class InventoryAdjust(BaseModel):
-    new_quantity: int = Field(..., ge=0)
-    note: Optional[str] = None
+    new_quantity: int = Field(..., ge=0, description="الكمية الجديدة")
+    note: Optional[str] = Field(default=None, description="ملاحظة")
 
 
 class InventoryItemResponse(BaseModel):
@@ -149,30 +150,30 @@ class InventoryTransactionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ========================================================================
+# ============================================================
 # 3. المعدات (Equipment)
-# ========================================================================
+# ============================================================
 
 class EquipmentCreate(BaseModel):
-    name: str = Field(..., min_length=3, max_length=255)
-    equipment_type: str
-    serial_number: Optional[str] = None
-    manufacturer: Optional[str] = None
-    model: Optional[str] = None
-    warehouse_id: Optional[int] = None
-    current_location: Optional[str] = None
-    purchase_date: Optional[datetime] = None
-    purchase_price_mrusdt: Decimal = 0
-    warranty_expiry: Optional[datetime] = None
-    smart_asset_id: Optional[int] = None
+    name: str = Field(..., min_length=3, max_length=255, description="اسم المعدة")
+    equipment_type: str = Field(description="نوع المعدة")
+    serial_number: Optional[str] = Field(default=None, description="الرقم التسلسلي")
+    manufacturer: Optional[str] = Field(default=None, description="الشركة المصنعة")
+    model: Optional[str] = Field(default=None, description="الموديل")
+    warehouse_id: Optional[int] = Field(default=None, description="معرف المخزن")
+    current_location: Optional[str] = Field(default=None, description="الموقع الحالي")
+    purchase_date: Optional[datetime] = Field(default=None, description="تاريخ الشراء")
+    purchase_price_mrusdt: Decimal = Field(default=Decimal("0.0"), description="سعر الشراء")
+    warranty_expiry: Optional[datetime] = Field(default=None, description="تاريخ انتهاء الضمان")
+    smart_asset_id: Optional[int] = Field(default=None, description="معرف الأصل الذكي في قطاع IoT")
 
 
 class EquipmentUpdate(BaseModel):
-    name: Optional[str] = None
-    status: Optional[EquipmentStatus] = None
-    warehouse_id: Optional[int] = None
-    current_location: Optional[str] = None
-    next_maintenance_date: Optional[datetime] = None
+    name: Optional[str] = Field(default=None, description="اسم المعدة")
+    status: Optional[EquipmentStatus] = Field(default=None, description="حالة المعدة")
+    warehouse_id: Optional[int] = Field(default=None, description="معرف المخزن")
+    current_location: Optional[str] = Field(default=None, description="الموقع الحالي")
+    next_maintenance_date: Optional[datetime] = Field(default=None, description="تاريخ الصيانة القادمة")
 
 
 class EquipmentResponse(EquipmentCreate):
@@ -188,10 +189,10 @@ class EquipmentResponse(EquipmentCreate):
 
 
 class EquipmentMaintenanceCreate(BaseModel):
-    maintenance_type: str
-    description: str
-    cost_mrusdt: Decimal = 0
-    scheduled_date: Optional[datetime] = None
+    maintenance_type: str = Field(description="نوع الصيانة")
+    description: str = Field(description="وصف الصيانة")
+    cost_mrusdt: Decimal = Field(default=Decimal("0.0"), description="التكلفة")
+    scheduled_date: Optional[datetime] = Field(default=None, description="تاريخ الصيانة المجدول")
 
 
 class EquipmentMaintenanceResponse(EquipmentMaintenanceCreate):
@@ -206,9 +207,9 @@ class EquipmentMaintenanceResponse(EquipmentMaintenanceCreate):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ========================================================================
+# ============================================================
 # 4. التنبؤ بالطلب (Forecasting)
-# ========================================================================
+# ============================================================
 
 class InventoryForecastResponse(BaseModel):
     id: int
@@ -229,9 +230,9 @@ class InventoryForecastResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ========================================================================
+# ============================================================
 # 5. إحصائيات (Stats)
-# ========================================================================
+# ============================================================
 
 class LogisticsStatsResponse(BaseModel):
     total_warehouses: int

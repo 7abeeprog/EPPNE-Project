@@ -1,36 +1,48 @@
 # app/core/cache.py
-import functools
+import hashlib
 import json
-from redis import asyncio as aioredis
-from app.core.config import settings
+from functools import wraps
+from typing import Callable
+from app.core.redis_client import redis_client
 
-# إنشاء عميل Redis
-redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-
-def cache_result(expire=300):
-    """مزخرف لتخزين نتائج الدوال في Redis"""
-    def decorator(func):
-        @functools.wraps(func)
+def cache_result(ttl: int = 300, key_prefix: str = "cache"):
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
         async def wrapper(*args, **kwargs):
-            # إنشاء مفتاح فريد بناءً على اسم الدالة والمعاملات
-            key = f"cache:{func.__name__}:{json.dumps(args)}:{json.dumps(kwargs)}"
+            key_data = {"func": func.__name__, "args": args, "kwargs": kwargs}
+            key_str = json.dumps(key_data, sort_keys=True)
+            cache_key = f"{key_prefix}:{hashlib.md5(key_str.encode()).hexdigest()}"
             
-            # محاولة جلب النتيجة من الكاش
-            cached = await redis_client.get(key)
-            if cached:
-                return json.loads(cached)
+            cached = await redis_client.get_json(cache_key)
+            if cached is not None:
+                return cached
             
-            # تنفيذ الدالة الأصلية إذا لم يوجد كاش
             result = await func(*args, **kwargs)
-            
-            # حفظ النتيجة في Redis
-            await redis_client.setex(key, expire, json.dumps(result))
+            await redis_client.set_json(cache_key, result, ex=ttl)
             return result
         return wrapper
     return decorator
 
-async def invalidate_cache(func_name: str):
-    """دالة لمسح الكاش عند حدوث تحديث للبيانات"""
-    keys = await redis_client.keys(f"cache:{func_name}:*")
-    if keys:
-        await redis_client.delete(*keys)
+class CacheManager:
+    @staticmethod
+    async def invalidate(pattern: str):
+        keys = await redis_client.keys(pattern)
+        if keys:
+            await redis_client.delete(*keys)
+
+    @staticmethod
+    async def invalidate_cache(pattern: str):
+        """هذا هو الاسم الذي يطلبه المشروع حالياً"""
+        await CacheManager.invalidate(pattern)
+
+    @staticmethod
+    async def invalidate_user_cache(user_id: int):
+        await CacheManager.invalidate(f"*user:{user_id}*")
+
+    # --- إضافة للتوافقية مع الملفات القديمة ---
+def invalidate_cache(pattern: str):
+    """دالة توافقية تمنع ظهور ImportError في القطاعات التي تستخدم الاسم القديم"""
+    import asyncio
+    # نقوم بتشغيل دالة الإلغاء بشكل متزامن للتوافق
+    return asyncio.run(CacheManager.invalidate(pattern))
+# ------------------------------------------

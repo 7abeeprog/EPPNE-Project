@@ -5,12 +5,13 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Building2, MapPin, TrendingUp, Users } from 'lucide-react';
-import type { Project } from '@/types/projects';
+import { ProjectResponse } from '@/services/projects';
 
-interface ProjectCardProps {
-  project: Project;
+// ✅ توسيع النوع ليشمل min_contribution (مؤقتاً حتى يتم إصلاح النوع في المصدر)
+type ProjectCardProps = {
+  project: ProjectResponse & { min_contribution?: number | string | null };
   className?: string;
-}
+};
 
 const statusColors: Record<string, string> = {
   DRAFT: 'border-gray-500/30 text-gray-400',
@@ -31,9 +32,13 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function ProjectCard({ project, className }: ProjectCardProps) {
-  const fundingPercentage = project.funding_goal_mrusdt > 0
-    ? (project.current_funding_mrusdt / project.funding_goal_mrusdt) * 100
-    : 0;
+  // ✅ تحويل القيم المالية القادمة كنصوص (string) إلى أرقام (number)
+  const fundingGoal = Number(project.funding_goal_mrusdt ?? 0);
+  const currentFunding = Number(project.current_funding_mrusdt ?? 0);
+  const fundingPercentage = fundingGoal > 0 ? (currentFunding / fundingGoal) * 100 : 0;
+
+  // ✅ تحويل قيمة الحد الأدنى للمساهمة (مع دعم null/undefined)
+  const minContribution = Number(project.min_contribution ?? 0);
 
   return (
     <Link
@@ -50,7 +55,7 @@ export default function ProjectCard({ project, className }: ProjectCardProps) {
         {project.cover_image_url ? (
           <Image
             src={project.cover_image_url}
-            alt={project.title}
+            alt={project.title ?? 'مشروع'}
             fill
             className="object-cover group-hover:scale-105 transition-transform duration-500"
           />
@@ -71,10 +76,10 @@ export default function ProjectCard({ project, className }: ProjectCardProps) {
       {/* المحتوى */}
       <div className="space-y-2">
         <h3 className="font-semibold text-foreground/90 text-lg line-clamp-1 group-hover:text-primary transition-colors">
-          {project.title}
+          {project.title ?? 'بدون عنوان'}
         </h3>
         <p className="text-sm text-muted-foreground/60 line-clamp-2">
-          {project.description}
+          {project.description ?? 'لا يوجد وصف'}
         </p>
 
         {/* الموقع */}
@@ -89,7 +94,7 @@ export default function ProjectCard({ project, className }: ProjectCardProps) {
         <div className="space-y-1">
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground/60">
-              {project.current_funding_mrusdt.toFixed(2)} / {project.funding_goal_mrusdt.toFixed(2)} MR_USDT
+              {currentFunding.toFixed(2)} / {fundingGoal.toFixed(2)} MR_USDT
             </span>
             <span className="text-primary font-medium">{fundingPercentage.toFixed(0)}%</span>
           </div>
@@ -105,12 +110,18 @@ export default function ProjectCard({ project, className }: ProjectCardProps) {
         <div className="flex items-center gap-4 pt-2 border-t border-white/5 text-xs text-muted-foreground/50">
           <span className="flex items-center gap-1">
             <Users className="w-3 h-3" />
-            {project.current_funding_mrusdt > 0 ? 'ممول' : 'بدون تمويل'}
+            {currentFunding > 0 ? 'ممول' : 'بدون تمويل'}
           </span>
           <span className="flex items-center gap-1">
             <TrendingUp className="w-3 h-3" />
-            {project.project_type.replace(/_/g, ' ')}
+            {project.project_type?.replace(/_/g, ' ') ?? 'غير محدد'}
           </span>
+          {/* عرض الحد الأدنى للمساهمة إن وُجد */}
+          {minContribution > 0 && (
+            <span className="flex items-center gap-1">
+              <span>حد أدنى: {minContribution.toFixed(2)} MR_USDT</span>
+            </span>
+          )}
         </div>
       </div>
     </Link>

@@ -2,50 +2,83 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth-store";
-import { IdentityService } from "@/services/identity.service";
-import { Loader2 } from "lucide-react";
 
-interface AuthProviderProps {
-  children: React.ReactNode;
-}
-
-export function AuthProvider({ children }: AuthProviderProps) {
-  const { setAuth, clearAuth, isLoading, setLoading } = useAuthStore();
-  const [isInitialized, setIsInitialized] = useState(false);
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { setAuth, setLoading, setInitialized, isInitialized, isLoading, isAuthenticated } = useAuthStore();
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    const initializeAuth = async () => {
-      setLoading(true);
+    setIsMounted(true);
+  }, []);
+
+  // ✅ تهيئة المصادقة
+  useEffect(() => {
+    if (!isMounted) return;
+
+    const initAuth = async () => {
       try {
-        // ✅ محاولة جلب بيانات المستخدم من الـ API
-        const user = await IdentityService.getProfile();
-        setAuth(user, ""); // التوكن مخزن في Cookies، لا نحتاج لتمريره
+        setLoading(true);
+        const storedToken = localStorage.getItem("access_token");
+        const storedUser = localStorage.getItem("user");
+
+        if (storedToken && storedUser) {
+          try {
+            const user = JSON.parse(storedUser);
+            setAuth(user, storedToken, localStorage.getItem("refresh_token") || "");
+          } catch {
+            setAuth(null as any, "", "");
+          }
+        } else {
+          setAuth(null as any, "", "");
+        }
       } catch (error) {
-        // ❌ فشل جلب البيانات -> المستخدم غير مسجل
-        clearAuth();
+        console.error("Auth initialization error:", error);
+        setAuth(null as any, "", "");
       } finally {
         setLoading(false);
-        setIsInitialized(true);
+        setInitialized(true);
       }
     };
 
-    initializeAuth();
-  }, [setAuth, clearAuth, setLoading]);
+    initAuth();
+  }, [isMounted, setAuth, setLoading, setInitialized]);
 
-  // ✅ عرض شاشة تحميل أثناء تهيئة المصادقة
-  if (!isInitialized || isLoading) {
+  // ✅ التوجيه: يتم تنفيذه في useEffect وليس أثناء الرسم
+  useEffect(() => {
+    // انتظر حتى يكتمل التهيئة
+    if (!isInitialized || isLoading) return;
+
+    const isAuthPage = pathname === "/login" || pathname === "/register";
+
+    if (!isAuthenticated && !isAuthPage) {
+      router.push("/login");
+    }
+
+    if (isAuthenticated && isAuthPage) {
+      router.push("/dashboard");
+    }
+  }, [isAuthenticated, isInitialized, isLoading, pathname, router]);
+
+  // ✅ عرض حالة التحميل
+  if (!isMounted || !isInitialized || isLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background">
-        <div className="relative">
-          <div className="absolute inset-0 bg-primary/20 blur-[80px] rounded-full" />
-          <Loader2 className="h-12 w-12 text-primary animate-spin relative z-10" />
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground text-lg">جاري تهيئة المنصة السيادية...</p>
         </div>
-        <p className="text-muted-foreground mt-4 font-medium animate-pulse">
-          جاري تهيئة المنصة السيادية...
-        </p>
       </div>
     );
+  }
+
+  // ✅ منع رسم المحتوى في حالة عدم المصادقة (سيتم التوجيه عبر useEffect)
+  const isAuthPage = pathname === "/login" || pathname === "/register";
+  if (!isAuthenticated && !isAuthPage) {
+    return null;
   }
 
   return <>{children}</>;

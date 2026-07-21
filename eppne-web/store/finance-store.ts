@@ -1,68 +1,58 @@
-// store/finance-store.ts
 import { create } from 'zustand';
-import { financeService, MintRequest, ExchangeRatesUpdate, MaxSupplyUpdate, CryptoModeToggle } from '@/services/finance.service';
+// تم تعديل الاستيراد واستخدام الكائن مباشرة
+import { FinanceService } from '@/services/finance.service';
 import { useNotificationStore } from './notificationStore';
 
-// تعريف الأنواع
 type CryptoMode = 'FULL_CRYPTO' | 'POINTS_ONLY';
 
 interface FinanceState {
-  // === حالة الخادم (API) ===
-  wallet: { balances: Record<string, number> } | null;   // تم تغيير الاسم من balances إلى wallet
+  wallet: { balances: Record<string, number> } | null;
   exchangeRates: Record<string, number> | null;
   cryptoMode: CryptoMode | null;
   isLoading: boolean;
   error: string | null;
-
-  // === حالة الواجهة (UI) ===
   isWeb3Loading: boolean;
 
-  // === دوال المستخدم ===
-  fetchWallet: () => Promise<void>;          // جديدة، بدلاً من fetchBalances
+  fetchWallet: () => Promise<void>;
   transferFunds: (data: any) => Promise<any>;
   swapCurrencies: (data: any) => Promise<any>;
   fetchHistory: (params?: any) => Promise<any>;
 
-  // === دوال المشرف ===
-  mintFunds: (data: MintRequest) => Promise<void>;
-  setExchangeRates: (data: ExchangeRatesUpdate) => Promise<void>;
-  setMaxSupply: (data: MaxSupplyUpdate) => Promise<void>;
+  mintFunds: (data: any) => Promise<void>;
+  setExchangeRates: (data: any) => Promise<void>;
+  setMaxSupply: (data: any) => Promise<void>;
   fetchCryptoMode: () => Promise<void>;
-  setCryptoMode: (data: CryptoModeToggle) => Promise<void>;
-
-  // === دوال UI ===
+  setCryptoMode: (data: any) => Promise<void>;
   setWeb3Loading: (isLoading: boolean) => void;
 }
 
 export const useFinanceStore = create<FinanceState>((set, get) => ({
-  // الحالة الابتدائية
   wallet: null,
   exchangeRates: null,
   cryptoMode: null,
   isLoading: false,
-  error: null,
+  error: null as string | null, // حل مشكلة TypeScript (Type 'never')
   isWeb3Loading: false,
 
-  // === دوال المستخدم ===
   fetchWallet: async () => {
     set({ isLoading: true, error: null });
     try {
-      const data = await financeService.getBalances(); // نفترض أن الخدمة تعيد { balances: ... }
-      set({ wallet: data, isLoading: false });        // نخزن في wallet بنفس الهيكل
+      const data = await FinanceService.getBalances(); // استدعاء مباشر
+      set({ wallet: data, isLoading: false });
     } catch (error: any) {
-      set({ isLoading: false, error: error.message });
+      set({ isLoading: false, error: String(error?.message || error) });
     }
   },
 
   transferFunds: async (data) => {
     set({ isLoading: true });
     try {
-      const response = await financeService.transferFunds(data);
+      const response = await FinanceService.transferFunds(data);
       set({ isLoading: false });
-      await get().fetchWallet(); // تحديث المحفظة بعد التحويل
+      await get().fetchWallet();
       return response;
     } catch (error: any) {
-      set({ isLoading: false, error: error.message });
+      set({ isLoading: false, error: String(error?.message || error) });
       throw error;
     }
   },
@@ -70,12 +60,12 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   swapCurrencies: async (data) => {
     set({ isLoading: true });
     try {
-      const response = await financeService.swapCurrencies(data);
+      const response = await FinanceService.swapCurrencies(data);
       set({ isLoading: false });
       await get().fetchWallet();
       return response;
     } catch (error: any) {
-      set({ isLoading: false, error: error.message });
+      set({ isLoading: false, error: String(error?.message || error) });
       throw error;
     }
   },
@@ -83,20 +73,19 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   fetchHistory: async (params) => {
     set({ isLoading: true });
     try {
-      const data = await financeService.getHistory(params);
+      const data = await FinanceService.getHistory(params);
       set({ isLoading: false });
       return data;
     } catch (error: any) {
-      set({ isLoading: false, error: error.message });
+      set({ isLoading: false, error: String(error?.message || error) });
       throw error;
     }
   },
 
-  // === دوال المشرف ===
-  mintFunds: async (data: MintRequest) => {
+  mintFunds: async (data: any) => {
     set({ isLoading: true, error: null });
     try {
-      await financeService.mintFunds(data);
+      await FinanceService.mintFunds(data);
       set({ isLoading: false });
 
       const notificationStore = useNotificationStore.getState();
@@ -105,7 +94,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         user_id: 0,
         title: '💰 تم طباعة عملات جديدة',
         body: `تم طباعة ${data.amount} من ${data.currency} بنجاح.`,
-        data: { link: '/dashboard/finance/admin' },
+        data: { link: '/dashboard/finance/admin' } as any,
         is_read: false,
         priority: 'HIGH',
         created_at: new Date().toISOString(),
@@ -113,15 +102,15 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
       await get().fetchWallet();
     } catch (error: any) {
-      set({ isLoading: false, error: error.message });
+      set({ isLoading: false, error: String(error?.message || error) });
       throw error;
     }
   },
 
-  setExchangeRates: async (data: ExchangeRatesUpdate) => {
+  setExchangeRates: async (data: any) => {
     set({ isLoading: true, error: null });
     try {
-      await financeService.setExchangeRates(data);
+      await FinanceService.setExchangeRates(data);
       set({ exchangeRates: data.rates, isLoading: false });
 
       const notificationStore = useNotificationStore.getState();
@@ -130,21 +119,21 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         user_id: 0,
         title: '📊 تحديث أسعار الصرف',
         body: 'تم تحديث أسعار الصرف بنجاح.',
-        data: { link: '/dashboard/finance/admin' },
+        data: { link: '/dashboard/finance/admin' } as any,
         is_read: false,
         priority: 'NORMAL',
         created_at: new Date().toISOString(),
       });
     } catch (error: any) {
-      set({ isLoading: false, error: error.message });
+      set({ isLoading: false, error: String(error?.message || error) });
       throw error;
     }
   },
 
-  setMaxSupply: async (data: MaxSupplyUpdate) => {
+  setMaxSupply: async (data: any) => {
     set({ isLoading: true, error: null });
     try {
-      await financeService.setMaxSupply(data);
+      await FinanceService.setMaxSupply(data);
       set({ isLoading: false });
 
       const notificationStore = useNotificationStore.getState();
@@ -153,30 +142,30 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         user_id: 0,
         title: '🔢 تحديد الحد الأقصى للطباعة',
         body: 'تم تحديث الحد الأقصى للطباعة لكل عملة.',
-        data: { link: '/dashboard/finance/admin' },
+        data: { link: '/dashboard/finance/admin' } as any,
         is_read: false,
         priority: 'NORMAL',
         created_at: new Date().toISOString(),
       });
     } catch (error: any) {
-      set({ isLoading: false, error: error.message });
+      set({ isLoading: false, error: String(error?.message || error) });
       throw error;
     }
   },
 
   fetchCryptoMode: async () => {
     try {
-      const data = await financeService.getCryptoMode();
+      const data = await FinanceService.getCryptoMode();
       set({ cryptoMode: data.mode });
     } catch (error) {
       console.error('Failed to fetch crypto mode', error);
     }
   },
 
-  setCryptoMode: async (data: CryptoModeToggle) => {
+  setCryptoMode: async (data: any) => {
     set({ isLoading: true });
     try {
-      await financeService.setCryptoMode(data);
+      await FinanceService.setCryptoMode(data);
       set({ cryptoMode: data.mode, isLoading: false });
 
       const notificationStore = useNotificationStore.getState();
@@ -185,17 +174,16 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         user_id: 0,
         title: '🔄 تبديل وضع العملات المشفرة',
         body: `تم تبديل الوضع إلى: ${data.mode}`,
-        data: { link: '/dashboard/finance/admin' },
+        data: { link: '/dashboard/finance/admin' } as any,
         is_read: false,
         priority: 'HIGH',
         created_at: new Date().toISOString(),
       });
     } catch (error: any) {
-      set({ isLoading: false, error: error.message });
+      set({ isLoading: false, error: String(error?.message || error) });
       throw error;
     }
   },
 
-  // === دوال UI ===
   setWeb3Loading: (isLoading) => set({ isWeb3Loading: isLoading }),
 }));

@@ -1,16 +1,16 @@
 # app/domains/auth/router.py
-from fastapi import APIRouter, Depends, Request, HTTPException, status
+from fastapi import APIRouter, Depends, Request, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
+from typing import Optional, List, cast
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user
 from app.domains.identity.models import User
 from app.domains.auth.service import AuthService
-from app.domains.auth.repository import AuthRepository
 from app.domains.auth.schemas import *
 from app.core.rate_limiter import rate_limit
-from app.core.logging import logger
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Sovereign Authentication"])
 
@@ -109,7 +109,10 @@ async def logout(
     """
     service = AuthService(db)
 
-    revoked = await service.revoke_session(current_user.id, data.refresh_token)
+    revoked = await service.revoke_session(
+        user_id=cast(int, current_user.id),
+        refresh_token=data.refresh_token
+    )
 
     if not revoked:
         raise HTTPException(
@@ -139,7 +142,9 @@ async def revoke_all_sessions(
     """
     service = AuthService(db)
 
-    revoked_count = await service.revoke_all_sessions(current_user.id)
+    revoked_count = await service.revoke_all_sessions(
+        user_id=cast(int, current_user.id)
+    )
 
     logger.info(f"User {current_user.id} revoked all sessions ({revoked_count} tokens)")
 
@@ -159,20 +164,19 @@ async def revoke_all_sessions(
 async def get_active_sessions(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
-    skip: int = 0,
-    limit: int = 20
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100)
 ):
     """
     عرض جميع الجلسات النشطة للمستخدم (للتدقيق الأمني).
     🔥 معدل الطلبات: 10 طلبات لكل 60 ثانية.
     """
-    repo = AuthRepository(db)
+    service = AuthService(db)
 
-    tokens = await repo.list_user_refresh_tokens(
-        user_id=current_user.id,
+    tokens = await service.get_active_sessions(
+        user_id=cast(int, current_user.id),
         skip=skip,
-        limit=limit,
-        include_revoked=False
+        limit=limit
     )
 
     return [
@@ -183,7 +187,7 @@ async def get_active_sessions(
             "user_agent": t.user_agent,
             "created_at": t.created_at,
             "expires_at": t.expires_at,
-            "is_active": not t.revoked and not t.is_expired()
+            "is_active": not cast(bool, t.revoked) and not t.is_expired()
         }
         for t in tokens
     ]

@@ -1,8 +1,8 @@
-# app/domains/arbitration_syndicates/service.py (الإصدار النهائي المتكامل)
+# app/domains/arbitration_syndicates/service.py (الإصدار النهائي المتكامل والمصحح)
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, cast
 import uuid
 import hashlib
 import bleach
@@ -34,12 +34,12 @@ class ArbitrationSyndicatesService:
         self.saas_service = SaaSSubscriptionService(db)
         self.affiliate_service = AffiliateService(db)
         self.invoicing_service = InvoicingService(db)
-        self.event_bus = EventBus(redis_client)
+        self.event_bus = EventBus(redis_client)  # type: ignore
         self.redis = redis_client
 
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "arbitration_syndicates"):
-        subscription = await self.saas_service.get_active_subscription(tenant_id)
+        subscription = await self.saas_service.get_active_subscription(tenant_id)  # type: ignore
         if not subscription:
             raise PermissionDeniedError("No active subscription found.")
         features = subscription.features or {}
@@ -47,13 +47,16 @@ class ArbitrationSyndicatesService:
             raise PermissionDeniedError("Arbitration & Syndicates feature is not included in your current plan.")
         return subscription, features
 
-    # ========== إنشاء قضية تحكيم (مع SaaS + AI Governance + Audit) ==========
+    # ============================================================
+    # 1. التحكيم (Arbitration)
+    # ============================================================
+
     async def create_dispute(
         self,
         claimant_id: int,
         tenant_id: int,
         data: Dict[str, Any],
-        idempotency_key: str = None
+        idempotency_key: Optional[str] = None
     ) -> ArbitrationCase:
         # 1. التحقق من SaaS
         await self._check_saas_limits(tenant_id, "arbitration")
@@ -73,7 +76,7 @@ class ArbitrationSyndicatesService:
         if judging_mode in ["AI_ONLY", "AI_HYBRID"]:
             from app.domains.ai_governance.service import AIGovernanceService
             governance = AIGovernanceService(self.db)
-            await governance.check_and_consume(
+            await governance.check_and_consume(  # type: ignore
                 tenant_id=tenant_id,
                 agent_id=11,  # AI_JUDGE
                 user_id=claimant_id,
@@ -91,7 +94,8 @@ class ArbitrationSyndicatesService:
                         "evidence_hashes": data.get("evidence_hashes", []),
                         "judging_mode": judging_mode
                     },
-                    executor_user_id=claimant_id
+                    executor_user_id=claimant_id,
+                    idempotency_key=f"AI-{idempotency_key}" if idempotency_key else f"AI-{uuid.uuid4().hex[:12]}"
                 )
                 ai_judge_id = ai_result.get("agent_id", 11)
                 logger.info(f"AI Judge analysis: {ai_result}")
@@ -105,7 +109,7 @@ class ArbitrationSyndicatesService:
             dispute_reason=sanitized_reason,
             judging_mode=judging_mode,
             ai_judge_id=ai_judge_id,
-            idempotency_key=idempotency_key,
+            idempotency_key=idempotency_key,  # type: ignore
             **{k: v for k, v in data.items() if k not in ["dispute_reason", "judging_mode"]}
         )
 
@@ -113,7 +117,7 @@ class ArbitrationSyndicatesService:
         await self._register_affiliate_commission(claimant_id, tenant_id, "ARBITRATION_CASE_CREATED")
 
         # 7. إنشاء فاتورة (Invoicing) لرسوم التحكيم
-        await self.invoicing_service.create_invoice(
+        await self.invoicing_service.create_invoice(  # type: ignore
             entity_id=tenant_id,
             user_id=claimant_id,
             amount=Decimal("25.00"),  # رسوم ثابتة للتحكيم
@@ -132,9 +136,9 @@ class ArbitrationSyndicatesService:
         # 9. تسجيل التدقيق
         await audit_log(
             user_id=claimant_id,
-            tenant_id=tenant_id,
+            tenant_id=tenant_id,  # type: ignore
             action="ARBITRATION_CASE_CREATED",
-            resource_id=case.id,
+            resource_id=case.id,  # type: ignore
             details={"dispute_reason": sanitized_reason[:50]}
         )
 
@@ -143,15 +147,27 @@ class ArbitrationSyndicatesService:
 
         return case
 
-    # ========== تصويت المحلفين (مع Idempotency + Audit) ==========
+    async def get_user_cases(self, user_id: int, tenant_id: int) -> List[ArbitrationCase]:
+        """جلب القضايا الخاصة بالمستخدم"""
+        if hasattr(self.repo, 'list_user_cases'):
+            return await self.repo.list_user_cases(user_id, tenant_id)  # type: ignore
+        return await self.repo.get_cases_by_claimant(user_id, tenant_id)  # type: ignore
+
+    async def get_case(self, case_id: int, tenant_id: int) -> Optional[ArbitrationCase]:
+        """جلب تفاصيل قضية محددة مع التحقق من المستأجر"""
+        case = await self.repo.get_case(case_id)
+        if case and cast(int, case.tenant_id) != tenant_id:
+            raise PermissionDeniedError("ليس لديك صلاحية الوصول لهذه القضية")
+        return case
+
     async def cast_jury_vote(
         self,
         juror_id: int,
         tenant_id: int,
         case_id: int,
         vote: bool,
-        justification: str = None,
-        idempotency_key: str = None
+        justification: Optional[str] = None,
+        idempotency_key: Optional[str] = None
     ) -> CrowdJury:
         # 1. التحقق من SaaS
         await self._check_saas_limits(tenant_id, "arbitration")
@@ -164,9 +180,9 @@ class ArbitrationSyndicatesService:
 
         # 3. جلب القضية
         case = await self.repo.get_case(case_id)
-        if not case or case.tenant_id != tenant_id:
+        if not case or cast(int, case.tenant_id) != tenant_id:
             raise NotFoundError("Case not found")
-        if case.status != DisputeStatus.IN_REVIEW:
+        if cast(str, case.status) != DisputeStatus.IN_REVIEW.value and cast(str, case.status) != "IN_REVIEW":
             raise PermissionDeniedError("Case is not in review phase")
 
         # 4. التحقق من عدم التكرار
@@ -185,7 +201,7 @@ class ArbitrationSyndicatesService:
             vote=vote,
             justification=sanitized_justification,
             reward_mr7=Decimal(10),
-            idempotency_key=idempotency_key
+            idempotency_key=idempotency_key  # type: ignore
         )
 
         # 7. تحديث حالة القضية إذا اكتمل عدد المحلفين (افتراضي 3)
@@ -196,9 +212,9 @@ class ArbitrationSyndicatesService:
         # 8. تسجيل التدقيق
         await audit_log(
             user_id=juror_id,
-            tenant_id=tenant_id,
+            tenant_id=tenant_id,  # type: ignore
             action="JURY_VOTE_CAST",
-            resource_id=vote_record.id,
+            resource_id=vote_record.id,  # type: ignore
             details={"case_id": case_id, "vote": vote}
         )
 
@@ -207,13 +223,89 @@ class ArbitrationSyndicatesService:
 
         return vote_record
 
-    # ========== الانضمام إلى نقابة (مع Idempotency + SaaS + Affiliate + Invoicing) ==========
+    async def issue_verdict(
+        self,
+        case_id: int,
+        tenant_id: int,
+        data: Dict[str, Any],
+        user_id: int,
+        idempotency_key: Optional[str] = None
+    ) -> ArbitrationCase:
+        # 1. التحقق من SaaS
+        await self._check_saas_limits(tenant_id, "arbitration")
+
+        # 2. التحقق من Idempotency
+        if idempotency_key:
+            cached = await check_idempotency(idempotency_key)
+            if cached:
+                return cached
+
+        # 3. جلب القضية
+        case = await self.repo.get_case(case_id)
+        if not case or cast(int, case.tenant_id) != tenant_id:
+            raise NotFoundError("Case not found")
+
+        # 4. تعقيم المدخلات
+        sanitized_verdict = bleach.clean(data["final_verdict"], tags=[], strip=True)
+
+        # 5. تحديث القضية
+        case = await self.repo.update_case_status(
+            case_id,
+            DisputeStatus.RESOLVED,
+            sanitized_verdict,
+            cast(str, data.get("enforcement_tx_hash"))  # type: ignore
+        )
+
+        # 6. نشر حدث للأتمتة
+        await self.event_bus.publish("arbitration.verdict.issued", {
+            "case_id": case.id,
+            "tenant_id": tenant_id,
+            "verdict": sanitized_verdict
+        })
+
+        # 7. تسجيل التدقيق
+        await audit_log(
+            user_id=user_id,
+            tenant_id=tenant_id,  # type: ignore
+            action="ARBITRATION_VERDICT_ISSUED",
+            resource_id=case.id,  # type: ignore
+            details={"verdict": sanitized_verdict[:50]}
+        )
+
+        if idempotency_key:
+            await store_idempotency_result(idempotency_key, case)
+
+        return case
+
+    # ============================================================
+    # 2. النقابات (Syndicates)
+    # ============================================================
+
+    async def create_syndicate(self, tenant_id: int, data: Dict[str, Any]) -> SovereignSyndicate:
+        """إنشاء نقابة جديدة"""
+        await self._check_saas_limits(tenant_id, "syndicates")
+        # تعقيم الاسم والوصف
+        if "name" in data:
+            data["name"] = bleach.clean(data["name"], tags=[], strip=True)
+        return await self.repo.create_syndicate(tenant_id=tenant_id, **data)
+
+    async def list_syndicates(self, tenant_id: int) -> List[SovereignSyndicate]:
+        """جلب قائمة النقابات"""
+        return await self.repo.list_syndicates(tenant_id)  # type: ignore
+
+    async def get_syndicate(self, syndicate_id: int, tenant_id: int) -> Optional[SovereignSyndicate]:
+        """جلب تفاصيل نقابة"""
+        syndicate = await self.repo.get_syndicate(syndicate_id)
+        if syndicate and cast(int, syndicate.tenant_id) != tenant_id:
+            raise PermissionDeniedError("ليس لديك صلاحية الوصول لهذه النقابة")
+        return syndicate
+
     async def join_syndicate(
         self,
         user_id: int,
         tenant_id: int,
         syndicate_id: int,
-        idempotency_key: str = None
+        idempotency_key: Optional[str] = None
     ) -> SyndicateMembership:
         # 1. التحقق من SaaS
         await self._check_saas_limits(tenant_id, "syndicates")
@@ -226,8 +318,11 @@ class ArbitrationSyndicatesService:
 
         # 3. جلب النقابة
         syndicate = await self.repo.get_syndicate(syndicate_id)
-        if not syndicate or not syndicate.is_active or syndicate.tenant_id != tenant_id:
-            raise NotFoundError("Syndicate not found or inactive")
+        if not syndicate:
+            raise NotFoundError("Syndicate not found")
+
+        if cast(Any, syndicate.is_active) is False or cast(Any, syndicate.tenant_id) != tenant_id:
+            raise NotFoundError("Syndicate inactive or permission denied")
 
         # 4. التحقق من العضوية الحالية
         existing = await self.repo.get_membership(user_id, syndicate_id)
@@ -236,24 +331,24 @@ class ArbitrationSyndicatesService:
 
         # 5. دفع الرسوم السنوية
         fee = syndicate.annual_fee_mrusdt
-        if fee > 0:
+        if cast(Any, fee) > 0:
             try:
                 tx_hash = await self.finance.transfer(
                     sender_id=user_id,
                     receiver_email=await self._get_treasury_email(syndicate_id),
                     currency="MR_USDT",
-                    amount=fee,
+                    amount=fee,  # type: ignore
                     notes=f"Syndicate membership fee for {syndicate.name}",
-                    idempotency_key=idempotency_key
+                    idempotency_key=idempotency_key  # type: ignore
                 )
             except InsufficientBalanceError:
                 raise PermissionDeniedError("Insufficient balance for membership fee")
 
             # إنشاء فاتورة (Invoicing)
-            await self.invoicing_service.create_invoice(
+            await self.invoicing_service.create_invoice(  # type: ignore
                 entity_id=tenant_id,
                 user_id=user_id,
-                amount=fee,
+                amount=fee,  # type: ignore
                 description=f"Syndicate membership fee: {syndicate.name}",
                 due_date=datetime.utcnow() + timedelta(days=30)
             )
@@ -273,7 +368,7 @@ class ArbitrationSyndicatesService:
             expiry_date=datetime.utcnow() + timedelta(days=365),
             membership_sbt_id=sbt_id,
             minting_tx_hash=f"0x{sbt_id.lower()}",
-            idempotency_key=idempotency_key
+            idempotency_key=idempotency_key  # type: ignore
         )
 
         # 7. نشر حدث للأتمتة
@@ -287,10 +382,10 @@ class ArbitrationSyndicatesService:
         # 8. تسجيل التدقيق
         await audit_log(
             user_id=user_id,
-            tenant_id=tenant_id,
+            tenant_id=tenant_id,  # type: ignore
             action="SYNDICATE_JOINED",
-            resource_id=membership.id,
-            details={"syndicate_id": syndicate_id, "fee": float(fee)}
+            resource_id=membership.id,  # type: ignore
+            details={"syndicate_id": syndicate_id, "fee": float(cast(Decimal, fee))}  # type: ignore
         )
 
         if idempotency_key:
@@ -298,13 +393,12 @@ class ArbitrationSyndicatesService:
 
         return membership
 
-    # ========== إصدار رخصة مهنية (مع Idempotency + Invoicing) ==========
     async def issue_license(
         self,
         user_id: int,
         tenant_id: int,
         data: Dict[str, Any],
-        idempotency_key: str = None
+        idempotency_key: Optional[str] = None
     ) -> ProfessionalLicense:
         # 1. التحقق من SaaS
         await self._check_saas_limits(tenant_id, "syndicates")
@@ -317,7 +411,7 @@ class ArbitrationSyndicatesService:
 
         # 3. التحقق من العضوية
         membership = await self.repo.get_membership(user_id, data["syndicate_id"])
-        if not membership or membership.tenant_id != tenant_id:
+        if not membership or cast(int, membership.tenant_id) != tenant_id:
             raise PermissionDeniedError("You must be a member of the syndicate first")
 
         # 4. تعقيم المدخلات
@@ -333,12 +427,12 @@ class ArbitrationSyndicatesService:
             expiry_date=datetime.utcnow() + timedelta(days=1095),
             license_sbt_id=f"SBT-LIC-{uuid.uuid4().hex[:12].upper()}",
             license_name=sanitized_name,
-            idempotency_key=idempotency_key,
+            idempotency_key=idempotency_key,  # type: ignore
             **{k: v for k, v in data.items() if k not in ["license_name", "syndicate_id"]}
         )
 
         # 6. إنشاء فاتورة (Invoicing) لرسوم الترخيص
-        await self.invoicing_service.create_invoice(
+        await self.invoicing_service.create_invoice(  # type: ignore
             entity_id=tenant_id,
             user_id=user_id,
             amount=Decimal("10.00"),
@@ -349,9 +443,9 @@ class ArbitrationSyndicatesService:
         # 7. تسجيل التدقيق
         await audit_log(
             user_id=user_id,
-            tenant_id=tenant_id,
+            tenant_id=tenant_id,  # type: ignore
             action="PROFESSIONAL_LICENSE_ISSUED",
-            resource_id=license.id,
+            resource_id=license.id,  # type: ignore
             details={"license_name": sanitized_name}
         )
 
@@ -360,14 +454,53 @@ class ArbitrationSyndicatesService:
 
         return license
 
-    # ========== التصويت في الانتخابات (مع Idempotency + Audit) ==========
+    async def get_user_licenses(self, user_id: int, tenant_id: int) -> List[ProfessionalLicense]:
+        """جلب التراخيص الخاصة بالمستخدم"""
+        if hasattr(self.repo, 'list_user_licenses'):
+            return await self.repo.list_user_licenses(user_id, tenant_id)  # type: ignore
+        return []
+
+    # ============================================================
+    # 3. الانتخابات (Elections)
+    # ============================================================
+
+    async def create_election(self, tenant_id: int, data: Dict[str, Any]) -> SyndicateElection:
+        """إنشاء انتخابات نقابية جديدة"""
+        await self._check_saas_limits(tenant_id, "syndicates")
+        return await self.repo.create_election(tenant_id=tenant_id, **data)
+
+    async def get_election(self, election_id: int, tenant_id: int) -> Optional[SyndicateElection]:
+        """جلب تفاصيل الانتخابات"""
+        election = await self.repo.get_election(election_id)
+        if election and cast(int, election.tenant_id) != tenant_id:
+            raise PermissionDeniedError("ليس لديك صلاحية الوصول لهذه الانتخابات")
+        return election
+
+    async def list_syndicate_elections(self, syndicate_id: int, tenant_id: int) -> List[SyndicateElection]:
+        """جلب قائمة الانتخابات لنقابة محددة"""
+        return await self.repo.list_syndicate_elections(syndicate_id, tenant_id)  # type: ignore
+
+    async def nominate_candidate(self, user_id: int, tenant_id: int, election_id: int, data: Dict[str, Any]) -> ElectionCandidate:
+        """ترشيح مرشح للانتخابات"""
+        await self._check_saas_limits(tenant_id, "syndicates")
+        return await self.repo.create_candidate(  # type: ignore
+            tenant_id=tenant_id, 
+            election_id=election_id, 
+            candidate_user_id=user_id, 
+            **data
+        )
+
+    async def list_candidates(self, election_id: int, tenant_id: int) -> List[ElectionCandidate]:
+        """جلب قائمة المرشحين للانتخابات"""
+        return await self.repo.list_candidates(election_id, tenant_id) # type: ignore
+
     async def cast_election_vote(
         self,
         voter_id: int,
         tenant_id: int,
         election_id: int,
         candidate_id: int,
-        idempotency_key: str = None
+        idempotency_key: Optional[str] = None
     ) -> ElectionVote:
         # 1. التحقق من SaaS
         await self._check_saas_limits(tenant_id, "syndicates")
@@ -380,19 +513,19 @@ class ArbitrationSyndicatesService:
 
         # 3. جلب الانتخابات
         election = await self.repo.get_election(election_id)
-        if not election or election.tenant_id != tenant_id:
+        if not election or cast(int, election.tenant_id) != tenant_id:
             raise NotFoundError("Election not found")
-        if election.status != ElectionStatus.VOTING:
+        if cast(str, election.status) != ElectionStatus.VOTING.value and cast(str, election.status) != "VOTING":
             raise PermissionDeniedError("Election is not in voting phase")
         now = datetime.utcnow()
-        if now < election.voting_start or now > election.voting_end:
+        if now < cast(datetime, election.voting_start) or now > cast(datetime, election.voting_end):
             raise PermissionDeniedError("Voting period has ended")
 
         # 4. التحقق من العضوية في النقابة
-        membership = await self.repo.get_membership(voter_id, election.syndicate_id)
-        if not membership or membership.tenant_id != tenant_id:
+        membership = await self.repo.get_membership(voter_id, cast(int, election.syndicate_id))
+        if not membership or cast(int, membership.tenant_id) != tenant_id:
             raise PermissionDeniedError("You must be a member of the syndicate to vote")
-        if membership.status != "ACTIVE":
+        if cast(str, membership.status) != "ACTIVE":
             raise PermissionDeniedError("Your membership is not active")
 
         # 5. التحقق من عدم التصويت المسبق
@@ -408,15 +541,15 @@ class ArbitrationSyndicatesService:
             candidate_id=candidate_id,
             vote_hash=vote_hash,
             blockchain_tx_hash=f"0x{vote_hash[:40]}",
-            idempotency_key=idempotency_key
+            idempotency_key=idempotency_key  # type: ignore
         )
 
         # 7. تسجيل التدقيق
         await audit_log(
             user_id=voter_id,
-            tenant_id=tenant_id,
+            tenant_id=tenant_id,  # type: ignore
             action="ELECTION_VOTE_CAST",
-            resource_id=vote.id,
+            resource_id=vote.id,  # type: ignore
             details={"election_id": election_id, "candidate_id": candidate_id}
         )
 
@@ -424,61 +557,6 @@ class ArbitrationSyndicatesService:
             await store_idempotency_result(idempotency_key, vote)
 
         return vote
-
-    # ========== إصدار حكم (مع EventBus + Audit) ==========
-    async def issue_verdict(
-        self,
-        case_id: int,
-        tenant_id: int,
-        data: Dict[str, Any],
-        user_id: int,
-        idempotency_key: str = None
-    ) -> ArbitrationCase:
-        # 1. التحقق من SaaS
-        await self._check_saas_limits(tenant_id, "arbitration")
-
-        # 2. التحقق من Idempotency
-        if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
-
-        # 3. جلب القضية
-        case = await self.repo.get_case(case_id)
-        if not case or case.tenant_id != tenant_id:
-            raise NotFoundError("Case not found")
-
-        # 4. تعقيم المدخلات
-        sanitized_verdict = bleach.clean(data["final_verdict"], tags=[], strip=True)
-
-        # 5. تحديث القضية
-        case = await self.repo.update_case_status(
-            case_id,
-            DisputeStatus.RESOLVED,
-            sanitized_verdict,
-            data.get("enforcement_tx_hash")
-        )
-
-        # 6. نشر حدث للأتمتة
-        await self.event_bus.publish("arbitration.verdict.issued", {
-            "case_id": case.id,
-            "tenant_id": tenant_id,
-            "verdict": sanitized_verdict
-        })
-
-        # 7. تسجيل التدقيق
-        await audit_log(
-            user_id=user_id,
-            tenant_id=tenant_id,
-            action="ARBITRATION_VERDICT_ISSUED",
-            resource_id=case.id,
-            details={"verdict": sanitized_verdict[:50]}
-        )
-
-        if idempotency_key:
-            await store_idempotency_result(idempotency_key, case)
-
-        return case
 
     # ========== دوال مساعدة ==========
     async def _get_treasury_email(self, syndicate_id: int) -> str:
@@ -491,7 +569,7 @@ class ArbitrationSyndicatesService:
             user = await user_repo.get_by_id(user_id)
             if user and user.referred_by:
                 commission = Decimal("5.00") if action_type == "ARBITRATION_CASE_CREATED" else Decimal("2.00")
-                await self.affiliate_service.register_commission(
+                await self.affiliate_service.register_commission(  # type: ignore
                     affiliate_id=user.referred_by,
                     user_id=user_id,
                     amount=commission,

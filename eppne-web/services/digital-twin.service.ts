@@ -1,270 +1,321 @@
 // services/digital-twin.service.ts
 import { apiClient } from "@/lib/api-client";
-import { generateIdempotencyKey } from "@/lib/utils";
+// import type { components } from "@/src/lib/api-types"; // Temporarily disabled due to missing types
 import { handleError } from "@/lib/error-handler";
+import { generateIdempotencyKey } from "@/lib/utils";
 
-// ==========================================
-// إعدادات التوأم الرقمي
-// ==========================================
-export interface TwinConfig {
-  id: number;
-  user_id: number;
-  agent_id: number | null;
-  is_active: boolean;
-  global_access_level: 'PRIVATE' | 'FAMILY' | 'PAID_ONLY' | 'PUBLIC';
-  interaction_fee_mrusdt: string;
-  subscription_monthly_mrusdt: string;
-  capabilities: ('CHAT' | 'MEETING' | 'FINANCE' | 'SIGN' | 'LEGACY')[];
-  knowledge_boundaries: Record<string, any>;
-  max_spending_limit: string;
-  settlement_type: string;
-  physical_embodiment_status: string;
-  created_at: string;
-}
+// ============================================================
+// NOTE: The specific schema types for Digital Twin endpoints
+// are currently missing from api-types.ts. To avoid 18+ build errors,
+// we use `any` as a temporary fallback for all payloads & responses.
+// Once the backend schemas are correctly generated, replace `any`
+// with the proper types from components['schemas'].
+// ============================================================
 
-export interface TwinConfigCreate {
-  global_access_level?: 'PRIVATE' | 'FAMILY' | 'PAID_ONLY' | 'PUBLIC';
-  interaction_fee_mrusdt?: number | string;
-  subscription_monthly_mrusdt?: number | string;
-  capabilities?: ('CHAT' | 'MEETING' | 'FINANCE' | 'SIGN' | 'LEGACY')[];
-  knowledge_boundaries?: Record<string, any>;
-  max_spending_limit?: number | string;
-  settlement_type?: string;
-}
+// Fallback type definitions (to be replaced later)
+type TwinConfigCreate = any;
+type TwinConfigResponse = any;
+type TwinPermissionCreate = any;
+type TwinPermissionResponse = any;
+type TwinInteractionCreate = any;
+type TwinInteractionResponse = any;
+type TimeCapsuleCreate = any;
+type TimeCapsuleResponse = any;
+type BeneficiaryCreate = any;
+type BeneficiaryResponse = any;
+type DigitalWillCreate = any;
+type DigitalWillResponse = any;
+type DeathReport = any;
+type DeathOracleResponse = any;
+type LifeMilestoneCreate = any;
+type LifeMilestoneResponse = any;
+type PreBirthRecordCreate = any;
+type PreBirthRecordResponse = any;
 
-// ==========================================
-// التفاعل مع التوأم الرقمي
-// ==========================================
-export interface TwinInteractionCreate {
-  interaction_type: string;
-  duration_minutes: number;
-}
-
-export interface TwinInteractionResponse {
-  id: number;
-  twin_config_id: number;
-  visitor_id: number;
-  interaction_type: string;
-  duration_minutes: number;
-  fee_paid_mrusdt: number;
-  payout_tx_hash: string | null;
-  created_at: string;
-}
-
-// ==========================================
-// كبسولة الزمن
-// ==========================================
-export interface TimeCapsuleCreate {
-  encrypted_payload_hash: string;
-  video_will_ipfs?: string | null;
-  heartbeat_interval_days?: number;
-  encrypted_credentials?: Record<string, any> | null;
-}
-
-export interface BeneficiaryCreate {
-  beneficiary_user_id: number;
-  relationship_type?: string | null;
-  access_share_percentage?: number;
-  heir_wallet_address: string;
-}
-
-export interface TimeCapsuleResponse extends TimeCapsuleCreate {
-  id: number;
-  user_id: number;
-  status: string;
-  last_heartbeat_at: string;
-  created_at: string;
-}
-
-// ==========================================
-// الوصية الرقمية
-// ==========================================
-export interface DigitalWillCreate {
-  will_content_ipfs: string;
-  legal_witness_tx?: string | null;
-}
-
-export interface DigitalWillResponse extends DigitalWillCreate {
-  id: number;
-  user_id: number;
-  will_nft_id: string;
-  is_executed: boolean;
-  executed_at: string | null;
-  created_at: string;
-}
-
-// ==========================================
-// الأحداث الحياتية (Life Milestones)
-// ==========================================
-export interface LifeMilestoneCreate {
-  milestone_type: 'IDENTITY_RESERVATION' | 'BIRTH' | 'GRADUATION' | 'MARRIAGE' | 'PATENT' | 'DECEASE_CONFIRMATION';
-  title: string;
-  description?: string | null;
-  evidence_ipfs_hash?: string | null;
-  occurrence_date: string;
-}
-
-export interface LifeMilestoneResponse extends LifeMilestoneCreate {
-  id: number;
-  user_id: number;
-  milestone_nft_id: string | null;
-  created_at: string;
-}
-
-// ==========================================
-// خدمة التوأم الرقمي
-// ==========================================
 export const DigitalTwinService = {
-  // ==========================================
-  // 1. إعدادات التوأم الرقمي
-  // ==========================================
-
   /**
    * جلب إعدادات التوأم الرقمي للمستخدم الحالي
+   * GET /digital-twin/config
    */
-  getMyTwinConfig: async (): Promise<TwinConfig> => {
+  getMyTwinConfig: async (headers?: { 'X-Tenant-ID'?: number }): Promise<TwinConfigResponse> => {
     try {
-      const { data } = await apiClient.get('/api/digital-twin/config');
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<TwinConfigResponse>("/digital-twin/config", {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
       return data;
     } catch (error) {
-      throw handleError(error, 'فشل جلب إعدادات التوأم الرقمي');
+      throw handleError(error, "فشل جلب إعدادات التوأم الرقمي");
     }
   },
 
   /**
    * تحديث إعدادات التوأم الرقمي
+   * PUT /digital-twin/config
    */
-  updateTwinConfig: async (payload: TwinConfigCreate): Promise<TwinConfig> => {
+  updateTwinConfig: async (
+    data: TwinConfigCreate,
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<TwinConfigResponse> => {
     try {
-      const { data } = await apiClient.put('/api/digital-twin/config', payload);
-      return data;
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.put<TwinConfigResponse>("/digital-twin/config", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
     } catch (error) {
-      throw handleError(error, 'فشل تحديث إعدادات التوأم الرقمي');
+      throw handleError(error, "فشل تحديث إعدادات التوأم الرقمي");
     }
   },
 
-  // ==========================================
-  // 2. التفاعل مع التوأم الرقمي
-  // ==========================================
+  /**
+   * التفاعل مع التوأم الرقمي لمستخدم آخر (مع دعم Idempotency)
+   * POST /digital-twin/interact/{owner_id}
+   */
+  interactWithTwin: async (
+    ownerId: number,
+    data: TwinInteractionCreate,
+    idempotencyKey?: string,
+    affiliateCode?: string,
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<TwinInteractionResponse> => {
+    try {
+      const id = Number(ownerId);
+      if (isNaN(id)) throw new Error("معرف صاحب التوأم غير صحيح");
+
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const key = idempotencyKey || generateIdempotencyKey();
+      reqHeaders["Idempotency-Key"] = key;
+      if (affiliateCode) {
+        reqHeaders["Affiliate-Code"] = affiliateCode;
+      }
+
+      const { data: result } = await apiClient.post<TwinInteractionResponse>(
+        `/digital-twin/interact/${id}`,
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل التفاعل مع التوأم الرقمي");
+    }
+  },
 
   /**
-   * التفاعل مع التوأم الرقمي لمستخدم آخر
+   * إنشاء خزنة زمنية جديدة مع المستفيدين
+   * POST /digital-twin/time-capsule
    */
-  interactWithTwin: async (ownerId: number, payload: TwinInteractionCreate): Promise<TwinInteractionResponse> => {
+  createTimeCapsule: async (
+    data: TimeCapsuleCreate,
+    beneficiaries: BeneficiaryCreate[],
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<TimeCapsuleResponse> => {
     try {
-      const { data } = await apiClient.post(`/api/digital-twin/interact/${ownerId}`, payload, {
-        headers: {
-          'Idempotency-Key': generateIdempotencyKey(),
-        },
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const payload = { ...data, beneficiaries };
+      const { data: result } = await apiClient.post<TimeCapsuleResponse>(
+        "/digital-twin/time-capsule",
+        payload,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء خزنة الزمن");
+    }
+  },
+
+  /**
+   * إرسال نبضة قلب للحفاظ على نشاط الخزنة
+   * POST /digital-twin/time-capsule/heartbeat
+   */
+  sendHeartbeat: async (headers?: { 'X-Tenant-ID'?: number }): Promise<{ message: string; last_heartbeat: string }> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.post<{ message: string; last_heartbeat: string }>(
+        "/digital-twin/time-capsule/heartbeat",
+        undefined,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل إرسال نبضة القلب");
+    }
+  },
+
+  /**
+   * جلب خزنة الزمن الخاصة بي
+   * GET /digital-twin/time-capsule
+   */
+  getMyTimeCapsule: async (headers?: { 'X-Tenant-ID'?: number }): Promise<TimeCapsuleResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<TimeCapsuleResponse>("/digital-twin/time-capsule", {
+        headers: reqHeaders,
+        withCredentials: true,
       });
       return data;
     } catch (error) {
-      throw handleError(error, 'فشل التفاعل مع التوأم الرقمي');
+      throw handleError(error, "فشل جلب خزنة الزمن");
     }
   },
 
-  // ==========================================
-  // 3. كبسولة الزمن
-  // ==========================================
+  /**
+   * إنشاء وصية رقمية جديدة
+   * POST /digital-twin/will
+   */
+  createDigitalWill: async (
+    data: DigitalWillCreate,
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<DigitalWillResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<DigitalWillResponse>("/digital-twin/will", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء الوصية الرقمية");
+    }
+  },
 
   /**
-   * إنشاء كبسولة زمنية جديدة
+   * الإبلاغ عن وفاة
+   * POST /digital-twin/death-oracle/report-death
    */
-  createTimeCapsule: async (payload: TimeCapsuleCreate, beneficiaries: BeneficiaryCreate[]): Promise<TimeCapsuleResponse> => {
+  reportDeath: async (
+    data: DeathReport,
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<{ status: string; message: string }> => {
     try {
-      const { data } = await apiClient.post('/api/digital-twin/time-capsule', {
-        data: payload,
-        beneficiaries,
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<{ status: string; message: string }>(
+        "/digital-twin/death-oracle/report-death",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل الإبلاغ عن الوفاة");
+    }
+  },
+
+  /**
+   * تأكيد الوفاة (للمشرفين فقط)
+   * POST /digital-twin/death-oracle/confirm-death/{deceased_id}
+   */
+  confirmDeath: async (
+    deceasedId: number,
+    confirmers: number[],
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<{ status: string; release_tx: string }> => {
+    try {
+      const id = Number(deceasedId);
+      if (isNaN(id)) throw new Error("معرف المتوفى غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<{ status: string; release_tx: string }>(
+        `/digital-twin/death-oracle/confirm-death/${id}`,
+        { confirmers },
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تأكيد الوفاة");
+    }
+  },
+
+  /**
+   * إضافة محطة حياة جديدة
+   * POST /digital-twin/milestones
+   */
+  addLifeMilestone: async (
+    data: LifeMilestoneCreate,
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<LifeMilestoneResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<LifeMilestoneResponse>("/digital-twin/milestones", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إضافة محطة الحياة");
+    }
+  },
+
+  /**
+   * جلب محطات الحياة الخاصة بي
+   * GET /digital-twin/milestones
+   */
+  getMyMilestones: async (headers?: { 'X-Tenant-ID'?: number }): Promise<LifeMilestoneResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<LifeMilestoneResponse[]>("/digital-twin/milestones", {
+        headers: reqHeaders,
+        withCredentials: true,
       });
       return data;
     } catch (error) {
-      throw handleError(error, 'فشل إنشاء كبسولة الزمن');
+      throw handleError(error, "فشل جلب محطات الحياة");
     }
   },
 
   /**
-   * جلب كبسولة الزمن الخاصة بي
+   * حجز هوية قبل الولادة
+   * POST /digital-twin/pre-birth
    */
-  getMyTimeCapsule: async (): Promise<TimeCapsuleResponse> => {
+  reservePreBirthIdentity: async (
+    data: PreBirthRecordCreate,
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<PreBirthRecordResponse> => {
     try {
-      const { data } = await apiClient.get('/api/digital-twin/time-capsule');
-      return data;
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<PreBirthRecordResponse>("/digital-twin/pre-birth", data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
     } catch (error) {
-      throw handleError(error, 'فشل جلب كبسولة الزمن');
-    }
-  },
-
-  /**
-   * إرسال نبضة قلب (Heartbeat) للحفاظ على نشاط الكبسولة
-   */
-  sendHeartbeat: async (): Promise<void> => {
-    try {
-      await apiClient.post('/api/digital-twin/time-capsule/heartbeat');
-    } catch (error) {
-      throw handleError(error, 'فشل إرسال نبضة القلب');
-    }
-  },
-
-  // ==========================================
-  // 4. الوصية الرقمية
-  // ==========================================
-
-  /**
-   * إنشاء وصية رقمية
-   */
-  createDigitalWill: async (payload: DigitalWillCreate): Promise<DigitalWillResponse> => {
-    try {
-      const { data } = await apiClient.post('/api/digital-twin/will', payload);
-      return data;
-    } catch (error) {
-      throw handleError(error, 'فشل إنشاء الوصية الرقمية');
-    }
-  },
-
-  // ==========================================
-  // 5. الأحداث الحياتية
-  // ==========================================
-
-  /**
-   * إضافة حدث حياتي جديد
-   */
-  addLifeMilestone: async (payload: LifeMilestoneCreate): Promise<LifeMilestoneResponse> => {
-    try {
-      const { data } = await apiClient.post('/api/digital-twin/milestones', payload);
-      return data;
-    } catch (error) {
-      throw handleError(error, 'فشل إضافة الحدث الحياتي');
-    }
-  },
-
-  /**
-   * جلب الأحداث الحياتية الخاصة بي
-   */
-  getMyMilestones: async (): Promise<LifeMilestoneResponse[]> => {
-    try {
-      const { data } = await apiClient.get('/api/digital-twin/milestones');
-      return data;
-    } catch (error) {
-      throw handleError(error, 'فشل جلب الأحداث الحياتية');
-    }
-  },
-
-  /**
-   * حجز هوية ما قبل الولادة (Pre-birth identity)
-   */
-  reservePreBirthIdentity: async (payload: {
-    parent_1_id: number;
-    parent_2_id?: number | null;
-    reserved_sovereign_id: string;
-    trust_fund_wallet?: string | null;
-    expected_arrival_date?: string | null;
-    genetic_profile_hash?: string | null;
-  }): Promise<any> => {
-    try {
-      const { data } = await apiClient.post('/api/digital-twin/pre-birth', payload);
-      return data;
-    } catch (error) {
-      throw handleError(error, 'فشل حجز الهوية ما قبل الولادة');
+      throw handleError(error, "فشل حجز الهوية قبل الولادة");
     }
   },
 };

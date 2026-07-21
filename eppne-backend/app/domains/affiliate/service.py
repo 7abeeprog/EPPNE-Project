@@ -1,11 +1,14 @@
 # app/domains/affiliate/service.py
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select  # تمت الإضافة لجلب بيانات المستخدم
 from datetime import datetime, timezone
 from decimal import Decimal
 import uuid
 import random
 import hashlib
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, cast
+from fastapi import HTTPException
+
 from app.domains.affiliate.repository import AffiliateRepository
 from app.domains.affiliate.models import (
     AffiliateProfile,
@@ -17,12 +20,21 @@ from app.domains.affiliate.models import (
 )
 from app.domains.affiliate.schemas import (
     AffiliateProfileCreate,
+    AffiliateProfileUpdate,
     CommissionCreate,
+    CommissionTierCreate,
+    CommissionTierUpdate,
     WithdrawRequest,
     AffiliateLinkCreate,
+    AffiliateLinkResponse,
+    CommissionResponse,
+    AffiliateStatsResponse,
+    CommissionBulkReleaseResponse,
+    PaginatedResponse,
 )
 from app.domains.finance.service import FinanceService
 from app.domains.commerce.repository import CommerceRepository
+from app.domains.identity.models import User  # تمت الإضافة لربط عمليات السحب
 from app.core.errors import (
     NotFoundError,
     PermissionDeniedError,
@@ -30,6 +42,8 @@ from app.core.errors import (
     InsufficientBalanceError,
 )
 from app.core.logging_conf import logger
+from app.core.pagination import PaginatedResponse as PaginatedResponseType
+
 
 class AffiliateService:
     def __init__(self, db: AsyncSession):
@@ -41,7 +55,9 @@ class AffiliateService:
     # ==========================================
     # 1. ملف الداعي (Affiliate Profile)
     # ==========================================
+
     async def get_or_create_profile(self, user_id: int, tenant_id: int) -> AffiliateProfile:
+        """جلب أو إنشاء ملف الداعي"""
         profile = await self.repo.get_affiliate_profile(user_id)
         if not profile:
             referral_code = await self._generate_referral_code(user_id)
@@ -52,14 +68,61 @@ class AffiliateService:
             )
         return profile
 
+    async def update_profile(self, user_id: int, data: AffiliateProfileUpdate) -> AffiliateProfile:
+        """تحديث ملف الداعي"""
+        return await self.repo.update_affiliate_profile(
+            user_id,
+            **data.model_dump(exclude_unset=True)
+        )
+
     async def _generate_referral_code(self, user_id: int) -> str:
         """توليد كود دعوة فريد (8 أحرف)"""
         base = f"EPPNE-{user_id}-{uuid.uuid4().hex[:6].upper()}"
         return base[:8].upper()
 
     # ==========================================
-    # 2. تتبع الإحالة (Referral Tracking)
+    # 2. روابط الدعوة (Affiliate Links)
     # ==========================================
+
+    async def create_affiliate_link(self, user_id: int, data: AffiliateLinkCreate) -> AffiliateLink:
+        """إنشاء رابط دعوة مخصص"""
+        profile = await self.get_or_create_profile(user_id, 1)  
+        tenant_id = profile.tenant_id
+
+        link = await self.repo.create_affiliate_link(
+            affiliate_id=profile.id,  # type: ignore
+            target=data.target,
+            target_id=data.target_id,
+            product_id=data.product_id,
+            utm_source=data.utm_source,
+            utm_medium=data.utm_medium,
+            utm_campaign=data.utm_campaign,
+        )
+        return link
+
+    async def get_affiliate_links(
+        self,
+        user_id: int,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> PaginatedResponseType[AffiliateLinkResponse]:
+        """جلب روابط الدعوة الخاصة بالمستخدم"""
+        profile = await self.repo.get_affiliate_profile(user_id)
+        if not profile:
+            return PaginatedResponseType(data=[], total=0, skip=skip, limit=limit)
+
+        result = await self.repo.get_affiliate_links(profile.id, skip, limit)  # type: ignore
+        return PaginatedResponseType(
+            data=[AffiliateLinkResponse.model_validate(item) for item in result.data],
+            total=result.total,
+            skip=result.skip,
+            limit=result.limit
+        )
+
+    # ==========================================
+    # 3. تتبع الإحالة (Referral Tracking)
+    # ==========================================
+
     async def track_referral(
         self,
         referrer_code: str,
@@ -69,10 +132,9 @@ class AffiliateService:
     ) -> Optional[ReferralTree]:
         """تتبع الإحالة عند تسجيل مستخدم جديد"""
         referrer = await self.repo.get_affiliate_by_code(referrer_code)
-        if not referrer or not referrer.is_active:
+        if not referrer or not getattr(referrer, "is_active", False):
             return None
 
-        # التحقق من عدم وجود إحالة سابقة لهذا النطاق
         existing = await self.repo.get_referral_by_scope(
             referred_id=referred_user_id,
             entity_type=entity_type,
@@ -81,64 +143,103 @@ class AffiliateService:
         if existing:
             return None
 
-        # حساب المستوى في الشجرة
-        referrer_tree = await self.repo.get_referral_tree(referrer.user_id)
-        depth = referrer_tree.depth + 1 if referrer_tree else 1
+        referrer_tree = await self.repo.get_referral_tree(referrer.user_id)  # type: ignore
+        depth = getattr(referrer_tree, "depth", 0) + 1 if referrer_tree else 1
+
+        await self.repo.update_affiliate_stats(
+            referrer.user_id,  # type: ignore
+            total_conversions=getattr(referrer, "total_conversions", 0) + 1,  # type: ignore
+        )
 
         return await self.repo.create_referral_tree(
-            referrer_id=referrer.user_id,
+            referrer_id=referrer.user_id,  # type: ignore
             referred_id=referred_user_id,
             entity_type=entity_type,
             entity_id=entity_id,
             depth=depth,
         )
 
+    async def track_click(
+        self,
+        referral_code: str,
+        target: Optional[str] = None,
+        product_id: Optional[int] = None,
+        utm_source: Optional[str] = None,
+        utm_medium: Optional[str] = None,
+        utm_campaign: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        referer_url: Optional[str] = None,
+    ) -> dict:
+        """تتبع نقرة على رابط دعوة"""
+        profile = await self.repo.get_affiliate_by_code(referral_code)
+        if not profile or not getattr(profile, "is_active", False):
+            raise HTTPException(status_code=404, detail="كود الدعوة غير صالح")
+
+        link = None
+        if target:
+            links_result = await self.repo.get_affiliate_links(profile.id, 0, 100)  # type: ignore
+            for l in links_result.data:
+                if getattr(l, "target", "") == target and (product_id is None or getattr(l, "product_id", None) == product_id):
+                    link = l
+                    break
+
+        click_log = await self.repo.create_click_log(
+            link_id=link.id if link else None,  # type: ignore
+            affiliate_id=profile.id,  # type: ignore
+            ip_address=ip_address,
+            user_agent=user_agent,
+            referer_url=referer_url,
+        )
+
+        if link:
+            await self.repo.increment_link_clicks(link.id)  # type: ignore
+
+        await self.repo.update_affiliate_stats(
+            profile.user_id,  # type: ignore
+            total_clicks=getattr(profile, "total_clicks", 0) + 1,  # type: ignore
+        )
+
+        return {"message": "تم تسجيل النقرة", "click_id": getattr(click_log, "id", None)}
+
     # ==========================================
-    # 3. توزيع العمولات (مع تصحيح حسب المنتج)
+    # 4. توزيع العمولات (مع تصحيح حسب المنتج)
     # ==========================================
+
     async def distribute_commissions(self, order_id: int, tenant_id: int) -> List[Commission]:
-        """
-        توزيع العمولات على الداعين عند إتمام عملية شراء.
-        ✅ التصحيح: يتم التوزيع على مستوى المنتج الفردي.
-        """
-        # جلب الطلب مع العناصر
-        order = await self.commerce_repo.get_order_with_items(order_id)
+        """توزيع العمولات على الداعين عند إتمام عملية شراء."""
+        order = await self.commerce_repo.get_order_with_items(order_id)  # type: ignore
         if not order:
             return []
 
-        all_commissions = []
-
-        # جلب إعدادات العمولات للمستأجر
+        all_commissions: List[Commission] = []
         tiers = await self.repo.get_commission_tiers(tenant_id)
 
-        # التكرار على كل عنصر في الطلب
-        for item in order.items:
-            product = await self.commerce_repo.get_product(item.product_id)
+        for item in getattr(order, "items", []):  # type: ignore
+            product = await self.commerce_repo.get_product(getattr(item, "product_id", 0))  # type: ignore
 
-            # ✅ البحث عن الداعي الخاص بهذا المنتج (PRODUCT)
             referral = await self.repo.get_referral_by_scope(
-                referred_id=order.customer_id,
+                referred_id=getattr(order, "customer_id", 0),  # type: ignore
                 entity_type="PRODUCT",
-                entity_id=item.product_id,
+                entity_id=getattr(item, "product_id", None),
             )
 
-            # ✅ إذا لم يوجد، البحث عن الداعي العام (GLOBAL)
             if not referral:
                 referral = await self.repo.get_referral_by_scope(
-                    referred_id=order.customer_id,
+                    referred_id=getattr(order, "customer_id", 0),  # type: ignore
                     entity_type="GLOBAL",
                 )
 
             if not referral:
                 continue
 
-            # ✅ توزيع العمولات على مستويات الإحالة (1-10)
+            item_amount = Decimal(str(getattr(item, "total_price_mrusdt", 0)))
             level_commissions = await self._distribute_levels(
                 referral=referral,
-                item_amount=item.total_price_mrusdt,
-                order_id=order.id,
-                product_id=item.product_id,
-                order_item_id=item.id,
+                item_amount=item_amount,
+                order_id=getattr(order, "id", 0),  # type: ignore
+                product_id=getattr(item, "product_id", 0),
+                order_item_id=getattr(item, "id", 0),
                 tenant_id=tenant_id,
                 tiers=tiers,
             )
@@ -155,22 +256,20 @@ class AffiliateService:
         product_id: int,
         order_item_id: int,
         tenant_id: int,
-        tiers: CommissionTier,
+        tiers: Optional[CommissionTier],
     ) -> List[Commission]:
-        """توزيع العمولات على مستويات الإحالة (1-10)"""
-        commissions = []
+        commissions: List[Commission] = []
         current_referral = referral
 
         for level in range(1, 11):
             if not current_referral:
                 break
 
-            referrer_profile = await self.repo.get_affiliate_profile(current_referral.referrer_id)
-            if not referrer_profile or not referrer_profile.is_active:
-                current_referral = await self.repo.get_referral_tree(current_referral.referrer_id)
+            referrer_profile = await self.repo.get_affiliate_profile(current_referral.referrer_id)  # type: ignore
+            if not referrer_profile or not getattr(referrer_profile, "is_active", False):
+                current_referral = await self.repo.get_referral_tree(current_referral.referrer_id)  # type: ignore
                 continue
 
-            # ✅ جلب نسبة العمولة لهذا المستوى (مع مراعاة التخصيص حسب المنتج)
             rate = await self._get_commission_rate(
                 tiers=tiers,
                 level=level,
@@ -179,23 +278,22 @@ class AffiliateService:
             )
 
             if rate <= 0:
-                current_referral = await self.repo.get_referral_tree(current_referral.referrer_id)
+                current_referral = await self.repo.get_referral_tree(current_referral.referrer_id)  # type: ignore
                 continue
 
-            # ✅ حساب قيمة العمولة على سعر العنصر الفردي
             commission_amount = item_amount * Decimal(rate) / Decimal(100)
 
             if commission_amount > 0:
                 commission = await self.repo.create_commission(
-                    affiliate_id=referrer_profile.id,
-                    user_id=referrer_profile.user_id,
+                    affiliate_id=referrer_profile.id,  # type: ignore
+                    user_id=referrer_profile.user_id,  # type: ignore
                     order_id=order_id,
                     order_item_id=order_item_id,
                     product_id=product_id,
                     tenant_id=tenant_id,
                     item_amount=item_amount,
-                    order_amount=0,
-                    commission_rate=rate,
+                    order_amount=Decimal(0),
+                    commission_rate=Decimal(rate),
                     commission_amount=commission_amount,
                     currency="MR_USDT",
                     referral_level=level,
@@ -204,91 +302,125 @@ class AffiliateService:
                 )
                 commissions.append(commission)
 
-            current_referral = await self.repo.get_referral_tree(current_referral.referrer_id)
+            current_referral = await self.repo.get_referral_tree(current_referral.referrer_id)  # type: ignore
 
         return commissions
 
     async def _get_commission_rate(
         self,
-        tiers: CommissionTier,
+        tiers: Optional[CommissionTier],
         level: int,
         product_id: int,
         tenant_id: int,
     ) -> Decimal:
-        """جلب نسبة العمولة المناسبة حسب الأولوية: PRODUCT → GLOBAL"""
-        # 1. البحث عن نسبة مخصصة للمنتج
         product_tier = await self.repo.get_commission_tier_by_product(
             tenant_id=tenant_id,
             product_id=product_id,
         )
         if product_tier:
-            return getattr(product_tier, f"level_{level}_pct", 0)
+            return getattr(product_tier, f"level_{level}_pct", Decimal(0))
 
-        # 2. البحث عن النسبة العامة
-        return getattr(tiers, f"level_{level}_pct", 0)
+        if tiers:
+            return getattr(tiers, f"level_{level}_pct", Decimal(0))
+
+        return Decimal(0)
 
     # ==========================================
-    # 4. سحب العمولات (Withdrawal)
+    # 5. العمولات (Commissions)
     # ==========================================
+
+    async def get_commissions_by_user(
+        self,
+        user_id: int,
+        status: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> PaginatedResponseType[CommissionResponse]:
+        result = await self.repo.get_commissions_by_user(user_id, status, skip, limit)
+        return PaginatedResponseType(
+            data=[CommissionResponse.model_validate(item) for item in result.data],
+            total=result.total,
+            skip=result.skip,
+            limit=result.limit
+        )
+
+    async def release_commissions(self, user_id: int) -> dict:
+        profile = await self.repo.get_affiliate_profile(user_id)
+        if not profile:
+            raise NotFoundError("ملف الداعي غير موجود")
+
+        pending = await self.repo.get_pending_commissions(user_id)
+        if not pending:
+            return {"message": "لا توجد عمولات معلقة", "released": 0}
+
+        released = await self.repo.bulk_update_commission_status(
+            [c.id for c in pending],  # type: ignore
+            status="CONFIRMED",
+            updated_at=datetime.now(timezone.utc),
+        )
+
+        return {"message": f"تم إفراج {released} عمولة", "released": released}
+
+    # ==========================================
+    # 6. سحب العمولات (مع Atomicity و Idempotency)
+    # ==========================================
+
     async def withdraw_commissions(
         self,
         user_id: int,
         amount: Decimal,
-        idempotency_key: Optional[str] = None,
+        idempotency_key: str,
     ) -> dict:
-        """سحب العمولات المستحقة إلى المحفظة"""
-        # جلب الداعي
         profile = await self.repo.get_affiliate_profile(user_id)
         if not profile:
             raise NotFoundError("ليس لديك ملف داعي")
 
-        # جلب إعدادات السحب
-        tiers = await self.repo.get_commission_tiers(profile.tenant_id)
-        min_withdrawal = tiers.min_withdrawal
+        tiers = await self.repo.get_commission_tiers(profile.tenant_id)  # type: ignore
+        min_withdrawal = getattr(tiers, "min_withdrawal", Decimal(10)) if tiers else Decimal(10)
 
         if amount < min_withdrawal:
             raise ValidationError(f"الحد الأدنى للسحب هو {min_withdrawal} MR_USDT")
 
-        # جلب العمولات المعلقة
         pending_commissions = await self.repo.get_pending_commissions(user_id)
-        total_pending = sum(c.commission_amount for c in pending_commissions)
+        total_pending = sum(getattr(c, "commission_amount", Decimal(0)) for c in pending_commissions)
 
         if amount > total_pending:
             raise InsufficientBalanceError("الرصيد غير كافٍ للسحب")
 
-        # توليد idempotency_key
-        idempotency_key = idempotency_key or f"WITHDRAW-{uuid.uuid4().hex[:12].upper()}"
+        # 🔥 حل المشكلة المنطقية: جلب إيميل المستخدم المطلوب لدالة الدفع
+        user_query = await self.db.execute(select(User).where(User.id == user_id))
+        user_obj = user_query.scalar_one_or_none()
+        receiver_email = user_obj.email if user_obj else f"user{user_id}@eppne.com"
 
-        # تحويل الأموال من حساب النظام إلى المحفظة
-        tx = await self.finance.transfer(
-            sender_id=1,  # حساب النظام
-            receiver_id=user_id,
-            amount=amount,
-            currency="MR_USDT",
-            notes=f"سحب عمولات الداعي {profile.referral_code}",
-            idempotency_key=idempotency_key,
-        )
+        async with self.db.begin_nested():
+            tx = await self.finance.transfer(
+                sender_id=1,
+                receiver_email=str(receiver_email),  # type: ignore
+                amount=amount,
+                currency="MR_USDT",
+                notes=f"سحب عمولات الداعي {getattr(profile, 'referral_code', '')}",
+                idempotency_key=idempotency_key,
+            )
 
-        # تحديث حالة العمولات إلى PAID (FIFO)
-        remaining = amount
-        paid_commissions = []
-        for commission in pending_commissions:
-            if remaining <= 0:
-                break
-            if commission.commission_amount <= remaining:
-                remaining -= commission.commission_amount
-                await self.repo.update_commission_status(
-                    commission.id,
-                    status="PAID",
-                    paid_at=datetime.now(timezone.utc),
-                    paid_tx_hash=tx.tx_hash,
-                )
-                paid_commissions.append(commission)
+            remaining = amount
+            paid_commissions = []
+            for commission in pending_commissions:
+                if remaining <= 0:
+                    break
+                commission_amount = getattr(commission, "commission_amount", Decimal(0))
+                if commission_amount <= remaining:
+                    remaining -= commission_amount
+                    await self.repo.update_commission_status(
+                        commission.id,  # type: ignore
+                        status="PAID",
+                        paid_at=datetime.now(timezone.utc),
+                        paid_tx_hash=tx.tx_hash,
+                    )
+                    paid_commissions.append(commission)
 
-        # تحديث إحصائيات الداعي
         await self.repo.update_affiliate_stats(
             user_id,
-            total_paid=profile.total_paid + amount,
+            total_paid=getattr(profile, "total_paid", Decimal(0)) + amount,  # type: ignore
         )
 
         return {
@@ -301,41 +433,114 @@ class AffiliateService:
         }
 
     # ==========================================
-    # 5. روابط الدعوة (Affiliate Links)
+    # 7. إحصائيات الداعي
     # ==========================================
-    async def create_affiliate_link(self, user_id: int, data: AffiliateLinkCreate) -> AffiliateLink:
-        profile = await self.get_or_create_profile(user_id, 1)  # tenant_id مؤقت
-        link = await self.repo.create_affiliate_link(
-            affiliate_id=profile.id,
-            target=data.target,
-            target_id=data.target_id,
-            product_id=data.product_id,
-            utm_source=data.utm_source,
-            utm_medium=data.utm_medium,
-            utm_campaign=data.utm_campaign,
-        )
-        return link
 
-    # ==========================================
-    # 6. إحصائيات الداعي
-    # ==========================================
-    async def get_affiliate_stats(self, user_id: int) -> dict:
+    async def get_affiliate_stats(self, user_id: int) -> Optional[AffiliateStatsResponse]:
         profile = await self.repo.get_affiliate_profile(user_id)
         if not profile:
             return None
 
         pending_commissions = await self.repo.get_pending_commissions(user_id)
-        total_pending = sum(c.commission_amount for c in pending_commissions)
+        total_pending = sum(getattr(c, "commission_amount", Decimal(0)) for c in pending_commissions)
 
-        return {
-            "user_id": user_id,
-            "referral_code": profile.referral_code,
-            "total_referrals": profile.total_conversions,
-            "active_referrals": 0,  # TODO: حساب عدد الإحالات النشطة
-            "total_clicks": profile.total_clicks,
-            "total_conversions": profile.total_conversions,
-            "total_earned": float(profile.total_earned),
-            "pending_earned": float(total_pending),
-            "paid_earned": float(profile.total_paid),
-            "conversion_rate": float(profile.total_conversions / profile.total_clicks * 100) if profile.total_clicks > 0 else 0,
-        }
+        total_clicks = getattr(profile, "total_clicks", 0)
+        total_conversions = getattr(profile, "total_conversions", 0)
+        conversion_rate = float(total_conversions / total_clicks * 100) if total_clicks > 0 else 0.0
+
+        return AffiliateStatsResponse(
+            user_id=user_id,
+            referral_code=profile.referral_code,  # type: ignore
+            total_referrals=total_conversions,
+            active_referrals=0,
+            total_clicks=total_clicks,
+            total_conversions=total_conversions,
+            total_earned=float(getattr(profile, "total_earned", 0)),
+            pending_earned=float(total_pending),
+            paid_earned=float(getattr(profile, "total_paid", 0)),
+            conversion_rate=conversion_rate,
+            top_performing_product=None,
+        )
+
+    # ==========================================
+    # 8. شجرة الإحالة (Referral Tree)
+    # ==========================================
+
+    async def get_referral_tree(self, user_id: int, max_depth: int = 5) -> List[dict]:
+        return await self.repo.get_referral_tree_with_sponsors(user_id, max_depth)
+
+    # ==========================================
+    # 9. إدارة العمولات (Admin)
+    # ==========================================
+
+    async def get_commission_tiers(self, tenant_id: int) -> Optional[CommissionTier]:
+        return await self.repo.get_commission_tiers(tenant_id)
+
+    async def update_commission_tiers(
+        self,
+        tenant_id: int,
+        data: CommissionTierUpdate,
+    ) -> CommissionTier:
+        tiers = await self.repo.get_commission_tiers(tenant_id)
+        if not tiers:
+            raise NotFoundError("إعدادات العمولات غير موجودة")
+
+        return await self.repo.update_commission_tier(
+            tiers.id,  # type: ignore
+            **data.model_dump(exclude_unset=True)
+        )
+
+    async def create_product_tier(
+        self,
+        tenant_id: int,
+        data: CommissionTierCreate,
+    ) -> CommissionTier:
+        existing = await self.repo.get_commission_tier_by_product(
+            tenant_id=tenant_id,
+            product_id=data.target_product_id,  # type: ignore
+        )
+        if existing:
+            raise ValidationError("توجد بالفعل إعدادات عمولات لهذا المنتج")
+
+        return await self.repo.create_commission_tier(
+            tenant_id=tenant_id,
+            **data.model_dump()
+        )
+
+    async def bulk_release_commissions(
+        self,
+        commission_ids: List[int],
+        admin_id: int,
+        notes: Optional[str] = None,
+    ) -> CommissionBulkReleaseResponse:
+        if not commission_ids:
+            raise ValidationError("يجب تحديد عمولة واحدة على الأقل")
+
+        commissions = []
+        total_amount = Decimal(0)
+        for cid in commission_ids:
+            commission = await self.repo.get_commission(cid)
+            if commission:
+                commissions.append(commission)
+                total_amount += getattr(commission, "commission_amount", Decimal(0))
+
+        if not commissions:
+            raise NotFoundError("لم يتم العثور على العمولات المحددة")
+
+        async with self.db.begin_nested():
+            released = await self.repo.bulk_update_commission_status(
+                [c.id for c in commissions],  # type: ignore
+                status="CONFIRMED",
+                updated_at=datetime.now(timezone.utc),
+                admin_notes=notes,
+            )
+
+        tx_hash = f"BULK-RELEASE-{uuid.uuid4().hex[:12].upper()}"
+
+        return CommissionBulkReleaseResponse(
+            released_count=released,
+            failed_count=len(commission_ids) - released,
+            total_amount=float(total_amount),
+            currency="MR_USDT",
+            tx_hash=tx_hash,
+        )

@@ -1,13 +1,12 @@
 # app/domains/social/router.py (الإصدار النهائي المتكامل)
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional, List
+from typing import Optional, List, cast
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user, get_current_tenant, get_current_superuser
 from app.domains.identity.models import User
 from app.domains.social.service import SocialService
-from app.domains.social.repository import SocialRepository
 from app.domains.social.schemas import *
 from app.domains.academy.models import AcademyTenant
 from app.core.rate_limiter import rate_limit
@@ -24,10 +23,11 @@ async def create_post(
     db: AsyncSession = Depends(get_db)
 ):
     service = SocialService(db)
+    user_id = cast(int, current_user.id)
     post = await service.create_post(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
-        data={**data.model_dump(), "tenant_id": tenant.id}
+        user_id=user_id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
+        data=data.model_dump()
     )
     return post
 
@@ -39,8 +39,8 @@ async def get_feed(
     tenant: AcademyTenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = SocialRepository(db)
-    posts = await repo.get_global_feed(skip, limit)
+    service = SocialService(db)
+    posts = await service.get_feed(cast(int, tenant.id), skip, limit)  # ✅ cast
     return posts
 
 @router.post("/posts/{post_id}/like")
@@ -53,9 +53,10 @@ async def like_post(
     db: AsyncSession = Depends(get_db)
 ):
     service = SocialService(db)
+    user_id = cast(int, current_user.id)
     result = await service.like_post(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
+        user_id=user_id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
         post_id=post_id,
         idempotency_key=idempotency_key
     )
@@ -70,9 +71,10 @@ async def share_post(
     db: AsyncSession = Depends(get_db)
 ):
     service = SocialService(db)
+    user_id = cast(int, current_user.id)
     result = await service.share_post(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
+        user_id=user_id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
         post_id=post_id
     )
     return result
@@ -82,40 +84,57 @@ async def share_post(
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_group(
     data: SocialGroupCreate,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = SocialRepository(db)
-    group = await repo.create_group(tenant_id=tenant.id, creator_id=current_user.id, **data.model_dump())
+    service = SocialService(db)
+    user_id = cast(int, current_user.id)
+    group = await service.create_group(
+        user_id=user_id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
+        data=data.model_dump(),
+        idempotency_key=idempotency_key
+    )
     return group
 
 @router.post("/groups/{group_id}/join")
 @rate_limit(max_requests=20, window_seconds=60)
 async def join_group(
     group_id: int,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = SocialRepository(db)
-    await repo.add_group_member(group_id, current_user.id)
-    return {"message": "انضممت إلى المجموعة"}
+    service = SocialService(db)
+    user_id = cast(int, current_user.id)
+    result = await service.join_group(
+        user_id=user_id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
+        group_id=group_id,
+        idempotency_key=idempotency_key
+    )
+    return result
 
 # ========== Social Contracts ==========
 @router.post("/contracts", response_model=SocialContractResponse, status_code=201)
 @rate_limit(max_requests=5, window_seconds=60)
 async def create_contract(
     data: SocialContractCreate,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = SocialRepository(db)
-    contract = await repo.create_contract(
-        tenant_id=tenant.id,
-        creator_id=current_user.id,
-        **data.model_dump()
+    service = SocialService(db)
+    user_id = cast(int, current_user.id)
+    contract = await service.create_contract(
+        user_id=user_id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
+        data=data.model_dump(),
+        idempotency_key=idempotency_key
     )
     return contract
 
@@ -129,9 +148,10 @@ async def sign_contract(
     db: AsyncSession = Depends(get_db)
 ):
     service = SocialService(db)
+    user_id = cast(int, current_user.id)
     result = await service.sign_contract(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
+        user_id=user_id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
         contract_id=contract_id,
         signature_hash=signature.digital_signature_hash
     )
@@ -146,10 +166,12 @@ async def setup_match_profile(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = SocialRepository(db)
-    profile = await repo.create_or_update_match_profile(
-        user_id=current_user.id,
-        data={**data.model_dump(), "tenant_id": tenant.id}
+    service = SocialService(db)
+    user_id = cast(int, current_user.id)
+    profile = await service.setup_match_profile(
+        user_id=user_id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
+        data=data.model_dump()
     )
     return profile
 
@@ -162,9 +184,10 @@ async def get_match_suggestions(
     db: AsyncSession = Depends(get_db)
 ):
     service = SocialService(db)
+    user_id = cast(int, current_user.id)
     suggestions = await service.get_match_suggestions(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
+        user_id=user_id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
         limit=limit
     )
     return suggestions
@@ -173,16 +196,19 @@ async def get_match_suggestions(
 @rate_limit(max_requests=10, window_seconds=60)
 async def request_connection(
     data: ConnectionRequest,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = SocialRepository(db)
-    conn = await repo.create_connection(
-        user_a_id=current_user.id,
-        user_b_id=data.target_user_id,
+    service = SocialService(db)
+    user_id = cast(int, current_user.id)
+    conn = await service.request_connection(
+        user_id=user_id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
+        target_user_id=data.target_user_id,
         connection_type=data.connection_type.value,
-        tenant_id=tenant.id
+        idempotency_key=idempotency_key
     )
     return conn
 
@@ -193,8 +219,12 @@ async def get_my_connections(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = SocialRepository(db)
-    conns = await repo.get_user_connections(current_user.id)
+    service = SocialService(db)
+    user_id = cast(int, current_user.id)
+    conns = await service.get_my_connections(
+        user_id=user_id,
+        tenant_id=cast(int, tenant.id)  # ✅ cast
+    )
     return conns
 
 # ========== المناسبات والتذكيرات ==========
@@ -207,9 +237,10 @@ async def create_occasion(
     db: AsyncSession = Depends(get_db)
 ):
     service = SocialService(db)
+    user_id = cast(int, current_user.id)
     occasion = await service.create_occasion(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
+        user_id=user_id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
         data=data.model_dump()
     )
     return occasion
@@ -222,10 +253,11 @@ async def get_upcoming_occasions(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = SocialRepository(db)
-    occasions = await repo.get_upcoming_occasions(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
+    service = SocialService(db)
+    user_id = cast(int, current_user.id)
+    occasions = await service.get_upcoming_occasions(
+        user_id=user_id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
         days_ahead=days_ahead
     )
     return occasions
@@ -241,14 +273,15 @@ async def send_digital_gift(
     db: AsyncSession = Depends(get_db)
 ):
     service = SocialService(db)
+    user_id = cast(int, current_user.id)
     gift = await service.send_digital_gift(
-        sender_id=current_user.id,
-        tenant_id=tenant.id,
+        sender_id=user_id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
         receiver_id=data.receiver_id,
         occasion_id=data.occasion_id,
         gift_type=data.gift_type,
         gift_value=data.gift_value_mrusdt,
-        message=data.gift_message,
+        message=data.gift_message or "",  # ✅ إصلاح: تمرير سلسلة فارغة إذا كان None
         metadata=data.gift_metadata,
         idempotency_key=idempotency_key
     )
@@ -264,9 +297,10 @@ async def request_physical_gift(
     db: AsyncSession = Depends(get_db)
 ):
     service = SocialService(db)
+    user_id = cast(int, current_user.id)
     gift = await service.request_physical_gift(
-        sender_id=current_user.id,
-        tenant_id=tenant.id,
+        sender_id=user_id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
         receiver_id=data.receiver_id,
         occasion_id=data.occasion_id,
         product_id=data.product_id,
@@ -288,7 +322,7 @@ async def create_subscription_plan(
 ):
     service = SocialService(db)
     plan = await service.create_group_subscription_plan(
-        tenant_id=tenant.id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
         data=data.model_dump()
     )
     return plan
@@ -306,7 +340,7 @@ async def subscribe_group(
     service = SocialService(db)
     sub = await service.subscribe_group_to_plan(
         group_id=group_id,
-        tenant_id=tenant.id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
         plan_id=data.plan_id,
         duration_months=data.duration_months,
         idempotency_key=idempotency_key
@@ -324,6 +358,6 @@ async def get_group_features(
     service = SocialService(db)
     features = await service.get_group_features(
         group_id=group_id,
-        tenant_id=tenant.id
+        tenant_id=cast(int, tenant.id)  # ✅ cast
     )
     return features

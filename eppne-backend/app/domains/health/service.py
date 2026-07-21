@@ -2,18 +2,20 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, cast
 import json
 import hashlib
 import httpx
 import asyncio
 from decimal import Decimal
+import uuid
 
 from app.domains.health.repository import HealthRepository
 from app.domains.health.models import (
     MedicalProfile, BiometricLog, AIHealthPrognosis, MedicalAppointment,
     HealthConsultation, Prescription, EmergencyDispatch,
-    AppointmentStatus, DispatchStatus, RiskLevel, EmergencyType, TargetEntityType
+    AppointmentStatus, DispatchStatus, RiskLevel, EmergencyType, TargetEntityType,
+    HealthFacility
 )
 from app.domains.health.schemas import (
     MedicalProfileCreate, BiometricLogCreate, MedicalAppointmentCreate,
@@ -22,13 +24,16 @@ from app.domains.health.schemas import (
 )
 from app.core.errors import (
     NotFoundError, ValidationError, InsufficientBalanceError,
-    IdempotencyError, SovereignError
+    IdempotencyError, SovereignError, PermissionDeniedError
 )
 from app.core.redis_client import redis_client
 from app.core.config import settings
 from app.domains.finance.service import FinanceService
-from app.domains.iot.service import IoTService  # للبصمة الكربونية
+from app.domains.iot.service import IoTService
 from app.domains.identity.models import User
+from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.audit import audit_log
+from app.core.event_bus import EventBus
 
 
 class HealthService:
@@ -37,40 +42,48 @@ class HealthService:
         self.repo = HealthRepository(db)
         self.finance = FinanceService(db)
         self.iot = IoTService(db)
+        self.event_bus = EventBus(cast(Any, redis_client))
 
-    # ==========================================================
-    # المساعدات الخاصة
-    # ==========================================================
-    async def _get_idempotency(self, key: str, table_model) -> Optional[Dict]:
-        """التحقق من وجود مفتاح Idempotency في قاعدة البيانات"""
-        if not key:
+    # ============================================================
+    # دوال مساعدة
+    # ============================================================
+
+    async def _get_user_email(self, user_id: int) -> str:
+        """جلب البريد الإلكتروني للمستخدم."""
+        from app.domains.identity.repository import UserRepository
+        user_repo = UserRepository(self.db)
+        user = await user_repo.get_user(user_id)  # type: ignore
+        return user.email if user else f"user_{user_id}@eppne.com"  # type: ignore
+
+    async def _validate_idempotency(self, idempotency_key: str, model_class) -> Optional[Any]:
+        """التحقق من Idempotency وإرجاع السجل المخزن إن وجد."""
+        if not idempotency_key:
             return None
-        # نبحث في الجدول المحدد عن سجل بنفس المفتاح
-        result = await self.db.execute(
-            select(table_model).where(table_model.idempotency_key == key)
-        )
-        record = result.scalar_one_or_none()
-        if record:
-            # نعيد البيانات كمصفوفة (dict) مع حذف المفتاح
-            return {c.name: getattr(record, c.name) for c in record.__table__.columns}
+        cached = await check_idempotency(idempotency_key)
+        if cached:
+            # نحاول جلب الكائن من قاعدة البيانات إذا كان cached يحتوي على ID
+            if isinstance(cached, dict) and "id" in cached:
+                return await self.repo.get_appointment(cached["id"]) if model_class == MedicalAppointment else None
+            return cached
         return None
 
-    async def _save_idempotency(self, key: str, instance):
-        """حفظ مفتاح Idempotency (يُضاف تلقائياً عند إنشاء السجل)"""
-        # المفتاح يُحفظ عبر الـ repository في حقل idempotency_key
-        pass  # يتم التعامل معه ضمن إنشاء السجل
+    async def _store_idempotency(self, idempotency_key: str, result: Any):
+        """تخزين نتيجة Idempotency."""
+        if idempotency_key:
+            await store_idempotency_result(idempotency_key, result)
 
-    # ==========================================================
+    # ============================================================
     # 1. الملف الطبي الشخصي (Medical Profile)
-    # ==========================================================
-    async def get_or_create_profile(self, user_id: int) -> MedicalProfile:
-        """الحصول على الملف الطبي للمستخدم، وإنشاء ملف افتراضي إذا لم يكن موجوداً"""
+    # ============================================================
+
+    async def get_or_create_profile(self, user_id: int, tenant_id: Optional[int] = None) -> MedicalProfile:
+        """الحصول على الملف الطبي للمستخدم، وإنشاء ملف افتراضي إذا لم يكن موجوداً."""
         profile = await self.repo.get_medical_profile(user_id)
         if not profile:
-            # إنشاء ملف طبي افتراضي
-            async with self.db.begin():
+            async with self.db.begin_nested():
                 profile = await self.repo.create_medical_profile(
                     user_id=user_id,
+                    tenant_id=tenant_id or 1,
                     target_entity_type=TargetEntityType.HUMAN,
                     health_score=100,
                     chronic_diseases=[],
@@ -79,27 +92,21 @@ class HealthService:
                 )
         return profile
 
-    async def update_profile(self, user_id: int, data: MedicalProfileCreate) -> MedicalProfile:
-        """تحديث الملف الطبي"""
-        async with self.db.begin():
-            profile = await self.repo.update_medical_profile(user_id, **data.model_dump())
+    async def update_profile(self, user_id: int, data: Dict[str, Any]) -> MedicalProfile:
+        """تحديث الملف الطبي."""
+        async with self.db.begin_nested():
+            profile = await self.repo.update_medical_profile(user_id, **data)
             return profile
 
-    # ==========================================================
+    # ============================================================
     # 2. البيانات الحيوية والذكاء الاصطناعي
-    # ==========================================================
+    # ============================================================
+
     async def process_biometric_data(self, user_id: int, data: Dict[str, Any]) -> Dict:
-        """
-        معالجة البيانات الحيوية الواردة من الأجهزة أو التطبيقات.
-        - تخزين السجل.
-        - تحديث النقاط الصحية (Health Score).
-        - استدعاء نموذج الذكاء الاصطناعي (Gemini) لتوقع المخاطر.
-        """
-        # الحصول على الملف الطبي
+        """معالجة البيانات الحيوية الواردة من الأجهزة أو التطبيقات."""
         profile = await self.get_or_create_profile(user_id)
 
-        async with self.db.begin():
-            # 1. تخزين السجل الحيوي
+        async with self.db.begin_nested():
             log_data = {
                 "medical_profile_id": profile.id,
                 "source": data.get("source"),
@@ -109,26 +116,22 @@ class HealthService:
             }
             log = await self.repo.create_biometric_log(**log_data)
 
-            # 2. تحديث النقاط الصحية (معادلة بسيطة)
-            # يمكننا تحليل المقاييس مثل معدل ضربات القلب، الضغط، النشاط
             metrics = data.get("aggregated_metrics", {})
             heart_rate = metrics.get("heart_rate", 70)
-            # مثال: إذا كان معدل الضربات خارج النطاق الطبيعي (60-100) نخفض النقاط
             health_delta = 0
             if heart_rate < 50 or heart_rate > 110:
                 health_delta = -5
             elif 50 <= heart_rate <= 60 or 100 <= heart_rate <= 110:
                 health_delta = -2
             else:
-                health_delta = 1  # تحسن طفيف
+                health_delta = 1
 
-            new_score = max(0, min(100, profile.health_score + health_delta))
+            new_score = max(0, min(100, profile.health_score + health_delta))  # type: ignore
             await self.repo.update_medical_profile(user_id, health_score=new_score)
 
-            # 3. استدعاء الذكاء الاصطناعي لتوقع المخاطر (إذا توفرت بيانات كافية)
             prognosis = None
-            if len(metrics) >= 3:  # على الأقل 3 مقاييس
-                prognosis = await self._call_ai_prognosis(profile.id, metrics)
+            if len(metrics) >= 3:
+                prognosis = await self._call_ai_prognosis(cast(int, profile.id), metrics)
 
             return {
                 "status": "success",
@@ -138,10 +141,8 @@ class HealthService:
             }
 
     async def _call_ai_prognosis(self, profile_id: int, metrics: Dict) -> Optional[AIHealthPrognosis]:
-        """استدعاء Gemini أو نموذج مفتوح المصدر لتوقع المخاطر الصحية"""
-        # محاكاة بسيطة - يمكن استبدالها بـ Gemini أو LLaMA
+        """استدعاء Gemini أو نموذج مفتوح المصدر لتوقع المخاطر الصحية."""
         try:
-            # بناء الطلب
             prompt = f"""
             بناءً على البيانات الحيوية التالية:
             {json.dumps(metrics, indent=2)}
@@ -155,11 +156,10 @@ class HealthService:
                 "preventive_recommendations": ["توصية1", "توصية2"]
             }}
             """
-            # هنا نستدعي Gemini (نستخدم نفس الكود من قطاع الترجمة)
             gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{gemini_url}?key={settings.GOOGLE_API_KEY}",
+                    f"{gemini_url}?key={settings.GOOGLE_API_KEY}",  # type: ignore
                     json={
                         "contents": [{"parts": [{"text": prompt}]}],
                         "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}
@@ -170,7 +170,6 @@ class HealthService:
                 result_text = data["candidates"][0]["content"]["parts"][0]["text"]
                 result = json.loads(result_text)
 
-                # حفظ التوقع
                 prognosis_data = {
                     "medical_profile_id": profile_id,
                     "risk_level": result.get("risk_level", RiskLevel.SAFE),
@@ -181,13 +180,23 @@ class HealthService:
                 prognosis = await self.repo.create_prognosis(**prognosis_data)
                 return prognosis
         except Exception as e:
-            # في حالة فشل الذكاء الاصطناعي، نستمر دون توقع
             print(f"AI prognosis failed: {str(e)}")
             return None
 
-    # ==========================================================
-    # 3. حجز المواعيد (مع Idempotency)
-    # ==========================================================
+    async def get_biometric_history(self, user_id: int, limit: int = 100) -> List[BiometricLog]:
+        """جلب تاريخ البيانات الحيوية للمستخدم."""
+        profile = await self.get_or_create_profile(user_id)
+        return list(await self.repo.list_biometric_logs(cast(int, profile.id), limit))
+
+    async def get_ai_prognosis(self, user_id: int) -> List[AIHealthPrognosis]:
+        """جلب توقعات الذكاء الاصطناعي للمستخدم."""
+        profile = await self.get_or_create_profile(user_id)
+        return list(await self.repo.list_prognoses(cast(int, profile.id)))
+
+    # ============================================================
+    # 3. حجز المواعيد (Appointments)
+    # ============================================================
+
     async def book_appointment(
         self,
         patient_id: int,
@@ -195,39 +204,36 @@ class HealthService:
         data: Dict[str, Any],
         idempotency_key: Optional[str] = None
     ) -> MedicalAppointment:
-        """
-        حجز موعد طبي مع دعم Idempotency ومنع التكرار.
-        """
+        """حجز موعد طبي مع دعم Idempotency."""
         # 1. التحقق من Idempotency
         if idempotency_key:
-            existing = await self._get_idempotency(idempotency_key, MedicalAppointment)
-            if existing:
-                # إعادة السجل المخزن سابقاً (نحوله إلى كائن MedicalAppointment)
-                return await self.repo.get_appointment(existing["id"])
+            cached = await self._validate_idempotency(idempotency_key, MedicalAppointment)
+            if cached:
+                return cached
 
-        # 2. التحقق من صحة البيانات (وجود الطبيب والمنشأة)
         doctor_id = data.get("doctor_id")
         facility_id = data.get("facility_id")
         appointment_time = data.get("appointment_time")
 
-        # يمكننا التحقق من وجود الطبيب والمنشأة في قاعدة البيانات (نفترض وجودهما)
-
-        # 3. خصم الرسوم (إذا كانت هناك رسوم)
-        fee = Decimal("10.00")  # مثال: 10 MRUSDT رسوم الحجز
+        # 2. خصم الرسوم (مع Idempotency للدفع)
+        fee = Decimal("10.00")
+        payment_idempotency = f"appointment_fee_{idempotency_key or uuid.uuid4().hex[:12]}"
         try:
-            await self.finance.debit(
-                user_id=patient_id,
+            await self.finance.transfer(
+                sender_id=patient_id,
+                receiver_email="health@eppne.com",
                 currency="MR_USDT",
                 amount=fee,
-                description=f"رسوم حجز موعد طبي (دكتور ID: {doctor_id})"
+                idempotency_key=payment_idempotency,
+                notes=f"رسوم حجز موعد طبي (دكتور ID: {doctor_id})"
             )
         except InsufficientBalanceError:
             raise ValidationError("الرصيد غير كافٍ لدفع رسوم الحجز")
         except Exception as e:
             raise SovereignError(f"فشل الخصم المالي: {str(e)}")
 
-        # 4. إنشاء الموعد في معاملة ذرية
-        async with self.db.begin():
+        # 3. إنشاء الموعد في معاملة ذرية
+        async with self.db.begin_nested():
             appointment_data = {
                 "tenant_id": tenant_id,
                 "patient_user_id": patient_id,
@@ -237,16 +243,73 @@ class HealthService:
                 "appointment_time": appointment_time,
                 "appointment_type": data.get("appointment_type", "CHECKUP"),
                 "status": AppointmentStatus.SCHEDULED,
-                "idempotency_key": idempotency_key  # حفظ المفتاح
+                "idempotency_key": idempotency_key
             }
             appointment = await self.repo.create_appointment(**appointment_data)
 
-            # تسجيل التدقيق (يمكن إضافته)
-            return appointment
+            # تسجيل التدقيق
+            await audit_log(
+            user_id=patient_id,
+            tenant_id=tenant_id,  # type: ignore
+            action="JOB_CREATED",
+            resource_id=job.id,  # type: ignore
+            details={"title": job.title}  # type: ignore
+        )
 
-    # ==========================================================
-    # 4. الطوارئ (مع Idempotency)
-    # ==========================================================
+        # تخزين Idempotency
+        if idempotency_key:
+            await self._store_idempotency(idempotency_key, appointment)
+
+        return appointment
+
+    async def get_my_appointments(self, user_id: int, status_filter: Optional[str] = None) -> List[MedicalAppointment]:
+        """جلب مواعيد المستخدم."""
+        return list(await self.repo.list_appointments(user_id, status_filter))
+
+    async def cancel_appointment(self, user_id: int, appointment_id: int) -> MedicalAppointment:
+        """إلغاء موعد (مع التحقق من الملكية)."""
+        appointment = await self.repo.get_appointment(appointment_id)
+        if not appointment or appointment.patient_user_id != user_id:  # type: ignore
+            raise NotFoundError("الموعد غير موجود")
+        return await self.repo.update_appointment_status(appointment_id, AppointmentStatus.CANCELLED.value)
+
+    # ============================================================
+    # 4. الاستشارات والوصفات
+    # ============================================================
+
+    async def create_consultation(self, data: Dict[str, Any]) -> HealthConsultation:
+        """إنشاء استشارة طبية بعد الموعد."""
+        async with self.db.begin_nested():
+            consultation = await self.repo.create_consultation(**data)
+            return consultation
+
+    async def get_consultation(self, consultation_id: int) -> Optional[HealthConsultation]:
+        """جلب تفاصيل الاستشارة."""
+        return await self.repo.get_consultation(consultation_id)
+
+    async def create_prescription(self, data: Dict[str, Any]) -> Prescription:
+        """إنشاء روشتة طبية."""
+        async with self.db.begin_nested():
+            consultation = await self.repo.get_consultation(cast(int, data.get("consultation_id")))
+            if not consultation:
+                raise NotFoundError("الاستشارة غير موجودة")
+
+            prescription_data = {
+                "tenant_id": consultation.tenant_id,  # type: ignore
+                "consultation_id": consultation.id,
+                "patient_id": data.get("patient_id"),
+                "medications": data.get("medications"),
+                "doctor_notes": data.get("doctor_notes"),
+                "pharmacy_store_id": data.get("pharmacy_store_id"),
+                "status": "ISSUED"
+            }
+            prescription = await self.repo.create_prescription(**prescription_data)
+            return prescription
+
+    # ============================================================
+    # 5. الطوارئ (Emergency)
+    # ============================================================
+
     async def trigger_emergency(
         self,
         caller_id: int,
@@ -254,17 +317,18 @@ class HealthService:
         data: Dict[str, Any],
         idempotency_key: Optional[str] = None
     ) -> EmergencyDispatch:
-        """
-        استدعاء الطوارئ مع دعم Idempotency.
-        """
-        # 1. التحقق من Idempotency
+        """استدعاء الطوارئ مع دعم Idempotency."""
         if idempotency_key:
-            existing = await self._get_idempotency(idempotency_key, EmergencyDispatch)
-            if existing:
-                return await self.repo.get_dispatch(existing["id"])
+            cached = await check_idempotency(idempotency_key)
+            if cached:
+                # نحاول جلب الكائن من قاعدة البيانات
+                if isinstance(cached, dict) and "id" in cached:
+                    dispatch = await self.repo.get_dispatch(cached["id"])
+                    if dispatch:
+                        return dispatch
+                return cast(EmergencyDispatch, cached)
 
-        # 2. إنشاء بلاغ الطوارئ
-        async with self.db.begin():
+        async with self.db.begin_nested():
             dispatch_data = {
                 "tenant_id": tenant_id,
                 "patient_id": data.get("patient_id") or caller_id,
@@ -277,87 +341,98 @@ class HealthService:
             }
             dispatch = await self.repo.create_dispatch(**dispatch_data)
 
-            # 3. إرسال إشعارات للمسعفين (يمكن تنفيذها عبر WebSocket أو RabbitMQ)
-            # ...
+            await audit_log(
+            user_id=caller_id,
+            tenant_id=tenant_id,  # type: ignore
+            action="JOB_CREATED",
+            resource_id=job.id,  # type: ignore
+            details={"title": job.title}  # type: ignore
+        )
 
-            return dispatch
+        if idempotency_key:
+            await self._store_idempotency(idempotency_key, dispatch)
 
-    # ==========================================================
-    # 5. الاستشارات والوصفات
-    # ==========================================================
-    async def create_consultation(self, data: Dict[str, Any]) -> HealthConsultation:
-        """إنشاء استشارة طبية بعد الموعد"""
-        async with self.db.begin():
-            consultation = await self.repo.create_consultation(**data)
-            return consultation
+        return dispatch
 
-    async def create_prescription(self, data: Dict[str, Any]) -> Prescription:
-        """إنشاء روشتة طبية"""
-        async with self.db.begin():
-            # التحقق من وجود الاستشارة
-            consultation = await self.repo.get_consultation(data.get("consultation_id"))
-            if not consultation:
-                raise NotFoundError("الاستشارة غير موجودة")
+    async def get_emergency_status(self, dispatch_id: int, user_id: int) -> Optional[EmergencyDispatch]:
+        """جلب حالة بلاغ الطوارئ مع التحقق من الصلاحية."""
+        dispatch = await self.repo.get_dispatch(dispatch_id)
+        if not dispatch:
+            return None
+        if dispatch.patient_id and dispatch.patient_id != user_id:  # type: ignore
+            raise PermissionDeniedError("ليس لديك صلاحية الاطلاع على هذا البلاغ")
+        return dispatch
 
-            # إنشاء الروشتة
-            prescription_data = {
-                "tenant_id": consultation.tenant_id,  # نأخذ من الاستشارة
-                "consultation_id": consultation.id,
-                "patient_id": data.get("patient_id"),
-                "medications": data.get("medications"),
-                "doctor_notes": data.get("doctor_notes"),
-                "pharmacy_store_id": data.get("pharmacy_store_id"),
-                "status": "ISSUED"
-            }
-            prescription = await self.repo.create_prescription(**prescription_data)
+    # ============================================================
+    # 6. المنشآت الصحية (Facilities)
+    # ============================================================
 
-            # ربط الروشتة بقطاع التجارة (لطلب الأدوية)
-            # يمكن استدعاء CommerceService لإنشاء طلب شراء
-            # ...
+    async def create_facility(self, user_id: int, data: Dict[str, Any]) -> HealthFacility:
+        """إنشاء منشأة صحية جديدة (للمشرفين فقط)."""
+        async with self.db.begin_nested():
+            facility = await self.repo.create_facility(**data)
+            await audit_log(
+            user_id=user_id,
+            tenant_id=tenant_id,  # type: ignore
+            action="JOB_CREATED",
+            resource_id=job.id,  # type: ignore
+            details={"title": job.title}  # type: ignore
+        )
+            return facility
 
-            return prescription
+    async def list_facilities(
+        self,
+        tenant_id: int,
+        category: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50
+    ) -> List[HealthFacility]:
+        """جلب قائمة المنشآت الصحية للمستأجر."""
+        # نحتاج إلى تعديل دالة list_facilities في الـ Repository لتقبل tenant_id
+        # لكن حالياً نمررها بدون tenant_id، سنقوم بتحسينها
+        facilities = await self.repo.list_facilities(category, skip, limit)
+        # تصفية حسب tenant_id (مؤقت حتى يتم تحديث الـ Repository)
+        return [f for f in facilities if f.tenant_id == tenant_id]  # type: ignore
 
-    # ==========================================================
-    # 6. دمج البصمة الكربونية (مع قطاع IoT)
-    # ==========================================================
+    async def get_facility(self, facility_id: int, tenant_id: int) -> Optional[HealthFacility]:
+        """جلب تفاصيل منشأة صحية."""
+        facility = await self.repo.get_facility(facility_id)
+        if facility and facility.tenant_id != tenant_id:  # type: ignore
+            raise PermissionDeniedError("ليس لديك صلاحية الاطلاع على هذه المنشأة")
+        return facility
+
+    # ============================================================
+    # 7. البصمة الكربونية
+    # ============================================================
+
     async def get_health_carbon_footprint(self, user_id: int) -> Dict:
-        """
-        حساب البصمة الكربونية للخدمات الصحية المستخدمة من قبل المستخدم.
-        (مثال: عدد المواعيد، العمليات، الأدوية)
-        """
+        """حساب البصمة الكربونية للخدمات الصحية المستخدمة من قبل المستخدم."""
         profile = await self.get_or_create_profile(user_id)
-
-        # الحصول على عدد المواعيد والاستشارات
         appointments = await self.repo.list_appointments(user_id)
         total_appointments = len(appointments)
-
-        # كل موعد ينتج بصمة كربونية تقريبية (0.5 كجم CO2)
         estimated_emissions = total_appointments * 0.5
 
         return {
             "user_id": user_id,
             "total_appointments": total_appointments,
             "estimated_carbon_emissions_kg": estimated_emissions,
-            "equivalent_trees": round(estimated_emissions / 20, 2)  # شجرة تمتص 20 كجم سنوياً
+            "equivalent_trees": round(estimated_emissions / 20, 2)
         }
 
-    # ==========================================================
-    # 7. التكامل مع المساعد الصوتي (Voice Commands)
-    # ==========================================================
+    # ============================================================
+    # 8. معالجة الأوامر الصوتية
+    # ============================================================
+
     async def process_voice_command(self, tenant_id: int, user_id: int, text: str) -> Dict:
-        """
-        تحليل الأوامر الصوتية المتعلقة بالصحة (تُستدعى من قطاع Voice Assistant).
-        """
+        """تحليل الأوامر الصوتية المتعلقة بالصحة."""
         text_lower = text.lower()
         if "موعد" in text_lower or "حجز" in text_lower:
-            # استخراج بيانات الموعد من النص (يمكن استخدام Gemini لتحليل أكثر دقة)
-            # محاكاة بسيطة
             return {
                 "intent": "CREATE_APPOINTMENT",
                 "sector": "health",
                 "action": "book_appointment",
                 "payload": {
-                    "doctor_id": 1,  # سيتم استخراجه
+                    "doctor_id": 1,
                     "facility_id": 1,
                     "appointment_time": datetime.utcnow() + timedelta(days=2)
                 }

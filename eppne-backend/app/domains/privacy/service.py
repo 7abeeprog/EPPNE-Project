@@ -1,21 +1,21 @@
 # app/domains/privacy/service.py
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text  
+from sqlalchemy import text
 from datetime import datetime
 import uuid
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, cast
 
 from app.domains.privacy.repository import PrivacyRepository
 from app.domains.privacy.models import (
-    PrivacySetting, DataConsentLog, DataErasureRequest, 
+    PrivacySetting, DataConsentLog, DataErasureRequest,
     TombstoneRecord, ErasureStatus, ConsentType
 )
 from app.core.errors import PermissionDeniedError, NotFoundError, ValidationError
-from app.core.task_queue import task_queue  
-from app.core.security import is_privacy_officer, encrypt_ip  
+from app.core.task_queue import task_queue
+from app.core.security import is_privacy_officer, encrypt_ip
+from app.core.pagination import PaginatedResponse
 
-# 🔥 فصل الـ Logger ليكون محلياً ومستقلاً
 logger = logging.getLogger("eppne.privacy.service")
 
 class PrivacyService:
@@ -26,27 +26,30 @@ class PrivacyService:
     # ==========================================
     # 1. إعدادات الخصوصية (Privacy Settings)
     # ==========================================
+    async def get_privacy_settings(self, user_id: int) -> PrivacySetting:
+        """جلب إعدادات الخصوصية للمستخدم."""
+        return await self.repo.get_privacy_settings(user_id)
+
     async def update_privacy_settings(self, user_id: int, data: Dict[str, Any]) -> PrivacySetting:
-        """تحديث إعدادات الخصوصية للمستخدم"""
+        """تحديث إعدادات الخصوصية للمستخدم."""
         if "profile_visibility" in data:
             valid_values = ["PUBLIC", "FRIENDS_ONLY", "PRIVATE"]
             if data["profile_visibility"] not in valid_values:
                 raise ValidationError(f"profile_visibility must be one of {valid_values}")
-
         return await self.repo.update_privacy_settings(user_id, data)
 
     # ==========================================
     # 2. تسجيل الموافقات (Consent Logs)
     # ==========================================
     async def record_consent(
-        self, 
-        user_id: int, 
-        consent_type: str, 
-        granted: bool, 
-        ip: Optional[str], 
+        self,
+        user_id: int,
+        consent_type: str,
+        granted: bool,
+        ip: Optional[str],
         user_agent: Optional[str]
     ) -> DataConsentLog:
-        """تسجيل موافقة المستخدم وتشفير الـ IP"""
+        """تسجيل موافقة المستخدم وتشفير الـ IP."""
         if consent_type not in [c.value for c in ConsentType]:
             raise ValidationError(f"Invalid consent_type: {consent_type}")
 
@@ -65,12 +68,12 @@ class PrivacyService:
     # 3. طلبات محو البيانات (Data Erasure)
     # ==========================================
     async def request_data_erasure(
-        self, 
-        user_id: int, 
-        target_module: str, 
+        self,
+        user_id: int,
+        target_module: str,
         reason: Optional[str] = None
     ) -> DataErasureRequest:
-        """إنشاء طلب محو بيانات جديد"""
+        """إنشاء طلب محو بيانات جديد."""
         existing = await self.repo.get_pending_erasure_request(user_id, target_module)
         if existing:
             raise ValidationError("You already have a pending erasure request for this module.")
@@ -82,17 +85,35 @@ class PrivacyService:
             status=ErasureStatus.PENDING
         )
 
+    async def list_erasure_requests(
+        self,
+        user_id: int,
+        skip: int = 0,
+        limit: int = 20,
+        status: Optional[ErasureStatus] = None
+    ) -> PaginatedResponse:
+        """جلب طلبات محو البيانات للمستخدم مع Pagination."""
+        return await self.repo.list_erasure_requests(user_id, skip, limit, status)
+
+    async def get_pending_erasure_requests_for_admin(
+        self,
+        skip: int = 0,
+        limit: int = 20
+    ) -> PaginatedResponse:
+        """جلب طلبات محو البيانات المعلقة (للمشرفين)."""
+        return await self.repo.get_pending_erasure_requests_for_admin(skip, limit)
+
     # ==========================================
     # 4. معالجة طلبات المحو (Admin Only)
     # ==========================================
     async def process_erasure_request(
-        self, 
-        request_id: int, 
-        admin_id: int, 
-        approve: bool, 
+        self,
+        request_id: int,
+        admin_id: int,
+        approve: bool,
         notes: Optional[str] = None
     ) -> DataErasureRequest:
-        """معالجة طلب محو البيانات بمعايير عسكرية للمعاملات"""
+        """معالجة طلب محو البيانات بمعايير عسكرية للمعاملات."""
         if not await is_privacy_officer(admin_id):
             raise PermissionDeniedError("Only Privacy Officers can process erasure requests.")
 
@@ -100,11 +121,12 @@ class PrivacyService:
         if not request_obj:
             raise NotFoundError("Erasure request not found")
 
-        current_status = getattr(request_obj, 'status', None)
+        # تحويل العمود إلى قيمة فعلية لتجنب تحذيرات Pylance
+        current_status = getattr(request_obj, 'status', None)  # type: ignore
         if current_status != ErasureStatus.PENDING:
             raise ValidationError(f"Request is already {current_status}")
 
-        req_user_id = int(getattr(request_obj, 'user_id', 0))
+        req_user_id = cast(int, getattr(request_obj, 'user_id', 0))
         req_module = str(getattr(request_obj, 'target_module', ''))
 
         async with self.db.begin_nested():
@@ -142,7 +164,7 @@ class PrivacyService:
     # 5. مسح البيانات الفعلي (Core Logic)
     # ==========================================
     async def _erase_module_data(self, user_id: int, module: str) -> None:
-        """توجيه الحذف للقطاعات المختارة"""
+        """توجيه الحذف للقطاعات المختارة."""
         try:
             if module in ["identity", "all"]:
                 await self._erase_identity_data(user_id)
@@ -166,7 +188,7 @@ class PrivacyService:
     # 6. المعالج الذري (Atomic Erasure Engine)
     # ==========================================
     async def _delete_and_tombstone(self, table_name: str, user_id: int, user_column: str = "user_id") -> None:
-        """تنفيذ الحذف الذري وإنشاء الشواهد"""
+        """تنفيذ الحذف الذري وإنشاء الشواهد."""
         query = text(f"DELETE FROM {table_name} WHERE {user_column} = :uid RETURNING id")
         result = await self.db.execute(query, {"uid": user_id})
         deleted_ids = result.scalars().all()
@@ -174,7 +196,7 @@ class PrivacyService:
         for rec_id in deleted_ids:
             tombstone = TombstoneRecord(
                 table_name=table_name,
-                record_id=rec_id,  
+                record_id=rec_id,
                 deleted_by_id=user_id,
                 original_tx_hash=f"TOMB-{uuid.uuid4().hex[:16].upper()}"
             )
@@ -186,7 +208,8 @@ class PrivacyService:
     async def _erase_identity_data(self, user_id: int) -> None:
         await self._delete_and_tombstone("privacy_settings", user_id)
         await self._delete_and_tombstone("data_consent_logs", user_id)
-        await self._delete_and_tombstone("data_erasure_requests", user_id)
+        # 🔥 لا نحذف سجلات طلبات المحو للحفاظ على أثر التدقيق
+        # await self._delete_and_tombstone("data_erasure_requests", user_id)
 
     async def _erase_academy_data(self, user_id: int) -> None:
         await self._delete_and_tombstone("academy_enrollments", user_id)
@@ -237,7 +260,6 @@ class PrivacyService:
     async def _async_burn_tokens(self, user_id: int, receipt_tx: str) -> None:
         try:
             logger.info(f"Burning tokens for user {user_id} with receipt {receipt_tx}")
-            # 🔥 الدالة الجديدة المخصصة للـ Hash
             await self.repo.update_tombstone_by_tx(receipt_tx, 'blockchain_burn_status', ErasureStatus.COMPLETED)
         except Exception as e:
             logger.error(f"Failed to burn tokens for user {user_id}: {str(e)}")

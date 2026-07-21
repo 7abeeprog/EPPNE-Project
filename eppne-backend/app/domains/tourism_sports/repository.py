@@ -1,13 +1,15 @@
+# app/domains/tourism_sports/repository.py (الإصدار النهائي المتكامل)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func
 from typing import Optional, List
 from app.domains.tourism_sports.models import (
     TourismDestination, AccommodationFacility, TourismProgram,
     ProgramParticipant, EntertainmentVenue, EntertainmentEvent,
-    NFTTicket, SportsOrganization, PlayerProfile, 
+    NFTTicket, SportsOrganization, PlayerProfile,
     PlayerTransfer, Tournament, SportsMatch
 )
 from app.core.errors import NotFoundError
+
 
 class TourismSportsRepository:
     def __init__(self, db: AsyncSession):
@@ -22,7 +24,10 @@ class TourismSportsRepository:
         return dest
 
     async def list_destinations(self, tenant_id: int, dest_type: Optional[str] = None):
-        query = select(TourismDestination).where(TourismDestination.tenant_id == tenant_id, TourismDestination.is_active == True)
+        query = select(TourismDestination).where(
+            TourismDestination.tenant_id == tenant_id,
+            TourismDestination.is_active == True
+        )
         if dest_type:
             query = query.where(TourismDestination.destination_type == dest_type)
         result = await self.db.execute(query)
@@ -79,6 +84,16 @@ class TourismSportsRepository:
         await self.db.refresh(org)
         return org
 
+    async def get_sports_org(self, org_id: int, tenant_id: int) -> Optional[SportsOrganization]:
+        """جلب منظمة رياضية مع التأكد من tenant_id."""
+        result = await self.db.execute(
+            select(SportsOrganization).where(
+                SportsOrganization.id == org_id,
+                SportsOrganization.tenant_id == tenant_id
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def create_player_profile(self, **kwargs) -> PlayerProfile:
         player = PlayerProfile(**kwargs)
         self.db.add(player)
@@ -87,7 +102,9 @@ class TourismSportsRepository:
         return player
 
     async def get_player_profile(self, user_id: int) -> Optional[PlayerProfile]:
-        result = await self.db.execute(select(PlayerProfile).where(PlayerProfile.user_id == user_id))
+        result = await self.db.execute(
+            select(PlayerProfile).where(PlayerProfile.user_id == user_id)
+        )
         return result.scalar_one_or_none()
 
     async def create_transfer(self, **kwargs) -> PlayerTransfer:
@@ -110,14 +127,23 @@ class TourismSportsRepository:
         await self.db.commit()
         await self.db.refresh(match)
         return match
+
     async def get_program(self, program_id: int) -> Optional[TourismProgram]:
-        result = await self.db.execute(select(TourismProgram).where(TourismProgram.id == program_id))
+        result = await self.db.execute(
+            select(TourismProgram).where(TourismProgram.id == program_id)
+        )
         return result.scalar_one_or_none()
 
     async def count_participants(self, program_id: int) -> int:
-        result = await self.db.execute(select(func.count(ProgramParticipant.id)).where(ProgramParticipant.program_id == program_id))
+        result = await self.db.execute(
+            select(func.count(ProgramParticipant.id)).where(
+                ProgramParticipant.program_id == program_id
+            )
+        )
         return result.scalar_one()
 
     async def get_event(self, event_id: int) -> Optional[EntertainmentEvent]:
-        result = await self.db.execute(select(EntertainmentEvent).where(EntertainmentEvent.id == event_id))
+        result = await self.db.execute(
+            select(EntertainmentEvent).where(EntertainmentEvent.id == event_id)
+        )
         return result.scalar_one_or_none()

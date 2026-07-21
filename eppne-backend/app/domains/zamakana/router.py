@@ -4,15 +4,14 @@
 """
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Header
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import List, Optional, cast
 
 from app.api.deps import get_current_active_user, get_current_tenant
 from app.domains.identity.models import User
 from app.domains.zamakana.service import ZamakanaService
-from app.domains.zamakana.repository import ZamakanaRepository
 from app.domains.zamakana.schemas import *
 from app.domains.academy.models import AcademyTenant
-from app.core.database import get_db, AsyncSessionLocal
+from app.core.database import get_db
 from app.core.rate_limiter import rate_limit
 
 router = APIRouter(prefix="/zamakana", tags=["Zamakana - Time & Knowledge Engine"])
@@ -30,11 +29,13 @@ async def create_node(
 ):
     """إضافة عقدة معرفية جديدة (حقبة، ابتكار، شخص، حدث)."""
     service = ZamakanaService(db)
-    node = await service.create_node(current_user.id, tenant.id, data.model_dump())
+    user_id = cast(int, current_user.id)
+    node = await service.create_node(user_id, cast(int, tenant.id), data.model_dump())  # ✅ cast
     return node
 
 
 @router.get("/nodes", response_model=List[ZamakanaNodeResponse])
+@rate_limit(max_requests=30, window_seconds=60)
 async def list_nodes(
     node_type: Optional[str] = None,
     skip: int = 0,
@@ -43,8 +44,8 @@ async def list_nodes(
     db: AsyncSession = Depends(get_db)
 ):
     """قائمة العقد المعرفية حسب النوع."""
-    repo = ZamakanaRepository(db)
-    nodes = await repo.list_nodes(tenant.id, node_type, skip, limit)
+    service = ZamakanaService(db)
+    nodes = await service.list_nodes(cast(int, tenant.id), node_type, skip, limit)  # ✅ cast
     return nodes
 
 
@@ -55,10 +56,8 @@ async def get_node(
     db: AsyncSession = Depends(get_db)
 ):
     """جلب عقدة معرفية محددة."""
-    repo = ZamakanaRepository(db)
-    node = await repo.get_node(node_id, tenant.id)
-    if not node:
-        raise HTTPException(status_code=404, detail="Node not found")
+    service = ZamakanaService(db)
+    node = await service.get_node(node_id, cast(int, tenant.id))  # ✅ cast
     return node
 
 
@@ -73,10 +72,8 @@ async def update_node(
 ):
     """تحديث عقدة معرفية (يتطلب أن يكون المستخدم هو منشئها)."""
     service = ZamakanaService(db)
-    node = await service.repo.get_node(node_id, tenant.id)
-    if not node or node.created_by != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    updated = await service.repo.update_node(node_id, tenant.id, **data.model_dump())
+    user_id = cast(int, current_user.id)
+    updated = await service.update_node(node_id, cast(int, tenant.id), user_id, data.model_dump())  # ✅ cast
     return updated
 
 
@@ -90,10 +87,8 @@ async def delete_node(
 ):
     """حذف عقدة معرفية (يتطلب أن يكون المستخدم هو منشئها)."""
     service = ZamakanaService(db)
-    node = await service.repo.get_node(node_id, tenant.id)
-    if not node or node.created_by != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    await service.repo.delete_node(node_id, tenant.id)
+    user_id = cast(int, current_user.id)
+    await service.delete_node(node_id, cast(int, tenant.id), user_id)  # ✅ cast
     return {"message": "Node deleted"}
 
 
@@ -108,16 +103,13 @@ async def create_edge(
 ):
     """ربط عقدتين (تأثير سببي أو تأثير الفراشة)."""
     service = ZamakanaService(db)
-    edge = await service.create_edge(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
-        data=data.model_dump(),
-        idempotency_key=idempotency_key
-    )
+    user_id = cast(int, current_user.id)
+    edge = await service.create_edge(user_id, cast(int, tenant.id), data.model_dump(), idempotency_key)  # ✅ cast
     return edge
 
 
 @router.get("/graph", response_model=dict)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_knowledge_graph(
     node_type: Optional[str] = None,
     limit: int = 100,
@@ -126,7 +118,7 @@ async def get_knowledge_graph(
 ):
     """استرجاع شبكة المعرفة (جميع العقد والحواف) للتصور."""
     service = ZamakanaService(db)
-    graph = await service.get_knowledge_graph(tenant.id, node_type, limit)
+    graph = await service.get_knowledge_graph(cast(int, tenant.id), node_type, limit)  # ✅ cast
     return graph
 
 
@@ -142,11 +134,13 @@ async def create_campaign(
 ):
     """إنشاء حملة كوكبية لجمع ساعات تطوعية."""
     service = ZamakanaService(db)
-    campaign = await service.create_campaign(current_user.id, tenant.id, data.model_dump())
+    user_id = cast(int, current_user.id)
+    campaign = await service.create_campaign(user_id, cast(int, tenant.id), data.model_dump())  # ✅ cast
     return campaign
 
 
 @router.get("/campaigns", response_model=List[PlanetaryCampaignResponse])
+@rate_limit(max_requests=30, window_seconds=60)
 async def list_campaigns(
     status: Optional[str] = None,
     skip: int = 0,
@@ -155,8 +149,8 @@ async def list_campaigns(
     db: AsyncSession = Depends(get_db)
 ):
     """قائمة الحملات الكوكبية."""
-    repo = ZamakanaRepository(db)
-    campaigns = await repo.list_campaigns(tenant.id, status, skip, limit)
+    service = ZamakanaService(db)
+    campaigns = await service.list_campaigns(cast(int, tenant.id), status, skip, limit)  # ✅ cast
     return campaigns
 
 
@@ -167,10 +161,8 @@ async def get_campaign(
     db: AsyncSession = Depends(get_db)
 ):
     """جلب حملة كوكبية محددة."""
-    repo = ZamakanaRepository(db)
-    campaign = await repo.get_campaign(campaign_id, tenant.id)
-    if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+    service = ZamakanaService(db)
+    campaign = await service.get_campaign(campaign_id, cast(int, tenant.id))  # ✅ cast
     return campaign
 
 
@@ -185,12 +177,8 @@ async def pledge_time(
 ):
     """التعهد بساعات تطوعية لحملة معينة."""
     service = ZamakanaService(db)
-    pledge = await service.pledge_time(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
-        data=data.model_dump(),
-        idempotency_key=idempotency_key
-    )
+    user_id = cast(int, current_user.id)
+    pledge = await service.pledge_time(user_id, cast(int, tenant.id), data.model_dump(), idempotency_key)  # ✅ cast
     return pledge
 
 
@@ -206,13 +194,8 @@ async def fulfill_pledge(
 ):
     """إثبات إنجاز الساعات المتعهد بها (رفع إثبات)."""
     service = ZamakanaService(db)
-    fulfilled = await service.fulfill_pledge(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
-        pledge_id=pledge_id,
-        proof_hash=data.proof_hash,
-        idempotency_key=idempotency_key
-    )
+    user_id = cast(int, current_user.id)
+    fulfilled = await service.fulfill_pledge(user_id, cast(int, tenant.id), pledge_id, data.proof_hash, idempotency_key)  # ✅ cast
     return fulfilled
 
 
@@ -224,8 +207,8 @@ async def get_campaign_pledges(
     db: AsyncSession = Depends(get_db)
 ):
     """قائمة التعهدات الخاصة بحملة معينة."""
-    repo = ZamakanaRepository(db)
-    pledges = await repo.list_pledges(campaign_id, tenant.id, status)
+    service = ZamakanaService(db)
+    pledges = await service.list_pledges(campaign_id, cast(int, tenant.id), status)  # ✅ cast
     return pledges
 
 
@@ -241,11 +224,13 @@ async def create_scenario(
 ):
     """إنشاء سيناريو مستقبلي جديد."""
     service = ZamakanaService(db)
-    scenario = await service.create_scenario(current_user.id, tenant.id, data.model_dump())
+    user_id = cast(int, current_user.id)
+    scenario = await service.create_scenario(user_id, cast(int, tenant.id), data.model_dump())  # ✅ cast
     return scenario
 
 
 @router.get("/scenarios", response_model=List[FutureScenarioResponse])
+@rate_limit(max_requests=30, window_seconds=60)
 async def list_scenarios(
     status: Optional[str] = None,
     skip: int = 0,
@@ -254,8 +239,8 @@ async def list_scenarios(
     db: AsyncSession = Depends(get_db)
 ):
     """قائمة السيناريوهات المستقبلية."""
-    repo = ZamakanaRepository(db)
-    scenarios = await repo.list_scenarios(tenant.id, status, skip, limit)
+    service = ZamakanaService(db)
+    scenarios = await service.list_scenarios(cast(int, tenant.id), status, skip, limit)  # ✅ cast
     return scenarios
 
 
@@ -266,10 +251,8 @@ async def get_scenario(
     db: AsyncSession = Depends(get_db)
 ):
     """جلب سيناريو مستقبلي محدد."""
-    repo = ZamakanaRepository(db)
-    scenario = await repo.get_scenario(scenario_id, tenant.id)
-    if not scenario:
-        raise HTTPException(status_code=404, detail="Scenario not found")
+    service = ZamakanaService(db)
+    scenario = await service.get_scenario(scenario_id, cast(int, tenant.id))  # ✅ cast
     return scenario
 
 
@@ -286,10 +269,11 @@ async def analyze_scenario(
     طلب تحليل الذكاء الاصطناعي للسيناريو.
     """
     service = ZamakanaService(db)
+    user_id = cast(int, current_user.id)
     scenario = await service.generate_ai_analysis(
         scenario_id=scenario_id,
-        tenant_id=tenant.id,
-        user_id=current_user.id,
+        tenant_id=cast(int, tenant.id),  # ✅ cast
+        user_id=user_id,
         idempotency_key=idempotency_key
     )
     return scenario
@@ -306,9 +290,10 @@ async def add_feedback(
 ):
     """إضافة مراجعة بشرية على تقرير AI للسيناريو."""
     service = ZamakanaService(db)
+    user_id = cast(int, current_user.id)
     feedback = await service.add_human_feedback(
-        user_id=current_user.id,
-        data={"scenario_id": scenario_id, **data.model_dump()}
+        user_id=user_id,
+        data={"scenario_id": scenario_id, "tenant_id": cast(int, tenant.id), **data.model_dump()}  # ✅ cast
     )
     return feedback
 
@@ -323,5 +308,6 @@ async def confirm_scenario(
 ):
     """اعتماد السيناريو بعد المراجعة البشرية."""
     service = ZamakanaService(db)
-    scenario = await service.confirm_scenario(scenario_id, current_user.id)
+    user_id = cast(int, current_user.id)
+    scenario = await service.confirm_scenario(scenario_id, user_id, cast(int, tenant.id))  # ✅ cast
     return scenario

@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getWorkflow, updateWorkflow, toggleWorkflowActive } from '@/services/automation';
+import { getWorkflow, updateWorkflow, toggleWorkflowActive } from '@/services/automation.service';
 import WorkflowBuilder from '@/components/automation/WorkflowBuilder';
 import TriggerSettings from '@/components/automation/TriggerSettings';
 import ExecutionsPage from '@/components/automation/ExecutionsPage'; // المود الجديد
@@ -90,8 +90,8 @@ export default function WorkflowEditorPage() {
   if (isNew) {
     return (
       <div className="h-screen">
-        <WorkflowBuilder 
-          initialWorkflow={undefined} 
+        <WorkflowBuilder
+          initialWorkflow={undefined}
           isNew={true}
         />
       </div>

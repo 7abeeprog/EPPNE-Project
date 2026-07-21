@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createSecret } from '@/services/automation';
+import { createSecret } from '@/services/automation.service';
 import { X, Loader2, Eye, EyeOff, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 

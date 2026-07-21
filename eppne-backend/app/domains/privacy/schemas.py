@@ -17,28 +17,23 @@ class PrivacySettingUpdate(BaseModel):
     """
     profile_visibility: Optional[str] = Field(
         default=None,
-        description="رؤية الملف الشخصي: PUBLIC, FRIENDS_ONLY, PRIVATE",
-        examples=["PUBLIC", "FRIENDS_ONLY", "PRIVATE"]
+        description="رؤية الملف الشخصي: PUBLIC, FRIENDS_ONLY, PRIVATE"
     )
     search_engine_indexing: Optional[bool] = Field(
         default=None,
-        description="السماح بفهرسة الملف الشخصي في محركات البحث",
-        example=True
+        description="السماح بفهرسة الملف الشخصي في محركات البحث"
     )
     allow_ai_training: Optional[bool] = Field(
         default=None,
-        description="السماح باستخدام البيانات لتدريب نماذج الذكاء الاصطناعي",
-        example=False
+        description="السماح باستخدام البيانات لتدريب نماذج الذكاء الاصطناعي"
     )
     allow_targeted_ads: Optional[bool] = Field(
         default=None,
-        description="السماح بعرض إعلانات مخصصة بناءً على النشاط",
-        example=True
+        description="السماح بعرض إعلانات مخصصة بناءً على النشاط"
     )
     share_live_location: Optional[bool] = Field(
         default=None,
-        description="مشاركة الموقع الحي مع التطبيقات المرتبطة",
-        example=False
+        description="مشاركة الموقع الحي مع التطبيقات المرتبطة"
     )
 
     @field_validator("profile_visibility")
@@ -87,14 +82,12 @@ class DataErasureRequestCreate(BaseModel):
     مخطط إنشاء طلب محو بيانات جديد.
     """
     target_module: str = Field(
-        description="القطاع المستهدف: identity, academy, finance, commerce, health, iot, realestate, all",
-        examples=["academy", "finance", "all"]
+        description="القطاع المستهدف: identity, academy, finance, commerce, health, iot, realestate, all"
     )
     reason: Optional[str] = Field(
         default=None,
         description="سبب طلب محو البيانات (اختياري)",
-        max_length=500,
-        examples=["رغبة في حذف بياناتي من النظام"]
+        max_length=500
     )
 
     @field_validator("target_module")
@@ -143,8 +136,8 @@ class PaginatedErasureRequestResponse(BaseModel):
     """
     data: List[DataErasureRequestResponse] = Field(description="قائمة الطلبات")
     total: int = Field(description="إجمالي عدد الطلبات")
-    skip: int = Field(description="عدد العناصر التي تم تخطيها", example=0)
-    limit: int = Field(description="عدد العناصر في الصفحة", example=20)
+    skip: int = Field(default=0, description="عدد العناصر التي تم تخطيها")
+    limit: int = Field(default=20, description="عدد العناصر في الصفحة")
     
     model_config = ConfigDict(
         json_schema_extra={

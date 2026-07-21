@@ -1,17 +1,19 @@
+# app/domains/commerce/schemas.py
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from decimal import Decimal
 
-# ========== Store ==========
+
 # ========== Store ==========
 class StoreCreate(BaseModel):
-    name: str
-    currency: str = "MR_USDT"
-    tax_rate: Decimal = 0
-    settlement_type: str = "WEB2_FIAT"
-    owner_email: Optional[str] = None      # <-- تمت الإضافة هنا
-    is_affiliate_enabled: bool = True      # <-- تمت الإضافة هنا
+    name: str = Field(description="اسم المتجر")
+    currency: str = Field(default="MR_USDT", description="العملة الأساسية")
+    tax_rate: Decimal = Field(default=Decimal("0.0"), description="نسبة الضريبة")
+    settlement_type: str = Field(default="WEB2_FIAT", description="نوع التسوية")
+    owner_email: Optional[str] = Field(default=None, description="البريد الإلكتروني للمالك")
+    is_affiliate_enabled: bool = Field(default=True, description="تفعيل نظام الإحالة")
+
 
 class StoreResponse(StoreCreate):
     id: int
@@ -19,11 +21,14 @@ class StoreResponse(StoreCreate):
     is_active: bool
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+
 # ========== Category ==========
 class CategoryCreate(BaseModel):
-    name: str
-    parent_id: Optional[int] = None
-    description: Optional[str] = None
+    name: str = Field(description="اسم التصنيف")
+    parent_id: Optional[int] = Field(default=None, description="معرف التصنيف الأب")
+    description: Optional[str] = Field(default=None, description="وصف التصنيف")
+
 
 class CategoryResponse(CategoryCreate):
     id: int
@@ -31,17 +36,19 @@ class CategoryResponse(CategoryCreate):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
 # ========== Product & Variant ==========
 class ProductVariantCreate(BaseModel):
-    sku: str
-    attributes: Dict[str, Any] = {}
-    price_mrusdt: Decimal
-    discount_price: Optional[Decimal] = None
-    discount_end_date: Optional[datetime] = None
-    stock_quantity: int = 0
-    is_wholesale_enabled: bool = False
-    wholesale_min_qty: Optional[int] = None
-    wholesale_price_mrusdt: Optional[Decimal] = None
+    sku: str = Field(description="رمز المخزون")
+    attributes: Dict[str, Any] = Field(default_factory=dict, description="خصائص المتغير")
+    price_mrusdt: Decimal = Field(description="السعر")
+    discount_price: Optional[Decimal] = Field(default=None, description="سعر الخصم")
+    discount_end_date: Optional[datetime] = Field(default=None, description="تاريخ انتهاء الخصم")
+    stock_quantity: int = Field(default=0, description="الكمية المتاحة")
+    is_wholesale_enabled: bool = Field(default=False, description="تفعيل السعر بالجملة")
+    wholesale_min_qty: Optional[int] = Field(default=None, description="الحد الأدنى للجملة")
+    wholesale_price_mrusdt: Optional[Decimal] = Field(default=None, description="سعر الجملة")
+
 
 class ProductVariantResponse(ProductVariantCreate):
     id: int
@@ -49,27 +56,30 @@ class ProductVariantResponse(ProductVariantCreate):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
 class ProductCreate(BaseModel):
-    title: str
-    description: Optional[str] = None
-    product_type: str = "PHYSICAL"
-    category_id: Optional[int] = None
-    base_price_mrusdt: Decimal
-    seo_metadata: Dict[str, Any] = {}
-    media_gallery: List[str] = []
-    is_affiliate_eligible: bool = True
-    affiliate_model: str = "FLAT_RATE"
-    affiliate_reward_percentage: Decimal = 0
-    max_affiliate_tiers: int = 1
-    custom_affiliate_tiers: Optional[Dict[str, float]] = None
-    variants: List[ProductVariantCreate] = []
+    title: str = Field(description="عنوان المنتج")
+    description: Optional[str] = Field(default=None, description="وصف المنتج")
+    product_type: str = Field(default="PHYSICAL", description="نوع المنتج")
+    category_id: Optional[int] = Field(default=None, description="معرف التصنيف")
+    base_price_mrusdt: Decimal = Field(description="السعر الأساسي")
+    seo_metadata: Dict[str, Any] = Field(default_factory=dict, description="بيانات SEO")
+    media_gallery: List[str] = Field(default_factory=list, description="معرض الصور")
+    is_affiliate_eligible: bool = Field(default=True, description="صلاحية الإحالة")
+    affiliate_model: str = Field(default="FLAT_RATE", description="نموذج الإحالة")
+    affiliate_reward_percentage: Decimal = Field(default=Decimal("0.0"), description="نسبة مكافأة الإحالة")
+    max_affiliate_tiers: int = Field(default=1, description="أقصى مستويات الإحالة")
+    custom_affiliate_tiers: Optional[Dict[str, float]] = Field(default=None, description="مستويات مخصصة")
+    variants: List[ProductVariantCreate] = Field(default_factory=list, description="المتغيرات")
+
 
 class ProductUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    base_price_mrusdt: Optional[Decimal] = None
-    is_published: Optional[bool] = None
-    is_active: Optional[bool] = None
+    title: Optional[str] = Field(default=None, description="عنوان المنتج")
+    description: Optional[str] = Field(default=None, description="وصف المنتج")
+    base_price_mrusdt: Optional[Decimal] = Field(default=None, description="السعر الأساسي")
+    is_published: Optional[bool] = Field(default=None, description="هل منشور؟")
+    is_active: Optional[bool] = Field(default=None, description="هل نشط؟")
+
 
 class ProductResponse(BaseModel):
     id: int
@@ -81,19 +91,21 @@ class ProductResponse(BaseModel):
     is_published: bool
     is_active: bool
     is_affiliate_eligible: bool
-    variants: List[ProductVariantResponse] = []
+    variants: List[ProductVariantResponse] = Field(default_factory=list)
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
 # ========== Address ==========
 class AddressCreate(BaseModel):
-    country: str
-    city: str
-    state: Optional[str] = None
-    postal_code: Optional[str] = None
-    street_line1: str
-    street_line2: Optional[str] = None
-    is_default: bool = False
+    country: str = Field(description="الدولة")
+    city: str = Field(description="المدينة")
+    state: Optional[str] = Field(default=None, description="الولاية")
+    postal_code: Optional[str] = Field(default=None, description="الرمز البريدي")
+    street_line1: str = Field(description="الشارع الأول")
+    street_line2: Optional[str] = Field(default=None, description="الشارع الثاني")
+    is_default: bool = Field(default=False, description="هل هو العنوان الافتراضي؟")
+
 
 class AddressResponse(AddressCreate):
     id: int
@@ -101,17 +113,21 @@ class AddressResponse(AddressCreate):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
 # ========== Order ==========
 class CartItem(BaseModel):
-    variant_id: int
-    quantity: int = Field(..., gt=0)
+    variant_id: int = Field(description="معرف المتغير")
+    quantity: int = Field(..., gt=0, description="الكمية")
+
 
 class CheckoutRequest(BaseModel):
-    store_id: int
-    items: List[CartItem]
-    shipping_address_id: Optional[int] = None
-    settlement_type: str = "WALLET_DEDUCTION"
-    affiliate_code: Optional[str] = None
+    store_id: int = Field(description="معرف المتجر")
+    items: List[CartItem] = Field(description="عناصر السلة")
+    shipping_address_id: Optional[int] = Field(default=None, description="معرف عنوان الشحن")
+    settlement_type: str = Field(default="WALLET_DEDUCTION", description="نوع التسوية")
+    affiliate_code: Optional[str] = Field(default=None, description="كود الإحالة")
+    idempotency_key: Optional[str] = Field(default=None, description="مفتاح عدم التكرار")
+
 
 class OrderResponse(BaseModel):
     id: int
@@ -124,8 +140,9 @@ class OrderResponse(BaseModel):
     status: str
     settlement_type: str
     created_at: datetime
-    items: List[Dict[str, Any]] = []
+    items: List[Dict[str, Any]] = Field(default_factory=list)
     model_config = ConfigDict(from_attributes=True)
+
 
 # ========== Affiliate ==========
 class AffiliateConfigResponse(BaseModel):
@@ -136,12 +153,14 @@ class AffiliateConfigResponse(BaseModel):
     system_fee_pct: float
     model_config = ConfigDict(from_attributes=True)
 
+
 class AffiliateTreeResponse(BaseModel):
     user_id: int
     sponsor_id: int
     network_depth: int
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
 
 class CommissionResponse(BaseModel):
     id: int
@@ -153,10 +172,14 @@ class CommissionResponse(BaseModel):
     status: str
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
-    # ========== طرق الدفع ==========
+
+
+# ========== طرق الدفع ==========
 class PaymentRequestCreate(BaseModel):
-    order_id: int
-    payment_method: str  # AGENT, VISA, CASH_ON_DELIVERY
+    order_id: int = Field(description="معرف الطلب")
+    payment_method: str = Field(description="طريقة الدفع (AGENT, VISA, CASH_ON_DELIVERY)")
+    idempotency_key: Optional[str] = Field(default=None, description="مفتاح عدم التكرار")
+
 
 class PaymentRequestResponse(BaseModel):
     id: int
@@ -172,8 +195,11 @@ class PaymentRequestResponse(BaseModel):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
 class AgentConfirmPayment(BaseModel):
-    agent_code: str
+    agent_code: str = Field(description="رمز الوكيل")
+    idempotency_key: Optional[str] = Field(default=None, description="مفتاح عدم التكرار")
+
 
 class VisaWebhookPayload(BaseModel):
     transaction_id: str
@@ -183,3 +209,4 @@ class VisaWebhookPayload(BaseModel):
     status: str  # SUCCESS, FAILED
     gateway_reference: str
     signature: str  # لتأكيد صحة الـ webhook
+    idempotency_key: Optional[str] = Field(default=None, description="مفتاح عدم التكرار")

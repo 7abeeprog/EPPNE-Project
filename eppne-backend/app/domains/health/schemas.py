@@ -1,15 +1,28 @@
+# app/domains/health/schemas.py
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from decimal import Decimal
-from app.domains.health.models import FacilityCategory, ConsultationType, AppointmentStatus, RiskLevel, EmergencyType, DispatchStatus, BiometricSource
+from app.domains.health.models import (
+    FacilityCategory, ConsultationType, AppointmentStatus, RiskLevel,
+    EmergencyType, DispatchStatus, BiometricSource, TargetEntityType
+)
 
-# ========== Facilities ==========
+
+# ============================================================
+# المنشآت الصحية (Facilities)
+# ============================================================
+
 class HealthFacilityCreate(BaseModel):
-    name: str
-    facility_category: FacilityCategory
-    specialties: List[str] = []
-    facility_wallet_address: Optional[str] = Field(None, pattern="^0x[a-fA-F0-9]{40}$")
+    name: str = Field(description="اسم المنشأة")
+    facility_category: FacilityCategory = Field(description="تصنيف المنشأة")
+    specialties: List[str] = Field(default_factory=list, description="التخصصات")
+    facility_wallet_address: Optional[str] = Field(
+        default=None,
+        pattern="^0x[a-fA-F0-9]{40}$",
+        description="عنوان المحفظة"
+    )
+
 
 class HealthFacilityResponse(HealthFacilityCreate):
     id: int
@@ -18,15 +31,20 @@ class HealthFacilityResponse(HealthFacilityCreate):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# ========== Medical Profile ==========
+
+# ============================================================
+# الملف الطبي (Medical Profile)
+# ============================================================
+
 class MedicalProfileCreate(BaseModel):
-    blood_type: Optional[str] = None
-    health_score: int = 100
-    athletic_class: Optional[str] = None
-    chronic_diseases: List[str] = []
-    allergies: List[str] = []
-    current_medications: List[str] = []
-    emergency_contact: Optional[str] = None
+    blood_type: Optional[str] = Field(default=None, description="فصيلة الدم")
+    health_score: int = Field(default=100, ge=0, le=100, description="النقاط الصحية")
+    athletic_class: Optional[str] = Field(default=None, description="الفئة الرياضية")
+    chronic_diseases: List[str] = Field(default_factory=list, description="الأمراض المزمنة")
+    allergies: List[str] = Field(default_factory=list, description="الحساسية")
+    current_medications: List[str] = Field(default_factory=list, description="الأدوية الحالية")
+    emergency_contact: Optional[str] = Field(default=None, description="جهة الاتصال في الطوارئ")
+
 
 class MedicalProfileResponse(MedicalProfileCreate):
     id: int
@@ -36,18 +54,24 @@ class MedicalProfileResponse(MedicalProfileCreate):
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# ========== Biometric & AI ==========
+
+# ============================================================
+# البيانات الحيوية والذكاء الاصطناعي
+# ============================================================
+
 class BiometricLogCreate(BaseModel):
-    source: BiometricSource
-    device_id: Optional[str] = None
-    aggregated_metrics: Dict[str, Any]
-    recorded_at: datetime
+    source: BiometricSource = Field(description="مصدر البيانات")
+    device_id: Optional[str] = Field(default=None, description="معرف الجهاز")
+    aggregated_metrics: Dict[str, Any] = Field(description="المقاييس المجمعة")
+    recorded_at: datetime = Field(description="وقت التسجيل")
+
 
 class BiometricLogResponse(BiometricLogCreate):
     id: int
     medical_profile_id: int
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
 
 class AIHealthPrognosisResponse(BaseModel):
     id: int
@@ -59,13 +83,18 @@ class AIHealthPrognosisResponse(BaseModel):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# ========== Appointments ==========
+
+# ============================================================
+# المواعيد الطبية (Appointments)
+# ============================================================
+
 class MedicalAppointmentCreate(BaseModel):
-    doctor_id: int
-    facility_id: int
-    department_id: Optional[int] = None
-    appointment_time: datetime
-    appointment_type: str = "CHECKUP"
+    doctor_id: int = Field(description="معرف الطبيب")
+    facility_id: int = Field(description="معرف المنشأة")
+    department_id: Optional[int] = Field(default=None, description="معرف القسم")
+    appointment_time: datetime = Field(description="وقت الموعد")
+    appointment_type: str = Field(default="CHECKUP", description="نوع الموعد")
+
 
 class MedicalAppointmentResponse(MedicalAppointmentCreate):
     id: int
@@ -75,22 +104,26 @@ class MedicalAppointmentResponse(MedicalAppointmentCreate):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
 class HealthConsultationCreate(BaseModel):
-    appointment_id: int
-    doctor_notes: Optional[str] = None
-    diagnosis: Optional[str] = None
-    prescription_ref: Optional[str] = None
+    appointment_id: int = Field(description="معرف الموعد")
+    doctor_notes: Optional[str] = Field(default=None, description="ملاحظات الطبيب")
+    diagnosis: Optional[str] = Field(default=None, description="التشخيص")
+    prescription_ref: Optional[str] = Field(default=None, description="مرجع الروشتة")
+
 
 class HealthConsultationResponse(HealthConsultationCreate):
     id: int
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
 class PrescriptionCreate(BaseModel):
-    consultation_id: int
-    medications: List[Dict[str, Any]]
-    doctor_notes: Optional[str] = None
-    pharmacy_store_id: Optional[int] = None
+    consultation_id: int = Field(description="معرف الاستشارة")
+    medications: List[Dict[str, Any]] = Field(description="قائمة الأدوية")
+    doctor_notes: Optional[str] = Field(default=None, description="ملاحظات الطبيب")
+    pharmacy_store_id: Optional[int] = Field(default=None, description="معرف الصيدلية")
+
 
 class PrescriptionResponse(PrescriptionCreate):
     id: int
@@ -100,13 +133,18 @@ class PrescriptionResponse(PrescriptionCreate):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# ========== Emergency ==========
+
+# ============================================================
+# الطوارئ (Emergency)
+# ============================================================
+
 class EmergencyDispatchCreate(BaseModel):
-    patient_id: Optional[int] = None
-    facility_id: Optional[int] = None
-    emergency_type: EmergencyType
-    gps_location: Dict[str, float]
-    vital_signs_on_route: Optional[Dict[str, Any]] = None
+    patient_id: Optional[int] = Field(default=None, description="معرف المريض")
+    facility_id: Optional[int] = Field(default=None, description="معرف المنشأة المستهدفة")
+    emergency_type: EmergencyType = Field(description="نوع الطوارئ")
+    gps_location: Dict[str, float] = Field(description="الموقع الجغرافي")
+    vital_signs_on_route: Optional[Dict[str, Any]] = Field(default=None, description="العلامات الحيوية")
+
 
 class EmergencyDispatchResponse(EmergencyDispatchCreate):
     id: int

@@ -12,7 +12,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Eye, EyeOff, UserPlus, CheckCircle, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
-// ✅ التحقق من قوة كلمة المرور (Client-Side Validation)
 const validatePassword = (password: string): { valid: boolean; message: string } => {
   if (password.length < 8) {
     return { valid: false, message: "كلمة المرور يجب أن تحتوي على 8 أحرف على الأقل" };
@@ -43,16 +42,11 @@ export function RegisterForm() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [nameAr, setNameAr] = useState("");
   const [nameEn, setNameEn] = useState("");
-  const [idempotencyKey, setIdempotencyKey] = useState("");
+  const [birthDate, setBirthDate] = useState("");
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const registerMutation = useRegister();
-
-  // توليد مفتاح عدم التكرار عند تحميل المكون
-  useEffect(() => {
-    setIdempotencyKey(crypto.randomUUID());
-  }, []);
 
   const passwordValidation = validatePassword(password);
   const passwordsMatch = password === confirmPassword && password.length > 0;
@@ -70,27 +64,34 @@ export function RegisterForm() {
       toast.error("يرجى تصحيح جميع الأخطاء في النموذج");
       return;
     }
+
     registerMutation.mutate({
       username: username.trim(),
       email: email.trim(),
       password,
       name_ar: nameAr.trim(),
       name_en: nameEn.trim(),
-      idempotency_key: idempotencyKey,
-      referral_code: referralCode, // ✅ إضافة كود الإحالة
+      birth_date: birthDate || new Date().toISOString().split('T')[0],
+      marriage_status: "SINGLE",
+      language_preference: "ar",
+      profile_metadata: {},
+      preferences: {},
     });
   };
 
-  // ✅ معالجة نجاح التسجيل (Toast مع مدة محددة)
-  if (registerMutation.isSuccess) {
-    toast.success("تم إنشاء الحساب بنجاح! يمكنك تسجيل الدخول الآن. 🎉", { duration: 3000 });
-    router.push("/auth/login");
-  }
+  // ✅ معالجة نجاح التسجيل داخل useEffect (الحل الصحيح)
+  useEffect(() => {
+    if (registerMutation.isSuccess) {
+      toast.success("تم إنشاء الحساب بنجاح! يمكنك تسجيل الدخول الآن. 🎉", { duration: 3000 });
+      window.location.href = "/dashboard";
+    }
+  }, [registerMutation.isSuccess, router]);
 
   return (
     <Card className="border-white/10 bg-card/40 backdrop-blur-xl shadow-[0_0_50px_-15px_rgba(var(--primary-rgb),0.2)] rounded-[2rem] overflow-hidden">
       <CardContent className="p-6 md:p-8">
         <form onSubmit={handleSubmit} className="space-y-5">
+          {/* اسم المستخدم */}
           <div className="space-y-2">
             <Label htmlFor="username" className="text-lg font-bold text-foreground">
               اسم المستخدم
@@ -107,6 +108,7 @@ export function RegisterForm() {
             />
           </div>
 
+          {/* البريد الإلكتروني */}
           <div className="space-y-2">
             <Label htmlFor="email" className="text-lg font-bold text-foreground">
               البريد الإلكتروني
@@ -123,6 +125,7 @@ export function RegisterForm() {
             />
           </div>
 
+          {/* الاسم بالعربية */}
           <div className="space-y-2">
             <Label htmlFor="name_ar" className="text-lg font-bold text-foreground">
               الاسم بالعربية
@@ -138,6 +141,7 @@ export function RegisterForm() {
             />
           </div>
 
+          {/* الاسم بالإنجليزية */}
           <div className="space-y-2">
             <Label htmlFor="name_en" className="text-lg font-bold text-foreground">
               الاسم بالإنجليزية
@@ -153,6 +157,22 @@ export function RegisterForm() {
             />
           </div>
 
+          {/* تاريخ الميلاد (حقل إجباري) */}
+          <div className="space-y-2">
+            <Label htmlFor="birthDate" className="text-lg font-bold text-foreground">
+              تاريخ الميلاد
+            </Label>
+            <Input
+              id="birthDate"
+              type="date"
+              value={birthDate}
+              onChange={(e) => setBirthDate(e.target.value)}
+              className="h-14 bg-background/50 border-white/10 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary/50 shadow-inner text-lg rtl:text-right"
+              disabled={registerMutation.isPending}
+            />
+          </div>
+
+          {/* كلمة المرور */}
           <div className="space-y-2">
             <Label htmlFor="password" className="text-lg font-bold text-foreground">
               كلمة المرور
@@ -164,9 +184,8 @@ export function RegisterForm() {
                 placeholder="أدخل كلمة المرور..."
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className={`h-14 bg-background/50 border-white/10 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary/50 shadow-inner text-lg rtl:text-right ${
-                  password.length > 0 && (passwordValidation.valid ? "border-emerald-500/50" : "border-destructive/50")
-                }`}
+                className={`h-14 bg-background/50 border-white/10 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary/50 shadow-inner text-lg rtl:text-right ${password.length > 0 && (passwordValidation.valid ? "border-emerald-500/50" : "border-destructive/50")
+                  }`}
                 disabled={registerMutation.isPending}
                 autoComplete="new-password"
               />
@@ -178,14 +197,12 @@ export function RegisterForm() {
                 {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
               </button>
             </div>
-            {/* ✅ مؤشر قوة كلمة المرور */}
             {password.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: -5 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`flex items-center gap-2 text-sm font-bold mt-1 ${
-                  passwordValidation.valid ? "text-emerald-500" : "text-destructive"
-                }`}
+                className={`flex items-center gap-2 text-sm font-bold mt-1 ${passwordValidation.valid ? "text-emerald-500" : "text-destructive"
+                  }`}
               >
                 {passwordValidation.valid ? (
                   <CheckCircle className="h-4 w-4" />
@@ -197,6 +214,7 @@ export function RegisterForm() {
             )}
           </div>
 
+          {/* تأكيد كلمة المرور */}
           <div className="space-y-2">
             <Label htmlFor="confirmPassword" className="text-lg font-bold text-foreground">
               تأكيد كلمة المرور
@@ -208,9 +226,8 @@ export function RegisterForm() {
                 placeholder="أعد كتابة كلمة المرور..."
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`h-14 bg-background/50 border-white/10 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary/50 shadow-inner text-lg rtl:text-right ${
-                  confirmPassword.length > 0 && (passwordsMatch ? "border-emerald-500/50" : "border-destructive/50")
-                }`}
+                className={`h-14 bg-background/50 border-white/10 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary/50 shadow-inner text-lg rtl:text-right ${confirmPassword.length > 0 && (passwordsMatch ? "border-emerald-500/50" : "border-destructive/50")
+                  }`}
                 disabled={registerMutation.isPending}
                 autoComplete="new-password"
               />
@@ -226,9 +243,8 @@ export function RegisterForm() {
               <motion.div
                 initial={{ opacity: 0, y: -5 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`flex items-center gap-2 text-sm font-bold mt-1 ${
-                  passwordsMatch ? "text-emerald-500" : "text-destructive"
-                }`}
+                className={`flex items-center gap-2 text-sm font-bold mt-1 ${passwordsMatch ? "text-emerald-500" : "text-destructive"
+                  }`}
               >
                 {passwordsMatch ? (
                   <CheckCircle className="h-4 w-4" />

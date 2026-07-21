@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAgentStore } from '@/store/agentStore';
-import { useAuth } from '@/hooks/auth/useAuth';
+import { useCurrentUser } from '@/hooks/auth/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -34,7 +34,7 @@ const agentRoles = [
 ];
 
 export default function AIAgentsPage() {
-  const { user } = useAuth();
+  const user = useCurrentUser();
   const { agents, isLoading, fetchAgents, createAgent, updateAgentStatus, executeAgentAction } = useAgentStore();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -96,7 +96,7 @@ export default function AIAgentsPage() {
   const handleExecuteAction = async (agentId: number, actionType: string) => {
     try {
       // مثال: تنفيذ تحليل مالي (سيتم ربطه لاحقاً)
-      const result = await executeAgentAction(agentId, actionType, { 
+      const result = await executeAgentAction(agentId, actionType, {
         task: 'تحليل الوضع المالي الحالي',
         timestamp: new Date().toISOString(),
       });

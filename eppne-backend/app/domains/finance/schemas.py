@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any, List
 from decimal import Decimal
 from datetime import datetime
 
+
 # ========== المحفظة ==========
 class WalletBalanceResponse(BaseModel):
     balances: Dict[str, float]
@@ -18,7 +19,8 @@ class TransferRequest(BaseModel):
     idempotency_key: Optional[str] = Field(None, description="مفتاح عدم التكرار (يُولد تلقائياً إذا لم يُقدم)")
 
     @field_validator("currency")
-    def validate_currency(cls, v):
+    @classmethod
+    def validate_currency(cls, v: str) -> str:
         allowed = ["MR_POUND", "MR_USDT", "MR7", "NBT", "MRX", "LOYALTY_POINTS"]
         if v not in allowed:
             raise ValueError(f"عملة غير مدعومة. المسموح: {allowed}")
@@ -31,6 +33,8 @@ class TransferResponse(BaseModel):
     currency: str
     status: str
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SwapRequest(BaseModel):
@@ -48,6 +52,8 @@ class SwapResponse(BaseModel):
     rate_applied: float
     tx_hash: str
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class TransactionResponse(BaseModel):
     id: int
@@ -56,7 +62,7 @@ class TransactionResponse(BaseModel):
     amount: float
     currency: str
     status: str
-    notes: Optional[str]
+    notes: Optional[str] = None
     created_at: datetime
     sender_id: Optional[int] = None
     receiver_id: Optional[int] = None
@@ -64,7 +70,6 @@ class TransactionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# 🔥 استجابة Pagination
 class PaginatedTransactionResponse(BaseModel):
     data: List[TransactionResponse]
     total: int

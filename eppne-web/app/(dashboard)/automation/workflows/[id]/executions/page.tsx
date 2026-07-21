@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { getWorkflowExecutions } from '@/services/automation';
+import { getWorkflowExecutions } from '@/services/automation.service';
 import ExecutionStatusBadge from '@/components/automation/ExecutionStatusBadge';
 import { formatDistanceToNow } from 'date-fns/ar';
 import { Loader2, Search, RefreshCw, Eye } from 'lucide-react';
@@ -19,8 +19,8 @@ export default function ExecutionsPage() {
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['executions', workflowId, statusFilter],
-    queryFn: () => getWorkflowExecutions(workflowId, { 
-      limit: 50, 
+    queryFn: () => getWorkflowExecutions(workflowId, {
+      limit: 50,
       ...(statusFilter && { status: statusFilter })
     }).then(res => res.data),
     refetchInterval: 10000, // تحديث كل 10 ثوانٍ لإظهار التنفيذات الجديدة
@@ -28,7 +28,7 @@ export default function ExecutionsPage() {
   });
 
   // فلترة البحث
-  const filtered = data?.filter(exec => 
+  const filtered = data?.filter(exec =>
     exec.id.toString().includes(searchTerm) ||
     exec.triggered_by.includes(searchTerm)
   );
@@ -104,12 +104,12 @@ export default function ExecutionsPage() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {filtered?.map((exec) => {
-                  const duration = exec.finished_at 
+                  const duration = exec.finished_at
                     ? formatDistanceToNow(new Date(exec.finished_at), { addSuffix: true })
-                    : exec.status === 'RUNNING' 
-                      ? 'جارٍ التنفيذ...' 
+                    : exec.status === 'RUNNING'
+                      ? 'جارٍ التنفيذ...'
                       : '—';
-                  
+
                   return (
                     <tr key={exec.id} className="hover:bg-white/5 transition-colors">
                       <td className="px-4 py-3 font-mono text-foreground/80">#{exec.id}</td>

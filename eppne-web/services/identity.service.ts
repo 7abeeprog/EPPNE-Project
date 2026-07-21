@@ -1,134 +1,116 @@
 // services/identity.service.ts
 import { apiClient } from "@/lib/api-client";
-import {
-  LoginRequest,
-  LoginResponse,
-  RegisterRequest,
-  RegisterResponse,
-  UserProfile,
-  UpdateProfileRequest,
-  ChangePasswordRequest,
-  Session,
-  Wallet,
-} from "@/types/identity";
+import type { components } from "@/src/lib/api-types";
 import { handleError } from "@/lib/error-handler";
 
+type UserCreate = components['schemas']['UserCreate'];
+type UserResponse = components['schemas']['UserResponse'];
+type UserUpdate = components['schemas']['UserUpdate'];
+
 export const IdentityService = {
-  // ==========================================
-  // 1. تسجيل الدخول
-  // ==========================================
-  login: async (payload: LoginRequest): Promise<LoginResponse> => {
+  /**
+   * تسجيل مستخدم جديد.
+   * POST /identity/identity/register
+   */
+  register: async (data: UserCreate): Promise<UserResponse> => {
     try {
-      const { data } = await apiClient.post("/identity/login", payload);
+      const { data: result } = await apiClient.post<UserResponse>("/identity/identity/register", data);
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إنشاء الحساب");
+    }
+  },
+
+  /**
+   * تسجيل الدخول باستخدام OAuth2 form data.
+   * POST /identity/identity/login
+   * يتم تعيين email كـ username لتوافق FastAPI.
+   */
+  login: async (email: string, password: string): Promise<any> => {
+    try {
+      const params = new URLSearchParams();
+      params.append("username", email);
+      params.append("password", password);
+      const { data } = await apiClient.post("/identity/identity/login", params.toString(), {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        withCredentials: true,
+      });
       return data;
     } catch (error) {
       throw handleError(error, "فشل تسجيل الدخول");
     }
   },
 
-  // ==========================================
-  // 2. التسجيل (مع Idempotency Key في الهيدر)
-  // ==========================================
-  register: async (payload: RegisterRequest): Promise<RegisterResponse> => {
+  /**
+   * جلب الملف الشخصي للمستخدم الحالي.
+   * GET /identity/identity/me
+   */
+  getMe: async (): Promise<UserResponse> => {
     try {
-      const { data } = await apiClient.post("/identity/register", payload, {
-        headers: {
-          "X-Idempotency-Key": payload.idempotency_key,
-        },
+      const { data } = await apiClient.get<UserResponse>("/identity/identity/me", {
+        withCredentials: true,
       });
-      return data;
-    } catch (error) {
-      throw handleError(error, "فشل إنشاء الحساب");
-    }
-  },
-
-  // ==========================================
-  // 3. تسجيل الخروج
-  // ==========================================
-  logout: async (): Promise<void> => {
-    try {
-      await apiClient.post("/identity/logout");
-    } catch (error) {
-      throw handleError(error, "فشل تسجيل الخروج");
-    }
-  },
-
-  // ==========================================
-  // 4. تجديد التوكن
-  // ==========================================
-  refreshToken: async (): Promise<{ access_token: string }> => {
-    try {
-      const { data } = await apiClient.post("/identity/refresh");
-      return data;
-    } catch (error) {
-      throw handleError(error, "فشل تجديد الجلسة");
-    }
-  },
-
-  // ==========================================
-  // 5. الملف الشخصي
-  // ==========================================
-  getProfile: async (): Promise<UserProfile> => {
-    try {
-      const { data } = await apiClient.get("/identity/me");
       return data;
     } catch (error) {
       throw handleError(error, "فشل جلب الملف الشخصي");
     }
   },
 
-  updateProfile: async (payload: UpdateProfileRequest): Promise<UserProfile> => {
+  /**
+   * تحديث الملف الشخصي للمستخدم الحالي.
+   * PUT /identity/identity/me
+   */
+  updateMe: async (data: UserUpdate): Promise<UserResponse> => {
     try {
-      const { data } = await apiClient.put("/identity/me", payload);
-      return data;
+      const { data: result } = await apiClient.put<UserResponse>("/identity/identity/me", data, {
+        withCredentials: true,
+      });
+      return result;
     } catch (error) {
       throw handleError(error, "فشل تحديث الملف الشخصي");
     }
   },
 
-  // ==========================================
-  // 6. تغيير كلمة المرور
-  // ==========================================
-  changePassword: async (payload: ChangePasswordRequest): Promise<void> => {
+  /**
+   * تسجيل الخروج (إبطال الجلسة الحالية).
+   * POST /identity/identity/logout
+   */
+  logout: async (): Promise<void> => {
     try {
-      await apiClient.post("/identity/change-password", payload);
+      await apiClient.post("/identity/identity/logout", undefined, {
+        withCredentials: true,
+      });
     } catch (error) {
-      throw handleError(error, "فشل تغيير كلمة المرور");
+      throw handleError(error, "فشل تسجيل الخروج");
     }
   },
 
-  // ==========================================
-  // 7. الجلسات
-  // ==========================================
-  getSessions: async (skip: number = 0, limit: number = 20): Promise<Session[]> => {
+  /**
+   * تجديد رمز الوصول (Access Token).
+   * POST /identity/identity/refresh
+   */
+  refresh: async (): Promise<any> => {
     try {
-      const { data } = await apiClient.get("/identity/sessions", {
-        params: { skip, limit },
+      const { data } = await apiClient.post("/identity/identity/refresh", undefined, {
+        withCredentials: true,
       });
       return data;
     } catch (error) {
-      throw handleError(error, "فشل جلب الجلسات");
+      throw handleError(error, "فشل تجديد الجلسة");
     }
   },
 
-  revokeAllSessions: async (): Promise<{ message: string; revoked_count: number }> => {
+  /**
+   * إبطال جميع الجلسات النشطة.
+   * POST /identity/identity/revoke-all
+   */
+  revokeAll: async (): Promise<void> => {
     try {
-      const { data } = await apiClient.post("/identity/revoke-all");
-      return data;
+      await apiClient.post("/identity/identity/revoke-all", undefined, {
+        withCredentials: true,
+      });
     } catch (error) {
       throw handleError(error, "فشل إبطال الجلسات");
-    }
-  },
-
-  // ==========================================
-  // 8. المحفظة
-  // ==========================================
-  getWallet: async (): Promise<Wallet> => {
-    try {
-      const { data } = await apiClient.get("/identity/wallet");
-      return data;
-    } catch (error) {
-      throw handleError(error, "فشل جلب المحفظة");
     }
   },
 };

@@ -2,15 +2,14 @@
 """
 مسارات (Endpoints) قطاع اللوجيستيات والمخازن – النسخة الذهبية
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional, List
+from typing import Optional, List, cast
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user, get_current_tenant, get_current_superuser
 from app.domains.identity.models import User
 from app.domains.logistics.service import LogisticsService
-from app.domains.logistics.repository import LogisticsRepository
 from app.domains.logistics.schemas import *
 from app.domains.academy.models import AcademyTenant
 from app.core.rate_limiter import rate_limit
@@ -18,12 +17,12 @@ from app.core.rate_limiter import rate_limit
 router = APIRouter(prefix="/logistics", tags=["Sovereign Logistics & Warehousing"])
 
 
-# ========================================================================
+# ============================================================
 # 1. المخازن (Warehouses)
-# ========================================================================
+# ============================================================
 
 @router.post("/warehouses", response_model=WarehouseResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_warehouse(
     data: WarehouseCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -31,41 +30,56 @@ async def create_warehouse(
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
-    warehouse = await service.create_warehouse(current_user.id, tenant.id, data.model_dump())
+    warehouse = await service.create_warehouse(
+        user_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
+        data=data.model_dump()
+    )
     return warehouse
 
 
 @router.get("/warehouses", response_model=List[WarehouseResponse])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def list_warehouses(
-    warehouse_type: Optional[str] = None,
-    is_active: Optional[bool] = None,
-    skip: int = 0,
-    limit: int = 50,
+    warehouse_type: Optional[WarehouseType] = Query(None, description="نوع المخزن"),
+    is_active: Optional[bool] = Query(None, description="هل المخزن نشط؟"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    warehouses = await repo.list_warehouses(tenant.id, warehouse_type, is_active, skip, min(limit, 200))
+    service = LogisticsService(db)
+    warehouses = await service.list_warehouses(
+        tenant_id=cast(int, tenant.id),
+        warehouse_type=warehouse_type,
+        is_active=is_active,
+        skip=skip,
+        limit=limit
+    )
     return warehouses
 
 
 @router.get("/warehouses/{warehouse_id}", response_model=WarehouseResponse)
-@rate_limit(max_requests=50, window=60)
+@rate_limit(max_requests=50, window_seconds=60)
 async def get_warehouse(
     warehouse_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    warehouse = await repo.get_warehouse(warehouse_id, tenant.id)
+    service = LogisticsService(db)
+    warehouse = await service.get_warehouse(
+        warehouse_id=warehouse_id,
+        tenant_id=cast(int, tenant.id)
+    )
     if not warehouse:
         raise HTTPException(status_code=404, detail="Warehouse not found")
     return warehouse
 
 
 @router.put("/warehouses/{warehouse_id}", response_model=WarehouseResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def update_warehouse(
     warehouse_id: int,
     data: WarehouseUpdate,
@@ -73,32 +87,33 @@ async def update_warehouse(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    warehouse = await repo.get_warehouse(warehouse_id, tenant.id)
-    if not warehouse:
-        raise HTTPException(status_code=404, detail="Warehouse not found")
-    updated = await repo.update_warehouse(warehouse_id, tenant.id, **data.model_dump(exclude_unset=True))
-    return updated
+    service = LogisticsService(db)
+    warehouse = await service.update_warehouse(
+        warehouse_id=warehouse_id,
+        tenant_id=cast(int, tenant.id),
+        data=data.model_dump(exclude_unset=True)
+    )
+    return warehouse
 
 
 @router.delete("/warehouses/{warehouse_id}")
-@rate_limit(max_requests=5, window=60)
+@rate_limit(max_requests=5, window_seconds=60)
 async def delete_warehouse(
     warehouse_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    warehouse = await repo.get_warehouse(warehouse_id, tenant.id)
-    if not warehouse:
-        raise HTTPException(status_code=404, detail="Warehouse not found")
-    await repo.delete_warehouse(warehouse_id, tenant.id)
+    service = LogisticsService(db)
+    await service.delete_warehouse(
+        warehouse_id=warehouse_id,
+        tenant_id=cast(int, tenant.id)
+    )
     return {"message": "Warehouse deleted"}
 
 
 @router.post("/warehouses/{warehouse_id}/zones", response_model=WarehouseZoneResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def create_warehouse_zone(
     warehouse_id: int,
     data: WarehouseZoneCreate,
@@ -106,21 +121,21 @@ async def create_warehouse_zone(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    zone = await repo.create_zone(
-        tenant_id=tenant.id,
+    service = LogisticsService(db)
+    zone = await service.create_warehouse_zone(
+        tenant_id=cast(int, tenant.id),
         warehouse_id=warehouse_id,
-        **data.model_dump()
+        data=data.model_dump()
     )
     return zone
 
 
-# ========================================================================
+# ============================================================
 # 2. المخزون (Inventory)
-# ========================================================================
+# ============================================================
 
 @router.post("/inventory/receive", response_model=InventoryTransactionResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def receive_inventory(
     data: InventoryReceive,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -130,8 +145,8 @@ async def receive_inventory(
 ):
     service = LogisticsService(db)
     transaction = await service.receive_inventory(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
+        user_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
@@ -139,7 +154,7 @@ async def receive_inventory(
 
 
 @router.post("/inventory/issue", response_model=InventoryTransactionResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def issue_inventory(
     data: InventoryIssue,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
@@ -149,8 +164,8 @@ async def issue_inventory(
 ):
     service = LogisticsService(db)
     transaction = await service.issue_inventory(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
+        user_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
@@ -158,7 +173,7 @@ async def issue_inventory(
 
 
 @router.post("/inventory/adjust/{inventory_item_id}", response_model=InventoryTransactionResponse)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def adjust_inventory(
     inventory_item_id: int,
     data: InventoryAdjust,
@@ -169,8 +184,8 @@ async def adjust_inventory(
 ):
     service = LogisticsService(db)
     transaction = await service.adjust_inventory(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
+        user_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
         inventory_item_id=inventory_item_id,
         new_quantity=data.new_quantity,
         note=data.note,
@@ -180,78 +195,101 @@ async def adjust_inventory(
 
 
 @router.get("/inventory", response_model=List[InventoryItemResponse])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def list_inventory(
-    warehouse_id: Optional[int] = None,
-    status: Optional[InventoryStatus] = None,
-    product_category: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 50,
+    warehouse_id: Optional[int] = Query(None, description="معرف المخزن"),
+    status: Optional[InventoryStatus] = Query(None, description="حالة المخزون"),
+    product_category: Optional[str] = Query(None, description="تصنيف المنتج"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    items = await repo.list_inventory(tenant.id, warehouse_id, status, product_category, skip, min(limit, 200))
+    service = LogisticsService(db)
+    items = await service.list_inventory(
+        tenant_id=cast(int, tenant.id),
+        warehouse_id=warehouse_id,
+        status=status,
+        product_category=product_category,
+        skip=skip,
+        limit=limit
+    )
     return items
 
 
 @router.get("/inventory/low-stock", response_model=List[InventoryItemResponse])
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_low_stock(
-    warehouse_id: Optional[int] = None,
+    warehouse_id: Optional[int] = Query(None, description="معرف المخزن"),
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    items = await repo.get_low_stock_items(tenant.id, warehouse_id)
+    service = LogisticsService(db)
+    items = await service.get_low_stock_items(
+        tenant_id=cast(int, tenant.id),
+        warehouse_id=warehouse_id
+    )
     return items
 
 
 @router.get("/inventory/expired", response_model=List[InventoryItemResponse])
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_expired(
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    items = await repo.get_expired_items(tenant.id)
+    service = LogisticsService(db)
+    items = await service.get_expired_items(tenant_id=cast(int, tenant.id))
     return items
 
 
 @router.get("/inventory/{item_id}", response_model=InventoryItemResponse)
-@rate_limit(max_requests=50, window=60)
+@rate_limit(max_requests=50, window_seconds=60)
 async def get_inventory_item(
     item_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    item = await repo.get_inventory_item(item_id, tenant.id)
+    service = LogisticsService(db)
+    item = await service.get_inventory_item(
+        inventory_item_id=item_id,
+        tenant_id=cast(int, tenant.id)
+    )
     if not item:
         raise HTTPException(status_code=404, detail="Inventory item not found")
     return item
 
 
 @router.get("/inventory/{item_id}/transactions", response_model=List[InventoryTransactionResponse])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def get_inventory_transactions(
     item_id: int,
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    transactions = await repo.list_transactions(tenant.id, inventory_item_id=item_id, skip=skip, limit=min(limit, 200))
+    service = LogisticsService(db)
+    transactions = await service.get_inventory_transactions(
+        tenant_id=cast(int, tenant.id),
+        inventory_item_id=item_id,
+        skip=skip,
+        limit=limit
+    )
     return transactions
 
 
-# ========================================================================
+# ============================================================
 # 3. المعدات (Equipment)
-# ========================================================================
+# ============================================================
 
 @router.post("/equipment", response_model=EquipmentResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def create_equipment(
     data: EquipmentCreate,
     tenant: AcademyTenant = Depends(get_current_tenant),
@@ -259,42 +297,58 @@ async def create_equipment(
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
-    equipment = await service.create_equipment(current_user.id, tenant.id, data.model_dump())
+    equipment = await service.create_equipment(
+        user_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
+        data=data.model_dump()
+    )
     return equipment
 
 
 @router.get("/equipment", response_model=List[EquipmentResponse])
-@rate_limit(max_requests=30, window=60)
+@rate_limit(max_requests=30, window_seconds=60)
 async def list_equipment(
-    equipment_type: Optional[str] = None,
-    status: Optional[EquipmentStatus] = None,
-    warehouse_id: Optional[int] = None,
-    skip: int = 0,
-    limit: int = 50,
+    equipment_type: Optional[str] = Query(None, description="نوع المعدة"),
+    status: Optional[EquipmentStatus] = Query(None, description="حالة المعدة"),
+    warehouse_id: Optional[int] = Query(None, description="معرف المخزن"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    equipment = await repo.list_equipment(tenant.id, equipment_type, status, warehouse_id, skip, min(limit, 200))
+    service = LogisticsService(db)
+    equipment = await service.list_equipment(
+        tenant_id=cast(int, tenant.id),
+        equipment_type=equipment_type,
+        status=status,
+        warehouse_id=warehouse_id,
+        skip=skip,
+        limit=limit
+    )
     return equipment
 
 
 @router.get("/equipment/{equipment_id}", response_model=EquipmentResponse)
-@rate_limit(max_requests=50, window=60)
+@rate_limit(max_requests=50, window_seconds=60)
 async def get_equipment(
     equipment_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    equip = await repo.get_equipment(equipment_id, tenant.id)
+    service = LogisticsService(db)
+    equip = await service.get_equipment(
+        equipment_id=equipment_id,
+        tenant_id=cast(int, tenant.id)
+    )
     if not equip:
         raise HTTPException(status_code=404, detail="Equipment not found")
     return equip
 
 
 @router.put("/equipment/{equipment_id}", response_model=EquipmentResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def update_equipment(
     equipment_id: int,
     data: EquipmentUpdate,
@@ -302,16 +356,17 @@ async def update_equipment(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    equip = await repo.get_equipment(equipment_id, tenant.id)
-    if not equip:
-        raise HTTPException(status_code=404, detail="Equipment not found")
-    updated = await repo.update_equipment(equipment_id, tenant.id, **data.model_dump(exclude_unset=True))
+    service = LogisticsService(db)
+    updated = await service.update_equipment(
+        equipment_id=equipment_id,
+        tenant_id=cast(int, tenant.id),
+        data=data.model_dump(exclude_unset=True)
+    )
     return updated
 
 
 @router.post("/equipment/{equipment_id}/maintenance", response_model=EquipmentMaintenanceResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit(max_requests=15, window=60)
+@rate_limit(max_requests=15, window_seconds=60)
 async def create_maintenance(
     equipment_id: int,
     data: EquipmentMaintenanceCreate,
@@ -319,24 +374,24 @@ async def create_maintenance(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    maintenance = await repo.create_maintenance(
-        tenant_id=tenant.id,
+    service = LogisticsService(db)
+    maintenance = await service.create_equipment_maintenance(
+        tenant_id=cast(int, tenant.id),
         equipment_id=equipment_id,
-        **data.model_dump()
+        data=data.model_dump()
     )
     return maintenance
 
 
-# ========================================================================
+# ============================================================
 # 4. التنبؤ بالطلب (Forecasting)
-# ========================================================================
+# ============================================================
 
 @router.post("/forecast", response_model=InventoryForecastResponse)
-@rate_limit(max_requests=10, window=60)
+@rate_limit(max_requests=10, window_seconds=60)
 async def generate_forecast(
-    product_id: int,
-    period: str = "MONTHLY",
+    product_id: int = Query(..., description="معرف المنتج"),
+    period: str = Query("MONTHLY", description="فترة التنبؤ"),
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
@@ -344,8 +399,8 @@ async def generate_forecast(
 ):
     service = LogisticsService(db)
     forecast = await service.generate_forecast(
-        user_id=current_user.id,
-        tenant_id=tenant.id,
+        user_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
         product_id=product_id,
         period=period,
         idempotency_key=idempotency_key
@@ -354,48 +409,38 @@ async def generate_forecast(
 
 
 @router.get("/forecast", response_model=List[InventoryForecastResponse])
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def list_forecasts(
-    product_id: Optional[int] = None,
-    period: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 50,
+    product_id: Optional[int] = Query(None, description="معرف المنتج"),
+    period: Optional[str] = Query(None, description="فترة التنبؤ"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    forecasts = await repo.list_forecasts(tenant.id, product_id, period, skip, min(limit, 200))
+    service = LogisticsService(db)
+    forecasts = await service.list_forecasts(
+        tenant_id=cast(int, tenant.id),
+        product_id=product_id,
+        period=period,
+        skip=skip,
+        limit=limit
+    )
     return forecasts
 
 
-# ========================================================================
+# ============================================================
 # 5. إحصائيات سريعة
-# ========================================================================
+# ============================================================
 
 @router.get("/stats", response_model=LogisticsStatsResponse)
-@rate_limit(max_requests=20, window=60)
+@rate_limit(max_requests=20, window_seconds=60)
 async def get_logistics_stats(
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = LogisticsRepository(db)
-    warehouses = await repo.list_warehouses(tenant.id)
-    inventory = await repo.list_inventory(tenant.id)
-    equipment = await repo.list_equipment(tenant.id)
-    low_stock = await repo.get_low_stock_items(tenant.id)
-    expired = await repo.get_expired_items(tenant.id)
-
-    total_quantity = sum(item.quantity for item in inventory)
-    total_value = sum(item.quantity * item.unit_price_mrusdt for item in inventory)
-
-    return {
-        "total_warehouses": len(warehouses),
-        "active_warehouses": len([w for w in warehouses if w.is_active]),
-        "total_inventory_items": len(inventory),
-        "total_quantity": total_quantity,
-        "total_value_mrusdt": total_value,
-        "low_stock_items": len(low_stock),
-        "expired_items": len(expired),
-        "total_equipment": len(equipment),
-        "available_equipment": len([e for e in equipment if e.status == EquipmentStatus.AVAILABLE])
-    }
+    service = LogisticsService(db)
+    stats = await service.get_logistics_stats(tenant_id=cast(int, tenant.id))
+    return stats

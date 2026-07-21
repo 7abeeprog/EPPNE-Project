@@ -4,6 +4,9 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from decimal import Decimal
 
+# استيراد الـ Pagination من الملف المركزي
+from app.core.pagination import PaginatedResponse
+
 # ==========================================
 # 1. ملف الداعي (Affiliate Profile)
 # ==========================================
@@ -11,7 +14,7 @@ from decimal import Decimal
 class AffiliateProfileBase(BaseModel):
     referral_code: str = Field(description="كود الدعوة الفريد", min_length=4, max_length=20)
     custom_slug: Optional[str] = Field(None, description="اسم مخصص للرابط", max_length=50)
-    default_commission_rate: Decimal = Field(5.0, description="نسبة العمولة الافتراضية")
+    default_commission_rate: Decimal = Field(Decimal('5.0'), description="نسبة العمولة الافتراضية")
 
 class AffiliateProfileCreate(AffiliateProfileBase):
     user_id: int
@@ -90,8 +93,8 @@ class CommissionUpdate(BaseModel):
 class CommissionResponse(CommissionBase):
     id: int
     status: str
-    paid_at: Optional[datetime]
-    paid_tx_hash: Optional[str]
+    paid_at: Optional[datetime] = None
+    paid_tx_hash: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -106,18 +109,18 @@ class CommissionTierBase(BaseModel):
     tenant_id: int
     entity_type: str = "GLOBAL"
     target_product_id: Optional[int] = None
-    level_1_pct: Decimal = 10.0
-    level_2_pct: Decimal = 5.0
-    level_3_pct: Decimal = 3.0
-    level_4_pct: Decimal = 2.0
-    level_5_pct: Decimal = 2.0
-    level_6_pct: Decimal = 1.0
-    level_7_pct: Decimal = 1.0
-    level_8_pct: Decimal = 0.5
-    level_9_pct: Decimal = 0.5
-    level_10_pct: Decimal = 0.0
-    system_fee_pct: Decimal = 5.0
-    min_withdrawal: Decimal = 10.0
+    level_1_pct: Decimal = Decimal('10.0')
+    level_2_pct: Decimal = Decimal('5.0')
+    level_3_pct: Decimal = Decimal('3.0')
+    level_4_pct: Decimal = Decimal('2.0')
+    level_5_pct: Decimal = Decimal('2.0')
+    level_6_pct: Decimal = Decimal('1.0')
+    level_7_pct: Decimal = Decimal('1.0')
+    level_8_pct: Decimal = Decimal('0.5')
+    level_9_pct: Decimal = Decimal('0.5')
+    level_10_pct: Decimal = Decimal('0.0')
+    system_fee_pct: Decimal = Decimal('5.0')
+    min_withdrawal: Decimal = Decimal('10.0')
 
 class CommissionTierCreate(CommissionTierBase):
     pass
@@ -151,7 +154,7 @@ class CommissionTierResponse(CommissionTierBase):
 # ==========================================
 
 class AffiliateLinkBase(BaseModel):
-    target: str = Field(description="المسار المستهدف", example="/store")
+    target: str = Field(description="المسار المستهدف")
     target_id: Optional[int] = None
     product_id: Optional[int] = None
     utm_source: Optional[str] = None
@@ -193,7 +196,10 @@ class WithdrawResponse(BaseModel):
     tx_hash: str
     amount: float
     currency: str
+    paid_commissions: int
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ==========================================
@@ -213,6 +219,8 @@ class AffiliateStatsResponse(BaseModel):
     conversion_rate: float
     top_performing_product: Optional[Dict[str, Any]] = None
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 # ==========================================
 # 8. إدارة العمولات (Admin)
@@ -229,14 +237,4 @@ class CommissionBulkReleaseResponse(BaseModel):
     currency: str
     tx_hash: Optional[str] = None
 
-
-# ==========================================
-# 9. Pagination
-# ==========================================
-
-class PaginatedResponse(BaseModel):
-    data: List[Any]
-    total: int
-    skip: int
-    limit: int
-    has_more: bool
+    model_config = ConfigDict(from_attributes=True)

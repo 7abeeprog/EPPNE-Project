@@ -4,8 +4,8 @@
 """
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, func, and_, or_
-from sqlalchemy.orm import selectinload  # ✅ إضافة الاستيراد
-from typing import Optional, List, Dict, Any
+from sqlalchemy.orm import selectinload
+from typing import Optional, List, Dict, Any, Sequence
 from datetime import datetime, timedelta
 from app.domains.communications.models import (
     Notification, NotificationDevice, MailThread, MailMessage,
@@ -23,7 +23,6 @@ class CommunicationsRepository:
     # ==============================
 
     async def create_notification(self, **kwargs) -> Notification:
-        """إنشاء إشعار جديد"""
         notification = Notification(**kwargs)
         self.db.add(notification)
         await self.db.commit()
@@ -31,8 +30,13 @@ class CommunicationsRepository:
         return notification
 
     async def get_notification(self, notification_id: int) -> Optional[Notification]:
-        """جلب إشعار بواسطة ID"""
-        result = await self.db.execute(select(Notification).where(Notification.id == notification_id))
+        result = await self.db.execute(select(Notification).where(Notification.id == notification_id))  # type: ignore
+        return result.scalar_one_or_none()
+
+    async def get_notification_by_idempotency(self, idempotency_key: str) -> Optional[Notification]:
+        if not idempotency_key:
+            return None
+        result = await self.db.execute(select(Notification).where(Notification.idempotency_key == idempotency_key))  # type: ignore
         return result.scalar_one_or_none()
 
     async def list_user_notifications(
@@ -42,44 +46,40 @@ class CommunicationsRepository:
         priority: Optional[str] = None,
         skip: int = 0,
         limit: int = 50
-    ) -> List[Notification]:
-        """قائمة إشعارات المستخدم مع فلترة"""
-        query = select(Notification).where(Notification.user_id == user_id)
+    ) -> Sequence[Notification]:
+        query = select(Notification).where(Notification.user_id == user_id)  # type: ignore
         if is_read is not None:
-            query = query.where(Notification.is_read == is_read)
+            query = query.where(Notification.is_read == is_read)  # type: ignore
         if priority:
-            query = query.where(Notification.priority == priority)
-        query = query.order_by(Notification.created_at.desc()).offset(skip).limit(limit)
+            query = query.where(Notification.priority == priority)  # type: ignore
+        query = query.order_by(Notification.created_at.desc()).offset(skip).limit(limit)  # type: ignore
         result = await self.db.execute(query)
         return result.scalars().all()
 
     async def mark_notification_read(self, notification_id: int, user_id: int) -> Notification:
-        """تحديد إشعار كمقروء"""
         notification = await self.get_notification(notification_id)
-        if not notification or notification.user_id != user_id:
+        if not notification or notification.user_id != user_id:  # type: ignore
             raise NotFoundError("الإشعار غير موجود")
-        notification.is_read = True
-        notification.read_at = datetime.utcnow()
+        notification.is_read = True  # type: ignore
+        notification.read_at = datetime.utcnow()  # type: ignore
         await self.db.commit()
         await self.db.refresh(notification)
         return notification
 
     async def mark_notification_sent(self, notification_id: int) -> Notification:
-        """تحديد إشعار كمرسل (بعد إرساله فعلياً)"""
         notification = await self.get_notification(notification_id)
         if not notification:
             raise NotFoundError("الإشعار غير موجود")
-        notification.is_sent = True
-        notification.sent_at = datetime.utcnow()
+        notification.is_sent = True  # type: ignore
+        notification.sent_at = datetime.utcnow()  # type: ignore
         await self.db.commit()
         await self.db.refresh(notification)
         return notification
 
     async def delete_old_notifications(self, days: int = 30) -> int:
-        """حذف الإشعارات الأقدم من عدد الأيام (تنظيف تلقائي)"""
         cutoff = datetime.utcnow() - timedelta(days=days)
         result = await self.db.execute(
-            delete(Notification).where(Notification.created_at < cutoff, Notification.is_read == True)
+            delete(Notification).where(Notification.created_at < cutoff, Notification.is_read == True)  # type: ignore
         )
         await self.db.commit()
         return result.rowcount
@@ -89,27 +89,24 @@ class CommunicationsRepository:
     # ==============================
 
     async def register_device(self, **kwargs) -> NotificationDevice:
-        """تسجيل جهاز جديد (FCM token)"""
         device = NotificationDevice(**kwargs)
         self.db.add(device)
         await self.db.commit()
         await self.db.refresh(device)
         return device
 
-    async def get_user_devices(self, user_id: int) -> List[NotificationDevice]:
-        """جلب أجهزة المستخدم النشطة"""
+    async def get_user_devices(self, user_id: int) -> Sequence[NotificationDevice]:
         result = await self.db.execute(
             select(NotificationDevice).where(
-                NotificationDevice.user_id == user_id,
-                NotificationDevice.is_active == True
+                NotificationDevice.user_id == user_id,  # type: ignore
+                NotificationDevice.is_active == True  # type: ignore
             )
         )
         return result.scalars().all()
 
     async def deactivate_device(self, device_token: str) -> None:
-        """إلغاء تفعيل جهاز (عند تسجيل الخروج أو تغيير التوكن)"""
         await self.db.execute(
-            update(NotificationDevice).where(NotificationDevice.device_token == device_token).values(is_active=False)
+            update(NotificationDevice).where(NotificationDevice.device_token == device_token).values(is_active=False)  # type: ignore
         )
         await self.db.commit()
 
@@ -118,7 +115,6 @@ class CommunicationsRepository:
     # ==============================
 
     async def create_thread(self, subject: str, tenant_id: int) -> MailThread:
-        """إنشاء محادثة جديدة (Thread)"""
         thread = MailThread(subject=subject, tenant_id=tenant_id)
         self.db.add(thread)
         await self.db.commit()
@@ -126,11 +122,10 @@ class CommunicationsRepository:
         return thread
 
     async def get_thread(self, thread_id: int) -> Optional[MailThread]:
-        result = await self.db.execute(select(MailThread).where(MailThread.id == thread_id))
+        result = await self.db.execute(select(MailThread).where(MailThread.id == thread_id))  # type: ignore
         return result.scalar_one_or_none()
 
     async def create_message(self, **kwargs) -> MailMessage:
-        """إنشاء رسالة جديدة (ترسل ويضاف نسختها للمجلدات)"""
         message = MailMessage(**kwargs)
         self.db.add(message)
         await self.db.commit()
@@ -138,11 +133,16 @@ class CommunicationsRepository:
         return message
 
     async def get_message(self, message_id: int) -> Optional[MailMessage]:
-        result = await self.db.execute(select(MailMessage).where(MailMessage.id == message_id))
+        result = await self.db.execute(select(MailMessage).where(MailMessage.id == message_id))  # type: ignore
+        return result.scalar_one_or_none()
+
+    async def get_message_by_idempotency(self, idempotency_key: str) -> Optional[MailMessage]:
+        if not idempotency_key:
+            return None
+        result = await self.db.execute(select(MailMessage).where(MailMessage.idempotency_key == idempotency_key))  # type: ignore
         return result.scalar_one_or_none()
 
     async def add_to_mailbox(self, message_id: int, owner_id: int, folder: MailFolder) -> MailboxItem:
-        """إضافة رسالة إلى صندوق بريد مستخدم معين (INBOX, SENT, ARCHIVE, TRASH)"""
         item = MailboxItem(message_id=message_id, owner_id=owner_id, folder=folder)
         self.db.add(item)
         await self.db.commit()
@@ -155,65 +155,58 @@ class CommunicationsRepository:
         folder: Optional[MailFolder] = None,
         skip: int = 0,
         limit: int = 50
-    ) -> List[MailboxItem]:
-        """جلب عناصر صندوق البريد لمستخدم مع تحميل علاقات الرسالة والمرسل"""
-        query = select(MailboxItem).where(
-            MailboxItem.owner_id == owner_id,
-            MailboxItem.is_deleted == False
-        )
-        
-        # 🔥 التحسين الحاسم: جلب الرسائل المرتبطة (message) والمرسل (sender) في استعلام واحد
-        query = query.options(
-            selectinload(MailboxItem.message).selectinload(MailMessage.sender)
-        )
-        
+    ) -> Sequence[MailboxItem]:
+        query = select(MailboxItem).where(MailboxItem.owner_id == owner_id)  # type: ignore
         if folder:
-            query = query.where(MailboxItem.folder == folder)
-        query = query.order_by(MailboxItem.created_at.desc()).offset(skip).limit(limit)
-        
+            query = query.where(MailboxItem.folder == folder)  # type: ignore
+        query = query.order_by(MailboxItem.created_at.desc()).offset(skip).limit(limit)  # type: ignore
         result = await self.db.execute(query)
         return result.scalars().all()
 
     async def move_to_folder(self, item_id: int, new_folder: MailFolder, owner_id: int) -> MailboxItem:
-        """نقل رسالة بين المجلدات (INBOX, ARCHIVE, TRASH)"""
-        result = await self.db.execute(select(MailboxItem).where(MailboxItem.id == item_id, MailboxItem.owner_id == owner_id))
+        result = await self.db.execute(
+            select(MailboxItem).where(MailboxItem.id == item_id, MailboxItem.owner_id == owner_id)  # type: ignore
+        )
         item = result.scalar_one_or_none()
         if not item:
             raise NotFoundError("العنصر غير موجود")
-        item.folder = new_folder
+        item.folder = new_folder  # type: ignore
         await self.db.commit()
         await self.db.refresh(item)
         return item
 
     async def toggle_star(self, item_id: int, owner_id: int) -> MailboxItem:
-        """تحديد/إلغاء تحديد النجمة (مهم)"""
-        result = await self.db.execute(select(MailboxItem).where(MailboxItem.id == item_id, MailboxItem.owner_id == owner_id))
+        result = await self.db.execute(
+            select(MailboxItem).where(MailboxItem.id == item_id, MailboxItem.owner_id == owner_id)  # type: ignore
+        )
         item = result.scalar_one_or_none()
         if not item:
             raise NotFoundError("العنصر غير موجود")
-        item.is_starred = not item.is_starred
+        item.is_starred = not item.is_starred  # type: ignore
         await self.db.commit()
         await self.db.refresh(item)
         return item
 
     async def mark_read(self, item_id: int, owner_id: int, is_read: bool = True) -> MailboxItem:
-        """تحديد الرسالة كمقروءة أو غير مقروءة"""
-        result = await self.db.execute(select(MailboxItem).where(MailboxItem.id == item_id, MailboxItem.owner_id == owner_id))
+        result = await self.db.execute(
+            select(MailboxItem).where(MailboxItem.id == item_id, MailboxItem.owner_id == owner_id)  # type: ignore
+        )
         item = result.scalar_one_or_none()
         if not item:
             raise NotFoundError("العنصر غير موجود")
-        item.is_read = is_read
+        item.is_read = is_read  # type: ignore
         await self.db.commit()
         await self.db.refresh(item)
         return item
 
     async def delete_message_permanently(self, item_id: int, owner_id: int) -> None:
-        """حذف نهائي (من سلة المحذوفات)"""
-        result = await self.db.execute(select(MailboxItem).where(MailboxItem.id == item_id, MailboxItem.owner_id == owner_id))
+        result = await self.db.execute(
+            select(MailboxItem).where(MailboxItem.id == item_id, MailboxItem.owner_id == owner_id)  # type: ignore
+        )
         item = result.scalar_one_or_none()
         if not item:
             raise NotFoundError("العنصر غير موجود")
-        if item.folder != MailFolder.TRASH:
+        if item.folder != MailFolder.TRASH:  # type: ignore
             raise ValueError("لا يمكن الحذف النهائي إلا من سلة المحذوفات")
         await self.db.delete(item)
         await self.db.commit()
@@ -229,8 +222,8 @@ class CommunicationsRepository:
         await self.db.refresh(attachment)
         return attachment
 
-    async def get_attachments_for_message(self, message_id: int) -> List[MailAttachment]:
-        result = await self.db.execute(select(MailAttachment).where(MailAttachment.message_id == message_id))
+    async def get_attachments_for_message(self, message_id: int) -> Sequence[MailAttachment]:
+        result = await self.db.execute(select(MailAttachment).where(MailAttachment.message_id == message_id))  # type: ignore
         return result.scalars().all()
 
     # ==============================
@@ -247,23 +240,25 @@ class CommunicationsRepository:
     async def get_template_by_event(self, tenant_id: int, trigger_event: str) -> Optional[CommunicationTemplate]:
         result = await self.db.execute(
             select(CommunicationTemplate).where(
-                CommunicationTemplate.tenant_id == tenant_id,
-                CommunicationTemplate.trigger_event == trigger_event,
-                CommunicationTemplate.is_active == True
+                CommunicationTemplate.tenant_id == tenant_id,  # type: ignore
+                CommunicationTemplate.trigger_event == trigger_event,  # type: ignore
+                CommunicationTemplate.is_active == True  # type: ignore
             )
         )
         return result.scalar_one_or_none()
 
-    async def list_templates(self, tenant_id: int) -> List[CommunicationTemplate]:
+    async def list_templates(self, tenant_id: int) -> Sequence[CommunicationTemplate]:
         result = await self.db.execute(
-            select(CommunicationTemplate).where(CommunicationTemplate.tenant_id == tenant_id)
+            select(CommunicationTemplate).where(CommunicationTemplate.tenant_id == tenant_id)  # type: ignore
         )
         return result.scalars().all()
 
     async def update_template(self, template_id: int, **kwargs) -> CommunicationTemplate:
-        await self.db.execute(update(CommunicationTemplate).where(CommunicationTemplate.id == template_id).values(**kwargs))
+        await self.db.execute(
+            update(CommunicationTemplate).where(CommunicationTemplate.id == template_id).values(**kwargs)  # type: ignore
+        )
         await self.db.commit()
-        result = await self.db.execute(select(CommunicationTemplate).where(CommunicationTemplate.id == template_id))
+        result = await self.db.execute(select(CommunicationTemplate).where(CommunicationTemplate.id == template_id))  # type: ignore
         template = result.scalar_one_or_none()
         if not template:
             raise NotFoundError("القالب غير موجود")

@@ -2,9 +2,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, func, and_, or_
 from sqlalchemy.orm import selectinload
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, cast  # ✅ إضافة cast
 from datetime import datetime, timedelta, timezone
-# أضف هذا السطر مع باقي الاستيرادات في الأعلى
 from app.domains.saas.schemas import TenantSubscriptionResponse, InvoiceResponse
 from app.domains.saas.models import (
     ServiceCatalog,
@@ -140,7 +139,14 @@ class SaaSRepository:
         result = await self.db.execute(paginated_query)
         items = list(result.scalars().all())
 
-        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
+        # ✅ تحويل العناصر إلى نماذج الاستجابة
+        response_items = [TenantSubscriptionResponse.model_validate(item) for item in items]
+        return PaginatedResponse[TenantSubscriptionResponse](
+            data=response_items,
+            total=total,
+            skip=skip,
+            limit=limit
+        )
 
     async def create_subscription(self, **kwargs) -> TenantSubscription:
         subscription = TenantSubscription(**kwargs)
@@ -172,6 +178,19 @@ class SaaSRepository:
     ) -> TenantSubscription:
         return await self.update_subscription(subscription_id, status=status)
 
+    # 🔥 دالة جديدة: إحصاء الاشتراكات النشطة لخدمة
+    async def get_active_subscription_count(self, service_id: int) -> int:
+        result = await self.db.execute(
+            select(func.count())
+            .select_from(TenantSubscription)
+            .join(ServicePlan)
+            .where(
+                ServicePlan.service_id == service_id,
+                TenantSubscription.status.in_(["ACTIVE", "TRIAL"])
+            )
+        )
+        return result.scalar() or 0
+
     # ==========================================
     # 4. صلاحيات الوصول (Service Access)
     # ==========================================
@@ -193,8 +212,10 @@ class SaaSRepository:
         services = await self.get_all_services()
         result = []
         for service in services:
-            access = await self.get_tenant_service_access(tenant_id, service.id)
-            subscription = await self.get_active_subscription(tenant_id, service.id)
+            # ✅ تحويل service.id إلى int باستخدام cast
+            service_id = cast(int, service.id)
+            access = await self.get_tenant_service_access(tenant_id, service_id)
+            subscription = await self.get_active_subscription(tenant_id, service_id)
             result.append({
                 "service": service,
                 "has_access": access is not None and access.is_active,
@@ -233,6 +254,12 @@ class SaaSRepository:
     # ==========================================
     # 5. الفواتير (Invoices)
     # ==========================================
+    async def get_invoice_by_id(self, invoice_id: int) -> Optional[Invoice]:
+        result = await self.db.execute(
+            select(Invoice).where(Invoice.id == invoice_id)
+        )
+        return result.scalar_one_or_none()
+
     async def get_invoice_by_idempotency(self, idempotency_key: str) -> Optional[Invoice]:
         result = await self.db.execute(
             select(Invoice).where(Invoice.idempotency_key == idempotency_key)
@@ -255,7 +282,14 @@ class SaaSRepository:
         result = await self.db.execute(paginated_query)
         items = list(result.scalars().all())
 
-        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
+        # ✅ تحويل العناصر إلى نماذج الاستجابة
+        response_items = [InvoiceResponse.model_validate(item) for item in items]
+        return PaginatedResponse[InvoiceResponse](
+            data=response_items,
+            total=total,
+            skip=skip,
+            limit=limit
+        )
 
     async def create_invoice(self, **kwargs) -> Invoice:
         invoice = Invoice(**kwargs)
@@ -276,6 +310,11 @@ class SaaSRepository:
         if not invoice:
             raise NotFoundError("الفاتورة غير موجودة")
         return invoice
+
+    # 🔥 دالة جديدة: جلب جميع الفواتير (للمشرفين)
+    async def get_all_invoices(self) -> List[Invoice]:
+        result = await self.db.execute(select(Invoice))
+        return list(result.scalars().all())
 
     # ==========================================
     # 6. رايات الميزات (Feature Flags)
@@ -304,7 +343,8 @@ class SaaSRepository:
     ) -> TenantFeatureFlag:
         flag = await self.get_feature_flag(tenant_id, service_id, feature_key)
         if flag:
-            flag.is_enabled = enabled
+            # ✅ استخدام setattr بدلاً من التعيين المباشر لتجنب خطأ Pylance
+            setattr(flag, 'is_enabled', enabled)
             await self.db.commit()
             await self.db.refresh(flag)
             return flag
@@ -319,3 +359,9 @@ class SaaSRepository:
             await self.db.commit()
             await self.db.refresh(flag)
             return flag
+
+    async def get_all_feature_flags_for_tenant(self, tenant_id: int) -> List[TenantFeatureFlag]:
+        result = await self.db.execute(
+            select(TenantFeatureFlag).where(TenantFeatureFlag.tenant_id == tenant_id)
+        )
+        return list(result.scalars().all())

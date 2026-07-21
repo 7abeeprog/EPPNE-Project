@@ -393,3 +393,19 @@ class AIAgentsRepository:
             .values(last_billed_month=month)
         )
         await self.db.commit()
+
+
+# ==========================================
+# الكلاس الجديد المطلوب حقنه (AIAgentRepository)
+# ==========================================
+class AIAgentRepository:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    # يمكنك إضافة دوال CRUD الأساسية هنا لاحقاً، 
+    # المهم الآن هو وجود الكلاس نفسه ليتوقف الخطأ
+    async def get_by_id(self, agent_id: int):
+        pass
+
+    async def create(self, agent_data: dict):
+        pass

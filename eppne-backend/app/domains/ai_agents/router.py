@@ -1,17 +1,17 @@
 # app/domains/ai_agents/router.py
 from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
+from typing import Optional, cast, List
+import uuid
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user, get_current_tenant, get_current_superuser
 from app.domains.identity.models import User
 from app.domains.ai_agents.service import AIAgentsService
-from app.domains.ai_agents.repository import AIAgentsRepository
 from app.domains.ai_agents.schemas import (
-    AIAgentCreate, 
-    AIAgentResponse, 
-    ApprovalResponse, 
+    AIAgentCreate,
+    AIAgentResponse,
+    ApprovalResponse,
     ApprovalResolution,
     AgentStatusUpdate,
     AgentStatusResponse
@@ -23,28 +23,28 @@ router = APIRouter(prefix="/ai", tags=["Sovereign AI Agents"])
 
 
 # ============================================================
-# 1. إدارة الوكلاء (Agents)
+# 1. إدارة الوكلاء (Agents) - مع صلاحيات صارمة
 # ============================================================
 
-@router.post("/agents", response_model=AIAgentResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/agents", response_model=AIAgentResponse, status_code=status.HTTP_201_CREATED)  # type: ignore
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_agent(
-    request: Request,
-    data: AIAgentCreate,
+    data: AIAgentCreate,  # type: ignore
     tenant: AcademyTenant = Depends(get_current_tenant),
-    current_user: User = Depends(get_current_superuser),
+    current_user: User = Depends(get_current_superuser),  # ✅ صلاحية عالية
     db: AsyncSession = Depends(get_db)
 ):
+    """إنشاء وكيل رقمي جديد (للإدارة فقط)."""
     service = AIAgentsService(db)
     agent = await service.create_agent(
-        owner_id=current_user.id,
-        tenant_id=tenant.id,
-        data=data.model_dump()
+        owner_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id),
+        data=data.model_dump()  # type: ignore
     )
     return agent
 
 
-@router.get("/agents", response_model=list[AIAgentResponse])
+@router.get("/agents", response_model=List[AIAgentResponse])  # type: ignore
 async def list_agents(
     role: Optional[str] = None,
     status: Optional[str] = None,
@@ -54,10 +54,11 @@ async def list_agents(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = AIAgentsRepository(db)
-    agents = await repo.list_agents(
-        tenant_id=tenant.id,
-        owner_id=current_user.id,
+    """جلب قائمة الوكلاء للمستأجر الحالي."""
+    service = AIAgentsService(db)
+    agents = await service.list_agents(
+        tenant_id=cast(int, tenant.id),
+        owner_id=cast(int, current_user.id),
         role=role,
         status=status,
         skip=skip,
@@ -66,15 +67,20 @@ async def list_agents(
     return agents
 
 
-@router.get("/agents/{agent_id}", response_model=AIAgentResponse)
+@router.get("/agents/{agent_id}", response_model=AIAgentResponse)  # type: ignore
 async def get_agent(
     agent_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = AIAgentsRepository(db)
-    agent = await repo.get_agent_by_owner(agent_id, current_user.id, tenant.id)
+    """جلب تفاصيل وكيل محدد."""
+    service = AIAgentsService(db)
+    agent = await service.get_agent_by_owner(
+        agent_id=agent_id,
+        owner_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id)
+    )
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found or you don't have permission.")
     return agent
@@ -83,7 +89,6 @@ async def get_agent(
 @router.post("/agents/{agent_id}/execute")
 @rate_limit(max_requests=20, window_seconds=60)
 async def execute_agent_action(
-    request: Request,   
     agent_id: int,
     action_type: str,
     payload: dict,
@@ -92,96 +97,109 @@ async def execute_agent_action(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    """تنفيذ إجراء بواسطة وكيل رقمي (مع Idempotency)."""
     service = AIAgentsService(db)
     result = await service.execute_agent_action(
         agent_id=agent_id,
-        tenant_id=tenant.id,
+        tenant_id=cast(int, tenant.id),
         action_type=action_type,
         payload=payload,
-        executor_user_id=current_user.id,
-        idempotency_key=idempotency_key
+        executor_user_id=cast(int, current_user.id),
+        idempotency_key=idempotency_key or f"EXEC-{uuid.uuid4().hex[:12].upper()}"
     )
     return result
 
 
-@router.patch("/agents/{agent_id}/status", response_model=AIAgentResponse)
+@router.patch("/agents/{agent_id}/status", response_model=AIAgentResponse)  # type: ignore
 @rate_limit(max_requests=10, window_seconds=60)
 async def update_agent_status(
-    request: Request,
     agent_id: int,
-    status_data: AgentStatusUpdate,
+    status_data: AgentStatusUpdate,  # type: ignore
     tenant: AcademyTenant = Depends(get_current_tenant),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_superuser),  # ✅ صلاحية عالية
     db: AsyncSession = Depends(get_db)
 ):
+    """تحديث حالة الوكيل (للإدارة فقط)."""
     service = AIAgentsService(db)
     agent = await service.update_agent_status(
         agent_id=agent_id,
-        tenant_id=tenant.id,
-        status=status_data.status,
-        executor_user_id=current_user.id
+        tenant_id=cast(int, tenant.id),
+        status=status_data.status.value if hasattr(status_data.status, 'value') else str(status_data.status),  # type: ignore
+        executor_user_id=cast(int, current_user.id)
     )
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
     return agent
 
 
 @router.delete("/agents/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
 @rate_limit(max_requests=5, window_seconds=60)
 async def delete_agent(
-    request: Request,
     agent_id: int,
     soft: bool = True,
     tenant: AcademyTenant = Depends(get_current_tenant),
-    current_user: User = Depends(get_current_superuser),
+    current_user: User = Depends(get_current_superuser),  # ✅ صلاحية عالية
     db: AsyncSession = Depends(get_db)
 ):
-    repo = AIAgentsRepository(db)
-    agent = await repo.get_agent(agent_id, tenant.id)
+    """حذف وكيل (للإدارة فقط)."""
+    service = AIAgentsService(db)
+    agent = await service.get_agent(agent_id, cast(int, tenant.id))
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    await repo.delete_agent(agent_id, tenant.id, soft=soft)
+    await service.delete_agent(
+        agent_id=agent_id,
+        tenant_id=cast(int, tenant.id),
+        soft=soft
+    )
     return None
 
 
 # ============================================================
-# 2. الموافقات البشرية (Human-in-the-loop)
+# 2. الموافقات البشرية (Human-in-the-loop) - مع عزل صارم
 # ============================================================
 
-@router.get("/approvals/pending", response_model=list[ApprovalResponse])
+@router.get("/approvals/pending", response_model=List[ApprovalResponse])  # type: ignore
 async def get_pending_approvals(
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = AIAgentsRepository(db)
-    approvals = await repo.get_pending_approvals(current_user.id, tenant.id)
+    """جلب طلبات الموافقة المعلقة للمستخدم الحالي."""
+    service = AIAgentsService(db)
+    approvals = await service.get_pending_approvals(
+        human_approver_id=cast(int, current_user.id),
+        tenant_id=cast(int, tenant.id)
+    )
     return approvals
 
 
 @router.post("/approvals/{approval_id}/resolve")
 @rate_limit(max_requests=10, window_seconds=60)
 async def resolve_approval(
-    request: Request,
     approval_id: int,
-    resolution: ApprovalResolution,
+    resolution: ApprovalResolution,  # type: ignore
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    """حل طلب موافقة (موافقة/رفض)."""
     service = AIAgentsService(db)
     approval = await service.resolve_approval(
         approval_id=approval_id,
-        tenant_id=tenant.id,
-        human_approver_id=current_user.id,
-        resolution=resolution.model_dump()
+        tenant_id=cast(int, tenant.id),
+        human_approver_id=cast(int, current_user.id),
+        resolution=resolution.model_dump()  # type: ignore
     )
+    if not approval:
+        raise HTTPException(status_code=404, detail="Approval not found or you don't have permission.")
     return {
-        "message": f"Approval {approval.status}",
-        "approval_id": approval.id,
-        "status": approval.status
+        "message": f"Approval {approval.status}",  # type: ignore
+        "approval_id": approval.id,  # type: ignore
+        "status": approval.status  # type: ignore
     }
 
 
-@router.get("/approvals", response_model=list[ApprovalResponse])
+@router.get("/approvals", response_model=List[ApprovalResponse])  # type: ignore
 async def list_approvals(
     agent_id: Optional[int] = None,
     status: Optional[str] = None,
@@ -191,9 +209,10 @@ async def list_approvals(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = AIAgentsRepository(db)
-    approvals = await repo.list_approvals(
-        tenant_id=tenant.id,
+    """جلب قائمة طلبات الموافقة مع فلترة."""
+    service = AIAgentsService(db)
+    approvals = await service.list_approvals(
+        tenant_id=cast(int, tenant.id),
         agent_id=agent_id,
         status=status,
         skip=skip,
@@ -202,15 +221,19 @@ async def list_approvals(
     return approvals
 
 
-@router.get("/approvals/{approval_id}", response_model=ApprovalResponse)
+@router.get("/approvals/{approval_id}", response_model=ApprovalResponse)  # type: ignore
 async def get_approval(
     approval_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = AIAgentsRepository(db)
-    approval = await repo.get_approval(approval_id, tenant.id)
+    """جلب تفاصيل طلب موافقة محدد."""
+    service = AIAgentsService(db)
+    approval = await service.get_approval(
+        approval_id=approval_id,
+        tenant_id=cast(int, tenant.id)
+    )
     if not approval:
         raise HTTPException(status_code=404, detail="Approval not found.")
     return approval
@@ -228,25 +251,34 @@ async def get_agent_analytics(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    """جلب تحليلات استخدام الوكيل."""
     service = AIAgentsService(db)
-    analytics = await service.get_agent_analytics(agent_id, tenant.id, days)
+    analytics = await service.get_agent_analytics(
+        agent_id=agent_id,
+        tenant_id=cast(int, tenant.id),
+        days=days
+    )
     return analytics
 
 
-@router.get("/agents/{agent_id}/status", response_model=AgentStatusResponse)
+@router.get("/agents/{agent_id}/status", response_model=AgentStatusResponse)  # type: ignore
 async def get_agent_status(
     agent_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    """جلب الحالة التفصيلية للوكيل."""
     service = AIAgentsService(db)
-    status_info = await service.get_agent_status(agent_id, tenant.id)
+    status_info = await service.get_agent_status(
+        agent_id=agent_id,
+        tenant_id=cast(int, tenant.id)
+    )
     return status_info
 
 
 # ============================================================
-# 🆕 4. استخدامات الـ AI للمستأجر (SaaS Dashboard)
+# 4. استخدامات الـ AI للمستأجر (SaaS Dashboard)
 # ============================================================
 
 @router.get("/usage")
@@ -255,25 +287,7 @@ async def get_ai_usage(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    repo = AIAgentsRepository(db)
+    """جلب إحصائيات استخدام الـ AI للمستأجر الحالي."""
     service = AIAgentsService(db)
-    
-    subscription = await repo.get_tenant_subscription(tenant.id)
-    features = subscription.features or {} if subscription else {}
-    
-    current_agents = await repo.count_agents(tenant.id)
-    monthly_calls = await repo.count_monthly_calls(tenant.id)
-    monthly_cost = await repo.get_monthly_ai_cost(tenant.id)
-    max_agents = features.get("max_agents", 0)
-    monthly_limit = features.get("monthly_ai_calls", 0)
-    
-    return {
-        "subscription_status": subscription.status if subscription else "NO_SUBSCRIPTION",
-        "max_agents": max_agents,
-        "current_agents": current_agents,
-        "monthly_calls_limit": monthly_limit,
-        "monthly_calls_used": monthly_calls,
-        "monthly_calls_remaining": max(0, monthly_limit - monthly_calls),
-        "monthly_cost_mrusdt": float(monthly_cost),
-        "features": features,
-    }
+    usage = await service.get_ai_usage(tenant_id=cast(int, tenant.id))
+    return usage

@@ -4,9 +4,9 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { getProjects } from '@/services/projects';
+import { ProjectsService, ProjectResponse } from '@/services/projects'; // ✅ استيراد الخدمة والنوع
 import ProjectCard from '@/components/projects/ProjectCard';
-import { Plus, Search, Filter, Loader2 } from 'lucide-react';
+import { Plus, Search, Filter, Loader2, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ProjectType, ProjectStatus } from '@/types/projects';
 
@@ -37,21 +37,23 @@ export default function ProjectsPage() {
   const [filterType, setFilterType] = useState<ProjectType | ''>('');
   const [filterStatus, setFilterStatus] = useState<ProjectStatus | ''>('');
 
+  // ✅ استدعاء الخدمة مباشرة دون .then غير الصحيح
   const { data, isLoading } = useQuery({
     queryKey: ['projects', filterType, filterStatus],
     queryFn: () =>
-      getProjects({
+      ProjectsService.listProjects({
         ...(filterType && { project_type: filterType }),
         ...(filterStatus && { status: filterStatus }),
         limit: 50,
-      }).then((res) => res.data),
+      }),
     staleTime: 2 * 60 * 1000,
   });
 
+  // ✅ التصفية باستخدام النوع ProjectResponse والحماية الاختيارية
   const filtered = data?.filter(
-    (p) =>
-      p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.description.toLowerCase().includes(searchTerm.toLowerCase())
+    (p: ProjectResponse) =>
+      (p.title?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (p.description?.toLowerCase() || '').includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -125,7 +127,7 @@ export default function ProjectsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered?.map((project) => (
+          {filtered?.map((project: ProjectResponse) => (
             <ProjectCard key={project.id} project={project} />
           ))}
         </div>

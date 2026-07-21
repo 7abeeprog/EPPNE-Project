@@ -2,7 +2,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { SessionInfo } from "@/types/auth";
+import type { SessionInfo } from "@/types/auth";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Monitor, Smartphone, Globe, Clock, CalendarDays, CheckCircle, XCircle } from "lucide-react";
@@ -12,7 +12,7 @@ interface SessionCardProps {
   index?: number;
 }
 
-const getDeviceIcon = (userAgent?: string) => {
+const getDeviceIcon = (userAgent?: string | null) => {
   if (!userAgent) return <Globe className="h-5 w-5" />;
   if (userAgent.includes("Mobile")) return <Smartphone className="h-5 w-5" />;
   return <Monitor className="h-5 w-5" />;
@@ -31,19 +31,18 @@ export function SessionCard({ session, index = 0 }: SessionCardProps) {
         <CardContent className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-primary/10 rounded-xl border border-primary/20 group-hover:scale-110 transition-transform">
-              {getDeviceIcon(session.user_agent)}
+              {getDeviceIcon(session.user_agent ?? undefined)} {/* ✅ إصلاح السطر 34 */}
             </div>
             <div>
               <div className="flex items-center gap-3">
                 <h4 className="font-bold text-lg text-foreground">
-                  {session.device_name || "جهاز غير معروف"}
+                  {session.device_name ?? "جهاز غير معروف"} {/* ✅ إصلاح null */}
                 </h4>
                 <Badge
-                  className={`${
-                    isActive
+                  className={`${isActive
                       ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
                       : "bg-muted/10 text-muted-foreground border-white/10"
-                  } border font-bold`}
+                    } border font-bold`}
                 >
                   {isActive ? (
                     <>
