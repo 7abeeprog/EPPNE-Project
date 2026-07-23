@@ -80,20 +80,19 @@ async def interact_with_twin(
 @rate_limit(max_requests=5, window_seconds=60)
 async def create_time_capsule(
     data: TimeCapsuleCreate,
-    beneficiaries: List[BeneficiaryCreate] = Query(..., description="قائمة المستفيدين"),
     tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = DigitalTwinService(db)
+    # استخراج beneficiaries من data
     capsule = await service.setup_time_capsule(
         user_id=cast(int, current_user.id),
         tenant_id=cast(int, tenant.id),
-        data=data.model_dump(),
-        beneficiaries=[b.model_dump() for b in beneficiaries]
+        data=data.model_dump(exclude={"beneficiaries"}),
+        beneficiaries=[b.model_dump() for b in data.beneficiaries]
     )
     return capsule
-
 
 @router.post("/time-capsule/heartbeat")
 @rate_limit(max_requests=10, window_seconds=60)

@@ -102,7 +102,8 @@ class ProjectService:
         updated = await self.repo.update_project(project_id, tenant_id, **data)
         if not updated:
             raise NotFoundError("Project not found after update")
-        invalidate_cache(f"project_analytics_{project_id}")
+        # 🔥 إضافة await
+        await invalidate_cache(f"project_analytics_{project_id}")
         return updated
 
     async def delete_project(self, project_id: int, tenant_id: int, owner_id: int, soft: bool = True) -> bool:
@@ -136,7 +137,8 @@ class ProjectService:
             "funding_goal": float(project.funding_goal_mrusdt)  # type: ignore
         })
 
-        invalidate_cache(f"project_analytics_{project_id}")
+        # 🔥 إضافة await
+        await invalidate_cache(f"project_analytics_{project_id}")
         return updated
 
     # ==========================================
@@ -225,7 +227,8 @@ class ProjectService:
                 "contribution_id": contribution.id
             })
 
-            invalidate_cache(f"project_analytics_{project.id}")
+            # 🔥 إضافة await
+            await invalidate_cache(f"project_analytics_{project.id}")
             return result
 
         except Exception as e:
@@ -270,7 +273,8 @@ class ProjectService:
             if not updated:
                 raise NotFoundError("Contribution not found after update")
 
-            invalidate_cache(f"project_analytics_{project.id}")
+            # 🔥 إضافة await
+            await invalidate_cache(f"project_analytics_{project.id}")
             return updated
 
     # ==========================================
@@ -334,7 +338,8 @@ class ProjectService:
                     "funds_to_release": float(milestone.funds_to_release)  # type: ignore
                 })
 
-            invalidate_cache(f"project_analytics_{project.id}")
+            # 🔥 إضافة await
+            await invalidate_cache(f"project_analytics_{project.id}")
             return updated
 
     # ==========================================

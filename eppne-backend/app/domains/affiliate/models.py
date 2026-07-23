@@ -142,6 +142,7 @@ class AffiliateLink(Base):
         Index("ix_affiliate_links_target", "target"),
         Index("ix_affiliate_links_product_id", "product_id"),
         Index("ix_affiliate_links_utm_campaign", "utm_campaign"),
+        Index("ix_affiliate_links_status", "status"),  # 🔥 إضافة فهرس للعمود الجديد
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -157,6 +158,10 @@ class AffiliateLink(Base):
 
     clicks = Column(Integer, default=0)
     conversions = Column(Integer, default=0)
+
+    # 🔥 العمود الجديد المطلوب
+    status = Column(String(20), default="ACTIVE", nullable=False)  # ACTIVE, EXPIRED, INACTIVE
+    expires_at = Column(DateTime(timezone=True), nullable=True)   # تاريخ انتهاء الصلاحية (اختياري)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -2,7 +2,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, func, and_, or_
 from sqlalchemy.orm import selectinload
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, cast
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from app.domains.affiliate.schemas import CommissionResponse, AffiliateLinkResponse
@@ -16,6 +16,7 @@ from app.domains.affiliate.models import (
 )
 from app.core.errors import NotFoundError
 from app.core.pagination import PaginatedResponse
+
 
 class AffiliateRepository:
     def __init__(self, db: AsyncSession):
@@ -95,15 +96,18 @@ class AffiliateRepository:
         chain = []
         current = await self.get_referral_tree(user_id)
         while current and len(chain) < max_depth:
-            profile = await self.get_affiliate_profile(current.referrer_id)
+            # 🔥 إصلاح: تحويل current.referrer_id من Column إلى int
+            referrer_id = cast(int, current.referrer_id)
+            profile = await self.get_affiliate_profile(referrer_id)
             chain.append({
-                "user_id": current.referrer_id,
+                "user_id": referrer_id,
                 "profile": profile,
                 "depth": current.depth,
                 "entity_type": current.entity_type,
                 "entity_id": current.entity_id,
             })
-            current = await self.get_referral_tree(current.referrer_id)
+            # 🔥 إصلاح: تحويل current.referrer_id من Column إلى int
+            current = await self.get_referral_tree(referrer_id)
         return chain
 
     async def create_referral_tree(self, **kwargs) -> ReferralTree:
@@ -149,7 +153,10 @@ class AffiliateRepository:
         result = await self.db.execute(paginated_query)
         items = list(result.scalars().all())
 
-        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
+        # 🔥 إصلاح: تحويل كائنات Commission إلى CommissionResponse
+        response_items = [CommissionResponse.model_validate(item) for item in items]
+
+        return PaginatedResponse(data=response_items, total=total, skip=skip, limit=limit)
 
     async def get_pending_commissions(self, user_id: int) -> List[Commission]:
         result = await self.db.execute(
@@ -256,7 +263,10 @@ class AffiliateRepository:
         result = await self.db.execute(paginated_query)
         items = list(result.scalars().all())
 
-        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
+        # 🔥 إصلاح: تحويل كائنات AffiliateLink إلى AffiliateLinkResponse
+        response_items = [AffiliateLinkResponse.model_validate(item) for item in items]
+
+        return PaginatedResponse(data=response_items, total=total, skip=skip, limit=limit)
 
     async def increment_link_clicks(self, link_id: int) -> int:
         result = await self.db.execute(
@@ -299,3 +309,23 @@ class AffiliateRepository:
             select(AffiliateClickLog).where(AffiliateClickLog.id == click_log_id)
         )
         return result.scalar_one_or_none()
+
+    # ==========================================
+    # 7. 🆕 دالة تنظيف الروابط المنتهية (محدثة)
+    # ==========================================
+    async def delete_expired_invitations(self, cutoff_date: datetime) -> int:
+        """
+        حذف روابط الدعوة المنتهية الصلاحية.
+        - تحذف الروابط التي حالتها 'EXPIRED' أو التي مضى على إنشائها أكثر من cutoff_date.
+        - تعيد عدد السجلات المحذوفة.
+        """
+        result = await self.db.execute(
+            delete(AffiliateLink).where(
+                or_(
+                    AffiliateLink.status == "EXPIRED",
+                    AffiliateLink.created_at < cutoff_date
+                )
+            )
+        )
+        await self.db.commit()
+        return result.rowcount

@@ -63,7 +63,7 @@ class EmploymentContractCreate(BaseModel):
     application_id: int = Field(description="معرف طلب التوظيف")
     job_title: str = Field(description="المسمى الوظيفي")
     base_salary: Decimal = Field(description="الراتب الأساسي")
-    allowances: Dict[str, Decimal] = Field(default_factory=dict, description="البدلات الإضافية")
+    allowances: Optional[Dict[str, Any]] = Field(default_factory=dict, description="البدلات الإضافية")
     currency: str = Field(default="MR_USDT", description="العملة")
     start_date: datetime = Field(description="تاريخ البدء")
     end_date: Optional[datetime] = Field(default=None, description="تاريخ الانتهاء (إن وجد)")

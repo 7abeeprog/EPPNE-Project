@@ -1,4 +1,4 @@
-# app/domains/employment/router.py (الإصدار النهائي المتكامل)
+# app/domains/employment/router.py (الإصدار النهائي المتكامل مع تحسينات الأمان)
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List, cast
@@ -27,6 +27,8 @@ async def create_job(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    if not tenant:
+        raise HTTPException(status_code=403, detail="Tenant not found")
     service = EmploymentService(db)
     job = await service.create_job(
         employer_id=cast(int, current_user.id),
@@ -45,6 +47,8 @@ async def get_open_jobs(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    if not tenant:
+        raise HTTPException(status_code=403, detail="Tenant not found")
     service = EmploymentService(db)
     jobs = await service.list_open_jobs(
         tenant_id=cast(int, tenant.id),
@@ -115,6 +119,8 @@ async def apply_to_job(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    if not tenant:
+        raise HTTPException(status_code=403, detail="Tenant not found")
     service = EmploymentService(db)
     application = await service.apply_for_job(
         applicant_id=cast(int, current_user.id),
@@ -191,6 +197,8 @@ async def create_contract(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    if not tenant:
+        raise HTTPException(status_code=403, detail="Tenant not found")
     service = EmploymentService(db)
     contract = await service.create_contract(
         employer_id=cast(int, current_user.id),
@@ -372,6 +380,8 @@ async def generate_payroll(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    if not tenant:
+        raise HTTPException(status_code=403, detail="Tenant not found")
     service = EmploymentService(db)
     payroll = await service.generate_payroll(
         contract_id=contract_id,
@@ -407,6 +417,8 @@ async def pay_payroll(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    if not tenant:
+        raise HTTPException(status_code=403, detail="Tenant not found")
     service = EmploymentService(db)
     payroll = await service.pay_payroll(
         payroll_id=payroll_id,

@@ -1,6 +1,8 @@
+# app/domains/agritech/repository.py
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func
 from typing import Optional, List
+from datetime import datetime  # 🔥 إضافة import datetime
 from app.domains.agritech.models import *
 from app.core.errors import NotFoundError
 from decimal import Decimal
@@ -27,7 +29,8 @@ class AgriTechRepository:
             query = query.where(SmartFarm.farm_type == farm_type)
         query = query.offset(skip).limit(limit)
         result = await self.db.execute(query)
-        return result.scalars().all()
+        # 🔥 تحويل النتيجة إلى list
+        return list(result.scalars().all())
 
     # ---------- Zones ----------
     async def create_zone(self, **kwargs) -> FarmZone:
@@ -39,11 +42,22 @@ class AgriTechRepository:
 
     async def list_zones(self, farm_id: int):
         result = await self.db.execute(select(FarmZone).where(FarmZone.farm_id == farm_id))
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def get_zone(self, zone_id: int) -> Optional[FarmZone]:
         result = await self.db.execute(select(FarmZone).where(FarmZone.id == zone_id))
         return result.scalar_one_or_none()
+
+    # ========== 🆕 دوال إضافية للمهام ==========
+    async def update_zone_last_reading(self, zone_id: int, recorded_at: datetime) -> FarmZone:
+        """تحديث آخر قراءة للمنطقة."""
+        await self.db.execute(
+            update(FarmZone)
+            .where(FarmZone.id == zone_id)
+            .values(last_reading=recorded_at)
+        )
+        await self.db.commit()
+        return await self.get_zone(zone_id)
 
     # ---------- Crop Cycles ----------
     async def create_crop_cycle(self, **kwargs) -> CropCycle:
@@ -62,7 +76,7 @@ class AgriTechRepository:
 
     async def list_harvests_by_cycle(self, cycle_id: int):
         result = await self.db.execute(select(HarvestBatch).where(HarvestBatch.cycle_id == cycle_id))
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     # ---------- Bio Assets ----------
     async def create_bio_cohort(self, **kwargs) -> BioAssetCohort:
@@ -103,7 +117,8 @@ class AgriTechRepository:
                 SupplyChainStage.traceable_id == traceable_id
             ).order_by(SupplyChainStage.stage_order)
         )
-        return result.scalars().all()
+        # 🔥 تحويل النتيجة إلى list (تم إصلاح نوع الإرجاع)
+        return list(result.scalars().all())
 
     async def create_traceability_qr(self, **kwargs) -> TraceabilityQR:
         qr = TraceabilityQR(**kwargs)
@@ -128,9 +143,17 @@ class AgriTechRepository:
                 AgriculturalCertificate.is_deleted == False
             )
         )
-        return result.scalars().all()
+        # 🔥 تحويل النتيجة إلى list (تم إصلاح نوع الإرجاع)
+        return list(result.scalars().all())
 
     # ========== IoT Sensors ==========
+    async def get_soil_reading(self, reading_id: int) -> Optional[SoilSensorReading]:
+        """جلب قراءة تربة واحدة بواسطة المعرف."""
+        result = await self.db.execute(
+            select(SoilSensorReading).where(SoilSensorReading.id == reading_id)
+        )
+        return result.scalar_one_or_none()
+
     async def create_soil_reading(self, **kwargs) -> SoilSensorReading:
         reading = SoilSensorReading(**kwargs)
         self.db.add(reading)
@@ -143,7 +166,8 @@ class AgriTechRepository:
             select(SoilSensorReading).where(SoilSensorReading.zone_id == zone_id)
             .order_by(SoilSensorReading.recorded_at.desc()).limit(limit)
         )
-        return result.scalars().all()
+        # 🔥 تحويل النتيجة إلى list (تم إصلاح نوع الإرجاع)
+        return list(result.scalars().all())
 
     async def create_weather_alert(self, **kwargs) -> WeatherAlert:
         alert = WeatherAlert(**kwargs)
@@ -162,4 +186,5 @@ class AgriTechRepository:
                 (WeatherAlert.end_time >= now) | (WeatherAlert.end_time == None)
             )
         )
-        return result.scalars().all()
+        # 🔥 تحويل النتيجة إلى list (تم إصلاح نوع الإرجاع)
+        return list(result.scalars().all())

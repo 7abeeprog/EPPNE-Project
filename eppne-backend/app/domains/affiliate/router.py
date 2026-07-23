@@ -1,4 +1,4 @@
-# app/domains/affiliate/router.py
+# app/domains/affiliate/router.py (الإصدار النهائي)
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, cast, List
@@ -79,6 +79,24 @@ async def get_affiliate_links(
         skip=skip,
         limit=limit
     )
+
+
+@router.patch("/links/{link_id}", response_model=AffiliateLinkResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def update_affiliate_link(
+    link_id: int,
+    data: AffiliateLinkUpdate,
+    current_user: User = Depends(require_subscription("affiliate")),
+    db: AsyncSession = Depends(get_db),
+):
+    """تحديث رابط دعوة (مثل تعطيله أو تغيير الحالة)"""
+    service = AffiliateService(db)
+    link = await service.update_affiliate_link(
+        user_id=cast(int, current_user.id),
+        link_id=link_id,
+        data=data
+    )
+    return link
 
 # ==========================================
 # 3. العمولات (مع حماية الاشتراك)

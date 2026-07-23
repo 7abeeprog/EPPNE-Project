@@ -1,4 +1,4 @@
-# app/domains/invitations/service.py (الإصدار النهائي المتكامل)
+# app/domains/invitations/service.py (الإصدار النهائي المتكامل المصحح بالكامل)
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -13,8 +13,8 @@ from app.domains.saas.service import SaaSControlService as SaaSSubscriptionServi
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
 from app.domains.finance.service import FinanceService
-from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
@@ -115,7 +115,6 @@ class InvitationsService:
     async def _create_user_from_invitation(self, data: dict, tenant_id: int):
         from app.domains.identity.service import UserService
         identity_service = UserService(self.db)
-        # إنشاء مستخدم جديد (تبسيط)
         from app.domains.identity.schemas import UserCreate
         user_create = UserCreate(
             username=data.get("email", "").split("@")[0],
@@ -128,7 +127,24 @@ class InvitationsService:
         pass
 
     # ============================================================
-    # 1. الدعوات (Invitations)
+    # دوال Idempotency الموحّدة
+    # ============================================================
+
+    async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
+        """التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency."""
+        if idempotency_key:
+            cached = await get_idempotency_result(idempotency_key)
+            if cached is not None:
+                return cached
+        return None
+
+    async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
+        """تخزين نتيجة العملية بعد النجاح."""
+        if idempotency_key:
+            await store_idempotency_result(idempotency_key, result)
+
+    # ============================================================
+    # 1. الدعوات (Invitations) – مع Idempotency محسّن
     # ============================================================
 
     async def create_invitation(
@@ -142,9 +158,14 @@ class InvitationsService:
         await self._check_saas_limits(tenant_id, "crm")
 
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                invitation_id = cached.get("invitation_id")
+                if invitation_id:
+                    invitation = await self.repo.get_invitation(invitation_id, tenant_id)
+                    if invitation:
+                        return invitation
+                raise ValidationError("Idempotency record exists but invitation not found.")
 
         sanitized_title = bleach.clean(data.get("title", ""), tags=[], strip=True)
         sanitized_message = bleach.clean(data.get("custom_message", ""), tags=[], strip=True)
@@ -166,7 +187,6 @@ class InvitationsService:
             if analysis["recommended_discount"] and data.get("discount_percentage", 0) == 0:
                 data["discount_percentage"] = analysis["recommended_discount"]
 
-        # 🔥 معاملة ذرية
         async with self.db.begin_nested():
             invitation = await self.repo.create_invitation(
                 tenant_id=tenant_id,  # type: ignore
@@ -205,7 +225,7 @@ class InvitationsService:
         })
 
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, invitation)
+            await self._store_idempotency(idempotency_key, {"invitation_id": invitation.id})
 
         return invitation
 
@@ -240,6 +260,10 @@ class InvitationsService:
             raise PermissionDeniedError("Not authorized")
         await self.repo.delete_invitation(invitation_id, tenant_id)
 
+    # ============================================================
+    # 2. قبول الدعوة – مع Idempotency محسّن
+    # ============================================================
+
     async def accept_invitation(
         self,
         invitation_id: int,
@@ -251,15 +275,14 @@ class InvitationsService:
         await self._check_saas_limits(tenant_id, "crm")
 
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
                 return cached
 
         invitation = await self.repo.get_invitation(invitation_id, tenant_id)
         if not invitation or invitation.status != InvitationStatus.SENT:  # type: ignore
             raise NotFoundError("Invitation not found or not sent")
 
-        # 🔥 معاملة ذرية
         async with self.db.begin_nested():
             if not user_id:
                 new_user = await self._create_user_from_invitation(accept_data, tenant_id)
@@ -323,9 +346,13 @@ class InvitationsService:
         }
 
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, result)
+            await self._store_idempotency(idempotency_key, result)
 
         return result
+
+    # ============================================================
+    # 3. الدردشة مع الذكاء الاصطناعي – مع Idempotency محسّن
+    # ============================================================
 
     async def chat_with_ai(
         self,
@@ -339,8 +366,8 @@ class InvitationsService:
         await self._check_saas_limits(tenant_id, "crm")
 
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
                 return cached
 
         invitation = await self.repo.get_invitation(invitation_id, tenant_id)
@@ -360,7 +387,6 @@ class InvitationsService:
 
         sanitized_message = bleach.clean(user_message, tags=[], strip=True)
 
-        # 🔥 معاملة ذرية لتسجيل المحادثة
         async with self.db.begin_nested():
             await self.repo.create_conversation(
                 tenant_id=tenant_id,  # type: ignore
@@ -419,7 +445,7 @@ class InvitationsService:
         result = {"reply": reply_text, "conversation_id": ai_message.id}
 
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, result)
+            await self._store_idempotency(idempotency_key, result)
 
         return result
 
@@ -433,7 +459,7 @@ class InvitationsService:
         return await self.repo.get_client_insight(invitation_id, tenant_id)
 
     # ============================================================
-    # 2. العملاء المحتملون (Leads)
+    # 4. العملاء المحتملون (Leads) – مع Idempotency محسّن
     # ============================================================
 
     async def create_lead(
@@ -446,9 +472,14 @@ class InvitationsService:
         await self._check_saas_limits(tenant_id, "crm")
 
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                lead_id = cached.get("lead_id")
+                if lead_id:
+                    lead = await self.repo.get_lead(lead_id, tenant_id)
+                    if lead:
+                        return lead
+                raise ValidationError("Idempotency record exists but lead not found.")
 
         async with self.db.begin_nested():
             lead = await self.repo.create_lead(
@@ -466,7 +497,7 @@ class InvitationsService:
         )
 
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, lead)
+            await self._store_idempotency(idempotency_key, {"lead_id": lead.id})
 
         return lead
 
@@ -495,7 +526,7 @@ class InvitationsService:
         await self.repo.delete_lead(lead_id, tenant_id)
 
     # ============================================================
-    # 3. تفاعلات العملاء (Interactions)
+    # 5. تفاعلات العملاء (Interactions) – مع Idempotency محسّن
     # ============================================================
 
     async def create_interaction(
@@ -509,9 +540,27 @@ class InvitationsService:
         await self._check_saas_limits(tenant_id, "crm")
 
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                interaction_id = cached.get("interaction_id")
+                if interaction_id:
+                    try:
+                        from app.domains.invitations.models import CustomerInteraction
+                        # إعادة بناء الكائن من البيانات المخزنة
+                        return CustomerInteraction(
+                            id=interaction_id,
+                            lead_id=lead_id,
+                            user_id=user_id,
+                            tenant_id=tenant_id,
+                            interaction_type=InteractionType(cached.get("interaction_type", "EMAIL")),
+                            title=cached.get("title", ""),
+                            content=cached.get("content", ""),
+                            metadata=cached.get("metadata", {}),
+                            created_at=datetime.utcnow()
+                        )
+                    except Exception:
+                        raise ValidationError("Idempotency record exists but cannot reconstruct interaction.")
+                raise ValidationError("Idempotency record exists but interaction not found.")
 
         lead = await self.repo.get_lead(lead_id, tenant_id)
         if not lead:
@@ -535,7 +584,19 @@ class InvitationsService:
         )
 
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, interaction)
+            # 🔥 تخزين البيانات كاملة مع استخدام cast لـ created_at
+            created_at = cast(datetime, interaction.created_at)
+            result_data = {
+                "interaction_id": interaction.id,
+                "lead_id": interaction.lead_id,
+                "user_id": interaction.user_id,
+                "interaction_type": interaction.interaction_type.value if hasattr(interaction.interaction_type, 'value') else str(interaction.interaction_type),
+                "title": interaction.title,
+                "content": interaction.content,
+                "metadata": interaction.metadata,
+                "created_at": created_at.isoformat() if created_at else None
+            }
+            await self._store_idempotency(idempotency_key, result_data)
 
         return interaction
 
@@ -543,7 +604,7 @@ class InvitationsService:
         return await self.repo.list_interactions(lead_id, tenant_id, limit)
 
     # ============================================================
-    # 4. الحملات التسويقية (Campaigns)
+    # 6. الحملات التسويقية (Campaigns) – مع Idempotency محسّن
     # ============================================================
 
     async def create_campaign(
@@ -556,14 +617,18 @@ class InvitationsService:
         await self._check_saas_limits(tenant_id, "crm")
 
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                campaign_id = cached.get("campaign_id")
+                if campaign_id:
+                    campaign = await self.repo.get_campaign(campaign_id, tenant_id)
+                    if campaign:
+                        return campaign
+                raise ValidationError("Idempotency record exists but campaign not found.")
 
         sanitized_name = bleach.clean(data.get("name", ""), tags=[], strip=True)
         sanitized_description = bleach.clean(data.get("description", ""), tags=[], strip=True)
 
-        # خصم الميزانية
         budget = data.get("budget_mrusdt", Decimal("0.0"))
         if budget > 0:
             payment_idempotency = f"campaign_budget_{idempotency_key or uuid.uuid4().hex[:12]}"
@@ -616,7 +681,7 @@ class InvitationsService:
         })
 
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, campaign)
+            await self._store_idempotency(idempotency_key, {"campaign_id": campaign.id})
 
         return campaign
 
@@ -658,7 +723,7 @@ class InvitationsService:
         return await self.repo.update_campaign(campaign_id, tenant_id, status=CampaignStatus.ACTIVE)
 
     # ============================================================
-    # 5. تذاكر الدعم (Support Tickets)
+    # 7. تذاكر الدعم (Support Tickets) – مع Idempotency محسّن
     # ============================================================
 
     async def create_ticket(
@@ -672,9 +737,14 @@ class InvitationsService:
         await self._check_saas_limits(tenant_id, "crm")
 
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                ticket_id = cached.get("ticket_id")
+                if ticket_id:
+                    ticket = await self.repo.get_ticket(ticket_id, tenant_id)
+                    if ticket:
+                        return ticket
+                raise ValidationError("Idempotency record exists but ticket not found.")
 
         sanitized_subject = bleach.clean(data.get("subject", ""), tags=[], strip=True)
         sanitized_description = bleach.clean(data.get("description", ""), tags=[], strip=True)
@@ -710,7 +780,7 @@ class InvitationsService:
         })
 
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, ticket)
+            await self._store_idempotency(idempotency_key, {"ticket_id": ticket.id})
 
         return ticket
 
@@ -735,6 +805,10 @@ class InvitationsService:
     ) -> SupportTicket:
         return await self.repo.update_ticket(ticket_id, tenant_id, **data)
 
+    # ============================================================
+    # 8. تعليقات التذاكر – مع Idempotency محسّن
+    # ============================================================
+
     async def add_ticket_comment(
         self,
         ticket_id: int,
@@ -746,9 +820,24 @@ class InvitationsService:
         await self._check_saas_limits(tenant_id, "crm")
 
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                comment_id = cached.get("comment_id")
+                if comment_id:
+                    try:
+                        from app.domains.invitations.models import TicketComment
+                        return TicketComment(
+                            id=comment_id,
+                            ticket_id=ticket_id,
+                            user_id=user_id,
+                            tenant_id=tenant_id,
+                            comment=cached.get("comment", ""),
+                            is_internal=cached.get("is_internal", False),
+                            created_at=datetime.utcnow()
+                        )
+                    except Exception:
+                        raise ValidationError("Idempotency record exists but cannot reconstruct comment.")
+                raise ValidationError("Idempotency record exists but comment not found.")
 
         ticket = await self.repo.get_ticket(ticket_id, tenant_id)
         if not ticket:
@@ -779,7 +868,17 @@ class InvitationsService:
         )
 
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, ticket_comment)
+            # 🔥 تخزين البيانات كاملة مع استخدام cast لـ created_at
+            created_at = cast(datetime, ticket_comment.created_at)
+            result_data = {
+                "comment_id": ticket_comment.id,
+                "ticket_id": ticket_comment.ticket_id,
+                "user_id": ticket_comment.user_id,
+                "comment": ticket_comment.comment,
+                "is_internal": ticket_comment.is_internal,
+                "created_at": created_at.isoformat() if created_at else None
+            }
+            await self._store_idempotency(idempotency_key, result_data)
 
         return ticket_comment
 
@@ -787,7 +886,7 @@ class InvitationsService:
         return await self.repo.list_ticket_comments(ticket_id, tenant_id)
 
     # ============================================================
-    # 6. التتبع والتحليلات (Tracking)
+    # 9. التتبع والتحليلات (Tracking) – مع Idempotency محسّن
     # ============================================================
 
     async def track_behavior(
@@ -800,9 +899,29 @@ class InvitationsService:
         await self._check_saas_limits(tenant_id, "crm")
 
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                tracking_id = cached.get("tracking_id")
+                if tracking_id:
+                    try:
+                        from app.domains.invitations.models import InvitationTracking
+                        return InvitationTracking(
+                            id=tracking_id,
+                            invitation_id=invitation_id,
+                            tenant_id=tenant_id,
+                            ip_address=cached.get("ip_address", ""),
+                            user_agent=cached.get("user_agent", ""),
+                            device_type=cached.get("device_type"),
+                            location_city=cached.get("location_city"),
+                            location_country=cached.get("location_country"),
+                            page_visited=cached.get("page_visited"),
+                            time_spent_seconds=cached.get("time_spent_seconds", 0),
+                            actions=cached.get("actions", []),
+                            created_at=datetime.utcnow()
+                        )
+                    except Exception:
+                        raise ValidationError("Idempotency record exists but cannot reconstruct tracking.")
+                raise ValidationError("Idempotency record exists but tracking not found.")
 
         sanitized_ip = bleach.clean(request_data.get("ip_address", ""), tags=[], strip=True)
         sanitized_user_agent = bleach.clean(request_data.get("user_agent", ""), tags=[], strip=True)
@@ -823,12 +942,27 @@ class InvitationsService:
             )
 
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, tracking)
+            # 🔥 تخزين البيانات كاملة مع استخدام cast لـ created_at
+            created_at = cast(datetime, tracking.created_at)
+            result_data = {
+                "tracking_id": tracking.id,
+                "invitation_id": tracking.invitation_id,
+                "ip_address": tracking.ip_address,
+                "user_agent": tracking.user_agent,
+                "device_type": tracking.device_type,
+                "location_city": tracking.location_city,
+                "location_country": tracking.location_country,
+                "page_visited": tracking.page_visited,
+                "time_spent_seconds": tracking.time_spent_seconds,
+                "actions": tracking.actions,
+                "created_at": created_at.isoformat() if created_at else None
+            }
+            await self._store_idempotency(idempotency_key, result_data)
 
         return tracking
 
     # ============================================================
-    # 7. الإحصائيات (Stats)
+    # 10. الإحصائيات (Stats)
     # ============================================================
 
     async def get_stats(self, tenant_id: int, user_id: int) -> dict:

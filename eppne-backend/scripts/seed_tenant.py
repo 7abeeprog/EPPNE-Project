@@ -3,8 +3,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.core.database import engine, AsyncSessionLocal # تأكد من اسم الـ Session لديك
 from app.domains.identity.models import User
+import app.domains.auth.models  # 👈 السطر المضاف
+
 from app.domains.academy.models import AcademyTenant, OrganizationEntity
-import app.domains.auth.models  # 👈 إضافة هذا السطر لتسجيل الموديل في الذاكرة
+from dotenv import load_dotenv
+load_dotenv()
 async def seed_smart_tenant():
     print("⏳ جاري فحص وبناء الكيانات السيادية...")
     

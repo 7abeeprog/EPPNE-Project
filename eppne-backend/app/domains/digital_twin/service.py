@@ -10,8 +10,8 @@ from app.domains.digital_twin.repository import DigitalTwinRepository
 from app.domains.finance.service import FinanceService
 from app.domains.saas.service import SaaSControlService
 from app.domains.affiliate.service import AffiliateService
-from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
@@ -122,6 +122,10 @@ class DigitalTwinService:
         await self._check_saas_limits(tenant_id)
         return await self.repo.update_twin_config(user_id, tenant_id, **data)
 
+    # ============================================================
+    # 2. التفاعل مع التوأم الرقمي (مع Idempotency محسّن)
+    # ============================================================
+
     async def interact_with_twin(
         self,
         visitor_id: int,
@@ -131,11 +135,18 @@ class DigitalTwinService:
         idempotency_key: Optional[str] = None
     ) -> TwinInteractionLog:
         """تفاعل المستخدم مع التوأم الرقمي مع دعم Idempotency."""
-        # 1. التحقق من Idempotency
+
+        # 1. التحقق من Idempotency باستخدام get_idempotency_result
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await get_idempotency_result(idempotency_key)
+            if cached is not None:
+                # استرجاع سجل التفاعل من قاعدة البيانات باستخدام المعرف المخزن
+                log_id = cached.get("log_id")
+                if log_id:
+                    log = await self.repo.get_interaction_log(log_id)  # type: ignore
+                    if log:
+                        return log
+                raise ValidationError("Idempotency record exists but interaction log not found.")
 
         # 2. التحقق من صلاحية SaaS
         await self._check_saas_limits(tenant_id)
@@ -190,9 +201,9 @@ class DigitalTwinService:
             idempotency_key=idempotency_key
         )
 
-        # 7. تخزين نتيجة Idempotency
+        # 7. تخزين نتيجة Idempotency (معرف السجل فقط)
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, log)
+            await store_idempotency_result(idempotency_key, {"log_id": log.id})
 
         # 8. نشر حدث
         await self.event_bus.publish("twin.interaction", {
@@ -207,7 +218,7 @@ class DigitalTwinService:
         return log
 
     # ============================================================
-    # 2. خزائن الزمن (Time Capsule)
+    # 3. خزائن الزمن (Time Capsule)
     # ============================================================
 
     async def setup_time_capsule(
@@ -255,7 +266,7 @@ class DigitalTwinService:
         return capsule
 
     # ============================================================
-    # 3. الوصية الرقمية (Digital Will)
+    # 4. الوصية الرقمية (Digital Will)
     # ============================================================
 
     async def create_digital_will(self, user_id: int, tenant_id: int, data: Dict[str, Any]) -> DigitalWill:
@@ -277,7 +288,7 @@ class DigitalTwinService:
         return await self.repo.get_digital_will(user_id, tenant_id)
 
     # ============================================================
-    # 4. أوراكل الموت (Death Oracle)
+    # 5. أوراكل الموت (Death Oracle)
     # ============================================================
 
     async def get_death_oracle(self, user_id: int, tenant_id: int) -> Optional[DeathOracleCheck]:
@@ -398,7 +409,7 @@ class DigitalTwinService:
                 )
 
     # ============================================================
-    # 5. محطات الحياة (Life Milestones)
+    # 6. محطات الحياة (Life Milestones)
     # ============================================================
 
     async def add_life_milestone(self, user_id: int, tenant_id: int, data: Dict[str, Any]) -> LifeMilestone:
@@ -416,7 +427,7 @@ class DigitalTwinService:
         return await self.repo.list_life_milestones(user_id, tenant_id)
 
     # ============================================================
-    # 6. الحجز قبل الولادة (Pre-Birth Identity)
+    # 7. الحجز قبل الولادة (Pre-Birth Identity)
     # ============================================================
 
     async def reserve_pre_birth_identity(

@@ -101,12 +101,17 @@ class DigitalTwinRepository:
 
     async def update_capsule_heartbeat(self, user_id: int, tenant_id: int) -> Optional[TimeCapsule]:
         """تحديث نبض الحياة للخزنة الزمنية مع التأكد من tenant_id."""
-        capsule = await self.get_time_capsule(user_id, tenant_id)
-        if capsule:
-            capsule.last_heartbeat_at = func.now()
-            await self.db.commit()
-            await self.db.refresh(capsule)
-        return capsule
+        # 🔥 استخدام update بدلاً من تعيين القيمة مباشرة
+        await self.db.execute(
+            update(TimeCapsule)
+            .where(
+                TimeCapsule.user_id == user_id,
+                TimeCapsule.tenant_id == tenant_id
+            )
+            .values(last_heartbeat_at=func.now())
+        )
+        await self.db.commit()
+        return await self.get_time_capsule(user_id, tenant_id)
 
     async def create_beneficiary(self, **kwargs) -> LegacyBeneficiary:
         """إنشاء مستفيد جديد (يتضمن tenant_id)."""
@@ -124,7 +129,8 @@ class DigitalTwinRepository:
                 LegacyBeneficiary.tenant_id == tenant_id
             )
         )
-        return result.scalars().all()
+        # 🔥 تحويل النتيجة إلى list
+        return list(result.scalars().all())
 
     async def create_digital_will(self, **kwargs) -> DigitalWill:
         """إنشاء وصية رقمية جديدة (يتضمن tenant_id)."""
@@ -189,17 +195,23 @@ class DigitalTwinRepository:
         release_tx: Optional[str] = None
     ) -> DeathOracleCheck:
         """تحديث حالة أوراكل الموت مع التأكد من tenant_id."""
-        oracle = await self.get_death_oracle(user_id, tenant_id)
-        if not oracle:
-            raise NotFoundError("سجل الوفاة غير موجود")
-        oracle.status = status
+        # 🔥 استخدام update بدلاً من تعيين القيم مباشرة
+        values = {"status": status}
         if death_certificate_ipfs:
-            oracle.official_death_certificate_ipfs = death_certificate_ipfs
+            values["official_death_certificate_ipfs"] = death_certificate_ipfs
         if release_tx:
-            oracle.release_tx_hash = release_tx
+            values["release_tx_hash"] = release_tx
+
+        await self.db.execute(
+            update(DeathOracleCheck)
+            .where(
+                DeathOracleCheck.user_id == user_id,
+                DeathOracleCheck.tenant_id == tenant_id
+            )
+            .values(**values)
+        )
         await self.db.commit()
-        await self.db.refresh(oracle)
-        return oracle
+        return await self.get_death_oracle(user_id, tenant_id)
 
     # ============================================================
     # 4. محطات الحياة (Life Milestones) مع العزل السيادي
@@ -223,7 +235,8 @@ class DigitalTwinRepository:
             )
             .order_by(LifeMilestone.occurrence_date)
         )
-        return result.scalars().all()
+        # 🔥 تحويل النتيجة إلى list
+        return list(result.scalars().all())
 
     # ============================================================
     # 5. الحجز قبل الولادة (Pre-Birth) مع العزل السيادي
@@ -246,3 +259,21 @@ class DigitalTwinRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    # ============================================================
+    # 6. التوائم النشطة (للفوترة)
+    # ============================================================
+
+    async def list_active_twins(self, tenant_id: int) -> List[DigitalTwinConfig]:
+        """
+        جلب جميع التوائم الرقمية النشطة لمستأجر معين.
+        تُستدعى من مهمة billing.process_twin_subscriptions.
+        """
+        result = await self.db.execute(
+            select(DigitalTwinConfig)
+            .where(
+                DigitalTwinConfig.tenant_id == tenant_id,
+                DigitalTwinConfig.is_active == True
+            )
+        )
+        return list(result.scalars().all())

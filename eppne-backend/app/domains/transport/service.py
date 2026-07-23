@@ -3,7 +3,7 @@
 # pyright: reportAttributeAccessIssue=false
 # pyright: reportArgumentType=false
 
-# app/domains/transport/service.py (الإصدار النهائي المتكامل)
+# app/domains/transport/service.py (الإصدار النهائي المتكامل المصحح)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import update
 from datetime import datetime, timedelta
@@ -19,8 +19,8 @@ from app.domains.saas.service import SaaSControlService as SaaSSubscriptionServi
 from app.domains.ai_agents.service import AIAgentsService
 from app.domains.ai_governance.service import AIGovernanceService
 from app.domains.communications.service import CommunicationsService
-from app.core.errors import NotFoundError, InsufficientBalanceError, PermissionDeniedError
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.errors import NotFoundError, InsufficientBalanceError, PermissionDeniedError, ValidationError
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
@@ -43,13 +43,29 @@ class TransportService:
         self.ai = AIAgentsService(db)
         self.governance = AIGovernanceService(db)
         self.communications = CommunicationsService(db)
-        self.event_bus = EventBus(cast(Any, redis_client))  # ✅ cast
+        self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
         self.user_repo = UserRepository(db)
 
+    # ============================================================
+    # 0. دوال Idempotency الموحّدة
+    # ============================================================
+
+    async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
+        """التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency."""
+        if idempotency_key:
+            cached = await get_idempotency_result(idempotency_key)
+            if cached is not None:
+                return cached
+        return None
+
+    async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
+        """تخزين نتيجة العملية بعد النجاح."""
+        if idempotency_key:
+            await store_idempotency_result(idempotency_key, result)
+
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "transport"):
-        # ✅ استخدام can_access_service بدلاً من get_active_subscription
         has_access = await self.saas.can_access_service(tenant_id, feature)
         if not has_access:
             raise PermissionDeniedError("Transport feature is not included in your current plan.")
@@ -93,7 +109,7 @@ class TransportService:
     ) -> List[TransportHub]:
         await self._check_saas_limits(tenant_id, "transport")
         result = await self.repo.list_hubs(tenant_id, hub_type, skip, limit)
-        return list(result)  # ✅ تحويل إلى list
+        return list(result)
 
     # ============================================================
     # 2. الأساطيل والمركبات (Fleets & Vehicles)
@@ -101,7 +117,7 @@ class TransportService:
     async def create_fleet(self, tenant_id: int, data: Dict[str, Any]) -> Fleet:
         await self._check_saas_limits(tenant_id, "transport")
         sanitized_name = bleach.clean(data.get("name", ""), tags=[], strip=True)
-        entity_id = data.get("entity_id", 1)  # قيمة افتراضية مؤقتة
+        entity_id = data.get("entity_id", 1)
         return await self.repo.create_fleet(
             tenant_id=tenant_id,
             entity_id=entity_id,
@@ -139,7 +155,7 @@ class TransportService:
     ) -> List[Vehicle]:
         await self._check_saas_limits(tenant_id, "transport")
         result = await self.repo.list_available_vehicles(tenant_id, fleet_id)
-        return list(result)  # ✅ تحويل إلى list
+        return list(result)
 
     # ============================================================
     # 3. المسارات (Routes)
@@ -147,7 +163,6 @@ class TransportService:
     async def create_route(self, tenant_id: int, data: Dict[str, Any]) -> Route:
         await self._check_saas_limits(tenant_id, "transport")
 
-        # استدعاء وكيل TRANSPORT_OPTIMIZER لتحسين المسار
         try:
             ai_result = await self.ai.execute_agent_action(  # type: ignore[call-arg]
                 agent_id=3,
@@ -278,10 +293,10 @@ class TransportService:
     ) -> List[Trip]:
         await self._check_saas_limits(tenant_id, "transport")
         result = await self.repo.list_trips(tenant_id, driver_id, status_filter, skip, limit)
-        return list(result)  # ✅ تحويل إلى list
+        return list(result)
 
     # ============================================================
-    # 5. الحجوزات (Bookings)
+    # 5. الحجوزات (Bookings) – مع Idempotency محسّن
     # ============================================================
     async def book_trip(
         self,
@@ -292,10 +307,16 @@ class TransportService:
     ) -> TripBooking:
         await self._check_saas_limits(tenant_id, "transport")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                booking_id = cached.get("booking_id")
+                if booking_id:
+                    booking = await self.repo.get_booking(booking_id)
+                    if booking:
+                        return booking
+                raise ValidationError("Idempotency record exists but booking not found.")
 
         trip = await self.repo.get_trip(data["trip_id"], tenant_id)
         if not trip or trip.status != TripStatus.SCHEDULED:  # type: ignore
@@ -314,7 +335,7 @@ class TransportService:
                     currency="MR_USDT",
                     amount=cast(Decimal, fare),
                     notes=f"Trip booking {trip.id}",
-                    idempotency_key=idempotency_key or ""  # ✅ تمرير سلسلة نصية
+                    idempotency_key=idempotency_key or ""
                 )
             except InsufficientBalanceError:
                 raise PermissionDeniedError("Insufficient balance")
@@ -362,8 +383,9 @@ class TransportService:
                 body=f"تم حجز رحلتك #{trip.id} بنجاح. السعر: {fare} MR_USDT"
             )
 
+        # تخزين معرف الحجز فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, booking)
+            await self._store_idempotency(idempotency_key, {"booking_id": booking.id})
 
         return booking
 
@@ -374,10 +396,10 @@ class TransportService:
     ) -> List[TripBooking]:
         await self._check_saas_limits(tenant_id, "transport")
         result = await self.repo.list_bookings(tenant_id, passenger_id=passenger_id)
-        return list(result)  # ✅ تحويل إلى list
+        return list(result)
 
     # ============================================================
-    # 6. مهام التوصيل (Deliveries)
+    # 6. مهام التوصيل (Deliveries) – مع Idempotency محسّن
     # ============================================================
     async def create_delivery(
         self,
@@ -388,10 +410,16 @@ class TransportService:
     ) -> DeliveryTask:
         await self._check_saas_limits(tenant_id, "transport")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                task_id = cached.get("task_id")
+                if task_id:
+                    task = await self.repo.get_delivery_task(task_id, tenant_id)
+                    if task:
+                        return task
+                raise ValidationError("Idempotency record exists but delivery task not found.")
 
         sanitized_pickup = self._sanitize_address(data["pickup_address"])
         sanitized_dropoff = self._sanitize_address(data["dropoff_address"])
@@ -418,8 +446,9 @@ class TransportService:
                 details={"receiver_id": data["receiver_id"]}
             )
 
+        # تخزين معرف المهمة فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, task)
+            await self._store_idempotency(idempotency_key, {"task_id": task.id})
 
         return task
 
@@ -438,6 +467,9 @@ class TransportService:
         await self._check_saas_limits(tenant_id, "transport")
         return await self.repo.complete_delivery(task_id, tenant_id, proof_hash)
 
+    # ============================================================
+    # 7. دفع رسوم التوصيل – مع Idempotency محسّن
+    # ============================================================
     async def pay_delivery(
         self,
         tenant_id: int,
@@ -447,10 +479,16 @@ class TransportService:
     ) -> DeliveryTask:
         await self._check_saas_limits(tenant_id, "transport")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                task_id_cached = cached.get("task_id")
+                if task_id_cached:
+                    task = await self.repo.get_delivery_task(task_id_cached, tenant_id)
+                    if task:
+                        return task
+                raise ValidationError("Idempotency record exists but delivery task not found.")
 
         task = await self.repo.get_delivery_task(task_id, tenant_id)
         if not task or task.sender_id != payer_id:  # type: ignore
@@ -473,7 +511,7 @@ class TransportService:
                     currency="MR_USDT",
                     amount=cast(Decimal, task.delivery_fee_mrusdt),  # type: ignore
                     notes=f"Delivery fee for task {task.id}",
-                    idempotency_key=idempotency_key or ""  # ✅ تمرير سلسلة نصية
+                    idempotency_key=idempotency_key or ""
                 )
             except InsufficientBalanceError:
                 raise PermissionDeniedError("Insufficient balance")
@@ -508,13 +546,14 @@ class TransportService:
                 "tenant_id": tenant_id
             })
 
+        # تخزين معرف المهمة فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, task)
+            await self._store_idempotency(idempotency_key, {"task_id": task.id})
 
         return await self.repo.get_delivery_task(task_id, tenant_id)
 
     # ============================================================
-    # 7. دوال مساعدة
+    # 8. دوال مساعدة
     # ============================================================
     @staticmethod
     def calculate_carbon(vehicle: Vehicle, distance_km: float) -> float:

@@ -1,4 +1,4 @@
-# app/domains/manufacturing/service.py (الإصدار النهائي مع حل audit_log)
+# app/domains/manufacturing/service.py (الإصدار النهائي مع حل جميع المشاكل)
 from sqlalchemy.ext.asyncio import AsyncSession
 from decimal import Decimal
 from datetime import datetime, timedelta
@@ -12,8 +12,8 @@ from app.domains.ai_agents.service import AIAgentsService
 from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
-from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
@@ -76,6 +76,23 @@ class ManufacturingService:
                 )
         except Exception as e:
             logger.error(f"Affiliate registration failed: {e}")
+
+    # ============================================================
+    # دوال Idempotency الموحّدة
+    # ============================================================
+
+    async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
+        """التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency."""
+        if idempotency_key:
+            cached = await get_idempotency_result(idempotency_key)
+            if cached is not None:
+                return cached
+        return None
+
+    async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
+        """تخزين نتيجة العملية بعد النجاح."""
+        if idempotency_key:
+            await store_idempotency_result(idempotency_key, result)
 
     # ============================================================
     # 1. المنشآت (Facilities)
@@ -244,7 +261,7 @@ class ManufacturingService:
         return await self.repo.get_batch(batch_id, tenant_id)
 
     # ============================================================
-    # 5. بدء الإنتاج (Start Production)
+    # 5. بدء الإنتاج (Start Production) – مع Idempotency محسّن
     # ============================================================
 
     async def start_production(
@@ -256,9 +273,10 @@ class ManufacturingService:
     ) -> Dict[str, Any]:
         await self._check_saas_limits(tenant_id, "manufacturing")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
                 return cached
 
         batch = await self.repo.get_batch(batch_id, tenant_id)
@@ -353,8 +371,9 @@ class ManufacturingService:
             "status": "QC_TESTING"
         }
 
+        # تخزين النتيجة كاملة
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, result)
+            await self._store_idempotency(idempotency_key, result)
 
         return result
 
@@ -401,7 +420,7 @@ class ManufacturingService:
             "resource_id": batch.id,
             "details": {
                 "material_name": batch.material_name,
-                "quantity": float(cast(Decimal, batch.quantity_kg)),
+                "quantity": float(cast(Any, batch.quantity_kg)),
                 "supplier_id": batch.supplier_id
             }
         })
@@ -410,7 +429,7 @@ class ManufacturingService:
             "batch_id": batch.id,
             "tenant_id": tenant_id,
             "material_name": batch.material_name,
-            "quantity": float(cast(Decimal, batch.quantity_kg)),
+            "quantity": float(cast(Any, batch.quantity_kg)),
             "supplier_id": batch.supplier_id
         })
 
@@ -418,6 +437,10 @@ class ManufacturingService:
 
     async def list_raw_materials(self, tenant_id: int, skip: int = 0, limit: int = 100) -> List[RawMaterialBatch]:
         return await self.repo.list_raw_materials(tenant_id, skip, limit)
+
+    # ============================================================
+    # 7. استهلاك المواد الخام – مع Idempotency محسّن (تخزين النتيجة كاملة)
+    # ============================================================
 
     async def consume_raw_material(
         self,
@@ -430,10 +453,28 @@ class ManufacturingService:
     ) -> MaterialConsumptionLog:
         await self._check_saas_limits(tenant_id, "manufacturing")
 
+        # 1. التحقق من Idempotency – نعيد النتيجة المخزنة كاملة
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                # بناء كائن MaterialConsumptionLog من البيانات المخزنة
+                log_id = cached.get("log_id")
+                if log_id:
+                    try:
+                        from app.domains.manufacturing.models import MaterialConsumptionLog
+                        return MaterialConsumptionLog(
+                            id=log_id,
+                            batch_id=cached.get("batch_id"),
+                            raw_material_batch_id=cached.get("raw_material_batch_id"),
+                            quantity_used_kg=Decimal(cached.get("quantity_used_kg", 0)),
+                            recorded_by=cached.get("recorded_by"),
+                            recorded_at=datetime.utcnow(),
+                            notes=cached.get("notes"),
+                            idempotency_key=idempotency_key
+                        )
+                    except Exception:
+                        raise ValidationError("Idempotency record exists but cannot reconstruct log.")
+                raise ValidationError("Idempotency record exists but log not found.")
 
         batch = await self.repo.get_batch(batch_id, tenant_id)
         if not batch:
@@ -467,13 +508,23 @@ class ManufacturingService:
             "details": {"batch_id": batch_id, "quantity": float(quantity)}
         })
 
+        # تخزين النتيجة كاملة (بدلاً من المعرف فقط) لضمان إمكانية إعادة بناء الكائن
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, log)
+            result_data = {
+                "log_id": log.id,
+                "batch_id": log.batch_id,
+                "raw_material_batch_id": log.raw_material_batch_id,
+                "quantity_used_kg": float(cast(Any, log.quantity_used_kg)),
+                "recorded_by": log.recorded_by,
+                "notes": log.notes,
+                "recorded_at": log.recorded_at.isoformat() if log.recorded_at else None
+            }
+            await self._store_idempotency(idempotency_key, result_data)
 
         return log
 
     # ============================================================
-    # 7. المنتجات الذكية والتوأم الرقمي
+    # 8. المنتجات الذكية والتوأم الرقمي
     # ============================================================
 
     async def create_digital_twin(
@@ -526,7 +577,7 @@ class ManufacturingService:
         return await self.repo.get_digital_twin(product_item_id, tenant_id)
 
     # ============================================================
-    # 8. شهادات الجودة (Quality Certificates)
+    # 9. شهادات الجودة (Quality Certificates)
     # ============================================================
 
     async def issue_quality_certificate(
@@ -572,7 +623,7 @@ class ManufacturingService:
         return await self.repo.get_certificates_for_entity(entity_type, entity_id, tenant_id)
 
     # ============================================================
-    # 9. الصيانة التنبؤية (Predictive Maintenance)
+    # 10. الصيانة التنبؤية (Predictive Maintenance)
     # ============================================================
 
     async def analyze_and_schedule_maintenance(
@@ -664,7 +715,7 @@ class ManufacturingService:
         return await self.repo.schedule_maintenance(log_id, scheduled_at)
 
     # ============================================================
-    # 10. قطع الغيار (Spare Parts)
+    # 11. قطع الغيار (Spare Parts)
     # ============================================================
 
     async def create_spare_part(

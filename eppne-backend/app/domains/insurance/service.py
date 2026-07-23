@@ -15,8 +15,8 @@ from app.domains.ai_agents.service import AIAgentsService
 from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
-from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
@@ -41,7 +41,7 @@ class InsuranceService:
         self.redis = redis_client
 
     # ============================================================
-    # دوال مساعدة
+    # دوال مساعدة (مع Idempotency الموحّد)
     # ============================================================
 
     async def _check_saas_limits(self, tenant_id: int, feature: str = "insurance"):
@@ -88,14 +88,32 @@ class InsuranceService:
             user = await self._get_user(user_id)
             if user and user.referred_by:  # type: ignore
                 commission = amount * Decimal("0.02")
-                subscription = await self.saas_service.get_active_subscription(tenant_id)  # type: ignore
+                await self.affiliate_service.register_commission(  # type: ignore
                     affiliate_id=user.referred_by,  # type: ignore
-                    user_id=user_id
-                    amount=commission
+                    user_id=user_id,
+                    amount=commission,
                     description=f"Affiliate commission for {action_type}",
                     status="PENDING"
+                )
         except Exception as e:
             logger.error(f"Affiliate registration failed: {e}")
+
+    # ============================================================
+    # دوال Idempotency الموحّدة
+    # ============================================================
+
+    async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
+        """التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency."""
+        if idempotency_key:
+            cached = await get_idempotency_result(idempotency_key)
+            if cached is not None:
+                return cached
+        return None
+
+    async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
+        """تخزين نتيجة العملية بعد النجاح."""
+        if idempotency_key:
+            await store_idempotency_result(idempotency_key, result)
 
     # ============================================================
     # 1. بوالص التأمين (Policies)
@@ -135,7 +153,7 @@ class InsuranceService:
         return policy
 
     # ============================================================
-    # 2. اشتراكات التأمين (Subscriptions)
+    # 2. اشتراكات التأمين (Subscriptions) – مع Idempotency محسّن
     # ============================================================
 
     async def subscribe(
@@ -148,10 +166,16 @@ class InsuranceService:
         """إنشاء اشتراك تأميني مع دعم Idempotency و Atomicity."""
         await self._check_saas_limits(tenant_id, "insurance")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                subscription_id = cached.get("subscription_id")
+                if subscription_id:
+                    subscription = await self.repo.get_subscription(subscription_id)
+                    if subscription:
+                        return subscription
+                raise ValidationError("Idempotency record exists but subscription not found.")
 
         policy = await self.repo.get_policy(data["policy_id"])
         if not policy or not cast(Any, policy.is_active) or cast(int, policy.tenant_id) != tenant_id:
@@ -218,8 +242,9 @@ class InsuranceService:
             details={"policy_id": policy.id, "premium": float(premium)}
         )
 
+        # تخزين معرف الاشتراك فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, subscription)
+            await self._store_idempotency(idempotency_key, {"subscription_id": subscription.id})
 
         return subscription
 
@@ -242,7 +267,6 @@ class InsuranceService:
         if not policy:
             raise NotFoundError("Policy not found")
 
-        # دفع القسط مع Idempotency
         payment_idempotency = f"renew_{subscription_id}_{uuid.uuid4().hex[:12]}"
         await self.finance.transfer(
             sender_id=user_id,
@@ -263,7 +287,7 @@ class InsuranceService:
         return await self.repo.update_subscription(subscription_id, end_date=new_end, status="ACTIVE")
 
     # ============================================================
-    # 3. مطالبات التعويض (Claims)
+    # 3. مطالبات التعويض (Claims) – مع Idempotency محسّن
     # ============================================================
 
     async def submit_claim(
@@ -276,10 +300,16 @@ class InsuranceService:
         """تقديم مطالبة تعويض مع Idempotency و AI."""
         await self._check_saas_limits(tenant_id, "insurance")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                claim_id = cached.get("claim_id")
+                if claim_id:
+                    claim = await self.repo.get_claim(claim_id)
+                    if claim:
+                        return claim
+                raise ValidationError("Idempotency record exists but claim not found.")
 
         subscription = await self.repo.get_subscription(data["subscription_id"])
         if not subscription or cast(int, subscription.tenant_id) != tenant_id:  # type: ignore
@@ -344,8 +374,9 @@ class InsuranceService:
             details={"subscription_id": subscription.id, "amount": float(data["claimed_amount_mrusdt"])}
         )
 
+        # تخزين معرف المطالبة فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, claim)
+            await self._store_idempotency(idempotency_key, {"claim_id": claim.id})
 
         return claim
 
@@ -369,10 +400,16 @@ class InsuranceService:
         """مراجعة مطالبة تعويض مع صرف التعويض في حال الموافقة."""
         await self._check_saas_limits(tenant_id, "insurance")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                claim_id_cached = cached.get("claim_id")
+                if claim_id_cached:
+                    claim = await self.repo.get_claim(claim_id_cached)
+                    if claim:
+                        return claim
+                raise ValidationError("Idempotency record exists but claim not found.")
 
         claim = await self.repo.get_claim(claim_id)
         if not claim or cast(int, claim.tenant_id) != tenant_id:  # type: ignore
@@ -455,8 +492,9 @@ class InsuranceService:
             details={"approved": approve, "amount": float(final_amount) if approve else 0}
         )
 
+        # تخزين معرف المطالبة فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, claim)
+            await self._store_idempotency(idempotency_key, {"claim_id": claim.id})
 
         return claim
 

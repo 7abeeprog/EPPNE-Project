@@ -17,15 +17,15 @@ import re
 
 from app.domains.sovereign_entities.repository import SovereignEntitiesRepository
 from app.domains.finance.service import FinanceService
-from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
 from app.domains.sovereign_entities.models import (
     SovereignEntity, EntityRepresentative, EntityPage, EntityDocument,
     KYBStatus, EntityRole, SovereignEntityType,
-    EntityPageTemplate, PageComponent  # ✅ إضافة الواردات المفقودة
+    EntityPageTemplate, PageComponent
 )
 from sqlalchemy.sql import func
 
@@ -35,7 +35,24 @@ class SovereignEntitiesService:
         self.db = db
         self.repo = SovereignEntitiesRepository(db)
         self.finance = FinanceService(db)
-        self.event_bus = EventBus(cast(Any, redis_client))  # ✅ cast لتجاوز مشكلة النوع
+        self.event_bus = EventBus(cast(Any, redis_client))
+
+    # ==============================
+    # 0. دوال Idempotency الموحّدة
+    # ==============================
+
+    async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
+        """التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency."""
+        if idempotency_key:
+            cached = await get_idempotency_result(idempotency_key)
+            if cached is not None:
+                return cached
+        return None
+
+    async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
+        """تخزين نتيجة العملية بعد النجاح."""
+        if idempotency_key:
+            await store_idempotency_result(idempotency_key, result)
 
     # ==============================
     # 1. إدارة الكيانات الأساسية
@@ -104,7 +121,6 @@ class SovereignEntitiesService:
     async def get_my_entities(self, user_id: int) -> List[SovereignEntity]:
         """جلب الكيانات التي يمثلها المستخدم."""
         reps = await self.repo.get_representatives_by_user(user_id)
-        # ✅ تحويل entity_id من Column[int] إلى int
         entity_ids = [cast(int, r.entity_id) for r in reps]
         return await self.repo.list_entities_by_ids(entity_ids)
 
@@ -214,13 +230,10 @@ class SovereignEntitiesService:
                 custom_structure=None
             )
 
-        # تحديث عدد الزيارات (مرة واحدة فقط)
         await self.repo.increment_page_visits(entity_id)
 
-        # جلب الصفحة المحدثة
         page = await self.repo.get_entity_page(entity_id)
 
-        # ✅ التحقق من أن page ليس None
         if not page:
             raise NotFoundError("Entity page not found after creation")
 
@@ -302,14 +315,13 @@ class SovereignEntitiesService:
         return await self.repo.list_components(tenant_id)
 
     # ==============================
-    # 6. التكامل مع القطاعات الأخرى
+    # 6. التكامل مع القطاعات الأخرى – الإيداع (مع Idempotency محسّن)
     # ==============================
 
     async def get_entity_balance(self, entity_id: int) -> Decimal:
         entity = await self.repo.get_entity(entity_id)
         if not entity:
             raise NotFoundError("Entity not found")
-        # ✅ تحويل العمود إلى Decimal
         return cast(Decimal, entity.treasury_balance_mrusdt)
 
     async def deposit_to_entity_wallet(
@@ -325,9 +337,10 @@ class SovereignEntitiesService:
         إيداع مبلغ في خزينة الكيان (مثل تحويل من حساب رئيسي أو أرباح).
         يدعم Idempotency لمنع تكرار الإيداع.
         """
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
                 return cached
 
         if not await self._is_authorized_representative(entity_id, admin_user_id, [EntityRole.OWNER, EntityRole.EXECUTIVE_DIRECTOR]):
@@ -371,10 +384,15 @@ class SovereignEntitiesService:
             "currency": currency
         }
 
+        # تخزين النتيجة كاملة
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, result)
+            await self._store_idempotency(idempotency_key, result)
 
         return result
+
+    # ==============================
+    # 7. التحويل من الكيان (مع Idempotency محسّن)
+    # ==============================
 
     async def transfer_from_entity(
         self,
@@ -389,10 +407,11 @@ class SovereignEntitiesService:
         """
         تحويل من خزينة الكيان إلى عنوان خارجي (مع Idempotency).
         """
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached.get("transaction_hash")
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                return cached.get("transaction_hash", "")
 
         entity = await self.repo.get_entity(entity_id)
         if not entity:
@@ -412,7 +431,7 @@ class SovereignEntitiesService:
                 currency=currency,
                 amount=amount,
                 notes=notes or f"Transfer from entity {entity.name}",
-                idempotency_key=idempotency_key or ""  # ✅ تمرير سلسلة نصية
+                idempotency_key=idempotency_key or ""
             )
 
             new_balance = cast(Decimal, entity.treasury_balance_mrusdt) - amount
@@ -443,16 +462,17 @@ class SovereignEntitiesService:
             "transaction_hash": tx_hash,
             "new_balance": float(cast(Decimal, new_balance))
         }
+
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, result)
+            await self._store_idempotency(idempotency_key, result)
 
         return tx_hash
 
     # ==============================
-    # 7. الهيكل التنظيمي (Tree)
+    # 8. الهيكل التنظيمي (Tree)
     # ==============================
 
-    async def get_entity_tree(self, entity_id: int) -> Optional[dict]:  # ✅ تغيير نوع الإرجاع إلى Optional[dict]
+    async def get_entity_tree(self, entity_id: int) -> Optional[dict]:
         """
         جلب شجرة الكيان بالكامل (للعرض في واجهة الإدارة).
         """
@@ -463,7 +483,7 @@ class SovereignEntitiesService:
         return tree
 
     # ==============================
-    # 8. دوال مساعدة
+    # 9. دوال مساعدة
     # ==============================
 
     async def _is_representative(self, entity_id: int, user_id: int) -> bool:
