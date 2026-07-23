@@ -3,9 +3,9 @@
 # pyright: reportAttributeAccessIssue=false
 # pyright: reportArgumentType=false
 
-# app/domains/social/service.py (الإصدار النهائي المتكامل)
+# app/domains/social/service.py (الإصدار النهائي المتكامل المصحح)
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update  # ✅ إضافة update
+from sqlalchemy import select, update
 from decimal import Decimal
 from datetime import datetime, timedelta
 import uuid
@@ -18,8 +18,8 @@ from app.domains.ai_agents.service import AIAgentsService
 from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
-from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
@@ -44,6 +44,23 @@ class SocialService:
         self.invoicing_service = InvoicingService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
+
+    # ============================================================
+    # 0. دوال Idempotency الموحّدة
+    # ============================================================
+
+    async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
+        """التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency."""
+        if idempotency_key:
+            cached = await get_idempotency_result(idempotency_key)
+            if cached is not None:
+                return cached
+        return None
+
+    async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
+        """تخزين نتيجة العملية بعد النجاح."""
+        if idempotency_key:
+            await store_idempotency_result(idempotency_key, result)
 
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "social"):
@@ -82,11 +99,17 @@ class SocialService:
         await self._check_saas_limits(tenant_id, "social")
         return await self.repo.get_global_feed(skip, limit)
 
+    # ============================================================
+    # 2. الإعجابات – مع Idempotency محسّن
+    # ============================================================
+
     async def like_post(self, user_id: int, tenant_id: int, post_id: int, idempotency_key: Optional[str] = None) -> dict:
         await self._check_saas_limits(tenant_id, "social")
+
+        # 1. التحقق من Idempotency – نعيد النتيجة المخزنة كاملة
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
                 return cached
 
         post = await self.repo.get_post(post_id)
@@ -95,11 +118,12 @@ class SocialService:
 
         success = await self.repo.add_like(post_id, user_id)
         if not success:
-            return {"status": "already_liked", "message": "Already liked"}
+            result = {"status": "already_liked", "message": "Already liked"}
+        else:
+            result = {"status": "success", "message": "Post liked"}
 
-        result = {"status": "success", "message": "Post liked"}
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, result)
+            await self._store_idempotency(idempotency_key, result)
         return result
 
     async def share_post(self, user_id: int, tenant_id: int, post_id: int) -> dict:
@@ -111,8 +135,9 @@ class SocialService:
         return {"status": "success", "message": "Post shared"}
 
     # ============================================================
-    # 2. المجموعات (Groups)
+    # 3. المجموعات (Groups) – مع Idempotency محسّن
     # ============================================================
+
     async def create_group(
         self,
         user_id: int,
@@ -121,10 +146,17 @@ class SocialService:
         idempotency_key: Optional[str] = None
     ) -> SocialGroup:
         await self._check_saas_limits(tenant_id, "social")
+
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                group_id = cached.get("group_id")
+                if group_id:
+                    group = await self.repo.get_group(group_id, tenant_id)
+                    if group:
+                        return group
+                raise ValidationError("Idempotency record exists but group not found.")
 
         group = await self.repo.create_group(
             tenant_id=tenant_id,
@@ -144,9 +176,14 @@ class SocialService:
             details={"name": group.name}
         )
 
+        # تخزين معرف المجموعة فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, group)
+            await self._store_idempotency(idempotency_key, {"group_id": group.id})
         return group
+
+    # ============================================================
+    # 4. الانضمام للمجموعة – مع Idempotency محسّن
+    # ============================================================
 
     async def join_group(
         self,
@@ -156,9 +193,11 @@ class SocialService:
         idempotency_key: Optional[str] = None
     ) -> dict:
         await self._check_saas_limits(tenant_id, "social")
+
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
                 return cached
 
         result = await self.db.execute(
@@ -172,12 +211,13 @@ class SocialService:
         result_dict = {"status": "success", "message": "Joined group"}
 
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, result_dict)
+            await self._store_idempotency(idempotency_key, result_dict)
         return result_dict
 
     # ============================================================
-    # 3. العقود الذكية (Contracts)
+    # 5. العقود الذكية (Contracts) – مع Idempotency محسّن
     # ============================================================
+
     async def create_contract(
         self,
         user_id: int,
@@ -186,10 +226,17 @@ class SocialService:
         idempotency_key: Optional[str] = None
     ) -> SocialSmartContract:
         await self._check_saas_limits(tenant_id, "social")
+
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                contract_id = cached.get("contract_id")
+                if contract_id:
+                    contract = await self.repo.get_contract(contract_id)
+                    if contract:
+                        return contract
+                raise ValidationError("Idempotency record exists but contract not found.")
 
         contract = await self.repo.create_contract(
             tenant_id=tenant_id,
@@ -210,8 +257,9 @@ class SocialService:
             details={"title": contract.title}
         )
 
+        # تخزين معرف العقد فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, contract)
+            await self._store_idempotency(idempotency_key, {"contract_id": contract.id})
         return contract
 
     async def sign_contract(
@@ -229,7 +277,7 @@ class SocialService:
         return {"status": "success", "message": "Contract signed"}
 
     # ============================================================
-    # 4. الذكاء الاصطناعي للتوافق (AI Matchmaking)
+    # 6. الذكاء الاصطناعي للتوافق (AI Matchmaking)
     # ============================================================
     async def setup_match_profile(
         self,
@@ -293,8 +341,9 @@ class SocialService:
             ]
 
     # ============================================================
-    # 5. الاتصالات (Connections)
+    # 7. الاتصالات (Connections) – مع Idempotency محسّن
     # ============================================================
+
     async def request_connection(
         self,
         user_id: int,
@@ -304,10 +353,17 @@ class SocialService:
         idempotency_key: Optional[str] = None
     ) -> UserConnection:
         await self._check_saas_limits(tenant_id, "social")
+
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                conn_id = cached.get("connection_id")
+                if conn_id:
+                    conn = await self.repo.get_connection(conn_id)
+                    if conn:
+                        return conn
+                raise ValidationError("Idempotency record exists but connection not found.")
 
         if user_id == target_user_id:
             raise PermissionDeniedError("Cannot connect to yourself")
@@ -329,8 +385,9 @@ class SocialService:
             details={"target_user": target_user_id, "type": connection_type}
         )
 
+        # تخزين معرف الاتصال فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, conn)
+            await self._store_idempotency(idempotency_key, {"connection_id": conn.id})
         return conn
 
     async def get_my_connections(self, user_id: int, tenant_id: int) -> List[UserConnection]:
@@ -338,7 +395,7 @@ class SocialService:
         return await self.repo.get_user_connections(user_id)
 
     # ============================================================
-    # 6. المناسبات والتذكيرات (Occasions & Reminders)
+    # 8. المناسبات والتذكيرات (Occasions & Reminders)
     # ============================================================
     async def create_occasion(self, user_id: int, tenant_id: int, data: Dict[str, Any]) -> UserOccasion:
         await self._check_saas_limits(tenant_id, "social")
@@ -386,7 +443,6 @@ class SocialService:
                 occasion = await self.repo.get_occasion(cast(int, reminder.occasion_id), tenant_id)
                 if not occasion:
                     continue
-                # ✅ update مستوردة الآن
                 await self.db.execute(
                     update(OccasionReminder)
                     .where(OccasionReminder.id == reminder.id)
@@ -403,8 +459,9 @@ class SocialService:
                 await self.db.commit()
 
     # ============================================================
-    # 7. الهدايا (Gifts) – مع معاملات ذرية
+    # 9. الهدايا (Gifts) – مع معاملات ذرية و Idempotency محسّن
     # ============================================================
+
     async def send_digital_gift(
         self,
         sender_id: int,
@@ -418,10 +475,17 @@ class SocialService:
         idempotency_key: Optional[str] = None
     ) -> DigitalGift:
         await self._check_saas_limits(tenant_id, "social")
+
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                gift_id = cached.get("gift_id")
+                if gift_id:
+                    gift = await self.repo.get_digital_gift(gift_id)
+                    if gift:
+                        return gift
+                raise ValidationError("Idempotency record exists but gift not found.")
 
         async with self.db.begin_nested():
             if gift_value > 0:
@@ -455,8 +519,9 @@ class SocialService:
             )
             await self.event_bus.publish("social.gift.sent", {"gift_id": gift.id, "receiver_id": receiver_id})
 
+            # تخزين معرف الهدية فقط
             if idempotency_key:
-                await store_idempotency_result(idempotency_key, gift)
+                await self._store_idempotency(idempotency_key, {"gift_id": gift.id})
 
         return gift
 
@@ -473,10 +538,17 @@ class SocialService:
         idempotency_key: Optional[str] = None
     ) -> PhysicalGiftRequest:
         await self._check_saas_limits(tenant_id, "social")
+
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                request_id = cached.get("request_id")
+                if request_id:
+                    gift_request = await self.repo.get_physical_gift_request(request_id)
+                    if gift_request:
+                        return gift_request
+                raise ValidationError("Idempotency record exists but gift request not found.")
 
         async with self.db.begin_nested():
             await self.finance.transfer(
@@ -509,14 +581,16 @@ class SocialService:
             )
             await self.event_bus.publish("social.gift.physical.requested", {"gift_id": gift.id})
 
+            # تخزين معرف الطلب فقط
             if idempotency_key:
-                await store_idempotency_result(idempotency_key, gift)
+                await self._store_idempotency(idempotency_key, {"request_id": gift.id})
 
         return gift
 
     # ============================================================
-    # 8. نظام SaaS للمجموعات (Group Subscriptions)
+    # 10. نظام SaaS للمجموعات (Group Subscriptions) – مع Idempotency محسّن
     # ============================================================
+
     async def create_group_subscription_plan(self, tenant_id: int, data: Dict[str, Any]) -> GroupSubscriptionPlan:
         await self._check_saas_limits(tenant_id, "social")
         plan = await self.repo.create_subscription_plan(tenant_id=tenant_id, **data)
@@ -531,10 +605,17 @@ class SocialService:
         idempotency_key: Optional[str] = None
     ) -> GroupSubscription:
         await self._check_saas_limits(tenant_id, "social")
+
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                subscription_id = cached.get("subscription_id")
+                if subscription_id:
+                    sub = await self.repo.get_group_subscription(subscription_id)
+                    if sub:
+                        return sub
+                raise ValidationError("Idempotency record exists but subscription not found.")
 
         plan = await self.repo.get_subscription_plan(plan_id, tenant_id)
         if not plan:
@@ -574,8 +655,9 @@ class SocialService:
                 details={"group_id": group_id, "plan": plan.name}
             )
 
+            # تخزين معرف الاشتراك فقط
             if idempotency_key:
-                await store_idempotency_result(idempotency_key, sub)
+                await self._store_idempotency(idempotency_key, {"subscription_id": sub.id})
 
         return sub
 
@@ -584,8 +666,9 @@ class SocialService:
         return await self.repo.get_group_features(group_id, tenant_id)
 
     # ============================================================
-    # 9. دوال مساعدة
+    # 11. دوال مساعدة
     # ============================================================
+
     async def _get_user_email(self, user_id: int) -> str:
         from app.domains.identity.repository import UserRepository
         user_repo = UserRepository(self.db)

@@ -1,4 +1,4 @@
-# app/domains/iot/service.py (الإصدار النهائي المتكامل)
+# app/domains/iot/service.py (الإصدار النهائي المتكامل المصحح)
 from sqlalchemy.ext.asyncio import AsyncSession
 from decimal import Decimal
 from typing import Optional, List, Dict, Any, cast
@@ -11,8 +11,8 @@ from app.domains.iot.models import UtilityType, SmartAsset, UtilityGrid, Utility
 from app.domains.finance.service import FinanceService
 from app.core.config import settings
 from app.core.redis_client import redis_client as get_redis_client
-from app.core.errors import BusinessError, NotFoundError, PermissionDeniedError
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.errors import BusinessError, NotFoundError, PermissionDeniedError, ValidationError
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 
 
 class IoTService:
@@ -32,15 +32,25 @@ class IoTService:
         user = await user_repo.get_by_id(user_id)
         return user.email if user else f"user_{user_id}@eppne.com"  # type: ignore
 
+    # ============================================================
+    # دوال Idempotency الموحّدة (تم إصلاحها)
+    # ============================================================
+
     async def _validate_idempotency(self, idempotency_key: str) -> Optional[dict]:
+        """
+        التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency.
+        تعيد النتيجة (Dict) إذا كانت موجودة، وإلا None.
+        """
         if not idempotency_key:
             return None
-        cached = await check_idempotency(idempotency_key)
-        if cached:
+        # 🔥 استخدام get_idempotency_result بدلاً من check_idempotency
+        cached = await get_idempotency_result(idempotency_key)
+        if cached is not None:
             return cached
         return None
 
     async def _store_idempotency(self, idempotency_key: str, result: dict):
+        """تخزين نتيجة العملية بعد النجاح."""
         if idempotency_key:
             await store_idempotency_result(idempotency_key, result)
 
@@ -106,9 +116,10 @@ class IoTService:
         ip: Optional[str] = None,
         ua: Optional[str] = None
     ) -> dict:
+        # 1. التحقق من Idempotency
         if idempotency_key:
             cached = await self._validate_idempotency(idempotency_key)
-            if cached:
+            if cached is not None:
                 return cached
 
         async with self.db.begin_nested():
@@ -144,6 +155,7 @@ class IoTService:
 
             result = {"status": "success", "reading_id": reading.id, "carbon_credits": float(carbon_credits)}
 
+        # تخزين النتيجة كاملة
         if idempotency_key:
             await self._store_idempotency(idempotency_key, result)
 
@@ -170,9 +182,10 @@ class IoTService:
         ip: Optional[str] = None,
         ua: Optional[str] = None
     ) -> dict:
+        # 1. التحقق من Idempotency
         if idempotency_key:
             cached = await self._validate_idempotency(idempotency_key)
-            if cached:
+            if cached is not None:
                 return cached
 
         async with self.db.begin_nested():
@@ -223,6 +236,7 @@ class IoTService:
                 "readings_processed": len(reading_ids)
             }
 
+        # تخزين النتيجة كاملة
         if idempotency_key:
             await self._store_idempotency(idempotency_key, result)
 

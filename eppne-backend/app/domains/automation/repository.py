@@ -182,7 +182,7 @@ class AutomationRepository:
         result = await self.db.execute(
             select(WorkflowSecret).where(WorkflowSecret.tenant_id == tenant_id)  # type: ignore
         )
-        secrets = result.scalars().all()
+        secrets = list(result.scalars().all())
         for secret in secrets:
             if cast(Any, secret.value_encrypted):
                 secret.value = self._decrypt_value(secret.value_encrypted)  # type: ignore

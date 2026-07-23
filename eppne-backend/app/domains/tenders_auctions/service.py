@@ -21,8 +21,8 @@ from app.domains.ai_agents.service import AIAgentsService
 from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
-from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
@@ -38,12 +38,28 @@ class TendersAuctionsService:
         self.saas_service = SaaSSubscriptionService(db)
         self.affiliate_service = AffiliateService(db)
         self.invoicing_service = InvoicingService(db)
-        self.event_bus = EventBus(cast(Any, redis_client))  # ✅ cast لتجاوز مشكلة النوع
+        self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
+
+    # ============================================================
+    # 0. دوال Idempotency الموحّدة
+    # ============================================================
+
+    async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
+        """التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency."""
+        if idempotency_key:
+            cached = await get_idempotency_result(idempotency_key)
+            if cached is not None:
+                return cached
+        return None
+
+    async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
+        """تخزين نتيجة العملية بعد النجاح."""
+        if idempotency_key:
+            await store_idempotency_result(idempotency_key, result)
 
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "tenders_auctions"):
-        # ✅ استخدام can_access_service بدلاً من get_active_subscription
         has_access = await self.saas_service.can_access_service(tenant_id, feature)
         if not has_access:
             raise PermissionDeniedError("Tenders & Auctions feature is not included in your current plan.")
@@ -91,7 +107,7 @@ class TendersAuctionsService:
 
         return tender
 
-    # ========== تقديم عطاء ==========
+    # ========== تقديم عطاء (مع Idempotency محسّن) ==========
     async def submit_bid(
         self,
         user_id: int,
@@ -101,10 +117,16 @@ class TendersAuctionsService:
     ) -> TenderBid:
         await self._check_saas_limits(tenant_id, "tenders")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                bid_id = cached.get("bid_id")
+                if bid_id:
+                    bid = await self.repo.get_bid(bid_id)
+                    if bid:
+                        return bid
+                raise ValidationError("Idempotency record exists but bid not found.")
 
         tender = await self.repo.get_tender(data["tender_id"])
         if not tender or tender.tenant_id != tenant_id:  # type: ignore
@@ -139,12 +161,13 @@ class TendersAuctionsService:
             details={"tender_id": tender.id}
         )
 
+        # تخزين معرف العطاء فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, bid)
+            await self._store_idempotency(idempotency_key, {"bid_id": bid.id})
 
         return bid
 
-    # ========== تقييم عطاء ==========
+    # ========== تقييم عطاء (مع Idempotency محسّن) ==========
     async def evaluate_bid_technically(
         self,
         evaluator_id: int,
@@ -155,10 +178,16 @@ class TendersAuctionsService:
     ) -> TenderBid:
         await self._check_saas_limits(tenant_id, "tenders")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                bid_id_cached = cached.get("bid_id")
+                if bid_id_cached:
+                    bid = await self.repo.get_bid(bid_id_cached)
+                    if bid:
+                        return bid
+                raise ValidationError("Idempotency record exists but bid not found.")
 
         bid = await self.repo.get_bid(bid_id)
         if not bid or bid.tenant_id != tenant_id:  # type: ignore
@@ -212,8 +241,9 @@ class TendersAuctionsService:
             details={"score": float(score), "status": status.value}
         )
 
+        # تخزين معرف العطاء فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, bid)
+            await self._store_idempotency(idempotency_key, {"bid_id": bid.id})
 
         return bid
 
@@ -255,7 +285,7 @@ class TendersAuctionsService:
 
         return auction
 
-    # ========== وضع مزايدة حية ==========
+    # ========== وضع مزايدة حية (مع Idempotency محسّن) ==========
     async def place_bid(
         self,
         user_id: int,
@@ -266,16 +296,21 @@ class TendersAuctionsService:
     ) -> LiveBid:
         await self._check_saas_limits(tenant_id, "auctions")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                bid_id = cached.get("bid_id")
+                if bid_id:
+                    live_bid = await self.repo.get_live_bid(bid_id)
+                    if live_bid:
+                        return live_bid
+                raise ValidationError("Idempotency record exists but live bid not found.")
 
         auction = await self.repo.get_auction(auction_id)
         if not auction or auction.tenant_id != tenant_id:  # type: ignore
             raise NotFoundError("Auction not found")
         
-        # ✅ cast لتجاوز مشكلة Column
         auction_status = cast(AuctionStatus, auction.status)
         if auction_status != AuctionStatus.OPEN:
             raise PermissionDeniedError("Auction is not open")
@@ -344,8 +379,9 @@ class TendersAuctionsService:
             details={"auction_id": auction_id, "amount": float(bid_amount)}
         )
 
+        # تخزين معرف المزايدة فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, bid)
+            await self._store_idempotency(idempotency_key, {"bid_id": bid.id})
 
         return bid
 
@@ -364,8 +400,8 @@ class TendersAuctionsService:
         has_winner = highest_bid is not None
 
         if has_winner and highest_bid:
-            bidder_id = cast(int, highest_bid.bidder_id)  # ✅ cast
-            bid_amount = cast(Decimal, highest_bid.bid_amount_mrusdt)  # ✅ cast
+            bidder_id = cast(int, highest_bid.bidder_id)
+            bid_amount = cast(Decimal, highest_bid.bid_amount_mrusdt)
             
             await self.finance.release_held_funds(  # type: ignore[attr-defined]
                 bidder_id,
@@ -395,7 +431,7 @@ class TendersAuctionsService:
         updated = await self.repo.close_auction(
             auction_id,
             has_winner,
-            cast(int, highest_bid.id) if has_winner and highest_bid else None  # ✅ cast
+            cast(int, highest_bid.id) if has_winner and highest_bid else None
         )
 
         final_price = float(cast(Decimal, highest_bid.bid_amount_mrusdt)) if has_winner and highest_bid else 0

@@ -16,8 +16,8 @@ from app.domains.affiliate.service import AffiliateService
 from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.ai_agents.service import AIAgentsService
 from app.domains.ai_governance.service import AIGovernanceService
-from app.core.errors import NotFoundError, InsufficientBalanceError, PermissionDeniedError, IdempotencyError
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.errors import NotFoundError, InsufficientBalanceError, PermissionDeniedError, IdempotencyError, ValidationError
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
@@ -44,6 +44,23 @@ class RealEstateService:
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
         self.user_repo = UserRepository(db)
+
+    # ============================================================
+    # دوال Idempotency الموحّدة
+    # ============================================================
+
+    async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
+        """التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency."""
+        if idempotency_key:
+            cached = await get_idempotency_result(idempotency_key)
+            if cached is not None:
+                return cached
+        return None
+
+    async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
+        """تخزين نتيجة العملية بعد النجاح."""
+        if idempotency_key:
+            await store_idempotency_result(idempotency_key, result)
 
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "real_estate"):
@@ -156,7 +173,7 @@ class RealEstateService:
         return list(result)
 
     # ============================================================
-    # الملكية الجزئية (Fractional Ownership)
+    # الملكية الجزئية (Fractional Ownership) – مع Idempotency محسّن
     # ============================================================
     async def buy_fractional_ownership(
         self,
@@ -169,10 +186,29 @@ class RealEstateService:
         """شراء ملكية جزئية (مع Idempotency ومعاملة ذرية)."""
         await self._check_saas_limits(tenant_id, "real_estate")
 
+        # 1. التحقق من Idempotency – نعيد النتيجة المخزنة كاملة
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                # إعادة بناء الكائن من البيانات المخزنة
+                ownership_id = cached.get("ownership_id")
+                if ownership_id:
+                    try:
+                        from app.domains.realestate.models import PropertyOwnership
+                        return PropertyOwnership(
+                            id=ownership_id,
+                            unit_id=cached.get("unit_id"),
+                            owner_user_id=cached.get("owner_user_id"),
+                            ownership_percentage=Decimal(cached.get("ownership_percentage", 0)),
+                            acquisition_date=datetime.fromisoformat(cached.get("acquisition_date", datetime.utcnow().isoformat())),
+                            deed_nft_token_id=cached.get("deed_nft_token_id"),
+                            purchase_tx_hash=cached.get("purchase_tx_hash"),
+                            tenant_id=tenant_id,
+                            idempotency_key=idempotency_key
+                        )
+                    except Exception:
+                        raise ValidationError("Idempotency record exists but cannot reconstruct ownership.")
+                raise ValidationError("Idempotency record exists but ownership not found.")
 
         async with self.db.begin_nested():
             unit = await self.repo.get_unit(unit_id)
@@ -190,7 +226,7 @@ class RealEstateService:
             cost = (unit_price * percentage) / Decimal(100)
 
             # ========================================
-            # استدعاء الوكيل الذكي (تم كتابته في سطر واحد مع تجاهل التحقق)
+            # استدعاء الوكيل الذكي
             # ========================================
             await self.ai.execute_agent_action(agent_id=2, tenant_id=tenant_id, action_type="ANALYZE_PROJECT", payload={"unit_id": unit_id, "price": float(cost), "percentage": float(percentage), "buyer_id": buyer_id}, executor_user_id=buyer_id)  # type: ignore[call-arg]
 
@@ -200,7 +236,7 @@ class RealEstateService:
             owner = await self._get_land_owner_for_unit(unit)
             owner_email = cast(str, owner.email)
             try:
-                # نقل الأموال (في سطر واحد مع تجاهل التحقق)
+                # نقل الأموال
                 tx_hash = await self.finance.transfer(sender_id=buyer_id, receiver_email=owner_email, currency="MR_USDT", amount=cost, notes=f"Purchase {percentage}% of unit {unit_id}", idempotency_key=idempotency_key or "")  # type: ignore[call-arg]
             except InsufficientBalanceError:
                 raise PermissionDeniedError("Insufficient balance")
@@ -253,8 +289,20 @@ class RealEstateService:
                 body=f"لقد اشتريت {percentage}% من الوحدة {unit_id} بقيمة {cost} MR_USDT"
             )
 
+            # تخزين البيانات كاملة مع استخدام cast لتوضيح الأنواع
             if idempotency_key:
-                await store_idempotency_result(idempotency_key, ownership)
+                # 🔥 استخدام cast لتجنب مشاكل Column[Decimal] و Column[datetime]
+                acquisition_date = cast(datetime, ownership.acquisition_date)
+                result_data = {
+                    "ownership_id": ownership.id,
+                    "unit_id": ownership.unit_id,
+                    "owner_user_id": ownership.owner_user_id,
+                    "ownership_percentage": float(cast(Any, ownership.ownership_percentage)),
+                    "acquisition_date": acquisition_date.isoformat() if acquisition_date else None,
+                    "deed_nft_token_id": ownership.deed_nft_token_id,
+                    "purchase_tx_hash": ownership.purchase_tx_hash
+                }
+                await self._store_idempotency(idempotency_key, result_data)
 
             return ownership
 
@@ -264,7 +312,7 @@ class RealEstateService:
         return list(result)
 
     # ============================================================
-    # عقود الإيجار (Rental Contracts)
+    # عقود الإيجار (Rental Contracts) – مع Idempotency محسّن
     # ============================================================
     async def rent_unit(
         self,
@@ -280,10 +328,32 @@ class RealEstateService:
         """تأجير وحدة (مع Idempotency ومعاملة ذرية)."""
         await self._check_saas_limits(tenant_id, "real_estate")
 
+        # 1. التحقق من Idempotency – نعيد النتيجة المخزنة كاملة
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                contract_id = cached.get("contract_id")
+                if contract_id:
+                    try:
+                        from app.domains.realestate.models import RentalContract
+                        # 🔥 استخدام cast لتجنب مشاكل Column
+                        start = cast(datetime, cached.get("start_date"))
+                        end = cast(datetime, cached.get("end_date"))
+                        return RentalContract(
+                            id=contract_id,
+                            unit_id=cached.get("unit_id"),
+                            tenant_user_id=cached.get("tenant_user_id"),
+                            landlord_user_id=cached.get("landlord_user_id"),
+                            start_date=datetime.fromisoformat(start.isoformat()) if start else datetime.utcnow(),
+                            end_date=datetime.fromisoformat(end.isoformat()) if end else datetime.utcnow(),
+                            monthly_rent_mrusdt=Decimal(cached.get("monthly_rent_mrusdt", 0)),
+                            contract_tx_hash=cached.get("contract_tx_hash"),
+                            tenant_id=tenant_id,
+                            idempotency_key=idempotency_key
+                        )
+                    except Exception:
+                        raise ValidationError("Idempotency record exists but cannot reconstruct contract.")
+                raise ValidationError("Idempotency record exists but contract not found.")
 
         async with self.db.begin_nested():
             unit = await self.repo.get_unit(unit_id)
@@ -321,8 +391,22 @@ class RealEstateService:
                 "details": {"unit_id": unit_id, "monthly_rent": float(monthly_rent)}
             })
 
+            # تخزين البيانات كاملة مع استخدام cast
             if idempotency_key:
-                await store_idempotency_result(idempotency_key, contract)
+                # 🔥 استخدام cast لتجنب مشاكل Column
+                start_date_casted = cast(datetime, contract.start_date)
+                end_date_casted = cast(datetime, contract.end_date)
+                result_data = {
+                    "contract_id": contract.id,
+                    "unit_id": contract.unit_id,
+                    "tenant_user_id": contract.tenant_user_id,
+                    "landlord_user_id": contract.landlord_user_id,
+                    "start_date": start_date_casted.isoformat() if start_date_casted else None,
+                    "end_date": end_date_casted.isoformat() if end_date_casted else None,
+                    "monthly_rent_mrusdt": float(cast(Any, contract.monthly_rent_mrusdt)),
+                    "contract_tx_hash": contract.contract_tx_hash
+                }
+                await self._store_idempotency(idempotency_key, result_data)
 
             return contract
 
@@ -386,7 +470,7 @@ class RealEstateService:
         return tokenization
 
     # ============================================================
-    # العقود الذكية (Smart Contracts)
+    # العقود الذكية (Smart Contracts) – مع Idempotency محسّن
     # ============================================================
     async def deploy_smart_contract(
         self,
@@ -399,10 +483,31 @@ class RealEstateService:
         """نشر عقد ذكي (مع Idempotency)."""
         await self._check_saas_limits(tenant_id, "real_estate_smart_contracts")
 
+        # 1. التحقق من Idempotency – نعيد النتيجة المخزنة كاملة
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                contract_id = cached.get("contract_id")
+                if contract_id:
+                    try:
+                        from app.domains.realestate.models import SmartContractEngine
+                        # 🔥 استخدام cast لتجنب مشاكل Column
+                        executed_at = cached.get("executed_at")
+                        executed_at_dt = datetime.fromisoformat(executed_at) if executed_at else None
+                        return SmartContractEngine(
+                            id=contract_id,
+                            contract_type=cached.get("contract_type"),
+                            reference_id=cached.get("reference_id"),
+                            contract_metadata=cached.get("contract_metadata", {}),
+                            blockchain_tx_hash=cached.get("blockchain_tx_hash"),
+                            execution_status=cached.get("execution_status", "PENDING"),
+                            executed_at=executed_at_dt,
+                            tenant_id=tenant_id,
+                            idempotency_key=idempotency_key
+                        )
+                    except Exception:
+                        raise ValidationError("Idempotency record exists but cannot reconstruct contract.")
+                raise ValidationError("Idempotency record exists but contract not found.")
 
         sanitized_metadata = self._sanitize_contract_metadata(contract_metadata)
 
@@ -427,8 +532,20 @@ class RealEstateService:
             "details": {"contract_type": contract_type, "reference_id": reference_id}
         })
 
+        # تخزين البيانات كاملة مع استخدام cast
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, contract)
+            # 🔥 استخدام cast لتجنب مشاكل Column
+            executed_at = cast(datetime, contract.executed_at)
+            result_data = {
+                "contract_id": contract.id,
+                "contract_type": contract.contract_type,
+                "reference_id": contract.reference_id,
+                "contract_metadata": contract.contract_metadata,
+                "blockchain_tx_hash": contract.blockchain_tx_hash,
+                "execution_status": contract.execution_status,
+                "executed_at": executed_at.isoformat() if executed_at else None
+            }
+            await self._store_idempotency(idempotency_key, result_data)
 
         return contract
 

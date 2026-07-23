@@ -48,7 +48,8 @@ class Settings(BaseSettings):
     REDIS_MAX_CONNECTIONS: int = Field(default=20, ge=5)
 
     # ========== JWT والأمان ==========
-    SECRET_KEY: str = Field(default="CHANGE_ME_NOW", min_length=32)
+    # 🔥 تم تغيير القيمة الافتراضية لتكون بطول 32 حرفاً (لتجاوز تحقق Pydantic)
+    SECRET_KEY: str = Field(default="CHANGE_ME_NOW_CHANGE_ME_NOW_12345678", min_length=32)
     ALGORITHM: str = Field(default="HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=10080)
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=30)
@@ -107,6 +108,17 @@ class Settings(BaseSettings):
         ]
     )
 
+    # ============================================================
+    # 🔥 الحل السحري لمشكلة AttributeError (تمت إضافته هنا)
+    # ============================================================
+    @property
+    def REFRESH_TOKEN_EXPIRE_MINUTES(self) -> int:
+        """
+        تحويل مدة صلاحية Refresh Token من أيام إلى دقائق.
+        يستخدمه ملف security.py تلقائياً.
+        """
+        return self.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60
+
     # إعدادات Pydantic (تُقرأ من .env مع تجاهل الحالة)
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -121,15 +133,15 @@ class Settings(BaseSettings):
         # ---- تحميل الأسرار من AWS في بيئة الإنتاج ----
         if self.ENVIRONMENT == "production":
             try:
-                secrets = load_secrets_from_aws()
-                self.SECRET_KEY = secrets.get("SECRET_KEY", self.SECRET_KEY)
-                self.DATABASE_URL = secrets.get("DATABASE_URL", self.DATABASE_URL)
-                self.REDIS_URL = secrets.get("REDIS_URL", self.REDIS_URL)
-                self.S3_ENDPOINT = secrets.get("S3_ENDPOINT", self.S3_ENDPOINT)
-                self.S3_ACCESS_KEY = secrets.get("S3_ACCESS_KEY", self.S3_ACCESS_KEY)
-                self.S3_SECRET_KEY = secrets.get("S3_SECRET_KEY", self.S3_SECRET_KEY)
+                secrets_aws = load_secrets_from_aws()
+                self.SECRET_KEY = secrets_aws.get("SECRET_KEY", self.SECRET_KEY)
+                self.DATABASE_URL = secrets_aws.get("DATABASE_URL", self.DATABASE_URL)
+                self.REDIS_URL = secrets_aws.get("REDIS_URL", self.REDIS_URL)
+                self.S3_ENDPOINT = secrets_aws.get("S3_ENDPOINT", self.S3_ENDPOINT)
+                self.S3_ACCESS_KEY = secrets_aws.get("S3_ACCESS_KEY", self.S3_ACCESS_KEY)
+                self.S3_SECRET_KEY = secrets_aws.get("S3_SECRET_KEY", self.S3_SECRET_KEY)
                 # 🔐 جلب مفتاح التشفير من الأسرار إن وُجد
-                enc_key = secrets.get("SECRET_ENCRYPTION_KEY")
+                enc_key = secrets_aws.get("SECRET_ENCRYPTION_KEY")
                 if enc_key:
                     self.SECRET_ENCRYPTION_KEY = enc_key
             except Exception as e:
@@ -138,17 +150,20 @@ class Settings(BaseSettings):
 
         # ---- تحقق أمني في الإنتاج ----
         if self.ENVIRONMENT == "production":
-            if self.SECRET_KEY == "CHANGE_ME_NOW":
-                raise ValueError("❌ SECRET_KEY must be changed in production!")
+            if self.SECRET_KEY == "CHANGE_ME_NOW_CHANGE_ME_NOW_12345678":
+                raise ValueError("❌ SECRET_KEY must be changed in production! (Default value is not allowed)")
             # التحقق من صحة مفتاح التشفير (أن يكون بطول 44 حرفاً Base64)
             try:
                 base64.urlsafe_b64decode(self.SECRET_ENCRYPTION_KEY)
             except Exception:
                 raise ValueError("❌ SECRET_ENCRYPTION_KEY must be a valid Base64-encoded 32-byte key!")
 
-        # ---- تحذير في التطوير إذا كان المفتاح مُولّداً تلقائياً ----
-        if self.ENVIRONMENT != "production" and self.SECRET_ENCRYPTION_KEY == generate_encryption_key():
-            print("⚠️  [DEV] Using auto-generated SECRET_ENCRYPTION_KEY. This is fine for development but replace it in production.")
+        # ---- تحذير في التطوير إذا كان المفتاح هو القيمة الافتراضية أو مُولّداً تلقائياً ----
+        if self.ENVIRONMENT != "production":
+            if self.SECRET_KEY == "CHANGE_ME_NOW_CHANGE_ME_NOW_12345678":
+                print("⚠️  [DEV] Using default SECRET_KEY. It is recommended to set a unique SECRET_KEY in .env file.")
+            if self.SECRET_ENCRYPTION_KEY == generate_encryption_key():
+                print("⚠️  [DEV] Using auto-generated SECRET_ENCRYPTION_KEY. This is fine for development but replace it in production.")
 
 # ========== إنشاء كائن الإعدادات العام ==========
 settings = Settings()

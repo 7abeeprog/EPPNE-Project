@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from app.domains.agritech.repository import AgriTechRepository
 from app.domains.finance.service import FinanceService
 from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.idempotency import check_idempotency, store_idempotency_result, get_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
@@ -38,7 +38,7 @@ class AgriTechService:
         self.event_bus = EventBus(redis_client)  # type: ignore
 
     # ==========================================
-    # دوال مساعدة
+    # دوال مساعدة (معدلة لتوافق الأنواع)
     # ==========================================
 
     async def _check_tenant_access(self, tenant_id: int, resource_tenant_id: int):
@@ -47,15 +47,18 @@ class AgriTechService:
             raise PermissionDeniedError("ليس لديك صلاحية الوصول لهذا المورد")
 
     async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
-        """التحقق من Idempotency"""
+        """
+        التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency.
+        تعيد النتيجة (Dict) إذا كانت موجودة، وإلا None.
+        """
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
+            cached = await get_idempotency_result(idempotency_key)
+            if cached is not None:
                 return cached
         return None
 
     async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
-        """تخزين نتيجة Idempotency"""
+        """تخزين نتيجة العملية بعد النجاح."""
         if idempotency_key:
             await store_idempotency_result(idempotency_key, result)
 
@@ -65,7 +68,6 @@ class AgriTechService:
 
     async def create_farm(self, user_id: int, tenant_id: int, data: Dict[str, Any]) -> SmartFarm:
         """إنشاء مزرعة جديدة"""
-        # تعقيم المدخلات
         sanitized_name = bleach.clean(data.get("name", ""), tags=[], strip=True)
 
         farm = await self.repo.create_farm(
@@ -78,7 +80,6 @@ class AgriTechService:
             has_insurance=data.get("has_insurance", False)
         )
 
-        # تسجيل التدقيق
         await audit_log(
             user_id=user_id,
             tenant_id=tenant_id,  # type: ignore
@@ -87,7 +88,6 @@ class AgriTechService:
             details={"name": farm.name, "type": farm.farm_type.value}
         )
 
-        # نشر حدث
         await self.event_bus.publish("agritech.farm.created", {
             "farm_id": farm.id,
             "tenant_id": tenant_id,
@@ -98,11 +98,9 @@ class AgriTechService:
         return farm
 
     async def list_farms(self, tenant_id: int, farm_type: Optional[str] = None, skip: int = 0, limit: int = 50) -> List[SmartFarm]:
-        """جلب قائمة المزارع للمستأجر"""
         return await self.repo.list_farms(tenant_id, farm_type, skip, limit)  # type: ignore
 
     async def get_farm(self, farm_id: int, tenant_id: int) -> Optional[SmartFarm]:
-        """جلب تفاصيل مزرعة محددة"""
         farm = await self.repo.get_farm(farm_id)
         if farm:
             await self._check_tenant_access(tenant_id, farm.tenant_id)  # type: ignore
@@ -113,8 +111,6 @@ class AgriTechService:
     # ==========================================
 
     async def add_farm_zone(self, farm_id: int, tenant_id: int, user_id: int, data: Dict[str, Any]) -> FarmZone:
-        """إضافة منطقة جديدة لمزرعة"""
-        # التحقق من وجود المزرعة وصلاحيتها
         farm = await self.repo.get_farm(farm_id)
         if not farm:
             raise NotFoundError("المزرعة غير موجودة")
@@ -137,7 +133,6 @@ class AgriTechService:
         return zone
 
     async def list_farm_zones(self, farm_id: int, tenant_id: int) -> List[FarmZone]:
-        """جلب مناطق مزرعة محددة"""
         farm = await self.repo.get_farm(farm_id)
         if not farm:
             raise NotFoundError("المزرعة غير موجودة")
@@ -156,19 +151,21 @@ class AgriTechService:
         data: Dict[str, Any],
         idempotency_key: str
     ) -> CropCycle:
-        """بدء دورة زراعية جديدة (مع Idempotency)"""
-        # 1. التحقق من Idempotency
         cached = await self._validate_idempotency(idempotency_key)
         if cached:
-            return cast(CropCycle, cached)
+            cycle_id = cached.get("cycle_id")
+            if cycle_id:
+                # 🔥 إضافة type: ignore لتجاوز تحذير Pylance
+                cycle = await self.repo.get_crop_cycle(cycle_id)  # type: ignore
+                if cycle:
+                    return cycle
+            raise ValidationError("Idempotency record exists but cycle not found.")
 
-        # 2. التحقق من المنطقة
         zone = await self.repo.get_zone(zone_id)
         if not zone:
             raise NotFoundError("المنطقة غير موجودة")
         await self._check_tenant_access(tenant_id, zone.tenant_id)  # type: ignore
 
-        # 3. إنشاء الدورة
         cycle = await self.repo.create_crop_cycle(
             zone_id=zone_id,
             tenant_id=tenant_id,
@@ -176,7 +173,6 @@ class AgriTechService:
             **data
         )
 
-        # 4. تخزين Idempotency
         await self._store_idempotency(idempotency_key, {"cycle_id": cycle.id})
 
         await audit_log(
@@ -190,7 +186,6 @@ class AgriTechService:
         return cycle
 
     async def list_crop_cycles(self, zone_id: int, tenant_id: int) -> List[CropCycle]:
-        """جلب الدورات الزراعية لمنطقة محددة"""
         zone = await self.repo.get_zone(zone_id)
         if not zone:
             raise NotFoundError("المنطقة غير موجودة")
@@ -208,19 +203,15 @@ class AgriTechService:
         data: Dict[str, Any],
         idempotency_key: str
     ) -> Dict[str, Any]:
-        """تسجيل محصول جديد (مع Idempotency و تحليل AI)"""
-        # 1. التحقق من Idempotency
         cached = await self._validate_idempotency(idempotency_key)
         if cached:
             return cached
 
-        # 2. التحقق من الدورة الزراعية
         cycle = await self.repo.get_crop_cycle(data["cycle_id"])  # type: ignore
         if not cycle:
             raise NotFoundError("الدورة الزراعية غير موجودة")
         await self._check_tenant_access(tenant_id, cycle.tenant_id)  # type: ignore
 
-        # 3. تعقيم المدخلات
         sanitized_data = {
             "cycle_id": data["cycle_id"],
             "grade": data["grade"],
@@ -231,7 +222,6 @@ class AgriTechService:
             "shipment_tracking_number": f"SHIP-{uuid.uuid4().hex[:8].upper()}"
         }
 
-        # 4. 🔥 معاملة ذرية (Atomicity)
         async with self.db.begin_nested():
             harvest = await self.repo.create_harvest(
                 tenant_id=tenant_id,
@@ -239,10 +229,8 @@ class AgriTechService:
                 **sanitized_data
             )
 
-        # 5. تحليل AI (خارج المعاملة لتجنب القفل)
         ai_logistics_actions = self._get_harvest_actions(harvest)
 
-        # 6. تسجيل التدقيق
         await audit_log(
             user_id=user_id,
             tenant_id=tenant_id,  # type: ignore
@@ -251,7 +239,6 @@ class AgriTechService:
             details={"cycle_id": cycle.id, "quantity": float(data["quantity_kg"])}
         )
 
-        # 7. نشر حدث
         await self.event_bus.publish("agritech.harvest.registered", {
             "harvest_id": harvest.id,
             "cycle_id": cycle.id,
@@ -259,7 +246,6 @@ class AgriTechService:
             "quantity": float(data["quantity_kg"])
         })
 
-        # 8. تخزين Idempotency
         result = {
             "harvest_id": harvest.id,
             "grade": harvest.grade.value,
@@ -272,7 +258,6 @@ class AgriTechService:
         return result
 
     def _get_harvest_actions(self, harvest: HarvestBatch) -> List[str]:
-        """تحديد إجراءات لوجستية بناءً على جودة المحصول"""
         actions = []
         grade_str = harvest.grade.value if hasattr(harvest.grade, 'value') else str(harvest.grade)
         if grade_str == "GRADE_1_EXPORT":
@@ -304,10 +289,14 @@ class AgriTechService:
         data: Dict[str, Any],
         idempotency_key: str
     ) -> BioAssetCohort:
-        """إضافة مجموعة حيوانية جديدة (مع Idempotency)"""
         cached = await self._validate_idempotency(idempotency_key)
         if cached:
-            return cast(BioAssetCohort, cached)
+            cohort_id = cached.get("cohort_id")
+            if cohort_id:
+                cohort = await self.repo.get_bio_cohort(cohort_id)  # type: ignore
+                if cohort:
+                    return cohort
+            raise ValidationError("Idempotency record exists but cohort not found.")
 
         zone = await self.repo.get_zone(zone_id)
         if not zone:
@@ -340,17 +329,15 @@ class AgriTechService:
         yield_data: Dict[str, Any],
         idempotency_key: str
     ) -> Dict[str, Any]:
-        """تسجيل إنتاج حيواني جديد (مع Idempotency)"""
         cached = await self._validate_idempotency(idempotency_key)
         if cached:
             return cached
 
-        cohort = await self.repo.get_bio_cohort(yield_data["cohort_id"])
+        cohort = await self.repo.get_bio_cohort(yield_data["cohort_id"])  # type: ignore
         if not cohort:
             raise NotFoundError("المجموعة الحيوانية غير موجودة")
         await self._check_tenant_access(tenant_id, cohort.tenant_id)  # type: ignore
 
-        # معاملة ذرية
         async with self.db.begin_nested():
             yield_record = await self.repo.create_bio_yield(
                 tenant_id=tenant_id,
@@ -358,12 +345,6 @@ class AgriTechService:
                 **yield_data
             )
 
-            # تحديث العدد الحالي (إذا كان نوع الإنتاج يتطلب ذلك)
-            if yield_record.product_type in [BioProductType.MILK, BioProductType.EGG, BioProductType.MEAT]:
-                # لا نحتاج لتحديث العدد في هذه الحالة
-                pass
-
-        # تحديد الإجراءات اللوجستية
         actions = self._get_bio_yield_actions(yield_record)
 
         result = {
@@ -386,7 +367,6 @@ class AgriTechService:
         return result
 
     def _get_bio_yield_actions(self, yield_record: BioProductYield) -> List[str]:
-        """تحديد إجراءات لوجستية للإنتاج الحيواني"""
         actions = []
         product_type_str = yield_record.product_type.value if hasattr(yield_record.product_type, 'value') else str(yield_record.product_type)
         if product_type_str in ["MILK", "EGG", "MEAT"]:
@@ -411,13 +391,11 @@ class AgriTechService:
         tenant_id: int,
         data: Dict[str, Any]
     ) -> SupplyChainStage:
-        """إضافة مرحلة جديدة في سلسلة التوريد"""
         stage = await self.repo.create_supply_chain_stage(
             tenant_id=tenant_id,
             operator_id=user_id,
             **data
         )
-        # إضافة Hash بلوكشين وهمي للتتبع
         stage.blockchain_tx_hash = f"0xTRACE{stage.id}{uuid.uuid4().hex[:8]}"  # type: ignore
         await self.db.commit()
         await self.db.refresh(stage)
@@ -438,9 +416,7 @@ class AgriTechService:
         traceable_id: int,
         tenant_id: int
     ) -> List[SupplyChainStage]:
-        """جلب سلسلة التوريد لكيان معين"""
         stages = await self.repo.get_supply_chain_stages(traceable_type, traceable_id)
-        # التحقق من صلاحية المستأجر على جميع المراحل
         for stage in stages:
             await self._check_tenant_access(tenant_id, stage.tenant_id)  # type: ignore
         return stages
@@ -452,7 +428,6 @@ class AgriTechService:
         traceable_id: int,
         user_id: int
     ) -> TraceabilityQR:
-        """توليد QR للتتبع"""
         try:
             import qrcode  # type: ignore
             from io import BytesIO
@@ -491,7 +466,6 @@ class AgriTechService:
         tenant_id: int,
         data: Dict[str, Any]
     ) -> AgriculturalCertificate:
-        """إصدار شهادة زراعية"""
         cert = await self.repo.create_certificate(
             tenant_id=tenant_id,
             created_by=user_id,
@@ -523,9 +497,7 @@ class AgriTechService:
         entity_id: int,
         tenant_id: int
     ) -> List[AgriculturalCertificate]:
-        """جلب شهادات كيان معين"""
         certs = await self.repo.get_certificates_for_entity(entity_type, entity_id)
-        # تصفية حسب المستأجر
         return [c for c in certs if c.tenant_id == tenant_id]  # type: ignore
 
     # ==========================================
@@ -538,14 +510,11 @@ class AgriTechService:
         tenant_id: int,
         data: Dict[str, Any]
     ) -> SoilSensorReading:
-        """تسجيل قراءة جديدة من مستشعر التربة"""
-        # التحقق من المنطقة
         zone = await self.repo.get_zone(data["zone_id"])
         if not zone:  # type: ignore
             raise NotFoundError("المنطقة غير موجودة")
         await self._check_tenant_access(tenant_id, zone.tenant_id)  # type: ignore
 
-        # تعقيم المدخلات
         sanitized_data = {
             "tenant_id": tenant_id,
             "zone_id": data["zone_id"],
@@ -569,7 +538,6 @@ class AgriTechService:
             details={"zone_id": zone.id, "moisture": data.get("moisture_percent")}
         )
 
-        # نشر حدث لتحليل البيانات (يمكن استبداله بـ Celery)
         await self.event_bus.publish("agritech.soil_reading.recorded", {
             "reading_id": reading.id,
             "zone_id": zone.id,
@@ -579,7 +547,6 @@ class AgriTechService:
         return reading
 
     async def get_recent_soil_readings(self, zone_id: int, tenant_id: int, limit: int = 100) -> List[SoilSensorReading]:
-        """جلب قراءات المستشعرات لمنطقة محددة"""
         zone = await self.repo.get_zone(zone_id)
         if not zone:
             raise NotFoundError("المنطقة غير موجودة")
@@ -596,7 +563,6 @@ class AgriTechService:
         user_id: int,
         data: Dict[str, Any]
     ) -> WeatherAlert:
-        """إنشاء تنبيه طقس جديد"""
         sanitized_message = bleach.clean(data["message"], tags=[], strip=True)
         alert = await self.repo.create_weather_alert(
             tenant_id=tenant_id,
@@ -626,5 +592,4 @@ class AgriTechService:
         return alert
 
     async def get_weather_alerts(self, tenant_id: int) -> List[WeatherAlert]:
-        """جلب تنبيهات الطقس النشطة"""
         return await self.repo.get_active_weather_alerts(tenant_id)

@@ -1,4 +1,5 @@
 # app/domains/digital_twin/schemas.py
+from __future__ import annotations
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -70,7 +71,7 @@ class TimeCapsuleCreate(BaseModel):
     video_will_ipfs: Optional[str] = Field(default=None, description="وصية فيديو على IPFS")
     heartbeat_interval_days: int = Field(default=90, description="فترة نبض الحياة بالأيام")
     encrypted_credentials: Optional[Dict[str, Any]] = Field(default=None, description="المفاتيح المشفرة")
-
+    beneficiaries: List[BeneficiaryCreate] = Field(..., description="قائمة المستفيدين")
 
 class TimeCapsuleResponse(TimeCapsuleCreate):
     id: int

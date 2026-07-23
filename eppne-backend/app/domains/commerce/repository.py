@@ -1,8 +1,10 @@
 # app/domains/commerce/repository.py
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, and_, or_
 from sqlalchemy.orm import selectinload, load_only
-from typing import Optional, List
+from typing import Optional, List, Any, cast
+from datetime import datetime
+import json
 
 # ✅ تم استيراد جميع الـ Schemas المطلوبة للـ Pagination
 from app.domains.commerce.schemas import (
@@ -14,6 +16,7 @@ from app.domains.commerce.schemas import (
 from app.domains.commerce.models import *
 from app.core.errors import NotFoundError
 from app.core.pagination import PaginatedResponse
+
 
 class CommerceRepository:
     def __init__(self, db: AsyncSession):
@@ -295,3 +298,117 @@ class CommerceRepository:
     async def get_payment_request(self, pr_id: int) -> PaymentRequest | None:
         result = await self.db.execute(select(PaymentRequest).where(PaymentRequest.id == pr_id))
         return result.scalar_one_or_none()
+
+    # ============================================================
+    # 🆕 دوال جديدة لمهام Celery (تم إضافتها)
+    # ============================================================
+
+    async def get_pending_orders_older_than(self, cutoff_time: datetime) -> List[Order]:
+        """
+        جلب الطلبات المعلقة (PENDING_PAYMENT أو PENDING) والتي تم إنشاؤها قبل cutoff_time.
+        تُستخدم في مهمة process_pending_orders.
+        """
+        result = await self.db.execute(
+            select(Order)
+            .where(
+                Order.status.in_(['PENDING_PAYMENT', 'PENDING']),
+                Order.created_at < cutoff_time
+            )
+            .order_by(Order.created_at)
+        )
+        # ✅ تحويل النتيجة إلى list باستخدام cast
+        return list(result.scalars().all())
+
+    async def get_order_items(self, order_id: int) -> List[OrderItem]:
+        """
+        جلب عناصر طلب معين.
+        """
+        result = await self.db.execute(
+            select(OrderItem)
+            .where(OrderItem.order_id == order_id)
+        )
+        return list(result.scalars().all())
+
+    async def update_product_stock(self, product_id: int, new_stock: int) -> None:
+        """
+        تحديث المخزون الأساسي للمنتج.
+        """
+        await self.db.execute(
+            update(Product)
+            .where(Product.id == product_id)
+            .values(stock_quantity=new_stock)
+        )
+        await self.db.commit()
+
+    async def get_paid_orders_since(
+        self,
+        start_time: datetime,
+        tenant_id: Optional[int] = None
+    ) -> List[Order]:
+        """
+        جلب الطلبات المدفوعة (status = 'PAID') منذ وقت معين.
+        إذا تم تمرير tenant_id، يتم التصفية حسب store.tenant_id عبر JOIN.
+        """
+        query = select(Order).where(
+            Order.status == "PAID",
+            Order.created_at >= start_time
+        )
+        if tenant_id is not None:
+            # ربط بـ StoreProfile للتصفية حسب tenant_id
+            query = query.join(StoreProfile, Order.store_id == StoreProfile.id).where(
+                StoreProfile.tenant_id == tenant_id
+            )
+        query = query.order_by(Order.created_at.desc())
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
+    async def get_failed_payment_requests(self) -> List[PaymentRequest]:
+        """
+        جلب طلبات الدفع الفاشلة التي لم تتجاوز الحد الأقصى للمحاولات (3 محاولات).
+        """
+        # نفترض وجود عمود retry_count في PaymentRequest، وإلا نستخدم metadata
+        # سنحاول استخدام retry_count إذا كان موجوداً، وإلا نستعمل fallback
+        try:
+            # محاولة استخدام عمود retry_count
+            result = await self.db.execute(
+                select(PaymentRequest)
+                .where(
+                    PaymentRequest.status == "FAILED",
+                    PaymentRequest.retry_count < 3  # type: ignore
+                )
+                .order_by(PaymentRequest.created_at)
+            )
+        except Exception:
+            # إذا لم يكن العمود موجوداً، نستخدم metadata لتخزين عدد المحاولات
+            # أو نأخذ كل الفاشلة (حل مؤقت)
+            result = await self.db.execute(
+                select(PaymentRequest)
+                .where(PaymentRequest.status == "FAILED")
+                .order_by(PaymentRequest.created_at)
+            )
+        return list(result.scalars().all())
+
+    async def increment_payment_retry_count(self, payment_request_id: int) -> None:
+        """
+        زيادة عدد محاولات إعادة الدفع لطلب دفع فاشل.
+        """
+        # محاولة استخدام retry_count إذا كان موجوداً
+        try:
+            await self.db.execute(
+                update(PaymentRequest)
+                .where(PaymentRequest.id == payment_request_id)
+                .values(retry_count=PaymentRequest.retry_count + 1)  # type: ignore
+            )
+        except Exception:
+            # إذا لم يكن العمود موجوداً، نخزن العدد في metadata كـ JSON
+            pr = await self.get_payment_request(payment_request_id)
+            if pr:
+                metadata = pr.metadata or {}
+                retry_count = metadata.get('retry_count', 0) + 1
+                metadata['retry_count'] = retry_count
+                await self.db.execute(
+                    update(PaymentRequest)
+                    .where(PaymentRequest.id == payment_request_id)
+                    .values(metadata=metadata)
+                )
+        await self.db.commit()

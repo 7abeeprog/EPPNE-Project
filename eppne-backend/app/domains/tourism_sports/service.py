@@ -3,7 +3,7 @@
 # pyright: reportAttributeAccessIssue=false
 # pyright: reportArgumentType=false
 
-# app/domains/tourism_sports/service.py (الإصدار النهائي المتكامل)
+# app/domains/tourism_sports/service.py (الإصدار النهائي المتكامل المصحح)
 from sqlalchemy.ext.asyncio import AsyncSession
 from decimal import Decimal
 from datetime import datetime, timedelta
@@ -18,8 +18,8 @@ from app.domains.ai_agents.service import AIAgentsService
 from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
-from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
@@ -42,6 +42,23 @@ class TourismSportsService:
         self.invoicing_service = InvoicingService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
+
+    # ============================================================
+    # 0. دوال Idempotency الموحّدة
+    # ============================================================
+
+    async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
+        """التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency."""
+        if idempotency_key:
+            cached = await get_idempotency_result(idempotency_key)
+            if cached is not None:
+                return cached
+        return None
+
+    async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
+        """تخزين نتيجة العملية بعد النجاح."""
+        if idempotency_key:
+            await store_idempotency_result(idempotency_key, result)
 
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "tourism_sports"):
@@ -79,7 +96,6 @@ class TourismSportsService:
     ) -> List[TourismDestination]:
         """قائمة الوجهات السياحية."""
         await self._check_saas_limits(tenant_id, "tourism")
-        # ✅ تحويل النتيجة إلى list لضمان النوع List
         result = await self.repo.list_destinations(tenant_id, destination_type)
         return list(result)
 
@@ -106,6 +122,10 @@ class TourismSportsService:
             status="ANNOUNCED"
         )
 
+    # ============================================================
+    # 2. حجز برنامج سياحي (مع Idempotency محسّن)
+    # ============================================================
+
     async def book_program(
         self,
         user_id: int,
@@ -116,10 +136,16 @@ class TourismSportsService:
         """حجز برنامج سياحي مع Idempotency ومعاملة ذرية."""
         await self._check_saas_limits(tenant_id, "tourism")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                participant_id = cached.get("participant_id")
+                if participant_id:
+                    participant = await self.repo.get_program_participant(participant_id)
+                    if participant:
+                        return participant
+                raise ValidationError("Idempotency record exists but participant not found.")
 
         program = await self.repo.get_program(program_id)
         if not program or program.status != "ANNOUNCED":  # type: ignore
@@ -172,13 +198,14 @@ class TourismSportsService:
                 details={"program_id": program_id, "amount": float(program.base_price_mrusdt)}  # type: ignore
             )
 
+        # تخزين معرف المشارك فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, participant)
+            await self._store_idempotency(idempotency_key, {"participant_id": participant.id})
 
         return participant
 
     # ============================================================
-    # 2. الترفيه (Entertainment)
+    # 3. الترفيه (Entertainment)
     # ============================================================
     async def create_event(
         self,
@@ -199,6 +226,10 @@ class TourismSportsService:
             base_ticket_price_mrusdt=data["base_ticket_price_mrusdt"]
         )
 
+    # ============================================================
+    # 4. شراء تذكرة فعالية (مع Idempotency محسّن)
+    # ============================================================
+
     async def purchase_event_ticket(
         self,
         user_id: int,
@@ -211,10 +242,16 @@ class TourismSportsService:
         """شراء تذكرة فعالية مع Idempotency ومعاملة ذرية."""
         await self._check_saas_limits(tenant_id, "entertainment")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                ticket_id = cached.get("ticket_id")
+                if ticket_id:
+                    ticket = await self.repo.get_ticket(ticket_id)
+                    if ticket:
+                        return ticket
+                raise ValidationError("Idempotency record exists but ticket not found.")
 
         event = await self.repo.get_event(event_id)
         if not event or event.tenant_id != tenant_id:  # type: ignore
@@ -280,13 +317,14 @@ class TourismSportsService:
                 details={"event_id": event_id, "tier": tier, "amount": float(price)}
             )
 
+        # تخزين معرف التذكرة فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, ticket)
+            await self._store_idempotency(idempotency_key, {"ticket_id": ticket.id})
 
         return ticket
 
     # ============================================================
-    # 3. الرياضة (Sports)
+    # 5. الرياضة (Sports)
     # ============================================================
     async def create_sports_org(
         self,
@@ -324,6 +362,10 @@ class TourismSportsService:
             market_value_mrusdt=data.get("market_value_mrusdt", Decimal(0))
         )
 
+    # ============================================================
+    # 6. تقديم عرض شراء لاعب (مع Idempotency محسّن)
+    # ============================================================
+
     async def place_transfer_bid(
         self,
         user_id: int,
@@ -335,10 +377,16 @@ class TourismSportsService:
         """تقديم عرض شراء لاعب مع Idempotency ومعاملة ذرية."""
         await self._check_saas_limits(tenant_id, "sports")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                transfer_id = cached.get("transfer_id")
+                if transfer_id:
+                    transfer = await self.repo.get_transfer(transfer_id)
+                    if transfer:
+                        return transfer
+                raise ValidationError("Idempotency record exists but transfer not found.")
 
         player = await self.repo.get_player_profile(data["player_id"])
         if not player or player.tenant_id != tenant_id:  # type: ignore
@@ -408,8 +456,9 @@ class TourismSportsService:
                 details={"player_id": data["player_id"], "bid_amount": float(data["bid_amount_mrusdt"])}
             )
 
+        # تخزين معرف التحويل فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, transfer)
+            await self._store_idempotency(idempotency_key, {"transfer_id": transfer.id})
 
         return transfer
 
@@ -433,8 +482,9 @@ class TourismSportsService:
         )
 
     # ============================================================
-    # 4. دوال مساعدة
+    # 7. دوال مساعدة
     # ============================================================
+
     async def _register_affiliate_commission(
         self,
         user_id: int,

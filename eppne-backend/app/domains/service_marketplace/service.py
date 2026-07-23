@@ -21,8 +21,8 @@ from app.domains.service_marketplace.models import (
 )
 from app.domains.finance.service import FinanceService
 from app.domains.sovereign_entities.service import SovereignEntitiesService
-from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.redis_client import redis_client
 from app.core.event_bus import EventBus
@@ -51,7 +51,24 @@ class ServiceMarketplaceService:
         self.governance_service = AIGovernanceService(db)
 
     # ============================================================
-    # 0. التحقق من صلاحيات SaaS
+    # 0. دوال Idempotency الموحّدة
+    # ============================================================
+
+    async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
+        """التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency."""
+        if idempotency_key:
+            cached = await get_idempotency_result(idempotency_key)
+            if cached is not None:
+                return cached
+        return None
+
+    async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
+        """تخزين نتيجة العملية بعد النجاح."""
+        if idempotency_key:
+            await store_idempotency_result(idempotency_key, result)
+
+    # ============================================================
+    # 1. التحقق من صلاحيات SaaS
     # ============================================================
 
     async def _check_saas_limits(self, tenant_id: int):
@@ -62,7 +79,7 @@ class ServiceMarketplaceService:
         return None, {}
 
     # ============================================================
-    # 1. إدارة الخدمات (للمطورين والإدارة)
+    # 2. إدارة الخدمات (للمطورين والإدارة)
     # ============================================================
 
     async def create_service(self, user_id: int, tenant_id: int, data: dict) -> MarketplaceService:
@@ -113,7 +130,7 @@ class ServiceMarketplaceService:
         return await self.repo.update_service(service_id, is_active=False)
 
     # ============================================================
-    # 2. شراء الخدمة (مع Idempotency، SaaS، Affiliate، Invoicing، AI Governance)
+    # 3. شراء الخدمة (مع Idempotency، SaaS، Affiliate، Invoicing، AI Governance)
     # ============================================================
 
     async def purchase_service(
@@ -126,10 +143,16 @@ class ServiceMarketplaceService:
         """
         شراء خدمة مع دعم Idempotency، SaaS، Affiliate، Invoicing، AI Governance.
         """
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                license_id = cached.get("license_id")
+                if license_id:
+                    license_obj = await self.repo.get_license(license_id)
+                    if license_obj:
+                        return license_obj
+                raise ValidationError("Idempotency record exists but license not found.")
 
         await self._check_saas_limits(buyer_tenant_id)
 
@@ -225,11 +248,13 @@ class ServiceMarketplaceService:
                 }
             )
 
-            invalidate_cache(f"marketplace_services_{buyer_tenant_id}")
-            invalidate_cache(f"marketplace_licenses_{buyer_tenant_id}")
+            # 🔥 إضافة await
+            await invalidate_cache(f"marketplace_services_{buyer_tenant_id}")
+            await invalidate_cache(f"marketplace_licenses_{buyer_tenant_id}")
 
+            # تخزين معرف الترخيص فقط
             if idempotency_key:
-                await store_idempotency_result(idempotency_key, license_obj)
+                await self._store_idempotency(idempotency_key, {"license_id": license_obj.id})
 
         deploy_service_task.delay(license_obj.id, buyer_tenant_id)
 
@@ -245,7 +270,7 @@ class ServiceMarketplaceService:
         return license_obj
 
     # ============================================================
-    # 3. النشر الآلي (Deployment)
+    # 4. النشر الآلي (Deployment)
     # ============================================================
 
     async def _deploy_service(self, license_id: int) -> None:
@@ -310,7 +335,7 @@ class ServiceMarketplaceService:
         return await self.repo.update_deployment_status(license_id, status, log or "")
 
     # ============================================================
-    # 4. التراخيص (Licenses)
+    # 5. التراخيص (Licenses)
     # ============================================================
 
     async def get_my_licenses(self, tenant_id: int, skip: int = 0, limit: int = 50) -> List[ServiceLicense]:
@@ -348,7 +373,7 @@ class ServiceMarketplaceService:
             return updated
 
     # ============================================================
-    # 5. الإضافات (Add-ons)
+    # 6. الإضافات (Add-ons)
     # ============================================================
 
     async def create_addon(self, user_id: int, tenant_id: int, data: dict) -> ServiceAddon:
@@ -393,7 +418,7 @@ class ServiceMarketplaceService:
             return updated
 
     # ============================================================
-    # 6. طلبات التخصيص (Customization)
+    # 7. طلبات التخصيص (Customization) – مع Idempotency محسّن
     # ============================================================
 
     async def request_customization(
@@ -404,10 +429,16 @@ class ServiceMarketplaceService:
         idempotency_key: Optional[str] = None
     ) -> CustomizationRequest:
         """إنشاء طلب تخصيص مع Idempotency."""
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                request_id = cached.get("request_id")
+                if request_id:
+                    request_obj = await self.repo.get_customization_request(request_id)
+                    if request_obj:
+                        return request_obj
+                raise ValidationError("Idempotency record exists but request not found.")
 
         license_obj = await self.repo.get_license(license_id)
         if not license_obj or license_obj.buyer_user_id != user_id:
@@ -421,8 +452,9 @@ class ServiceMarketplaceService:
             idempotency_key=idempotency_key
         )
 
+        # تخزين معرف الطلب فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, request_obj)
+            await self._store_idempotency(idempotency_key, {"request_id": request_obj.id})
 
         return request_obj
 
@@ -431,7 +463,7 @@ class ServiceMarketplaceService:
         return await self.repo.list_customization_requests(license_id, tenant_id)
 
     # ============================================================
-    # 7. دوال مساعدة
+    # 8. دوال مساعدة
     # ============================================================
 
     async def _get_user(self, user_id: int):

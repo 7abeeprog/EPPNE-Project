@@ -24,7 +24,7 @@ from app.domains.ai_agents.service import AIAgentsService
 from app.domains.ai_agents.models import AgentStatus, ApprovalStatus
 from app.core.errors import NotFoundError, PermissionDeniedError, NetworkError, TimeoutError, ValidationError, IdempotencyError
 from app.core.config import settings
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 
 # ============================================================
 # 🔒 إعدادات الأمان والحدود
@@ -189,7 +189,7 @@ class AutomationEngine:
             logger.warning(f"Node {node_id} not found in workflow, skipping")
             return
 
-       # تحويل العقدة إلى قاموس ليفهمها Pylance
+        # تحويل العقدة إلى قاموس ليفهمها Pylance
         node_dict = cast(dict, node)
         
         # قراءة المهلة الخاصة بالعقدة (افتراضي 30 ثانية)
@@ -941,9 +941,10 @@ class AutomationService:
         idempotency_key: Optional[str] = None
     ) -> dict:
         """معالجة Webhook trigger مع Idempotency."""
+        # 🔥 التصحيح: استخدام get_idempotency_result بدلاً من check_idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
+            cached = await get_idempotency_result(idempotency_key)
+            if cached is not None:
                 return cached
 
         full_path = f"/webhook/{path}"

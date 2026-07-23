@@ -16,8 +16,8 @@ from app.domains.saas.service import SaaSControlService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
 from app.domains.finance.service import FinanceService
-from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
@@ -66,6 +66,23 @@ class LogisticsService:
     async def _get_user_email(self, user_id: int) -> str:
         user = await self._get_user(user_id)
         return user.email if user else f"user_{user_id}@eppne.com"  # type: ignore
+
+    # ============================================================
+    # دوال Idempotency الموحّدة
+    # ============================================================
+
+    async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
+        """التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency."""
+        if idempotency_key:
+            cached = await get_idempotency_result(idempotency_key)
+            if cached is not None:
+                return cached
+        return None
+
+    async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
+        """تخزين نتيجة العملية بعد النجاح."""
+        if idempotency_key:
+            await store_idempotency_result(idempotency_key, result)
 
     # ============================================================
     # 1. إدارة المخازن
@@ -150,7 +167,7 @@ class LogisticsService:
             return zone
 
     # ============================================================
-    # 2. إدارة المخزون
+    # 2. إدارة المخزون – استلام المخزون (مع Idempotency محسّن)
     # ============================================================
 
     async def receive_inventory(
@@ -162,10 +179,17 @@ class LogisticsService:
     ) -> InventoryTransaction:
         await self._check_saas_limits(tenant_id, "logistics")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                transaction_id = cached.get("transaction_id")
+                if transaction_id:
+                    # استرجاع المعاملة من قاعدة البيانات
+                    transaction = await self.repo.get_transaction(transaction_id, tenant_id)
+                    if transaction:
+                        return transaction
+                raise ValidationError("Idempotency record exists but transaction not found.")
 
         warehouse = await self.repo.get_warehouse(data["warehouse_id"], tenant_id)
         if not warehouse:
@@ -224,10 +248,15 @@ class LogisticsService:
             "product": data["product_name"]
         })
 
+        # تخزين معرف المعاملة فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, transaction)
+            await self._store_idempotency(idempotency_key, {"transaction_id": transaction.id})
 
         return transaction
+
+    # ============================================================
+    # 2.1 صرف المخزون (مع Idempotency محسّن)
+    # ============================================================
 
     async def issue_inventory(
         self,
@@ -238,10 +267,16 @@ class LogisticsService:
     ) -> InventoryTransaction:
         await self._check_saas_limits(tenant_id, "logistics")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                transaction_id = cached.get("transaction_id")
+                if transaction_id:
+                    transaction = await self.repo.get_transaction(transaction_id, tenant_id)
+                    if transaction:
+                        return transaction
+                raise ValidationError("Idempotency record exists but transaction not found.")
 
         inventory_item = await self.repo.get_inventory_item(data["inventory_item_id"], tenant_id)
         if not inventory_item:
@@ -288,9 +323,13 @@ class LogisticsService:
         )
 
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, transaction)
+            await self._store_idempotency(idempotency_key, {"transaction_id": transaction.id})
 
         return transaction
+
+    # ============================================================
+    # 2.2 تعديل المخزون (مع Idempotency محسّن)
+    # ============================================================
 
     async def adjust_inventory(
         self,
@@ -303,10 +342,16 @@ class LogisticsService:
     ) -> InventoryTransaction:
         await self._check_saas_limits(tenant_id, "logistics")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                transaction_id = cached.get("transaction_id")
+                if transaction_id:
+                    transaction = await self.repo.get_transaction(transaction_id, tenant_id)
+                    if transaction:
+                        return transaction
+                raise ValidationError("Idempotency record exists but transaction not found.")
 
         inventory_item = await self.repo.get_inventory_item(inventory_item_id, tenant_id)
         if not inventory_item:
@@ -349,7 +394,7 @@ class LogisticsService:
         )
 
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, transaction)
+            await self._store_idempotency(idempotency_key, {"transaction_id": transaction.id})
 
         return transaction
 
@@ -460,7 +505,7 @@ class LogisticsService:
             return maintenance
 
     # ============================================================
-    # 4. التنبؤ بالطلب (Forecasting)
+    # 4. التنبؤ بالطلب (Forecasting) – مع Idempotency محسّن
     # ============================================================
 
     async def generate_forecast(
@@ -473,10 +518,16 @@ class LogisticsService:
     ) -> InventoryForecast:
         await self._check_saas_limits(tenant_id, "logistics")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                forecast_id = cached.get("forecast_id")
+                if forecast_id:
+                    forecast = await self.repo.get_forecast(forecast_id, tenant_id)
+                    if forecast:
+                        return forecast
+                raise ValidationError("Idempotency record exists but forecast not found.")
 
         inventory_history = await self.repo.get_inventory_history(tenant_id, product_id, days=90)
 
@@ -491,7 +542,6 @@ class LogisticsService:
             cost=Decimal("0.02")
         )
 
-        # ✅ تعريف prediction بقيمة افتراضية قبل try
         prediction: Dict[str, Any] = {}
         try:
             ai_result = await self.ai_service.execute_agent_action(
@@ -504,7 +554,6 @@ class LogisticsService:
                     "period": period
                 },
                 executor_user_id=user_id,
-                # ✅ تمرير idempotency_key كسلسلة، باستخدام أو "" إذا كان None
                 idempotency_key=idempotency_key or ""
             )
 
@@ -517,7 +566,6 @@ class LogisticsService:
 
         except Exception as e:
             logger.error(f"AI forecast failed: {e}")
-            # ✅ تعيين قيم افتراضية في حال الفشل
             predicted_demand = 100
             confidence = 50
             seasonality = 1.0
@@ -538,8 +586,9 @@ class LogisticsService:
                 ai_agent_id=13
             )
 
+        # تخزين معرف التوقع فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, forecast)
+            await self._store_idempotency(idempotency_key, {"forecast_id": forecast.id})
 
         return forecast
 

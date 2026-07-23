@@ -1,4 +1,4 @@
-# app/domains/affiliate/schemas.py
+# app/domains/affiliate/schemas.py (الإصدار النهائي مع حقل status و expires_at)
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -150,7 +150,7 @@ class CommissionTierResponse(CommissionTierBase):
 
 
 # ==========================================
-# 5. روابط الدعوة (Affiliate Links)
+# 5. روابط الدعوة (Affiliate Links) – المُحدَّث
 # ==========================================
 
 class AffiliateLinkBase(BaseModel):
@@ -164,19 +164,24 @@ class AffiliateLinkBase(BaseModel):
 class AffiliateLinkCreate(AffiliateLinkBase):
     pass
 
+# 🔥 التحديث: إضافة حقل status (لتعطيل الرابط أو إعادة تفعيله)
 class AffiliateLinkUpdate(BaseModel):
     target: Optional[str] = None
     product_id: Optional[int] = None
     utm_source: Optional[str] = None
     utm_medium: Optional[str] = None
     utm_campaign: Optional[str] = None
-    is_active: Optional[bool] = None
+    status: Optional[str] = Field(None, description="ACTIVE, EXPIRED, INACTIVE")
+    expires_at: Optional[datetime] = Field(None, description="تاريخ انتهاء الصلاحية (إن وجد)")
 
+# 🔥 التحديث: إضافة الحقول الجديدة في الـ Response
 class AffiliateLinkResponse(AffiliateLinkBase):
     id: int
     affiliate_id: int
     clicks: int
     conversions: int
+    status: str = Field(description="حالة الرابط: ACTIVE, EXPIRED, INACTIVE")
+    expires_at: Optional[datetime] = Field(None, description="تاريخ انتهاء صلاحية الرابط (إن وجد)")
     created_at: datetime
     updated_at: datetime
 

@@ -3,7 +3,7 @@
 # pyright: reportAttributeAccessIssue=false
 # pyright: reportArgumentType=false
 
-# app/domains/zamakana/service.py (الإصدار النهائي المتكامل)
+# app/domains/zamakana/service.py (الإصدار النهائي المتكامل المصحح)
 """
 خدمات قطاع الزمكان – محرك المعرفة والتأثير عبر الزمن
 يدعم: إنشاء عقد المعرفة، ربطها، الحملات الكوكبية، التعهدات الزمنية،
@@ -22,8 +22,8 @@ from app.domains.ai_agents.service import AIAgentsService
 from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
-from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
@@ -42,12 +42,28 @@ class ZamakanaService:
         self.saas_service = SaaSSubscriptionService(db)
         self.affiliate_service = AffiliateService(db)
         self.invoicing_service = InvoicingService(db)
-        self.event_bus = EventBus(cast(Any, redis_client))  # ✅ cast لتجاوز مشكلة النوع
+        self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
+
+    # ============================================================
+    # 0. دوال Idempotency الموحّدة
+    # ============================================================
+
+    async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
+        """التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency."""
+        if idempotency_key:
+            cached = await get_idempotency_result(idempotency_key)
+            if cached is not None:
+                return cached
+        return None
+
+    async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
+        """تخزين نتيجة العملية بعد النجاح."""
+        if idempotency_key:
+            await store_idempotency_result(idempotency_key, result)
 
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "zamakana"):
-        # ✅ استخدام can_access_service بدلاً من get_active_subscription
         has_access = await self.saas_service.can_access_service(tenant_id, feature)
         if not has_access:
             raise PermissionDeniedError("Zamakana feature is not included in your current plan.")
@@ -102,7 +118,7 @@ class ZamakanaService:
     ) -> List[ZamakanaNode]:
         await self._check_saas_limits(tenant_id, "zamakana")
         result = await self.repo.list_nodes(tenant_id, node_type, skip, limit)
-        return list(result)  # ✅ تحويل إلى list
+        return list(result)
 
     async def get_node(self, node_id: int, tenant_id: int) -> ZamakanaNode:
         node = await self.repo.get_node(node_id, tenant_id)
@@ -129,7 +145,7 @@ class ZamakanaService:
         await self.repo.delete_node(node_id, tenant_id)
 
     # ============================================================
-    # 2. الحواف المعرفية (Edges)
+    # 2. الحواف المعرفية (Edges) – مع Idempotency محسّن
     # ============================================================
     async def create_edge(
         self,
@@ -140,10 +156,16 @@ class ZamakanaService:
     ) -> ZamakanaEdge:
         await self._check_saas_limits(tenant_id, "zamakana")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                edge_id = cached.get("edge_id")
+                if edge_id:
+                    edge = await self.repo.get_edge(edge_id, tenant_id)
+                    if edge:
+                        return edge
+                raise ValidationError("Idempotency record exists but edge not found.")
 
         source = await self.repo.get_node(data["source_node_id"], tenant_id)
         target = await self.repo.get_node(data["target_node_id"], tenant_id)
@@ -171,8 +193,9 @@ class ZamakanaService:
             details={"source": source.title, "target": target.title}
         )
 
+        # تخزين معرف الحافة فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, edge)
+            await self._store_idempotency(idempotency_key, {"edge_id": edge.id})
 
         return edge
 
@@ -238,7 +261,7 @@ class ZamakanaService:
     ) -> List[PlanetaryCampaign]:
         await self._check_saas_limits(tenant_id, "zamakana")
         result = await self.repo.list_campaigns(tenant_id, status, skip, limit)
-        return list(result)  # ✅ تحويل إلى list
+        return list(result)
 
     async def get_campaign(self, campaign_id: int, tenant_id: int) -> PlanetaryCampaign:
         campaign = await self.repo.get_campaign(campaign_id, tenant_id)
@@ -247,7 +270,7 @@ class ZamakanaService:
         return campaign
 
     # ============================================================
-    # 5. التعهدات الزمنية (Pledges)
+    # 5. التعهدات الزمنية (Pledges) – مع Idempotency محسّن
     # ============================================================
     async def pledge_time(
         self,
@@ -258,10 +281,16 @@ class ZamakanaService:
     ) -> TimePledge:
         await self._check_saas_limits(tenant_id, "zamakana")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                pledge_id = cached.get("pledge_id")
+                if pledge_id:
+                    pledge = await self.repo.get_pledge(pledge_id, tenant_id)
+                    if pledge:
+                        return pledge
+                raise ValidationError("Idempotency record exists but pledge not found.")
 
         campaign = await self.repo.get_campaign(data["campaign_id"], tenant_id)
         if not campaign or campaign.status != "ACTIVE":  # type: ignore
@@ -298,8 +327,9 @@ class ZamakanaService:
                 details={"campaign_id": campaign.id, "hours": float(pledge.pledged_hours)}
             )
 
+        # تخزين معرف التعهد فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, pledge)
+            await self._store_idempotency(idempotency_key, {"pledge_id": pledge.id})
 
         return pledge
 
@@ -311,8 +341,11 @@ class ZamakanaService:
     ) -> List[TimePledge]:
         await self._check_saas_limits(tenant_id, "zamakana")
         result = await self.repo.list_pledges(campaign_id, tenant_id, status)
-        return list(result)  # ✅ تحويل إلى list
+        return list(result)
 
+    # ============================================================
+    # 6. تنفيذ التعهد – مع Idempotency محسّن
+    # ============================================================
     async def fulfill_pledge(
         self,
         user_id: int,
@@ -323,10 +356,16 @@ class ZamakanaService:
     ) -> TimePledge:
         await self._check_saas_limits(tenant_id, "zamakana")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                pledge_id_cached = cached.get("pledge_id")
+                if pledge_id_cached:
+                    pledge = await self.repo.get_pledge(pledge_id_cached, tenant_id)
+                    if pledge:
+                        return pledge
+                raise ValidationError("Idempotency record exists but pledge not found.")
 
         pledge = await self.repo.get_pledge(pledge_id, tenant_id)
         if not pledge or pledge.user_id != user_id:  # type: ignore
@@ -364,13 +403,14 @@ class ZamakanaService:
                 details={"hours": float(pledge.pledged_hours)}
             )
 
+        # تخزين معرف التعهد فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, fulfilled)
+            await self._store_idempotency(idempotency_key, {"pledge_id": pledge.id})
 
         return fulfilled
 
     # ============================================================
-    # 6. السيناريوهات المستقبلية (Scenarios)
+    # 7. السيناريوهات المستقبلية (Scenarios)
     # ============================================================
     async def create_scenario(
         self,
@@ -411,7 +451,7 @@ class ZamakanaService:
     ) -> List[FutureScenario]:
         await self._check_saas_limits(tenant_id, "zamakana")
         result = await self.repo.list_scenarios(tenant_id, status, skip, limit)
-        return list(result)  # ✅ تحويل إلى list
+        return list(result)
 
     async def get_scenario(self, scenario_id: int, tenant_id: int) -> FutureScenario:
         scenario = await self.repo.get_scenario(scenario_id, tenant_id)
@@ -419,6 +459,9 @@ class ZamakanaService:
             raise NotFoundError("Scenario not found")
         return scenario
 
+    # ============================================================
+    # 8. تحليل الذكاء الاصطناعي – مع Idempotency محسّن
+    # ============================================================
     async def generate_ai_analysis(
         self,
         scenario_id: int,
@@ -429,10 +472,16 @@ class ZamakanaService:
     ) -> FutureScenario:
         await self._check_saas_limits(tenant_id, "zamakana")
 
+        # 1. التحقق من Idempotency
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
-            if cached:
-                return cached
+            cached = await self._validate_idempotency(idempotency_key)
+            if cached is not None:
+                scenario_id_cached = cached.get("scenario_id")
+                if scenario_id_cached:
+                    scenario = await self.repo.get_scenario(scenario_id_cached, tenant_id)
+                    if scenario:
+                        return scenario
+                raise ValidationError("Idempotency record exists but scenario not found.")
 
         scenario = await self.repo.get_scenario(scenario_id, tenant_id)
         if not scenario or scenario.created_by != user_id:  # type: ignore
@@ -518,8 +567,9 @@ class ZamakanaService:
             details={"ai_agent_id": ai_agent_id}
         )
 
+        # تخزين معرف السيناريو فقط
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, updated)
+            await self._store_idempotency(idempotency_key, {"scenario_id": updated.id})
 
         return updated
 
@@ -583,7 +633,7 @@ class ZamakanaService:
         return updated
 
     # ============================================================
-    # 7. دوال مساعدة
+    # 9. دوال مساعدة
     # ============================================================
     async def _register_affiliate_commission(self, user_id: int, tenant_id: int, action_type: str):
         try:

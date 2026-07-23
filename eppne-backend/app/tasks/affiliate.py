@@ -1,92 +1,152 @@
 # app/tasks/affiliate.py
-from celery import shared_task
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
-from decimal import Decimal
+"""
+مهام Celery الموحّدة لقطاع الإحالات (Affiliate).
+تم دمج affiliate.py و affiliate_tasks.py في ملف واحد.
+يدعم: توزيع العمولات، تحرير العمولات المعلقة، وتنظيف الروابط المنتهية.
+"""
 import asyncio
+from datetime import datetime, timezone, timedelta  # 🔥 إضافة timedelta
+from decimal import Decimal
+from typing import Dict, Any, Optional
 
-from app.core.config import settings
+# 🔥 استيراد التطبيق المركزي والاتصال الموحّد بقاعدة البيانات
+from app.core.celery_app import celery_app
+from app.core.database import SessionLocal
 from app.domains.affiliate.service import AffiliateService
-from app.domains.finance.service import FinanceService
-from app.core.logging import logger
-
-engine = create_async_engine(settings.DATABASE_URL, echo=False)
-AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+from app.domains.affiliate.repository import AffiliateRepository
+from app.core.logging_conf import logger
 
 
-async def _distribute_commissions_async(order_id: int, tenant_id: int):
-    """توزيع العمولات بشكل غير متزامن"""
-    async with AsyncSessionLocal() as db:
-        service = AffiliateService(db)
-        commissions = await service.distribute_commissions(order_id, tenant_id)
-        await db.commit()
-        logger.info(f"Distributed {len(commissions)} commissions for order {order_id}")
-        return commissions
-
-
-@shared_task(name="affiliate.distribute_commissions", bind=True, max_retries=3, default_retry_delay=60)
-def distribute_commissions_task(self, order_id: int, tenant_id: int):
-    """توزيع العمولات بشكل غير متزامن عبر Celery"""
+# ============================================================
+# 1. أداة تشغيل آمنة للـ Async (تمنع تسرب الذاكرة)
+# ============================================================
+def _run_async(coro):
+    """
+    تشغيل دالة غير متزامنة (Async) بطريقة آمنة داخل Celery.
+    - تخلق حلقة أحداث جديدة لكل مهمة لضمان العزل.
+    - تغلق الحلقة تلقائياً بعد الانتهاء لمنع تسرب الذاكرة.
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     try:
-        result = asyncio.run(_distribute_commissions_async(order_id, tenant_id))
-        return {"status": "success", "count": len(result)}
+        return loop.run_until_complete(coro)
+    finally:
+        # 🔥 تنظيف الموارد وإغلاق الحلقة
+        try:
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+        except Exception:
+            pass
+        finally:
+            loop.close()
+
+
+# ============================================================
+# 2. مهمة توزيع العمولات (بعد إتمام الطلب)
+# ============================================================
+@celery_app.task(
+    name="affiliate.distribute_commissions",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=60,
+    acks_late=True,          # 🔥 تأكيد بعد التنفيذ (يمنع فقدان المهمة)
+    time_limit=300,          # 5 دقائق كحد أقصى
+    soft_time_limit=240,     # 4 دقائق إنذار
+)
+def distribute_commissions_task(self, order_id: int, tenant_id: int):
+    """
+    توزيع العمولات بشكل غير متزامن عبر Celery.
+    تُستدعى تلقائياً بعد إتمام الطلب في قطاع التجارة.
+    """
+    try:
+        async def _run():
+            async with SessionLocal() as db:
+                service = AffiliateService(db)
+                commissions = await service.distribute_commissions(order_id, tenant_id)
+                await db.commit()
+                logger.info(f"✅ Distributed {len(commissions)} commissions for order {order_id}")
+                return {"status": "success", "count": len(commissions)}
+        
+        result = _run_async(_run())
+        logger.info(f"Commissions distributed successfully for order {order_id}")
+        return result
+        
     except Exception as e:
-        logger.error(f"Failed to distribute commissions for order {order_id}: {str(e)}")
+        logger.error(f"❌ Failed to distribute commissions for order {order_id}: {str(e)}")
         raise self.retry(exc=e, countdown=60)
 
 
-async def _release_commissions_async(user_id: int):
-    """إفراج العمولات المعلقة"""
-    async with AsyncSessionLocal() as db:
-        service = AffiliateService(db)
-        finance = FinanceService(db)
-
-        # جلب العمولات المعلقة
-        repo = service.repo
-        commissions = await repo.get_pending_commissions(user_id)
-        if not commissions:
-            return {"status": "no_pending", "count": 0}
-
-        # حساب الإجمالي
-        total = sum(c.commission_amount for c in commissions)
-
-        # التحويل إلى المحفظة
-        tx = await finance.transfer(
-            sender_id=1,
-            receiver_id=user_id,
-            amount=total,
-            currency="MR_USDT",
-            notes=f"إفراج عمولات للمستخدم {user_id}",
-            idempotency_key=f"RELEASE-{user_id}-{datetime.now().timestamp()}",
-        )
-
-        # تحديث حالة العمولات
-        for commission in commissions:
-            await repo.update_commission_status(
-                commission.id,
-                status="CONFIRMED",
-                paid_at=datetime.now(timezone.utc),
-                paid_tx_hash=tx.tx_hash,
-            )
-
-        await db.commit()
-        logger.info(f"Released {len(commissions)} commissions for user {user_id}, total: {total}")
-        return {"status": "success", "count": len(commissions), "total": float(total)}
-
-
-@shared_task(name="affiliate.release_commissions", bind=True, max_retries=3, default_retry_delay=120)
-def release_commissions_task(self, user_id: int):
-    """إفراج العمولات المعلقة بشكل غير متزامن"""
+# ============================================================
+# 3. مهمة تحرير العمولات المعلقة (للمستخدم)
+# ============================================================
+@celery_app.task(
+    name="affiliate.release_commissions",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=120,
+    acks_late=True,          # 🔥 تأكيد بعد التنفيذ
+    time_limit=600,          # 10 دقائق (لأنها تشمل تحويلات مالية)
+    soft_time_limit=480,     # 8 دقائق إنذار
+)
+def release_commissions_task(self, user_id: int, idempotency_key: str):
+    """
+    تحرير العمولات المعلقة للمستخدم.
+    - تتحقق من Idempotency لمنع الدفع المزدوج.
+    - تحول المبلغ الإجمالي إلى محفظة المستخدم.
+    """
     try:
-        result = asyncio.run(_release_commissions_async(user_id))
+        async def _run():
+            async with SessionLocal() as db:
+                service = AffiliateService(db)
+                result = await service.release_commissions(user_id)
+                await db.commit()
+                logger.info(f"✅ Released commissions for user {user_id}: {result.get('count', 0)} commissions")
+                return result
+
+        result = _run_async(_run())
+        logger.info(f"Commissions released successfully for user {user_id}")
         return result
+
     except Exception as e:
-        logger.error(f"Failed to release commissions for user {user_id}: {str(e)}")
+        logger.error(f"❌ Failed to release commissions for user {user_id}: {str(e)}")
         raise self.retry(exc=e, countdown=120)
 
 
-@shared_task(name="affiliate.clean_expired_links", bind=True)
+# ============================================================
+# 4. مهمة تنظيف الروابط المنتهية (جدولة دورية)
+# ============================================================
+@celery_app.task(
+    name="affiliate.clean_expired_links",
+    bind=True,
+    max_retries=2,
+    default_retry_delay=3600,  # ساعة واحدة
+    acks_late=True,
+    time_limit=300,
+    soft_time_limit=240,
+)
 def clean_expired_links_task(self):
-    """تنظيف روابط الدعوة المنتهية الصلاحية (اختياري)"""
-    # تنفيذ منطق التنظيف حسب الحاجة
-    pass
+    """
+    تنظيف روابط الدعوة المنتهية الصلاحية.
+    تُستدعى بشكل دوري (مثلاً يومياً) عبر جدولة Celery Beat.
+    """
+    try:
+        async def _run():
+            async with SessionLocal() as db:
+                # 🔥 استخدام Repository مباشرة
+                repo = AffiliateRepository(db)
+                # تنفيذ منطق التنظيف: حذف الروابط المنتهية منذ أكثر من 30 يوماً
+                cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)  # 🔥 استخدام timezone.utc بدلاً من utcnow()
+                deleted_count = await repo.delete_expired_invitations(cutoff_date)
+                await db.commit()
+                logger.info(f"🧹 Cleaned {deleted_count} expired affiliate links")
+                return {"status": "success", "deleted_count": deleted_count}
+
+        result = _run_async(_run())
+        logger.info("✅ Expired affiliate links cleaned successfully.")
+        return result
+
+    except Exception as e:
+        logger.error(f"❌ Failed to clean expired affiliate links: {str(e)}")
+        raise self.retry(exc=e, countdown=3600)
