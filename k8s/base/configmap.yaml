@@ -1,14 +1,18 @@
-# .ai-generated/k8s/base/configmap.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: eppne-config
   namespace: eppne
 data:
+  # 🔥 هذه القيم سيتم استبدالها عبر Kustomize (patches) أو envsubst قبل التطبيق
   ENVIRONMENT: "production"
-  REGION: "us-east-1"
+  LOG_LEVEL: "INFO"
+  AWS_REGION: "us-east-1"
   DATABASE_POOL_SIZE: "20"
   DATABASE_MAX_OVERFLOW: "40"
   REDIS_MAX_CONNECTIONS: "20"
   RATE_LIMIT_PER_MINUTE: "60"
   WS_HEARTBEAT_INTERVAL: "30"
+  # 🔥 إضافة متغيرات إضافية مفيدة
+  ACCESS_TOKEN_EXPIRE_MINUTES: "10080"
+  REFRESH_TOKEN_EXPIRE_DAYS: "30"

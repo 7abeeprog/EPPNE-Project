@@ -1,6 +1,9 @@
 # app/core/redis_client.py
 import redis.asyncio as redis
 from redis.asyncio import ConnectionPool
+from redis.backoff import ExponentialBackoff
+from redis.retry import Retry
+from redis.exceptions import TimeoutError, ConnectionError
 from typing import Optional
 import logging
 from app.core.config import settings
@@ -27,47 +30,49 @@ class RedisClientWrapper:
             return self._client
 
         try:
-            # جلب الإعدادات من ملف الإعدادات (settings)
             redis_url = getattr(settings, "REDIS_URL", "redis://localhost:6379/0")
             redis_password = getattr(settings, "REDIS_PASSWORD", None)
             max_connections = getattr(settings, "REDIS_MAX_CONNECTIONS", 20)
 
             logger.info(f"🔄 جاري الاتصال بـ Redis على: {redis_url.split('@')[-1] if '@' in redis_url else redis_url}")
 
-            # إنشاء مجمع اتصالات (Connection Pool) لتحسين الأداء مع +10M مستخدم
+            # إعداد استراتيجية إعادة المحاولة مع التزايد الأسي
+            retry_strategy = Retry(
+                ExponentialBackoff(cap=10, base=1),
+                retries=3
+            )
+
+            # إنشاء مجمع اتصالات (Connection Pool) مع إعادة المحاولة
             self._pool = ConnectionPool.from_url(
                 redis_url,
                 password=redis_password,
                 max_connections=max_connections,
-                decode_responses=True,  # تحويل البايت إلى سلسلة نصية تلقائياً
+                decode_responses=True,
                 health_check_interval=30,
-                retry_on_timeout=True
+                retry_on_timeout=True,
+                retry=retry_strategy,
+                retry_on_error=[TimeoutError, ConnectionError]
             )
 
             self._client = redis.Redis(connection_pool=self._pool)
 
             # التحقق من الاتصال (Ping)
             await self._client.ping()
-            logger.info("✅ تم الاتصال بـ Redis بنجاح.")
+            logger.info("✅ تم الاتصال بـ Redis بنجاح مع إعادة المحاولة التلقائية.")
             return self._client
 
         except Exception as e:
             logger.error(f"❌ فشل الاتصال بـ Redis: {str(e)}")
-            # يمكنك اختيار رفع الاستثناء أو الاستمرار في وضع Offline Mode
             raise ConnectionError(f"تعذر الاتصال بـ Redis: {str(e)}")
 
     async def get_client(self) -> redis.Redis:
-        """
-        إرجاع العميل الحالي، وإن لم يكن موجوداً يقوم بتهيئته.
-        """
+        """إرجاع العميل الحالي، وإن لم يكن موجوداً يقوم بتهيئته."""
         if not self._client:
             return await self.initialize()
         return self._client
 
     async def close(self):
-        """
-        إغلاق جميع الاتصالات بشكل آمن (يُستدعى عند إيقاف التطبيق).
-        """
+        """إغلاق جميع الاتصالات بشكل آمن."""
         if self._client:
             await self._client.close(close_connection_pool=True)
             logger.info("🔒 تم إغلاق اتصال Redis.")
@@ -107,7 +112,7 @@ class RedisClientWrapper:
         client = await self.get_client()
         return await client.expire(key, time)
 
-    # ========== عمليات التخزين المؤقت الجماعية (للـ Cache Aside) ==========
+    # ========== عمليات التخزين المؤقت الجماعية (لـ Cache Aside) ==========
     async def get_json(self, key: str):
         """جلب قيمة JSON وتحويلها إلى قاموس (dict)"""
         val = await self.get(key)

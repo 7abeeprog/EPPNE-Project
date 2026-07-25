@@ -4,12 +4,12 @@ import type { components } from "@/src/lib/api-types";
 import { handleError } from "@/lib/error-handler";
 import { generateIdempotencyKey } from "@/lib/utils";
 
-type ProjectCreate = components['schemas']['ProjectCreate'];
-type ProjectResponse = components['schemas']['ProjectResponse'];
-type ProjectUpdate = components['schemas']['ProjectUpdate'];
-type ProjectType = components['schemas']['ProjectType'];
-type ProjectStatus = components['schemas']['ProjectStatus'];
-type PaginatedResponse_ProjectResponse_ = components['schemas']['PaginatedResponse_ProjectResponse_'];
+export type ProjectCreate = components['schemas']['ProjectCreate'];
+export type ProjectResponse = components['schemas']['ProjectResponse'];
+export type ProjectUpdate = components['schemas']['ProjectUpdate'];
+export type ProjectType = components['schemas']['ProjectType'];
+export type ProjectStatus = components['schemas']['ProjectStatus'];
+export type PaginatedResponse_ProjectResponse_ = components['schemas']['PaginatedResponse_ProjectResponse_'];
 type ContributionCreate = components['schemas']['ContributionCreate'];
 type ContributionApprove = components['schemas']['ContributionApprove'];
 type ContributionResponse = components['schemas']['ContributionResponse'];

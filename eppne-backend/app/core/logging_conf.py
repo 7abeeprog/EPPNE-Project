@@ -2,38 +2,124 @@
 import logging
 import sys
 import os
+import contextvars
+from typing import Optional
 from app.core.config import settings
 
-def setup_logging():
-    # التحقق من صحة مسار ملف السجل
+# ============================================================
+# 🔥 السياق المتغير لتخزين Trace-ID عبر الطلبات (Async-Safe)
+# ============================================================
+_trace_id_var: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "trace_id", default="-"
+)
+
+
+def set_trace_id(trace_id: str) -> None:
+    """
+    تعيين Trace-ID للطلب الحالي (يُستدعى من Middleware في main.py).
+    """
+    _trace_id_var.set(trace_id)
+
+
+def get_trace_id() -> str:
+    """
+    جلب Trace-ID للطلب الحالي (للاستخدام داخل السجلات).
+    """
+    return _trace_id_var.get()
+
+
+# ============================================================
+# 🔥 Filter مخصص لإضافة Trace-ID إلى كل سجل
+# ============================================================
+class TraceIDFilter(logging.Filter):
+    """
+    يُضيف trace_id إلى سجل اللوغات (Log Record) تلقائياً.
+    """
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.trace_id = get_trace_id()
+        return True
+
+
+# ============================================================
+# إعداد نظام التسجيل الأساسي (Production-Ready)
+# ============================================================
+def setup_logging() -> None:
+    """
+    تهيئة نظام التسجيل مع دعم Trace-ID وإعدادات البيئة.
+    """
+    # 1. التأكد من وجود مجلد السجلات
     if settings.LOG_FILE:
         log_dir = os.path.dirname(settings.LOG_FILE)
-        if log_dir:  # تجنب محاولة إنشاء دليل فارغ
+        if log_dir:
             os.makedirs(log_dir, exist_ok=True)
 
-    # استراتيجية الخبير: التعامل الآمن مع المتغير مع تنبيه واضح
+    # 2. قراءة مستوى التسجيل بأمان
     try:
         log_level_name = settings.LOG_LEVEL.upper()
     except AttributeError:
-        # هذا السيناريو لن يحدث بعد تعديل config.py، لكن وضعه احترازي لإنقاذ السيرفر
         log_level_name = "INFO"
-        print(f"⚠️ [CRITICAL WAKE-UP] LOG_LEVEL missing in Settings! Defaulting to INFO. Please check config.py", file=sys.stderr)
+        print(
+            f"⚠️ [CRITICAL WAKE-UP] LOG_LEVEL missing in Settings! Defaulting to INFO. Please check config.py",
+            file=sys.stderr
+        )
 
+    log_level = getattr(logging, log_level_name, logging.INFO)
+
+    # 3. تنسيق السجل المتقدم (يتضمن Trace-ID)
+    log_format = "%(asctime)s [%(levelname)s] [%(trace_id)s] %(name)s: %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
+
+    # 4. إنشاء المعالجات (Handlers)
+    handlers = [
+        logging.StreamHandler(sys.stdout),  # طباعة على الشاشة (stdout)
+    ]
+
+    # إضافة معالج الملفات إذا تم تحديد ملف
+    if settings.LOG_FILE:
+        file_handler = logging.FileHandler(settings.LOG_FILE, encoding="utf-8")
+        handlers.append(file_handler)
+
+    # 5. تكوين التنسيق الأساسي (BasicConfig)
     logging.basicConfig(
-        level=getattr(logging, log_level_name, logging.INFO),
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(settings.LOG_FILE) if settings.LOG_FILE else logging.NullHandler()
-        ]
+        level=log_level,
+        format=log_format,
+        datefmt=date_format,
+        handlers=handlers,
     )
-    
-    # تهدئة ضجيج SQLAlchemy في الإنتاج
-    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
-    
-    # سجل بدء التشغيل للتأكيد
-    logger = logging.getLogger("eppne")
-    logger.info(f"✅ Logging system initialized successfully with level: {log_level_name}")
 
-# هذا هو الـ Logger العام للمشروع
+    # ============================================================
+    # 6. 🔥 تطبيق TraceIDFilter على جميع المعالجات (الجذرية)
+    # ============================================================
+    root_logger = logging.getLogger()
+    trace_filter = TraceIDFilter()
+    for handler in root_logger.handlers:
+        handler.addFilter(trace_filter)
+
+    # 7. تهدئة الضجيج في الإنتاج
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)  # تقليل ضجيج Uvicorn
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+    # 8. تأكيد بدء التشغيل
+    logger = logging.getLogger("eppne")
+    logger.info(f"✅ Logging system initialized with Trace-ID support. Level: {log_level_name}")
+
+
+# ============================================================
+# 9. 🔥 توصية استراتيجية: استخدام JSON Logging للإنتاج (معلّق)
+# ============================================================
+# إذا أردت في المستقبل التكامل مع ELK / Loki / Datadog،
+# قم بتثبيت `python-json-logger` واستبدال التنسيق بـ:
+#
+# from pythonjsonlogger import jsonlogger
+# formatter = jsonlogger.JsonFormatter(
+#     fmt="%(asctime)s %(levelname)s %(name)s %(trace_id)s %(message)s",
+#     datefmt="%Y-%m-%dT%H:%M:%SZ",
+#     rename_fields={"levelname": "severity", "asctime": "timestamp"},
+# )
+
+
+# ============================================================
+# الـ Logger العام للمشروع
+# ============================================================
 logger = logging.getLogger("eppne")

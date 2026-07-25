@@ -3,14 +3,17 @@ import os
 import json
 import base64
 import secrets
-import boto3
-from botocore.exceptions import ClientError
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+import logging
 from typing import Optional, Dict, Any, List
-from dotenv import load_dotenv
+from pydantic import Field, field_validator, SecretStr  # type: ignore[import]
+from pydantic_settings import BaseSettings, SettingsConfigDict  # type: ignore[import]
+from botocore.exceptions import ClientError  # type: ignore[import]
+import boto3  # type: ignore[import]
+from dotenv import load_dotenv  # type: ignore[import]
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 def load_secrets_from_aws() -> Dict[str, Any]:
     """
@@ -18,11 +21,11 @@ def load_secrets_from_aws() -> Dict[str, Any]:
     في حال الفشل، يتم رفع استثناء لإيقاف التشغيل في البيئة الإنتاجية.
     """
     try:
-        client = boto3.client('secretsmanager', region_name=os.getenv("REGION", "us-east-1"))
+        client = boto3.client('secretsmanager', region_name=os.getenv("AWS_REGION", "us-east-1"))
         response = client.get_secret_value(SecretId=os.getenv("SECRETS_ARN", "eppne/prod/secrets"))
         return json.loads(response['SecretString'])
     except ClientError as e:
-        raise Exception(f"Could not retrieve secrets from AWS: {e}")
+        raise RuntimeError(f"Could not retrieve secrets from AWS: {e}") from e
 
 def generate_encryption_key() -> str:
     """
@@ -31,43 +34,105 @@ def generate_encryption_key() -> str:
     """
     return base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8')
 
-class Settings(BaseSettings):
-    # ========== الحقول الأساسية ==========
-    ENVIRONMENT: str = Field(default="development")
-    LOG_FILE: str = Field(default="app.log")
-    LOG_LEVEL: str = Field(default="INFO")
 
-    # ========== قاعدة البيانات ==========
-    DATABASE_URL: str = Field(default="postgresql+asyncpg://eppne:eppne123@localhost:5432/eppne")
-    DATABASE_POOL_SIZE: int = Field(default=20, ge=1)
+class Settings(BaseSettings):
+    # ============================================================
+    # 1. الحقول الأساسية (مع قيم افتراضية آمنة للتطوير فقط)
+    # ============================================================
+    ENVIRONMENT: str = Field(default="development", pattern="^(development|staging|production)$")
+    LOG_FILE: str = Field(default="app.log")
+    LOG_LEVEL: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
+
+    # ============================================================
+    # 2. قاعدة البيانات (مع Validator صارم)
+    # ============================================================
+    DATABASE_URL: str = Field(
+        default="postgresql+asyncpg://eppne:eppne123@localhost:5432/eppne",
+        description="PostgreSQL Async URL (e.g., postgresql+asyncpg://user:pass@host:port/db)"
+    )
+    DATABASE_POOL_SIZE: int = Field(default=20, ge=1, le=100)
     DATABASE_MAX_OVERFLOW: int = Field(default=40, ge=0)
 
-    # ========== Redis ==========
-    REDIS_URL: str = Field(default="redis://localhost:6379/0")
-    REDIS_PASSWORD: Optional[str] = Field(default=None)
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        """تأكد من أن الرابط يستخدم مشغل asyncpg ويحتوي على منفذ."""
+        if not v.startswith("postgresql+asyncpg://"):
+            raise ValueError("DATABASE_URL must use 'postgresql+asyncpg://' driver.")
+        # تحقق من وجود منفذ (رقم بعد آخر نقطتين)
+        if ":" not in v.split("@")[-1]:
+            raise ValueError("DATABASE_URL must include port number (e.g., :5432).")
+        return v
+
+    # ============================================================
+    # 3. Redis (مع Validator صارم)
+    # ============================================================
+    REDIS_URL: str = Field(
+        default="redis://localhost:6379/0",
+        description="Redis URL (e.g., redis://:password@host:port/db)"
+    )
+    REDIS_PASSWORD: Optional[str] = Field(default=None, description="Redis password (optional, can be in URL)")
     REDIS_MAX_CONNECTIONS: int = Field(default=20, ge=5)
 
-    # ========== JWT والأمان ==========
-    # 🔥 تم تغيير القيمة الافتراضية لتكون بطول 32 حرفاً (لتجاوز تحقق Pydantic)
-    SECRET_KEY: str = Field(default="CHANGE_ME_NOW_CHANGE_ME_NOW_12345678", min_length=32)
-    ALGORITHM: str = Field(default="HS256")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=10080)
-    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=30)
+    @field_validator("REDIS_URL")
+    @classmethod
+    def validate_redis_url(cls, v: str) -> str:
+        """تأكد من أن الرابط يبدأ بـ redis://."""
+        if not v.startswith("redis://"):
+            raise ValueError("REDIS_URL must start with 'redis://'.")
+        return v
 
-    # ========== 🔐 مفتاح التشفير الإضافي (لـ Fernet / Automation) ==========
+    # ============================================================
+    # 4. JWT والأمان (إلزامية في الإنتاج، مع SecretStr)
+    # ============================================================
+    SECRET_KEY: SecretStr = Field(
+        default=SecretStr("CHANGE_ME_NOW_CHANGE_ME_NOW_12345678"),
+        min_length=32,
+        description="JWT Secret Key (min 32 chars). MUST be changed in production."
+    )
+    ALGORITHM: str = Field(default="HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=10080, ge=1)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=30, ge=1)
+
+    # ============================================================
+    # 5. مفتاح التشفير الإضافي (لـ Fernet / Automation)
+    # ============================================================
     SECRET_ENCRYPTION_KEY: str = Field(
         default_factory=generate_encryption_key,
-        description="مفتاح تشفير 32-بايت بصيغة Base64 يستخدم لتشفير بيانات سير العمل والأسرار الداخلية."
+        description="Base64-encoded 32-byte encryption key for internal secrets."
     )
 
-    # ========== المستخدم السوبر ==========
-    FIRST_SUPERUSER_EMAIL: str = Field(default="admin@eppne.com")
-    FIRST_SUPERUSER_PASSWORD: str = Field(default="ChangeMe@123")
-    FIRST_SUPERUSER_USERNAME: str = Field(default="sovereign_admin")
+    @field_validator("SECRET_ENCRYPTION_KEY")
+    @classmethod
+    def validate_encryption_key(cls, v: str) -> str:
+        """تأكد من أن المفتاح هو Base64 صالح لـ 32 بايت."""
+        try:
+            decoded = base64.urlsafe_b64decode(v)
+            if len(decoded) != 32:
+                raise ValueError("SECRET_ENCRYPTION_KEY must decode to exactly 32 bytes.")
+        except Exception as e:
+            raise ValueError(f"SECRET_ENCRYPTION_KEY must be a valid Base64-encoded 32-byte key: {e}") from e
+        return v
+
+    # ============================================================
+    # 6. المستخدم السوبر (إلزامي في الإنتاج)
+    # ============================================================
+    FIRST_SUPERUSER_EMAIL: str = Field(
+        default="admin@eppne.com",
+        pattern=r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+    )
+    FIRST_SUPERUSER_PASSWORD: SecretStr = Field(
+        default=SecretStr("ChangeMe@123"),
+        min_length=8,
+        description="Superuser password. MUST be changed in production."
+    )
+    FIRST_SUPERUSER_USERNAME: str = Field(default="sovereign_admin", min_length=3)
     FIRST_SUPERUSER_NAME_AR: str = Field(default="المدير التنفيذي")
     FIRST_SUPERUSER_NAME_EN: str = Field(default="Executive Director")
 
-    # ========== العملات ==========
+    # ============================================================
+    # 7. العملات والتخزين
+    # ============================================================
     CRYPTO_MODE: str = Field(default="FULL_CRYPTO")
     EXCHANGE_RATES: Dict[str, float] = Field(
         default={
@@ -79,7 +144,9 @@ class Settings(BaseSettings):
         }
     )
 
-    # ========== تخزين الملفات (S3) ==========
+    # ============================================================
+    # 8. تخزين الملفات (S3/MinIO)
+    # ============================================================
     S3_ENDPOINT: str = Field(default="localhost:9000")
     S3_ACCESS_KEY: str = Field(default="minioadmin")
     S3_SECRET_KEY: str = Field(default="minioadmin")
@@ -87,9 +154,11 @@ class Settings(BaseSettings):
     S3_BUCKET_CERTIFICATES: str = Field(default="eppne-certs")
     S3_USE_SSL: bool = Field(default=False)
 
-    # ========== التوصيلات ==========
-    WS_HEARTBEAT_INTERVAL: int = Field(default=30)
-    RATE_LIMIT_PER_MINUTE: int = Field(default=60)
+    # ============================================================
+    # 9. الشبكة والتوصيلات
+    # ============================================================
+    WS_HEARTBEAT_INTERVAL: int = Field(default=30, ge=5)
+    RATE_LIMIT_PER_MINUTE: int = Field(default=60, ge=1)
     ALLOWED_HOSTS: List[str] = Field(
         default=[
             "localhost",
@@ -109,61 +178,78 @@ class Settings(BaseSettings):
     )
 
     # ============================================================
-    # 🔥 الحل السحري لمشكلة AttributeError (تمت إضافته هنا)
+    # 10. خصائص محسوبة (Computed Properties)
     # ============================================================
     @property
     def REFRESH_TOKEN_EXPIRE_MINUTES(self) -> int:
-        """
-        تحويل مدة صلاحية Refresh Token من أيام إلى دقائق.
-        يستخدمه ملف security.py تلقائياً.
-        """
+        """تحويل مدة صلاحية Refresh Token من أيام إلى دقائق."""
         return self.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60
 
-    # إعدادات Pydantic (تُقرأ من .env مع تجاهل الحالة)
+    # ============================================================
+    # 11. تكوين Pydantic
+    # ============================================================
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
-        case_sensitive=False
+        case_sensitive=False,
     )
 
+    # ============================================================
+    # 12. المنشئ (مع تحميل AWS Secrets Manager)
+    # ============================================================
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # ---- تحميل الأسرار من AWS في بيئة الإنتاج ----
+        # -- تحميل الأسرار من AWS في بيئة الإنتاج --
         if self.ENVIRONMENT == "production":
             try:
                 secrets_aws = load_secrets_from_aws()
-                self.SECRET_KEY = secrets_aws.get("SECRET_KEY", self.SECRET_KEY)
-                self.DATABASE_URL = secrets_aws.get("DATABASE_URL", self.DATABASE_URL)
-                self.REDIS_URL = secrets_aws.get("REDIS_URL", self.REDIS_URL)
-                self.S3_ENDPOINT = secrets_aws.get("S3_ENDPOINT", self.S3_ENDPOINT)
-                self.S3_ACCESS_KEY = secrets_aws.get("S3_ACCESS_KEY", self.S3_ACCESS_KEY)
-                self.S3_SECRET_KEY = secrets_aws.get("S3_SECRET_KEY", self.S3_SECRET_KEY)
-                # 🔐 جلب مفتاح التشفير من الأسرار إن وُجد
-                enc_key = secrets_aws.get("SECRET_ENCRYPTION_KEY")
-                if enc_key:
-                    self.SECRET_ENCRYPTION_KEY = enc_key
+                # تحديث الحقول الحساسة من AWS
+                for key, value in secrets_aws.items():
+                    if hasattr(self, key):
+                        # إذا كان الحقل من نوع SecretStr، نلف القيمة به
+                        if key in ("SECRET_KEY", "FIRST_SUPERUSER_PASSWORD"):
+                            setattr(self, key, SecretStr(value))
+                        else:
+                            setattr(self, key, value)
+                logger.info("✅ AWS Secrets loaded successfully for production environment.")
             except Exception as e:
                 # في الإنتاج، يجب ألا نستمر إذا تعذر جلب الأسرار
-                raise RuntimeError(f"Production startup failed: unable to load secrets - {e}")
+                raise RuntimeError(f"Production startup failed: unable to load secrets - {e}") from e
 
-        # ---- تحقق أمني في الإنتاج ----
+        # -- تحقق أمني في الإنتاج --
         if self.ENVIRONMENT == "production":
-            if self.SECRET_KEY == "CHANGE_ME_NOW_CHANGE_ME_NOW_12345678":
+            # التأكد من أن SECRET_KEY غير افتراضي
+            if self.SECRET_KEY.get_secret_value() == "CHANGE_ME_NOW_CHANGE_ME_NOW_12345678":
                 raise ValueError("❌ SECRET_KEY must be changed in production! (Default value is not allowed)")
-            # التحقق من صحة مفتاح التشفير (أن يكون بطول 44 حرفاً Base64)
+
+            # التأكد من أن كلمة مرور السوبر غير افتراضية
+            if self.FIRST_SUPERUSER_PASSWORD.get_secret_value() == "ChangeMe@123":
+                raise ValueError("❌ FIRST_SUPERUSER_PASSWORD must be changed in production! (Default is not allowed)")
+
+            # التحقق من صحة مفتاح التشفير (تم عبر validator أعلاه، لكن نضعه هنا كتأكيد)
             try:
                 base64.urlsafe_b64decode(self.SECRET_ENCRYPTION_KEY)
-            except Exception:
-                raise ValueError("❌ SECRET_ENCRYPTION_KEY must be a valid Base64-encoded 32-byte key!")
+            except Exception as e:
+                raise ValueError(f"❌ SECRET_ENCRYPTION_KEY is invalid: {e}") from e
 
-        # ---- تحذير في التطوير إذا كان المفتاح هو القيمة الافتراضية أو مُولّداً تلقائياً ----
+        # -- تحذيرات في التطوير (استخدام logging بدلاً من print) --
         if self.ENVIRONMENT != "production":
-            if self.SECRET_KEY == "CHANGE_ME_NOW_CHANGE_ME_NOW_12345678":
-                print("⚠️  [DEV] Using default SECRET_KEY. It is recommended to set a unique SECRET_KEY in .env file.")
-            if self.SECRET_ENCRYPTION_KEY == generate_encryption_key():
-                print("⚠️  [DEV] Using auto-generated SECRET_ENCRYPTION_KEY. This is fine for development but replace it in production.")
+            if self.SECRET_KEY.get_secret_value() == "CHANGE_ME_NOW_CHANGE_ME_NOW_12345678":
+                logger.warning(
+                    "⚠️  [DEV] Using default SECRET_KEY. "
+                    "It is recommended to set a unique SECRET_KEY in .env file."
+                )
+            if self.FIRST_SUPERUSER_PASSWORD.get_secret_value() == "ChangeMe@123":
+                logger.warning(
+                    "⚠️  [DEV] Using default FIRST_SUPERUSER_PASSWORD. "
+                    "It is recommended to set a unique password in .env file."
+                )
+            # لا نتحقق من SECRET_ENCRYPTION_KEY في التطوير لأنه قد يكون مولّداً تلقائياً
 
-# ========== إنشاء كائن الإعدادات العام ==========
+
+# ============================================================
+# 13. إنشاء كائن الإعدادات العام
+# ============================================================
 settings = Settings()
