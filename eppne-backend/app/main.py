@@ -7,10 +7,11 @@ from contextlib import asynccontextmanager
 import socketio
 import time
 import json
+import uuid
 from typing import Dict, Optional, Any
 
 from app.core.database import engine
-from app.core.logging_conf import setup_logging
+from app.core.logging_conf import setup_logging, logger, set_trace_id
 from app.core.errors import SovereignError, IdempotencyError, RateLimitError
 from app.core.redis_client import redis_client
 from app.core.config import settings
@@ -19,7 +20,7 @@ from app.core.config import settings
 # استيرادات الإضافات الأساسية
 # ==========================================
 from app.core.database_indexes import create_indexes
-#from app.core.metrics import metrics
+# from app.core.metrics import metrics
 
 # استيراد dependencies الخاصة بالمصادقة (لنقاط AI)
 from app.domains.identity.router import get_current_user
@@ -71,14 +72,26 @@ print("--- فحص سجل كلاسات SQLAlchemy ---")
 # ==========================================
 setup_logging()
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🚀 إطلاق المنصة السيادية EPPNE...")
+    """إدارة دورة حياة التطبيق (بدء التشغيل والإيقاف)."""
+    logger.info("🚀 إطلاق المنصة السيادية EPPNE...")
+    
+    # تهيئة Redis
     await redis_client.initialize()
+    
+    # إنشاء الفهارس في قاعدة البيانات
     await create_indexes()
+    
+    logger.info("✅ تم تهيئة جميع المكونات الأساسية.")
     yield
+    
+    # تنظيف الموارد عند الإيقاف
     await engine.dispose()
     await redis_client.close()
+    logger.info("🛑 تم إيقاف المنصة السيادية EPPNE.")
+
 
 # ==========================================
 # بناء المحرك الداخلي
@@ -90,6 +103,7 @@ fastapi_app = FastAPI(
     lifespan=lifespan
 )
 
+
 # ==========================================
 # معالجات الأخطاء المخصصة
 # ==========================================
@@ -100,12 +114,14 @@ async def sovereign_error_handler(request: Request, exc: SovereignError):
         content={"detail": exc.message, "code": exc.code}
     )
 
+
 @fastapi_app.exception_handler(IdempotencyError)
 async def idempotency_error_handler(request: Request, exc: IdempotencyError):
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
         content={"detail": exc.message, "code": "IDEMPOTENCY_CONFLICT"}
     )
+
 
 @fastapi_app.exception_handler(RateLimitError)
 async def rate_limit_error_handler(request: Request, exc: RateLimitError):
@@ -114,27 +130,56 @@ async def rate_limit_error_handler(request: Request, exc: RateLimitError):
         content={"detail": exc.message, "code": "RATE_LIMIT_EXCEEDED"}
     )
 
-# ==========================================
-# الـ Middlewares
-# ==========================================
-fastapi_app.add_middleware(
-    CORSMiddleware,
-    # أضفنا localhost:3000 بشكل صريح هنا لبيئة التطوير
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"] + getattr(settings, "ALLOWED_ORIGINS", []),
-    allow_credentials=True,
-    allow_methods=["*"], # السماح بكل العمليات (GET, POST, PUT, DELETE, OPTIONS)
-    allow_headers=["*"], # السماح بكل الهيدرز
-    expose_headers=["X-Total-Count", "X-Skip", "X-Limit", "X-Process-Time"],
-    max_age=3600,
-)
 
-fastapi_app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=settings.ALLOWED_HOSTS
-)
+# ============================================================
+#  🔥 MIDDLEWARE 1: Trace-ID & Request-ID (يُضاف أولاً)
+# ============================================================
+@fastapi_app.middleware("http")
+async def trace_id_middleware(request: Request, call_next):
+    """
+    إضافة Trace-ID لكل طلب للربط مع السجلات في بيئة موزعة.
+    - يقرأ X-Trace-ID من الهيدر إن وُجد، أو يُنشئ واحداً جديداً.
+    - يُخزّنه في request.state.trace_id لاستخدامه في السجلات.
+    - يُخزّنه في ContextVar للـ Logging باستخدام set_trace_id().
+    - يُعيده في Response Headers لتتبعه من العميل.
+    """
+    # محاولة قراءة Trace-ID من الهيدر
+    trace_id = request.headers.get("X-Trace-ID")
+    if not trace_id:
+        trace_id = str(uuid.uuid4())
+    
+    # تخزينه في حالة الطلب لاستخدامه في الـ Logging
+    request.state.trace_id = trace_id
+    # ✅ ربط الـ Trace-ID مع نظام التسجيل (لإضافته إلى كل سطر سجل)
+    set_trace_id(trace_id)
+    
+    # إضافة X-Request-ID (معيار شائع في البنى التحتية)
+    request_id = request.headers.get("X-Request-ID", trace_id[:8])
+    request.state.request_id = request_id
+    
+    # معالجة الطلب
+    start_time = time.time()
+    response = await call_next(request)
+    
+    # إضافة الـ Trace-ID إلى Response Headers
+    response.headers["X-Trace-ID"] = trace_id
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Process-Time"] = str(time.time() - start_time)
+    
+    return response
 
+
+# ============================================================
+#  MIDDLEWARE 2: Idempotency (مع دعم المسار وحفظ الهيدرز)
+# ============================================================
 @fastapi_app.middleware("http")
 async def idempotency_middleware(request: Request, call_next):
+    """
+    تنفيذ Idempotency للطلبات غير الآمنة (POST, PUT, PATCH, DELETE).
+    - يخزن استجابة الطلب الناجح (2xx) مع الهيدرز في Redis لمدة 24 ساعة.
+    - يعيد الاستجابة المخزّنة (مع الهيدرز الأصلية) إذا تكرر نفس المفتاح لنفس المسار.
+    """
+    # تخطي الطلبات الآمنة (GET, HEAD, OPTIONS)
     if request.method in ["GET", "HEAD", "OPTIONS"]:
         return await call_next(request)
 
@@ -142,53 +187,96 @@ async def idempotency_middleware(request: Request, call_next):
     if not idem_key:
         return await call_next(request)
 
+    # تضمين المسار في مفتاح التخزين لتمييز الطلبات على مسارات مختلفة
     path = request.url.path
     cache_key = f"idem:{path}:{idem_key}"
     
+    # التحقق من وجود استجابة مخزّنة مسبقاً
     cached_response = await redis_client.get_json(cache_key)
     if cached_response:
+        logger.info(f"🔄 Idempotency cache hit: {cache_key}")
         return JSONResponse(
             status_code=cached_response.get("status_code", 200),
             content=cached_response.get("body", {}),
-            headers={"Idempotency-Result": "cached"}
+            headers=cached_response.get("headers", {})  # ✅ إعادة الهيدرز المخزنة
         )
 
+    # معالجة الطلب الأصلي
     response = await call_next(request)
 
+    # تخزين الاستجابة الناجحة فقط (2xx)
     if 200 <= response.status_code < 300:
+        # قراءة محتوى الاستجابة
         body = b""
         async for chunk in response.body_iterator:
             body += chunk
         response_body = body.decode("utf-8")
         
+        # تخزين في Redis مع صلاحية 24 ساعة (نخزن الهيدرز أيضاً)
         await redis_client.set_json(
             cache_key,
             {
                 "status_code": response.status_code,
-                "body": json.loads(response_body) if response_body else {}
+                "body": json.loads(response_body) if response_body else {},
+                "headers": dict(response.headers)  # ✅ حفظ الهيدرز
             },
-            ex=86400
+            ex=86400  # 24 ساعة
         )
         
+        logger.info(f"✅ Idempotency stored for: {cache_key}")
+        
+        # إعادة إنشاء الاستجابة (لأننا استهلكنا الـ body)
         return JSONResponse(
             status_code=response.status_code,
             content=json.loads(response_body) if response_body else {},
             headers=dict(response.headers)
         )
+    
     return response
 
+
+# ============================================================
+#  MIDDLEWARE 3: CORS (السماح بالنطاقات)
+# ============================================================
+fastapi_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"] + getattr(settings, "ALLOWED_ORIGINS", []),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Total-Count", "X-Skip", "X-Limit", "X-Process-Time", "X-Trace-ID"],
+    max_age=3600,
+)
+
+
+# ============================================================
+#  MIDDLEWARE 4: Trusted Hosts
+# ============================================================
+fastapi_app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=settings.ALLOWED_HOSTS
+)
+
+
+# ============================================================
+#  MIDDLEWARE 5: أداء (Performance)
+# ============================================================
 @fastapi_app.middleware("http")
 async def performance_middleware(request: Request, call_next):
+    """
+    تسجيل زمن معالجة الطلب وإصدار تحذير إذا تجاوز 1 ثانية.
+    """
     start_time = time.time()
     response = await call_next(request)
     process_time = time.time() - start_time
-    response.headers["X-Process-Time"] = str(process_time)
     
-    #metrics.record_request(str(request.url.path), request.method, process_time)
-
     if process_time > 1.0:
-        print(f"⚠️ بطء في الطلب: {request.method} {request.url.path} - {process_time:.2f}s")
+        trace_id = getattr(request.state, "trace_id", "unknown")
+        logger.warning(
+            f"⚠️ بطء في الطلب: {request.method} {request.url.path} - {process_time:.2f}s [Trace: {trace_id}]"
+        )
     return response
+
 
 # ==========================================
 # تضمين جميع الموجهات مع تحديد المسار والوسم
@@ -232,24 +320,40 @@ routers_config = [
 for router_obj, prefix_path, tags_list in routers_config:
     fastapi_app.include_router(router_obj, prefix="/api", tags=tags_list)  # type: ignore
 
+
 # ==========================================
-# نقاط النهاية العامة
+# نقاط النهاية العامة (الصحة والجاهزية)
 # ==========================================
 @fastapi_app.get("/health")
 async def health():
+    """
+    نقطة فحص الصحة (Liveness Probe) – تُستخدم في K8s للتحقق من أن الحاوية تعمل.
+    """
     return {"status": "Sovereign System Operational", "version": "2.0.0"}
+
 
 @fastapi_app.get("/ready")
 async def readiness():
+    """
+    نقطة فحص الجاهزية (Readiness Probe) – تُستخدم في K8s للتحقق من جاهزية الخدمة.
+    تتحقق من: اتصال قاعدة البيانات، اتصال Redis.
+    """
     try:
-        await engine.connect()
+        # التحقق من اتصال قاعدة البيانات
+        async with engine.connect() as conn:
+            await conn.execute("SELECT 1")
+        
+        # التحقق من اتصال Redis
         await redis_client.ping()
+        
         return {"status": "ready", "components": {"database": "ok", "redis": "ok"}}
     except Exception as e:
+        logger.error(f"❌ Readiness check failed: {e}")
         return JSONResponse(
             status_code=503,
             content={"status": "not_ready", "error": str(e)}
         )
+
 
 # ==========================================
 # نقاط النهاية للذكاء الاصطناعي
@@ -273,6 +377,7 @@ async def ai_chat(
     )
     return result
 
+
 @fastapi_app.get("/api/ai/cost")
 async def get_ai_cost(
     model_id: Optional[str] = None,
@@ -287,6 +392,7 @@ async def get_ai_cost(
     else:
         data = await CostTracker.get_total_cost(model_id)
     return data
+
 
 @fastapi_app.put("/api/ai/routing")
 async def update_ai_routing(
@@ -304,6 +410,7 @@ async def update_ai_routing(
 
     AIRouter.update_routing_percentages(new_percentages)
     return {"status": "updated", "percentages": new_percentages}
+
 
 # ==========================================
 # إعداد خادم WebSockets
@@ -327,4 +434,5 @@ async def disconnect(sid):
 async def echo(sid, data):
     await sio.emit('echo_response', {'received': data}, room=sid)
 
+# إنشاء التطبيق النهائي (ASGI)
 app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app, socketio_path='/ws')
