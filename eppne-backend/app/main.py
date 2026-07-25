@@ -22,8 +22,8 @@ from app.core.config import settings
 from app.core.database_indexes import create_indexes
 # from app.core.metrics import metrics
 
-# استيراد dependencies الخاصة بالمصادقة (لنقاط AI)
-from app.domains.identity.router import get_current_user
+# 🔥 استيراد dependencies الخاصة بالمصادقة والصلاحيات
+from app.api.deps import get_current_user, get_current_user_optional, require_sector
 from app.domains.identity.models import User
 
 # ==========================================
@@ -143,25 +143,19 @@ async def trace_id_middleware(request: Request, call_next):
     - يُخزّنه في ContextVar للـ Logging باستخدام set_trace_id().
     - يُعيده في Response Headers لتتبعه من العميل.
     """
-    # محاولة قراءة Trace-ID من الهيدر
     trace_id = request.headers.get("X-Trace-ID")
     if not trace_id:
         trace_id = str(uuid.uuid4())
     
-    # تخزينه في حالة الطلب لاستخدامه في الـ Logging
     request.state.trace_id = trace_id
-    # ✅ ربط الـ Trace-ID مع نظام التسجيل (لإضافته إلى كل سطر سجل)
     set_trace_id(trace_id)
     
-    # إضافة X-Request-ID (معيار شائع في البنى التحتية)
     request_id = request.headers.get("X-Request-ID", trace_id[:8])
     request.state.request_id = request_id
     
-    # معالجة الطلب
     start_time = time.time()
     response = await call_next(request)
     
-    # إضافة الـ Trace-ID إلى Response Headers
     response.headers["X-Trace-ID"] = trace_id
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Process-Time"] = str(time.time() - start_time)
@@ -179,7 +173,6 @@ async def idempotency_middleware(request: Request, call_next):
     - يخزن استجابة الطلب الناجح (2xx) مع الهيدرز في Redis لمدة 24 ساعة.
     - يعيد الاستجابة المخزّنة (مع الهيدرز الأصلية) إذا تكرر نفس المفتاح لنفس المسار.
     """
-    # تخطي الطلبات الآمنة (GET, HEAD, OPTIONS)
     if request.method in ["GET", "HEAD", "OPTIONS"]:
         return await call_next(request)
 
@@ -187,45 +180,38 @@ async def idempotency_middleware(request: Request, call_next):
     if not idem_key:
         return await call_next(request)
 
-    # تضمين المسار في مفتاح التخزين لتمييز الطلبات على مسارات مختلفة
     path = request.url.path
     cache_key = f"idem:{path}:{idem_key}"
     
-    # التحقق من وجود استجابة مخزّنة مسبقاً
     cached_response = await redis_client.get_json(cache_key)
     if cached_response:
         logger.info(f"🔄 Idempotency cache hit: {cache_key}")
         return JSONResponse(
             status_code=cached_response.get("status_code", 200),
             content=cached_response.get("body", {}),
-            headers=cached_response.get("headers", {})  # ✅ إعادة الهيدرز المخزنة
+            headers=cached_response.get("headers", {})
         )
 
-    # معالجة الطلب الأصلي
     response = await call_next(request)
 
-    # تخزين الاستجابة الناجحة فقط (2xx)
     if 200 <= response.status_code < 300:
-        # قراءة محتوى الاستجابة
         body = b""
         async for chunk in response.body_iterator:
             body += chunk
         response_body = body.decode("utf-8")
         
-        # تخزين في Redis مع صلاحية 24 ساعة (نخزن الهيدرز أيضاً)
         await redis_client.set_json(
             cache_key,
             {
                 "status_code": response.status_code,
                 "body": json.loads(response_body) if response_body else {},
-                "headers": dict(response.headers)  # ✅ حفظ الهيدرز
+                "headers": dict(response.headers)
             },
-            ex=86400  # 24 ساعة
+            ex=86400
         )
         
         logger.info(f"✅ Idempotency stored for: {cache_key}")
         
-        # إعادة إنشاء الاستجابة (لأننا استهلكنا الـ body)
         return JSONResponse(
             status_code=response.status_code,
             content=json.loads(response_body) if response_body else {},
@@ -263,9 +249,6 @@ fastapi_app.add_middleware(
 # ============================================================
 @fastapi_app.middleware("http")
 async def performance_middleware(request: Request, call_next):
-    """
-    تسجيل زمن معالجة الطلب وإصدار تحذير إذا تجاوز 1 ثانية.
-    """
     start_time = time.time()
     response = await call_next(request)
     process_time = time.time() - start_time
@@ -279,50 +262,60 @@ async def performance_middleware(request: Request, call_next):
 
 
 # ==========================================
-# تضمين جميع الموجهات مع تحديد المسار والوسم
+# 🔥 تضمين جميع الموجهات مع صلاحيات القطاعات (Sector Permissions)
 # ==========================================
+# تعريف كل Router مع القطاع المطلوب (يُستثنى auth_router لأنه عام)
 routers_config = [
-    (academy_router, "/academy", ["Academy"]),
-    (affiliate_router, "/affiliate", ["Affiliate"]),
-    (agritech_router, "/agritech", ["Agritech"]),
-    (ai_agents_router, "/ai-agents", ["AI Agents"]),
-    (ai_governance_router, "/ai-governance", ["AI Governance"]),
-    (arbitration_syndicates_router, "/arbitration", ["Arbitration Syndicates"]),
-    (auth_router, "/auth", ["Authentication"]),
-    (automation_router, "/automation", ["Automation"]),
-    (command_router, "/command", ["Command Center"]),
-    (commerce_router, "/commerce", ["Commerce"]),
-    (communications_router, "/communications", ["Communications"]),
-    (digital_twin_router, "/digital-twin", ["Digital Twin"]),
-    (employment_router, "/employment", ["Employment"]),
-    (finance_router, "/finance", ["Finance"]),
-    (health_router, "/health", ["Health"]),
-    (identity_router, "/identity", ["Identity"]),
-    (insurance_router, "/insurance", ["Insurance"]),
-    (invitations_router, "/invitations", ["Invitations"]),
-    (iot_router, "/iot", ["IoT"]),
-    (logistics_router, "/logistics", ["Logistics"]),
-    (manufacturing_router, "/manufacturing", ["Manufacturing"]),
-    (privacy_router, "/privacy", ["Privacy"]),
-    (projects_router, "/projects", ["Projects"]),
-    (realestate_router, "/realestate", ["Real Estate"]),
-    (saas_router, "/saas", ["SaaS"]),
-    (marketplace_router, "/marketplace", ["Service Marketplace"]),
-    (social_router, "/social", ["Social"]),
-    (sovereign_router, "/sovereign", ["Sovereign Entities"]),
-    (tenders_auctions_router, "/tenders", ["Tenders & Auctions"]),
-    (tourism_sports_router, "/tourism-sports", ["Tourism & Sports"]),
-    (translation_router, "/translation", ["Translation"]),
-    (transport_router, "/transport", ["Transport"]),
-    (zamakana_router, "/zamakana", ["Zamakana"])
+    # (router_obj, prefix_path, tags_list, sector)
+    (academy_router, "/academy", ["Academy"], "academy"),
+    (affiliate_router, "/affiliate", ["Affiliate"], "affiliate"),
+    (agritech_router, "/agritech", ["Agritech"], "agritech"),
+    (ai_agents_router, "/ai-agents", ["AI Agents"], "ai"),
+    (ai_governance_router, "/ai-governance", ["AI Governance"], "ai"),
+    (arbitration_syndicates_router, "/arbitration", ["Arbitration Syndicates"], "arbitration"),
+    (automation_router, "/automation", ["Automation"], "automation"),
+    (command_router, "/command", ["Command Center"], "command"),
+    (commerce_router, "/commerce", ["Commerce"], "commerce"),
+    (communications_router, "/communications", ["Communications"], "communications"),
+    (digital_twin_router, "/digital-twin", ["Digital Twin"], "digital_twin"),
+    (employment_router, "/employment", ["Employment"], "employment"),
+    (finance_router, "/finance", ["Finance"], "finance"),
+    (health_router, "/health", ["Health"], "health"),
+    (identity_router, "/identity", ["Identity"], "identity"),
+    (insurance_router, "/insurance", ["Insurance"], "insurance"),
+    (invitations_router, "/invitations", ["Invitations"], "invitations"),
+    (iot_router, "/iot", ["IoT"], "iot"),
+    (logistics_router, "/logistics", ["Logistics"], "logistics"),
+    (manufacturing_router, "/manufacturing", ["Manufacturing"], "manufacturing"),
+    (privacy_router, "/privacy", ["Privacy"], "privacy"),
+    (projects_router, "/projects", ["Projects"], "projects"),
+    (realestate_router, "/realestate", ["Real Estate"], "realestate"),
+    (saas_router, "/saas", ["SaaS"], "saas"),
+    (marketplace_router, "/marketplace", ["Service Marketplace"], "marketplace"),
+    (social_router, "/social", ["Social"], "social"),
+    (sovereign_router, "/sovereign", ["Sovereign Entities"], "sovereign"),
+    (tenders_auctions_router, "/tenders", ["Tenders & Auctions"], "tenders"),
+    (tourism_sports_router, "/tourism-sports", ["Tourism & Sports"], "tourism"),
+    (translation_router, "/translation", ["Translation"], "translation"),
+    (transport_router, "/transport", ["Transport"], "transport"),
+    (zamakana_router, "/zamakana", ["Zamakana"], "zamakana"),
 ]
 
-for router_obj, prefix_path, tags_list in routers_config:
-    fastapi_app.include_router(router_obj, prefix="/api", tags=tags_list)  # type: ignore
+# تضمين Routers القطاعات مع تطبيق require_sector
+for router_obj, prefix_path, tags_list, sector in routers_config:
+    fastapi_app.include_router(
+        router_obj,
+        prefix="/api",
+        tags=tags_list,
+        dependencies=[Depends(require_sector(sector))]  # 🔥 تطبيق صلاحية القطاع
+    )
+
+# 🔥 استثناء Router المصادقة (يُسمح للجميع)
+fastapi_app.include_router(auth_router, prefix="/api", tags=["Authentication"])
 
 
 # ==========================================
-# نقاط النهاية العامة (الصحة والجاهزية)
+# نقاط النهاية العامة (الصحة والجاهزية) – بدون حماية
 # ==========================================
 @fastapi_app.get("/health")
 async def health():
@@ -339,13 +332,9 @@ async def readiness():
     تتحقق من: اتصال قاعدة البيانات، اتصال Redis.
     """
     try:
-        # التحقق من اتصال قاعدة البيانات
         async with engine.connect() as conn:
             await conn.execute("SELECT 1")
-        
-        # التحقق من اتصال Redis
         await redis_client.ping()
-        
         return {"status": "ready", "components": {"database": "ok", "redis": "ok"}}
     except Exception as e:
         logger.error(f"❌ Readiness check failed: {e}")
@@ -356,13 +345,13 @@ async def readiness():
 
 
 # ==========================================
-# نقاط النهاية للذكاء الاصطناعي
+# نقاط النهاية للذكاء الاصطناعي (تستخدم optional user)
 # ==========================================
 @fastapi_app.post("/api/ai/chat")
 async def ai_chat(
     request: Request,
     body: Dict[str, Any],
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     from app.services.ai import ai_engine, TaskType
     result = await ai_engine.generate(
@@ -382,7 +371,7 @@ async def ai_chat(
 async def get_ai_cost(
     model_id: Optional[str] = None,
     period: str = "total",
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     from app.services.ai import CostTracker
     if period == "daily":
@@ -397,7 +386,7 @@ async def get_ai_cost(
 @fastapi_app.put("/api/ai/routing")
 async def update_ai_routing(
     percentages: Dict[str, int],
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),  # يتطلب توكن صالح
 ):
     from app.services.ai import AIRouter, AIModelId
     new_percentages = {}
