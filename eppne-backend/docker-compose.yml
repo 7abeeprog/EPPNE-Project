@@ -73,6 +73,7 @@ services:
       --requirepass ${REDIS_PASSWORD}
       --maxmemory 512mb
       --maxmemory-policy allkeys-lru
+      --maxclients 1000   # 🔥 إضافة حد أقصى للاتصالات لمنع استنزاف الموارد (B2)
     ports:
       - "${REDIS_PORT:-6379}:6379"
     restart: unless-stopped

@@ -21,7 +21,7 @@ spec:
         app: eppne-backend
     spec:
       serviceAccountName: backend-sa
-      terminationGracePeriodSeconds: 60  # 🔥 إعطاء وقت لإنهاء الطلبات المعلقة
+      terminationGracePeriodSeconds: 60
       containers:
       - name: backend
         image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/eppne-backend:${IMAGE_TAG:-latest}
@@ -34,7 +34,6 @@ spec:
             name: eppne-config
         - secretRef:
             name: eppne-secrets
-        # 🔥 إضافة متغيرات البيئة المفقودة
         env:
         - name: ENVIRONMENT
           valueFrom:
@@ -48,10 +47,10 @@ spec:
               key: LOG_LEVEL
         resources:
           requests:
-            memory: "1Gi"      # 🔥 زيادة الطلبات لتتناسب مع التحميل
+            memory: "1Gi"
             cpu: "500m"
           limits:
-            memory: "2Gi"      # 🔥 زيادة الحدود لتتناسب مع حجم التطبيق
+            memory: "2Gi"
             cpu: "1500m"
         livenessProbe:
           httpGet:
