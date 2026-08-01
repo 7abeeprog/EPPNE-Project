@@ -5,8 +5,9 @@
 """
 from sqlalchemy import (
     Column, Integer, BigInteger, String, ForeignKey, DateTime, Text,
-    Boolean, Numeric, JSON, Enum as SQLEnum, Index, CheckConstraint
+    Boolean, Numeric, Enum as SQLEnum, Index, CheckConstraint
 )
+from sqlalchemy.dialects.postgresql import JSONB  # ✅ تم إضافة الاستيراد الصحيح
 from sqlalchemy.sql import func
 from app.core.database import Base
 import enum
@@ -67,7 +68,7 @@ class Warehouse(Base):
     name = Column(String(255), nullable=False)
     warehouse_type = Column(SQLEnum(WarehouseType), nullable=False)
     location = Column(String(255), nullable=False)
-    gps_location = Column(JSON, nullable=True)
+    gps_location = Column(JSONB, nullable=True)
 
     total_capacity_sqm = Column(Numeric(15, 2), nullable=False)
     used_capacity_sqm = Column(Numeric(15, 2), default=0)
@@ -116,12 +117,11 @@ class InventoryItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 Idempotency
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     warehouse_id = Column(Integer, ForeignKey("logistics_warehouses.id"), nullable=False, index=True)
     zone_id = Column(Integer, ForeignKey("logistics_warehouse_zones.id"), nullable=True, index=True)
 
-    # الربط بالمنتج (من قطاع التجارة أو التصنيع)
     product_id = Column(Integer, nullable=True, index=True)
     product_name = Column(String(255), nullable=False)
     product_sku = Column(String(100), nullable=True, index=True)
@@ -135,15 +135,13 @@ class InventoryItem(Base):
     unit = Column(String(20), default="UNIT")  # UNIT, KG, L, BOX, PALLET
     unit_price_mrusdt = Column(Numeric(30, 8), default=0)
 
-    # تتبع الجودة
     batch_number = Column(String(100), nullable=True)
     manufacture_date = Column(DateTime(timezone=True), nullable=True)
     expiry_date = Column(DateTime(timezone=True), nullable=True)
     status = Column(SQLEnum(InventoryStatus), default=InventoryStatus.AVAILABLE)
 
-    # سلسلة التوريد
-    supplier_id = Column(Integer, nullable=True)  # من قطاع الكيانات
-    source_order_id = Column(Integer, nullable=True)  # من قطاع التجارة
+    supplier_id = Column(Integer, nullable=True)
+    source_order_id = Column(Integer, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -164,24 +162,21 @@ class InventoryTransaction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 Idempotency
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     inventory_item_id = Column(Integer, ForeignKey("logistics_inventory_items.id"), nullable=False, index=True)
     transaction_type = Column(SQLEnum(TransactionType), nullable=False)
     quantity = Column(Integer, nullable=False)
 
-    # المصدر والوجهة
     source_warehouse_id = Column(Integer, ForeignKey("logistics_warehouses.id"), nullable=True)
     destination_warehouse_id = Column(Integer, ForeignKey("logistics_warehouses.id"), nullable=True)
 
-    # المرجع (طلب، أمر، إلخ)
     reference_type = Column(String(50), nullable=True)
     reference_id = Column(Integer, nullable=True)
 
     notes = Column(Text, nullable=True)
     performed_by = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    # التوثيق
     blockchain_tx_hash = Column(String(100), nullable=True)
     document_url = Column(String(512), nullable=True)
 
@@ -202,7 +197,7 @@ class Equipment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 Idempotency
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     name = Column(String(255), nullable=False)
     equipment_type = Column(String(100), nullable=False)  # FORKLIFT, CRANE, CONVEYOR, VEHICLE, TOOL
@@ -221,7 +216,6 @@ class Equipment(Base):
     last_maintenance_date = Column(DateTime(timezone=True), nullable=True)
     next_maintenance_date = Column(DateTime(timezone=True), nullable=True)
 
-    # ربط بـ IoT
     smart_asset_id = Column(Integer, nullable=True)
 
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -268,7 +262,7 @@ class SupplyChainOrder(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 Idempotency
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     order_number = Column(String(100), unique=True, nullable=False)
     order_type = Column(String(50), nullable=False)  # PURCHASE, TRANSFER, RETURN
@@ -283,7 +277,6 @@ class SupplyChainOrder(Base):
     status = Column(SQLEnum(OrderStatus), default=OrderStatus.DRAFT)
     total_amount_mrusdt = Column(Numeric(30, 8), default=0)
 
-    # الربط مع المالية والنقل
     invoice_id = Column(Integer, nullable=True)
     shipment_tracking_number = Column(String(100), nullable=True)
 
@@ -325,7 +318,7 @@ class SupplyChainOrderItem(Base):
     )
 
 
-# ========== 5. التنبؤ بالطلب (Forecasting) ==========
+# ========== 5. التنبؤ بالطلب (Forecasting - مع ترقية JSONB) ==========
 class InventoryForecast(Base):
     __tablename__ = "logistics_inventory_forecasts"
 
@@ -340,12 +333,10 @@ class InventoryForecast(Base):
     predicted_demand = Column(Integer, nullable=False)
     confidence_score = Column(Numeric(5, 2), default=0)  # 0-100
 
-    # عوامل التأثير
     seasonality_factor = Column(Numeric(5, 2), default=1.0)
     trend_factor = Column(Numeric(5, 2), default=1.0)
-    external_factors = Column(JSON, default=dict)
+    external_factors = Column(JSONB, default=dict)
 
-    # الذكاء الاصطناعي
     ai_agent_id = Column(Integer, nullable=True)
     ai_model_version = Column(String(50), nullable=True)
 

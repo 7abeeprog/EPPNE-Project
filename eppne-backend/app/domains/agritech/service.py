@@ -1,5 +1,6 @@
-# app/domains/agritech/service.py (الإصدار النهائي المتكامل مع التصحيحات)
+# app/domains/agritech/service.py
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import update  # ✅ إضافة import update
 from decimal import Decimal
 from datetime import datetime, timedelta
 import uuid
@@ -10,7 +11,7 @@ from fastapi import HTTPException
 from app.domains.agritech.repository import AgriTechRepository
 from app.domains.finance.service import FinanceService
 from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
-from app.core.idempotency import check_idempotency, store_idempotency_result, get_idempotency_result
+from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
@@ -21,57 +22,48 @@ from app.domains.agritech.models import (
     AgriculturalCertificate, SoilSensorReading, WeatherAlert,
     HarvestGrade, BioProductType, FarmType
 )
-from app.domains.agritech.schemas import (
-    SmartFarmResponse, FarmZoneResponse, CropCycleResponse,
-    HarvestBatchResponse, BioAssetCohortResponse, BioProductYieldResponse,
-    SupplyChainStageResponse, TraceabilityQRResponse,
-    AgriculturalCertificateResponse, SoilSensorReadingResponse,
-    WeatherAlertResponse
-)
 
 
 class AgriTechService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, tenant_id: int):
         self.db = db
+        self.tenant_id = tenant_id
         self.repo = AgriTechRepository(db)
-        self.finance = FinanceService(db)
-        self.event_bus = EventBus(redis_client)  # type: ignore
+        self.finance = FinanceService(db, tenant_id)
+        # ✅ معالجة نوع redis_client بشكل آمن
+        redis = redis_client.client if hasattr(redis_client, 'client') else redis_client
+        self.event_bus = EventBus(redis)
 
     # ==========================================
-    # دوال مساعدة (معدلة لتوافق الأنواع)
+    # دوال مساعدة
     # ==========================================
 
-    async def _check_tenant_access(self, tenant_id: int, resource_tenant_id: int):
-        """التحقق من أن المستأجر يملك المورد"""
-        if tenant_id != resource_tenant_id:
+    async def _check_tenant_access(self, resource_tenant_id: int):
+        if self.tenant_id != resource_tenant_id:
             raise PermissionDeniedError("ليس لديك صلاحية الوصول لهذا المورد")
 
     async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
-        """
-        التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency.
-        تعيد النتيجة (Dict) إذا كانت موجودة، وإلا None.
-        """
         if idempotency_key:
-            cached = await get_idempotency_result(idempotency_key)
+            cache_key = f"idempotency:{self.tenant_id}:{idempotency_key}"
+            cached = await get_idempotency_result(cache_key)
             if cached is not None:
                 return cached
         return None
 
     async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
-        """تخزين نتيجة العملية بعد النجاح."""
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, result)
+            cache_key = f"idempotency:{self.tenant_id}:{idempotency_key}"
+            await store_idempotency_result(cache_key, result)
 
     # ==========================================
     # 1. المزارع (Farms)
     # ==========================================
 
-    async def create_farm(self, user_id: int, tenant_id: int, data: Dict[str, Any]) -> SmartFarm:
-        """إنشاء مزرعة جديدة"""
+    async def create_farm(self, user_id: int, data: Dict[str, Any]) -> SmartFarm:
         sanitized_name = bleach.clean(data.get("name", ""), tags=[], strip=True)
 
         farm = await self.repo.create_farm(
-            tenant_id=tenant_id,
+            tenant_id=self.tenant_id,
             manager_id=user_id,
             land_asset_id=data["land_asset_id"],
             name=sanitized_name,
@@ -82,62 +74,90 @@ class AgriTechService:
 
         await audit_log(
             user_id=user_id,
-            tenant_id=tenant_id,  # type: ignore
             action="FARM_CREATED",
-            resource_id=farm.id,  # type: ignore
-            details={"name": farm.name, "type": farm.farm_type.value}
+            details={
+                "tenant_id": self.tenant_id,
+                "farm_id": farm.id,
+                "name": farm.name,
+                "type": farm.farm_type.value
+            }
         )
 
         await self.event_bus.publish("agritech.farm.created", {
             "farm_id": farm.id,
-            "tenant_id": tenant_id,
+            "tenant_id": self.tenant_id,
             "manager_id": user_id,
             "name": farm.name
         })
 
         return farm
 
-    async def list_farms(self, tenant_id: int, farm_type: Optional[str] = None, skip: int = 0, limit: int = 50) -> List[SmartFarm]:
-        return await self.repo.list_farms(tenant_id, farm_type, skip, limit)  # type: ignore
+    async def list_farms(
+        self,
+        farm_type: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50
+    ) -> Dict[str, Any]:
+        result = await self.repo.list_farms(
+            tenant_id=self.tenant_id,
+            farm_type=farm_type,
+            skip=skip,
+            limit=limit
+        )
+        return {
+            "items": result.data,
+            "total": result.total,
+            "skip": result.skip,
+            "limit": result.limit
+        }
 
-    async def get_farm(self, farm_id: int, tenant_id: int) -> Optional[SmartFarm]:
-        farm = await self.repo.get_farm(farm_id)
+    async def get_farm(self, farm_id: int) -> Optional[SmartFarm]:
+        farm = await self.repo.get_farm(farm_id, self.tenant_id)
         if farm:
-            await self._check_tenant_access(tenant_id, farm.tenant_id)  # type: ignore
+            await self._check_tenant_access(cast(int, farm.tenant_id))
         return farm
 
     # ==========================================
     # 2. المناطق (Zones)
     # ==========================================
 
-    async def add_farm_zone(self, farm_id: int, tenant_id: int, user_id: int, data: Dict[str, Any]) -> FarmZone:
-        farm = await self.repo.get_farm(farm_id)
+    async def add_farm_zone(self, farm_id: int, user_id: int, data: Dict[str, Any]) -> FarmZone:
+        farm = await self.repo.get_farm(farm_id, self.tenant_id)
         if not farm:
             raise NotFoundError("المزرعة غير موجودة")
-        await self._check_tenant_access(tenant_id, farm.tenant_id)  # type: ignore
+        await self._check_tenant_access(cast(int, farm.tenant_id))
 
         zone = await self.repo.create_zone(
             farm_id=farm_id,
-            tenant_id=tenant_id,
+            tenant_id=self.tenant_id,
             **data
         )
 
         await audit_log(
             user_id=user_id,
-            tenant_id=tenant_id,  # type: ignore
             action="ZONE_ADDED",
-            resource_id=zone.id,  # type: ignore
-            details={"zone_code": zone.zone_code, "farm_id": farm_id}
+            details={
+                "tenant_id": self.tenant_id,
+                "zone_id": zone.id,
+                "zone_code": zone.zone_code,
+                "farm_id": farm_id
+            }
         )
 
         return zone
 
-    async def list_farm_zones(self, farm_id: int, tenant_id: int) -> List[FarmZone]:
-        farm = await self.repo.get_farm(farm_id)
+    async def list_farm_zones(self, farm_id: int) -> Dict[str, Any]:
+        farm = await self.repo.get_farm(farm_id, self.tenant_id)
         if not farm:
             raise NotFoundError("المزرعة غير موجودة")
-        await self._check_tenant_access(tenant_id, farm.tenant_id)  # type: ignore
-        return await self.repo.list_zones(farm_id)  # type: ignore
+        await self._check_tenant_access(cast(int, farm.tenant_id))
+        result = await self.repo.list_zones(farm_id, self.tenant_id)
+        return {
+            "items": result.data,
+            "total": result.total,
+            "skip": result.skip,
+            "limit": result.limit
+        }
 
     # ==========================================
     # 3. الدورات الزراعية (Crop Cycles)
@@ -146,7 +166,6 @@ class AgriTechService:
     async def start_crop_cycle(
         self,
         zone_id: int,
-        tenant_id: int,
         user_id: int,
         data: Dict[str, Any],
         idempotency_key: str
@@ -155,20 +174,19 @@ class AgriTechService:
         if cached:
             cycle_id = cached.get("cycle_id")
             if cycle_id:
-                # 🔥 إضافة type: ignore لتجاوز تحذير Pylance
-                cycle = await self.repo.get_crop_cycle(cycle_id)  # type: ignore
+                cycle = await self.repo.get_crop_cycle(cycle_id, self.tenant_id)
                 if cycle:
                     return cycle
             raise ValidationError("Idempotency record exists but cycle not found.")
 
-        zone = await self.repo.get_zone(zone_id)
+        zone = await self.repo.get_zone(zone_id, self.tenant_id)
         if not zone:
             raise NotFoundError("المنطقة غير موجودة")
-        await self._check_tenant_access(tenant_id, zone.tenant_id)  # type: ignore
+        await self._check_tenant_access(cast(int, zone.tenant_id))
 
         cycle = await self.repo.create_crop_cycle(
             zone_id=zone_id,
-            tenant_id=tenant_id,
+            tenant_id=self.tenant_id,
             idempotency_key=idempotency_key,
             **data
         )
@@ -177,29 +195,37 @@ class AgriTechService:
 
         await audit_log(
             user_id=user_id,
-            tenant_id=tenant_id,  # type: ignore
             action="CROP_CYCLE_STARTED",
-            resource_id=cycle.id,  # type: ignore
-            details={"crop_name": cycle.crop_name, "zone_id": zone_id}
+            details={
+                "tenant_id": self.tenant_id,
+                "cycle_id": cycle.id,
+                "crop_name": cycle.crop_name,
+                "zone_id": zone_id
+            }
         )
 
         return cycle
 
-    async def list_crop_cycles(self, zone_id: int, tenant_id: int) -> List[CropCycle]:
-        zone = await self.repo.get_zone(zone_id)
+    async def list_crop_cycles(self, zone_id: int) -> Dict[str, Any]:
+        zone = await self.repo.get_zone(zone_id, self.tenant_id)
         if not zone:
             raise NotFoundError("المنطقة غير موجودة")
-        await self._check_tenant_access(tenant_id, zone.tenant_id)  # type: ignore
-        return await self.repo.list_crop_cycles(zone_id)  # type: ignore
+        await self._check_tenant_access(cast(int, zone.tenant_id))
+        result = await self.repo.list_crop_cycles(zone_id, self.tenant_id)
+        return {
+            "items": result.data,
+            "total": result.total,
+            "skip": result.skip,
+            "limit": result.limit
+        }
 
     # ==========================================
-    # 4. الحصاد (Harvest) - مع AI وتحليل
+    # 4. الحصاد (Harvest)
     # ==========================================
 
     async def register_harvest(
         self,
         user_id: int,
-        tenant_id: int,
         data: Dict[str, Any],
         idempotency_key: str
     ) -> Dict[str, Any]:
@@ -207,10 +233,10 @@ class AgriTechService:
         if cached:
             return cached
 
-        cycle = await self.repo.get_crop_cycle(data["cycle_id"])  # type: ignore
+        cycle = await self.repo.get_crop_cycle(data["cycle_id"], self.tenant_id)
         if not cycle:
             raise NotFoundError("الدورة الزراعية غير موجودة")
-        await self._check_tenant_access(tenant_id, cycle.tenant_id)  # type: ignore
+        await self._check_tenant_access(cast(int, cycle.tenant_id))
 
         sanitized_data = {
             "cycle_id": data["cycle_id"],
@@ -224,7 +250,7 @@ class AgriTechService:
 
         async with self.db.begin_nested():
             harvest = await self.repo.create_harvest(
-                tenant_id=tenant_id,
+                tenant_id=self.tenant_id,
                 idempotency_key=idempotency_key,
                 **sanitized_data
             )
@@ -233,23 +259,26 @@ class AgriTechService:
 
         await audit_log(
             user_id=user_id,
-            tenant_id=tenant_id,  # type: ignore
             action="HARVEST_REGISTERED",
-            resource_id=harvest.id,  # type: ignore
-            details={"cycle_id": cycle.id, "quantity": float(data["quantity_kg"])}
+            details={
+                "tenant_id": self.tenant_id,
+                "harvest_id": harvest.id,
+                "cycle_id": cycle.id,
+                "quantity": float(Decimal(str(harvest.quantity_kg)))
+            }
         )
 
         await self.event_bus.publish("agritech.harvest.registered", {
             "harvest_id": harvest.id,
             "cycle_id": cycle.id,
-            "tenant_id": tenant_id,
-            "quantity": float(data["quantity_kg"])
+            "tenant_id": self.tenant_id,
+            "quantity": float(Decimal(str(harvest.quantity_kg)))
         })
 
         result = {
             "harvest_id": harvest.id,
             "grade": harvest.grade.value,
-            "quantity_kg": float(harvest.quantity_kg),  # type: ignore
+            "quantity_kg": float(Decimal(str(harvest.quantity_kg))),
             "tracking_number": harvest.shipment_tracking_number,
             "ai_logistics_actions": ai_logistics_actions
         }
@@ -270,10 +299,9 @@ class AgriTechService:
             actions.append("توجيه كأعلاف للثروة الحيوانية")
         elif grade_str == "WASTE_SMART_BIO":
             actions.append("توجيه لمحطات الطاقة الحيوية")
-            
-        if harvest.waste_for_smart_bio_kg > 0:  # type: ignore
+        if cast(Decimal, harvest.waste_for_smart_bio_kg) > 0:
             actions.append(f"{harvest.waste_for_smart_bio_kg} كجم مخلفات لمحطات الطاقة")
-        if harvest.fodder_for_livestock_kg > 0:  # type: ignore
+        if cast(Decimal, harvest.fodder_for_livestock_kg) > 0:
             actions.append(f"{harvest.fodder_for_livestock_kg} كجم أعلاف للماشية")
         return actions
 
@@ -284,7 +312,6 @@ class AgriTechService:
     async def add_bio_cohort(
         self,
         zone_id: int,
-        tenant_id: int,
         user_id: int,
         data: Dict[str, Any],
         idempotency_key: str
@@ -293,19 +320,19 @@ class AgriTechService:
         if cached:
             cohort_id = cached.get("cohort_id")
             if cohort_id:
-                cohort = await self.repo.get_bio_cohort(cohort_id)  # type: ignore
+                cohort = await self.repo.get_bio_cohort(cohort_id, self.tenant_id)
                 if cohort:
                     return cohort
             raise ValidationError("Idempotency record exists but cohort not found.")
 
-        zone = await self.repo.get_zone(zone_id)
+        zone = await self.repo.get_zone(zone_id, self.tenant_id)
         if not zone:
             raise NotFoundError("المنطقة غير موجودة")
-        await self._check_tenant_access(tenant_id, zone.tenant_id)  # type: ignore
+        await self._check_tenant_access(cast(int, zone.tenant_id))
 
         cohort = await self.repo.create_bio_cohort(
             zone_id=zone_id,
-            tenant_id=tenant_id,
+            tenant_id=self.tenant_id,
             current_count_or_kg=data["initial_count_or_kg"],
             **data
         )
@@ -314,10 +341,13 @@ class AgriTechService:
 
         await audit_log(
             user_id=user_id,
-            tenant_id=tenant_id,  # type: ignore
             action="BIO_COHORT_ADDED",
-            resource_id=cohort.id,  # type: ignore
-            details={"bio_type": cohort.bio_type.value, "zone_id": zone_id}
+            details={
+                "tenant_id": self.tenant_id,
+                "cohort_id": cohort.id,
+                "bio_type": cohort.bio_type.value,
+                "zone_id": zone_id
+            }
         )
 
         return cohort
@@ -325,7 +355,6 @@ class AgriTechService:
     async def register_bio_yield(
         self,
         user_id: int,
-        tenant_id: int,
         yield_data: Dict[str, Any],
         idempotency_key: str
     ) -> Dict[str, Any]:
@@ -333,14 +362,14 @@ class AgriTechService:
         if cached:
             return cached
 
-        cohort = await self.repo.get_bio_cohort(yield_data["cohort_id"])  # type: ignore
+        cohort = await self.repo.get_bio_cohort(yield_data["cohort_id"], self.tenant_id)
         if not cohort:
             raise NotFoundError("المجموعة الحيوانية غير موجودة")
-        await self._check_tenant_access(tenant_id, cohort.tenant_id)  # type: ignore
+        await self._check_tenant_access(cast(int, cohort.tenant_id))
 
         async with self.db.begin_nested():
             yield_record = await self.repo.create_bio_yield(
-                tenant_id=tenant_id,
+                tenant_id=self.tenant_id,
                 idempotency_key=idempotency_key,
                 **yield_data
             )
@@ -350,7 +379,7 @@ class AgriTechService:
         result = {
             "yield_id": yield_record.id,
             "product_type": yield_record.product_type.value,
-            "quantity": float(yield_record.quantity_unit),  # type: ignore
+            "quantity": float(Decimal(str(yield_record.quantity_unit))),
             "ai_logistics_actions": actions
         }
 
@@ -358,10 +387,12 @@ class AgriTechService:
 
         await audit_log(
             user_id=user_id,
-            tenant_id=tenant_id,  # type: ignore
             action="BIO_YIELD_REGISTERED",
-            resource_id=yield_record.id,  # type: ignore
-            details={"product_type": yield_record.product_type.value}
+            details={
+                "tenant_id": self.tenant_id,
+                "yield_id": yield_record.id,
+                "product_type": yield_record.product_type.value
+            }
         )
 
         return result
@@ -372,12 +403,11 @@ class AgriTechService:
         if product_type_str in ["MILK", "EGG", "MEAT"]:
             actions.append(f"توجيه {yield_record.quantity_unit} وحدة من {product_type_str} لسلاسل التبريد")
         elif product_type_str in ["VERMICOMPOST", "COMPOST_TEA"]:
-            if yield_record.destination_farm_id:  # type: ignore
+            if yield_record.destination_farm_id:
                 actions.append(f"توجيه السماد العضوي للمزرعة رقم {yield_record.destination_farm_id}")
             else:
                 actions.append("تخزين السماد العضوي في المستودعات")
-                
-        if yield_record.waste_for_smart_bio_kg > 0:  # type: ignore
+        if cast(Decimal, yield_record.waste_for_smart_bio_kg) > 0:
             actions.append(f"{yield_record.waste_for_smart_bio_kg} كجم مخلفات عضوية لمحطات Smart Bio")
         return actions
 
@@ -388,24 +418,31 @@ class AgriTechService:
     async def add_traceability_stage(
         self,
         user_id: int,
-        tenant_id: int,
         data: Dict[str, Any]
     ) -> SupplyChainStage:
         stage = await self.repo.create_supply_chain_stage(
-            tenant_id=tenant_id,
+            tenant_id=self.tenant_id,
             operator_id=user_id,
             **data
         )
-        stage.blockchain_tx_hash = f"0xTRACE{stage.id}{uuid.uuid4().hex[:8]}"  # type: ignore
+        # ✅ استخدام update مع استيراد update
+        await self.db.execute(
+            update(SupplyChainStage)
+            .where(SupplyChainStage.id == stage.id)
+            .values(blockchain_tx_hash=f"0xTRACE{stage.id}{uuid.uuid4().hex[:8]}")
+        )
         await self.db.commit()
         await self.db.refresh(stage)
 
         await audit_log(
             user_id=user_id,
-            tenant_id=tenant_id,  # type: ignore
             action="TRACEABILITY_STAGE_ADDED",
-            resource_id=stage.id,  # type: ignore
-            details={"traceable_type": data["traceable_type"], "traceable_id": data["traceable_id"]}
+            details={
+                "tenant_id": self.tenant_id,
+                "stage_id": stage.id,
+                "traceable_type": data["traceable_type"],
+                "traceable_id": data["traceable_id"]
+            }
         )
 
         return stage
@@ -413,32 +450,36 @@ class AgriTechService:
     async def get_traceability_stages(
         self,
         traceable_type: str,
-        traceable_id: int,
-        tenant_id: int
-    ) -> List[SupplyChainStage]:
-        stages = await self.repo.get_supply_chain_stages(traceable_type, traceable_id)
-        for stage in stages:
-            await self._check_tenant_access(tenant_id, stage.tenant_id)  # type: ignore
-        return stages
+        traceable_id: int
+    ) -> Dict[str, Any]:
+        result = await self.repo.get_supply_chain_stages(
+            traceable_type=traceable_type,
+            traceable_id=traceable_id,
+            tenant_id=self.tenant_id
+        )
+        return {
+            "items": result.data,
+            "total": result.total,
+            "skip": result.skip,
+            "limit": result.limit
+        }
 
     async def generate_traceability_qr(
         self,
-        tenant_id: int,
         traceable_type: str,
         traceable_id: int,
         user_id: int
     ) -> TraceabilityQR:
         try:
-            import qrcode  # type: ignore
-            from io import BytesIO
+            import qrcode
         except ImportError:
-            raise ValidationError("مكتبة QR غير مثبتة")
+            raise ValidationError("مكتبة QR غير مثبتة، يرجى تثبيت qrcode باستخدام: pip install qrcode[pil]")
 
         qr_hash = uuid.uuid4().hex[:12]
         public_url = f"https://trace.eppne.com/{qr_hash}"
 
         qr = await self.repo.create_traceability_qr(
-            tenant_id=tenant_id,
+            tenant_id=self.tenant_id,
             traceable_type=traceable_type,
             traceable_id=traceable_id,
             qr_code=qr_hash,
@@ -448,10 +489,13 @@ class AgriTechService:
 
         await audit_log(
             user_id=user_id,
-            tenant_id=tenant_id,  # type: ignore
             action="QR_GENERATED",
-            resource_id=qr.id,  # type: ignore
-            details={"traceable_type": traceable_type, "traceable_id": traceable_id}
+            details={
+                "tenant_id": self.tenant_id,
+                "qr_id": qr.id,
+                "traceable_type": traceable_type,
+                "traceable_id": traceable_id
+            }
         )
 
         return qr
@@ -463,24 +507,31 @@ class AgriTechService:
     async def issue_certificate(
         self,
         user_id: int,
-        tenant_id: int,
         data: Dict[str, Any]
     ) -> AgriculturalCertificate:
         cert = await self.repo.create_certificate(
-            tenant_id=tenant_id,
+            tenant_id=self.tenant_id,
             created_by=user_id,
             **data
         )
-        cert.certificate_nft_id = f"CERT-{cert.id}-{uuid.uuid4().hex[:8].upper()}"  # type: ignore
+        # ✅ استخدام update
+        await self.db.execute(
+            update(AgriculturalCertificate)
+            .where(AgriculturalCertificate.id == cert.id)
+            .values(certificate_nft_id=f"CERT-{cert.id}-{uuid.uuid4().hex[:8].upper()}")
+        )
         await self.db.commit()
         await self.db.refresh(cert)
 
         await audit_log(
             user_id=user_id,
-            tenant_id=tenant_id,  # type: ignore
             action="CERTIFICATE_ISSUED",
-            resource_id=cert.id,  # type: ignore
-            details={"type": data["certificate_type"], "entity_id": data["certified_entity_id"]}
+            details={
+                "tenant_id": self.tenant_id,
+                "certificate_id": cert.id,
+                "type": data["certificate_type"],
+                "entity_id": data["certified_entity_id"]
+            }
         )
 
         await self.event_bus.publish("agritech.certificate.issued", {
@@ -494,11 +545,19 @@ class AgriTechService:
     async def get_entity_certificates(
         self,
         entity_type: str,
-        entity_id: int,
-        tenant_id: int
-    ) -> List[AgriculturalCertificate]:
-        certs = await self.repo.get_certificates_for_entity(entity_type, entity_id)
-        return [c for c in certs if c.tenant_id == tenant_id]  # type: ignore
+        entity_id: int
+    ) -> Dict[str, Any]:
+        result = await self.repo.get_certificates_for_entity(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            tenant_id=self.tenant_id
+        )
+        return {
+            "items": result.data,
+            "total": result.total,
+            "skip": result.skip,
+            "limit": result.limit
+        }
 
     # ==========================================
     # 8. مستشعرات التربة (Soil Sensors)
@@ -507,16 +566,15 @@ class AgriTechService:
     async def record_soil_data(
         self,
         user_id: int,
-        tenant_id: int,
         data: Dict[str, Any]
     ) -> SoilSensorReading:
-        zone = await self.repo.get_zone(data["zone_id"])
-        if not zone:  # type: ignore
+        zone = await self.repo.get_zone(data["zone_id"], self.tenant_id)
+        if not zone:
             raise NotFoundError("المنطقة غير موجودة")
-        await self._check_tenant_access(tenant_id, zone.tenant_id)  # type: ignore
+        await self._check_tenant_access(cast(int, zone.tenant_id))
 
         sanitized_data = {
-            "tenant_id": tenant_id,
+            "tenant_id": self.tenant_id,
             "zone_id": data["zone_id"],
             "sensor_device_id": bleach.clean(data["sensor_device_id"], tags=[], strip=True),
             "moisture_percent": data.get("moisture_percent"),
@@ -532,26 +590,39 @@ class AgriTechService:
 
         await audit_log(
             user_id=user_id,
-            tenant_id=tenant_id,  # type: ignore
             action="SOIL_READING_RECORDED",
-            resource_id=reading.id,  # type: ignore
-            details={"zone_id": zone.id, "moisture": data.get("moisture_percent")}
+            details={
+                "tenant_id": self.tenant_id,
+                "reading_id": reading.id,
+                "zone_id": zone.id,
+                "moisture": data.get("moisture_percent")
+            }
         )
 
         await self.event_bus.publish("agritech.soil_reading.recorded", {
             "reading_id": reading.id,
             "zone_id": zone.id,
-            "tenant_id": tenant_id
+            "tenant_id": self.tenant_id
         })
 
         return reading
 
-    async def get_recent_soil_readings(self, zone_id: int, tenant_id: int, limit: int = 100) -> List[SoilSensorReading]:
-        zone = await self.repo.get_zone(zone_id)
+    async def get_recent_soil_readings(
+        self,
+        zone_id: int,
+        limit: int = 100
+    ) -> Dict[str, Any]:
+        zone = await self.repo.get_zone(zone_id, self.tenant_id)
         if not zone:
             raise NotFoundError("المنطقة غير موجودة")
-        await self._check_tenant_access(tenant_id, zone.tenant_id)  # type: ignore
-        return await self.repo.get_recent_soil_readings(zone_id, limit)
+        await self._check_tenant_access(cast(int, zone.tenant_id))
+        result = await self.repo.get_recent_soil_readings(zone_id, self.tenant_id, limit)
+        return {
+            "items": result.data,
+            "total": result.total,
+            "skip": result.skip,
+            "limit": result.limit
+        }
 
     # ==========================================
     # 9. تنبيهات الطقس (Weather Alerts)
@@ -559,13 +630,12 @@ class AgriTechService:
 
     async def create_weather_alert(
         self,
-        tenant_id: int,
         user_id: int,
         data: Dict[str, Any]
     ) -> WeatherAlert:
         sanitized_message = bleach.clean(data["message"], tags=[], strip=True)
         alert = await self.repo.create_weather_alert(
-            tenant_id=tenant_id,
+            tenant_id=self.tenant_id,
             alert_type=data["alert_type"],
             severity=data.get("severity", "WARNING"),
             location_gps=data.get("location_gps"),
@@ -577,19 +647,22 @@ class AgriTechService:
 
         await audit_log(
             user_id=user_id,
-            tenant_id=tenant_id,  # type: ignore
             action="WEATHER_ALERT_CREATED",
-            resource_id=alert.id,  # type: ignore
-            details={"alert_type": alert.alert_type, "severity": alert.severity}
+            details={
+                "tenant_id": self.tenant_id,
+                "alert_id": alert.id,
+                "alert_type": alert.alert_type,
+                "severity": alert.severity
+            }
         )
 
         await self.event_bus.publish("agritech.weather_alert.created", {
             "alert_id": alert.id,
-            "tenant_id": tenant_id,
+            "tenant_id": self.tenant_id,
             "severity": alert.severity
         })
 
         return alert
 
-    async def get_weather_alerts(self, tenant_id: int) -> List[WeatherAlert]:
-        return await self.repo.get_active_weather_alerts(tenant_id)
+    async def get_weather_alerts(self) -> List[WeatherAlert]:
+        return await self.repo.get_active_weather_alerts(self.tenant_id)

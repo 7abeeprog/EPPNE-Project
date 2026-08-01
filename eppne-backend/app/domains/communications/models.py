@@ -1,6 +1,8 @@
+# app/domains/communications/models.py
 from sqlalchemy import (
-    Column, Integer, String, ForeignKey, DateTime, Text, Boolean, JSON, Enum as SQLEnum, Index
+    Column, Integer, String, ForeignKey, DateTime, Text, Boolean, Enum as SQLEnum, Index, text
 )
+from sqlalchemy.dialects.postgresql import JSONB  # ✅ تم إضافة الاستيراد الصحيح
 from sqlalchemy.sql import func
 from app.core.database import Base
 import enum
@@ -34,7 +36,7 @@ class Notification(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     title = Column(String(255), nullable=False)
     body = Column(Text, nullable=False)
-    data = Column(JSON, default=dict)          # بيانات إضافية (مثل معرف الطلب، نوع الحدث)
+    data = Column(JSONB, default=dict)
     channel = Column(SQLEnum(NotificationChannel), default=NotificationChannel.IN_APP)
     priority = Column(SQLEnum(NotificationPriority), default=NotificationPriority.NORMAL)
     is_read = Column(Boolean, default=False)
@@ -42,11 +44,12 @@ class Notification(Base):
     sent_at = Column(DateTime(timezone=True), nullable=True)
     read_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    idempotency_key = Column(String(255), nullable=True, unique=True, index=True)  # ✅ إضافة حقل Idempotency
+    idempotency_key = Column(String(255), nullable=True, unique=True, index=True)
 
     __table_args__ = (
         Index("ix_notifications_user_read", "user_id", "is_read"),
         Index("ix_notifications_created", "created_at"),
+        Index("ix_notifications_user_unread", "user_id", "is_read", postgresql_where=text("is_read = false")),
     )
 
 
@@ -55,14 +58,15 @@ class NotificationDevice(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    device_token = Column(String(255), nullable=False)   # FCM token, Expo token, etc.
-    platform = Column(String(50), nullable=False)       # ios, android, web
+    device_token = Column(String(255), nullable=False)
+    platform = Column(String(50), nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
         Index("ix_device_token_unique", "device_token", unique=True),
+        Index("ix_device_user_active", "user_id", "is_active"),
     )
 
 
@@ -75,6 +79,11 @@ class MailThread(Base):
     subject = Column(String(255), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_mail_thread_tenant", "tenant_id"),
+        Index("ix_mail_thread_created", "created_at"),
+    )
 
 
 class MailMessage(Base):
@@ -89,14 +98,21 @@ class MailMessage(Base):
     body_text = Column(Text, nullable=True)
     body_html = Column(Text, nullable=True)
 
-    is_certified = Column(Boolean, default=False)          # بريد موثق بتوقيع رقمي
-    certified_tx_hash = Column(String(100), nullable=True) # توثيق على السلسلة
+    is_certified = Column(Boolean, default=False)
+    certified_tx_hash = Column(String(100), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     is_deleted = Column(Boolean, default=False)
-    idempotency_key = Column(String(255), nullable=True, unique=True, index=True)  # ✅ إضافة حقل Idempotency
+    idempotency_key = Column(String(255), nullable=True, unique=True, index=True)
+
+    __table_args__ = (
+        Index("ix_mail_message_sender", "sender_id"),
+        Index("ix_mail_message_recipient", "recipient_id"),
+        Index("ix_mail_message_thread", "thread_id"),
+        Index("ix_mail_message_created", "created_at"),
+    )
 
 
 class MailboxItem(Base):
@@ -111,6 +127,12 @@ class MailboxItem(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    __table_args__ = (
+        Index("ix_mailbox_owner_folder", "owner_id", "folder"),
+        Index("ix_mailbox_message_owner", "message_id", "owner_id", unique=True),
+        Index("ix_mailbox_owner_unread", "owner_id", "is_read", postgresql_where=text("is_read = false")),
+    )
+
 
 class MailAttachment(Base):
     __tablename__ = "mail_attachments"
@@ -124,6 +146,10 @@ class MailAttachment(Base):
     ipfs_hash = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    __table_args__ = (
+        Index("ix_mail_attachment_message", "message_id"),
+    )
+
 
 # ========== 3. قوالب البريد والإشعارات ==========
 class CommunicationTemplate(Base):
@@ -132,10 +158,15 @@ class CommunicationTemplate(Base):
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     name = Column(String(100), nullable=False, index=True)
-    trigger_event = Column(String(100), nullable=False, index=True)  # USER_WELCOME, INVOICE_DUE, ORDER_SHIPPED
+    trigger_event = Column(String(100), nullable=False, index=True)
     subject_template = Column(String(255), nullable=False)
     body_template = Column(Text, nullable=False)
     channel = Column(SQLEnum(NotificationChannel), default=NotificationChannel.EMAIL)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_template_tenant_event", "tenant_id", "trigger_event"),
+        Index("ix_template_active", "is_active"),
+    )

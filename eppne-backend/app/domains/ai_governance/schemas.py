@@ -21,6 +21,10 @@ class AgentQuotaResponse(AgentQuotaCreate):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AgentQuotaRemainingResponse(BaseModel):
+    quotas: Dict[str, Dict[str, Any]] = Field(description="تفاصيل الحصص المتبقية")
+
+
 class AgentRateLimitUpdate(BaseModel):
     requests_per_minute: Optional[int] = Field(default=None, description="عدد الطلبات في الدقيقة")
     requests_per_hour: Optional[int] = Field(default=None, description="عدد الطلبات في الساعة")

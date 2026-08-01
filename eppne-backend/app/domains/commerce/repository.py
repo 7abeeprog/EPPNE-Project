@@ -6,7 +6,6 @@ from typing import Optional, List, Any, cast
 from datetime import datetime
 import json
 
-# ✅ تم استيراد جميع الـ Schemas المطلوبة للـ Pagination
 from app.domains.commerce.schemas import (
     ProductResponse, 
     AddressResponse, 
@@ -14,6 +13,7 @@ from app.domains.commerce.schemas import (
     CommissionResponse
 )
 from app.domains.commerce.models import *
+from app.domains.identity.models import User  # ✅ إضافة الاستيراد المفقود
 from app.core.errors import NotFoundError
 from app.core.pagination import PaginatedResponse
 
@@ -22,7 +22,7 @@ class CommerceRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    # ---------- Store ----------
+    # ========== Store ==========
     async def create_store(self, **kwargs) -> StoreProfile:
         store = StoreProfile(**kwargs)
         self.db.add(store)
@@ -34,11 +34,15 @@ class CommerceRepository:
         result = await self.db.execute(select(StoreProfile).where(StoreProfile.tenant_id == tenant_id))
         return result.scalar_one_or_none()
 
-    async def get_store(self, store_id: int) -> StoreProfile | None:
-        result = await self.db.execute(select(StoreProfile).where(StoreProfile.id == store_id))
+    async def get_store(self, store_id: int, tenant_id: int) -> StoreProfile | None:
+        result = await self.db.execute(
+            select(StoreProfile).where(
+                and_(StoreProfile.id == store_id, StoreProfile.tenant_id == tenant_id)
+            )
+        )
         return result.scalar_one_or_none()
 
-    # ---------- Categories ----------
+    # ========== Categories ==========
     async def create_category(self, **kwargs) -> ProductCategory:
         cat = ProductCategory(**kwargs)
         self.db.add(cat)
@@ -46,7 +50,7 @@ class CommerceRepository:
         await self.db.refresh(cat)
         return cat
 
-    # ---------- Products ----------
+    # ========== Products ==========
     async def create_product(self, **kwargs) -> Product:
         product = Product(**kwargs)
         self.db.add(product)
@@ -68,7 +72,6 @@ class CommerceRepository:
         return result.scalar_one_or_none()
 
     async def get_variant_for_update(self, variant_id: int) -> ProductVariant | None:
-        """✅ جلب المتغير مع قفل (للتحديث الذري)"""
         result = await self.db.execute(
             select(ProductVariant).where(ProductVariant.id == variant_id).with_for_update()
         )
@@ -85,11 +88,15 @@ class CommerceRepository:
     async def get_products_by_store(
         self,
         store_id: int,
+        tenant_id: int,
         skip: int = 0,
         limit: int = 20,
         only_published: bool = True
     ) -> PaginatedResponse[ProductResponse]:
-        """✅ جلب المنتجات مع Pagination وتحويلها إلى Schema"""
+        store = await self.get_store(store_id, tenant_id)
+        if not store:
+            raise NotFoundError("المتجر غير موجود أو لا يخص هذا المستأجر")
+        
         query = select(Product).where(Product.store_id == store_id)
         if only_published:
             query = query.where(Product.is_published == True)
@@ -102,12 +109,11 @@ class CommerceRepository:
         result = await self.db.execute(paginated_query)
         items = result.scalars().all()
         
-        # تحويل كائنات قاعدة البيانات إلى Pydantic
         schema_items = [ProductResponse.model_validate(item) for item in items]
 
         return PaginatedResponse(data=schema_items, total=total, skip=skip, limit=limit)
 
-    # ---------- Address ----------
+    # ========== Address ==========
     async def create_address(self, **kwargs) -> Address:
         addr = Address(**kwargs)
         self.db.add(addr)
@@ -116,7 +122,6 @@ class CommerceRepository:
         return addr
 
     async def get_user_addresses(self, user_id: int, skip: int = 0, limit: int = 20) -> PaginatedResponse[AddressResponse]:
-        """✅ جلب العناوين مع Pagination وتحويلها إلى Schema"""
         query = select(Address).where(Address.user_id == user_id)
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self.db.execute(count_query)
@@ -129,13 +134,17 @@ class CommerceRepository:
         schema_items = [AddressResponse.model_validate(item) for item in items]
         return PaginatedResponse(data=schema_items, total=total, skip=skip, limit=limit)
 
-    # ---------- Orders (مع Pagination) ----------
-    async def get_order_by_idempotency_key(self, idempotency_key: str) -> Order | None:
-        result = await self.db.execute(select(Order).where(Order.idempotency_key == idempotency_key))
+    # ========== Orders ==========
+    async def get_order_by_idempotency_key(self, idempotency_key: str, tenant_id: int) -> Order | None:
+        result = await self.db.execute(
+            select(Order).where(
+                and_(Order.idempotency_key == idempotency_key, Order.tenant_id == tenant_id)
+            )
+        )
         return result.scalar_one_or_none()
 
-    async def create_order(self, **kwargs) -> Order:
-        order = Order(**kwargs)
+    async def create_order(self, tenant_id: int, **kwargs) -> Order:
+        order = Order(tenant_id=tenant_id, **kwargs)
         self.db.add(order)
         await self.db.flush()
         return order
@@ -146,32 +155,34 @@ class CommerceRepository:
         await self.db.flush()
         return item
 
-    async def get_order(self, order_id: int) -> Order | None:
-        result = await self.db.execute(select(Order).where(Order.id == order_id))
+    async def get_order(self, order_id: int, tenant_id: int) -> Order | None:
+        result = await self.db.execute(
+            select(Order).where(and_(Order.id == order_id, Order.tenant_id == tenant_id))
+        )
         return result.scalar_one_or_none()
 
-    async def update_order_status(self, order_id: int, status: str) -> Order:
-        await self.db.execute(update(Order).where(Order.id == order_id).values(status=status))
+    async def update_order_status(self, order_id: int, tenant_id: int, status: str) -> Order:
+        await self.db.execute(
+            update(Order)
+            .where(and_(Order.id == order_id, Order.tenant_id == tenant_id))
+            .values(status=status)
+        )
         await self.db.commit()
-        return await self.get_order(order_id)
+        return await self.get_order(order_id, tenant_id)
 
     async def get_user_orders(
         self,
         user_id: int,
+        tenant_id: int,
         skip: int = 0,
         limit: int = 20
     ) -> PaginatedResponse[OrderResponse]:
-        """✅ جلب طلبات المستخدم مع Pagination و Schema"""
         query = (
             select(Order)
-            .where(Order.customer_id == user_id)
+            .where(and_(Order.customer_id == user_id, Order.tenant_id == tenant_id))
             .options(
                 load_only(
-                    Order.id,  # type: ignore
-                    Order.total_amount_mrusdt,  # type: ignore
-                    Order.status,  # type: ignore
-                    Order.settlement_type,  # type: ignore
-                    Order.created_at,  # type: ignore
+                    "id", "total_amount_mrusdt", "status", "settlement_type", "created_at"
                 )
             )
             .order_by(Order.created_at.desc())
@@ -188,9 +199,15 @@ class CommerceRepository:
         schema_items = [OrderResponse.model_validate(item) for item in items]
         return PaginatedResponse(data=schema_items, total=total, skip=skip, limit=limit)
 
-    # ---------- Affiliate ----------
-    async def get_affiliate_tree(self, user_id: int) -> AffiliateTree | None:
-        result = await self.db.execute(select(AffiliateTree).where(AffiliateTree.user_id == user_id))
+    # ========== Affiliate ==========
+    async def get_affiliate_tree(self, user_id: int, tenant_id: int) -> AffiliateTree | None:
+        result = await self.db.execute(
+            select(AffiliateTree)
+            .join(User, User.id == AffiliateTree.user_id)
+            .where(
+                and_(AffiliateTree.user_id == user_id, User.tenant_id == tenant_id)
+            )
+        )
         return result.scalar_one_or_none()
 
     async def create_affiliate_tree(self, **kwargs) -> AffiliateTree:
@@ -200,15 +217,16 @@ class CommerceRepository:
         await self.db.refresh(tree)
         return tree
 
-    async def get_sponsor_chain(self, user_id: int, max_depth: int = 10):
+    async def get_sponsor_chain(self, user_id: int, tenant_id: int, max_depth: int = 10):
         chain = []
-        current = await self.get_affiliate_tree(user_id)
+        current = await self.get_affiliate_tree(user_id, tenant_id)
         while current and len(chain) < max_depth:
-            chain.append(current.sponsor_id)
-            current = await self.get_affiliate_tree(current.sponsor_id)  # type: ignore
+            sponsor_id = cast(int, current.sponsor_id)
+            chain.append(sponsor_id)
+            current = await self.get_affiliate_tree(sponsor_id, tenant_id)
         return chain
 
-    # ---------- Commissions ----------
+    # ========== Commissions ==========
     async def create_commission(self, **kwargs) -> CommissionRecord:
         comm = CommissionRecord(**kwargs)
         self.db.add(comm)
@@ -216,12 +234,13 @@ class CommerceRepository:
         await self.db.refresh(comm)
         return comm
 
-    async def get_pending_commissions(self, beneficiary_id: int, skip: int = 0, limit: int = 20) -> PaginatedResponse[CommissionResponse]:
-        """✅ جلب العمولات المعلقة مع Schema"""
+    async def get_pending_commissions(self, beneficiary_id: int, tenant_id: int, skip: int = 0, limit: int = 20) -> PaginatedResponse[CommissionResponse]:
         query = select(CommissionRecord).where(
             CommissionRecord.beneficiary_id == beneficiary_id,
             CommissionRecord.status == "PENDING"
         )
+        query = query.join(User, User.id == CommissionRecord.beneficiary_id).where(User.tenant_id == tenant_id)
+        
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
@@ -246,7 +265,7 @@ class CommerceRepository:
         result = await self.db.execute(select(CommissionRecord).where(CommissionRecord.id == commission_id))
         return result.scalar_one_or_none()
 
-    # ---------- Affiliate Config ----------
+    # ========== Affiliate Config ==========
     async def get_affiliate_config(self, tenant_id: int) -> AffiliateConfig | None:
         result = await self.db.execute(select(AffiliateConfig).where(AffiliateConfig.tenant_id == tenant_id))
         return result.scalar_one_or_none()
@@ -263,81 +282,79 @@ class CommerceRepository:
         await self.db.refresh(config)
         return config
 
-    # ---------- Payment Requests (مع Idempotency) ----------
-    async def get_payment_request_by_idempotency_key(self, idempotency_key: str) -> PaymentRequest | None:
+    # ========== Payment Requests ==========
+    async def get_payment_request_by_idempotency_key(self, idempotency_key: str, tenant_id: int) -> PaymentRequest | None:
         result = await self.db.execute(
-            select(PaymentRequest).where(PaymentRequest.idempotency_key == idempotency_key)
+            select(PaymentRequest).where(
+                and_(PaymentRequest.idempotency_key == idempotency_key, PaymentRequest.tenant_id == tenant_id)
+            )
         )
         return result.scalar_one_or_none()
 
-    async def create_payment_request(self, **kwargs) -> PaymentRequest:
-        pr = PaymentRequest(**kwargs)
+    async def create_payment_request(self, tenant_id: int, **kwargs) -> PaymentRequest:
+        pr = PaymentRequest(tenant_id=tenant_id, **kwargs)
         self.db.add(pr)
         await self.db.commit()
         await self.db.refresh(pr)
         return pr
 
-    async def get_payment_request_by_order(self, order_id: int, payment_method: str) -> PaymentRequest | None:
+    async def get_payment_request_by_order(self, order_id: int, payment_method: str, tenant_id: int) -> PaymentRequest | None:
         result = await self.db.execute(
             select(PaymentRequest).where(
-                PaymentRequest.order_id == order_id,
-                PaymentRequest.payment_method == payment_method
+                and_(
+                    PaymentRequest.order_id == order_id,
+                    PaymentRequest.payment_method == payment_method,
+                    PaymentRequest.tenant_id == tenant_id
+                )
             ).order_by(PaymentRequest.id.desc())
         )
         return result.scalar_one_or_none()
 
-    async def get_payment_request_by_agent_code(self, agent_code: str) -> PaymentRequest | None:
-        result = await self.db.execute(select(PaymentRequest).where(PaymentRequest.agent_code == agent_code))
+    async def get_payment_request_by_agent_code(self, agent_code: str, tenant_id: int) -> PaymentRequest | None:
+        result = await self.db.execute(
+            select(PaymentRequest).where(
+                and_(PaymentRequest.agent_code == agent_code, PaymentRequest.tenant_id == tenant_id)
+            )
+        )
         return result.scalar_one_or_none()
 
-    async def update_payment_request(self, payment_request_id: int, **kwargs) -> PaymentRequest:
-        await self.db.execute(update(PaymentRequest).where(PaymentRequest.id == payment_request_id).values(**kwargs))
+    async def update_payment_request(self, payment_request_id: int, tenant_id: int, **kwargs) -> PaymentRequest:
+        await self.db.execute(
+            update(PaymentRequest)
+            .where(and_(PaymentRequest.id == payment_request_id, PaymentRequest.tenant_id == tenant_id))
+            .values(**kwargs)
+        )
         await self.db.commit()
-        return await self.get_payment_request(payment_request_id)
+        return await self.get_payment_request(payment_request_id, tenant_id)
 
-    async def get_payment_request(self, pr_id: int) -> PaymentRequest | None:
-        result = await self.db.execute(select(PaymentRequest).where(PaymentRequest.id == pr_id))
+    async def get_payment_request(self, pr_id: int, tenant_id: int) -> PaymentRequest | None:
+        result = await self.db.execute(
+            select(PaymentRequest).where(and_(PaymentRequest.id == pr_id, PaymentRequest.tenant_id == tenant_id))
+        )
         return result.scalar_one_or_none()
 
     # ============================================================
-    # 🆕 دوال جديدة لمهام Celery (تم إضافتها)
+    # 🆕 دوال Celery
     # ============================================================
 
-    async def get_pending_orders_older_than(self, cutoff_time: datetime) -> List[Order]:
-        """
-        جلب الطلبات المعلقة (PENDING_PAYMENT أو PENDING) والتي تم إنشاؤها قبل cutoff_time.
-        تُستخدم في مهمة process_pending_orders.
-        """
+    async def get_pending_orders_older_than(self, cutoff_time: datetime, tenant_id: int) -> List[Order]:
         result = await self.db.execute(
             select(Order)
             .where(
                 Order.status.in_(['PENDING_PAYMENT', 'PENDING']),
-                Order.created_at < cutoff_time
+                Order.created_at < cutoff_time,
+                Order.tenant_id == tenant_id
             )
             .order_by(Order.created_at)
         )
-        # ✅ تحويل النتيجة إلى list باستخدام cast
         return list(result.scalars().all())
 
     async def get_order_items(self, order_id: int) -> List[OrderItem]:
-        """
-        جلب عناصر طلب معين.
-        """
-        result = await self.db.execute(
-            select(OrderItem)
-            .where(OrderItem.order_id == order_id)
-        )
+        result = await self.db.execute(select(OrderItem).where(OrderItem.order_id == order_id))
         return list(result.scalars().all())
 
     async def update_product_stock(self, product_id: int, new_stock: int) -> None:
-        """
-        تحديث المخزون الأساسي للمنتج.
-        """
-        await self.db.execute(
-            update(Product)
-            .where(Product.id == product_id)
-            .values(stock_quantity=new_stock)
-        )
+        await self.db.execute(update(Product).where(Product.id == product_id).values(stock_quantity=new_stock))
         await self.db.commit()
 
     async def get_paid_orders_since(
@@ -345,70 +362,37 @@ class CommerceRepository:
         start_time: datetime,
         tenant_id: Optional[int] = None
     ) -> List[Order]:
-        """
-        جلب الطلبات المدفوعة (status = 'PAID') منذ وقت معين.
-        إذا تم تمرير tenant_id، يتم التصفية حسب store.tenant_id عبر JOIN.
-        """
         query = select(Order).where(
             Order.status == "PAID",
             Order.created_at >= start_time
         )
         if tenant_id is not None:
-            # ربط بـ StoreProfile للتصفية حسب tenant_id
-            query = query.join(StoreProfile, Order.store_id == StoreProfile.id).where(
-                StoreProfile.tenant_id == tenant_id
-            )
+            query = query.where(Order.tenant_id == tenant_id)
         query = query.order_by(Order.created_at.desc())
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
-    async def get_failed_payment_requests(self) -> List[PaymentRequest]:
-        """
-        جلب طلبات الدفع الفاشلة التي لم تتجاوز الحد الأقصى للمحاولات (3 محاولات).
-        """
-        # نفترض وجود عمود retry_count في PaymentRequest، وإلا نستخدم metadata
-        # سنحاول استخدام retry_count إذا كان موجوداً، وإلا نستعمل fallback
-        try:
-            # محاولة استخدام عمود retry_count
-            result = await self.db.execute(
-                select(PaymentRequest)
-                .where(
-                    PaymentRequest.status == "FAILED",
-                    PaymentRequest.retry_count < 3  # type: ignore
-                )
-                .order_by(PaymentRequest.created_at)
+    async def get_failed_payment_requests(self, tenant_id: int) -> List[PaymentRequest]:
+        result = await self.db.execute(
+            select(PaymentRequest)
+            .where(
+                PaymentRequest.status == "FAILED",
+                PaymentRequest.tenant_id == tenant_id
             )
-        except Exception:
-            # إذا لم يكن العمود موجوداً، نستخدم metadata لتخزين عدد المحاولات
-            # أو نأخذ كل الفاشلة (حل مؤقت)
-            result = await self.db.execute(
-                select(PaymentRequest)
-                .where(PaymentRequest.status == "FAILED")
-                .order_by(PaymentRequest.created_at)
-            )
+            .order_by(PaymentRequest.created_at)
+        )
         return list(result.scalars().all())
 
-    async def increment_payment_retry_count(self, payment_request_id: int) -> None:
-        """
-        زيادة عدد محاولات إعادة الدفع لطلب دفع فاشل.
-        """
-        # محاولة استخدام retry_count إذا كان موجوداً
-        try:
+    async def increment_payment_retry_count(self, payment_request_id: int, tenant_id: int) -> None:
+        pr = await self.get_payment_request(payment_request_id, tenant_id)
+        if pr:
+            # ✅ التأكد من أن gateway_response هو dict
+            metadata = cast(dict, pr.gateway_response) or {}
+            retry_count = metadata.get('retry_count', 0) + 1
+            metadata['retry_count'] = retry_count
             await self.db.execute(
                 update(PaymentRequest)
-                .where(PaymentRequest.id == payment_request_id)
-                .values(retry_count=PaymentRequest.retry_count + 1)  # type: ignore
+                .where(and_(PaymentRequest.id == payment_request_id, PaymentRequest.tenant_id == tenant_id))
+                .values(gateway_response=metadata)
             )
-        except Exception:
-            # إذا لم يكن العمود موجوداً، نخزن العدد في metadata كـ JSON
-            pr = await self.get_payment_request(payment_request_id)
-            if pr:
-                metadata = pr.metadata or {}
-                retry_count = metadata.get('retry_count', 0) + 1
-                metadata['retry_count'] = retry_count
-                await self.db.execute(
-                    update(PaymentRequest)
-                    .where(PaymentRequest.id == payment_request_id)
-                    .values(metadata=metadata)
-                )
-        await self.db.commit()
+            await self.db.commit()

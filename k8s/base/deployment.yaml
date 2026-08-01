@@ -6,7 +6,7 @@ metadata:
   labels:
     app: eppne-backend
 spec:
-  replicas: 3
+  replicas: 5  # ✅ تم الرفع من 3 إلى 5
   selector:
     matchLabels:
       app: eppne-backend
@@ -22,6 +22,19 @@ spec:
     spec:
       serviceAccountName: backend-sa
       terminationGracePeriodSeconds: 60
+      # ✅ إضافة podAntiAffinity
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - eppne-backend
+              topologyKey: kubernetes.io/hostname
       containers:
       - name: backend
         image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/eppne-backend:${IMAGE_TAG:-latest}
@@ -45,6 +58,11 @@ spec:
             configMapKeyRef:
               name: eppne-config
               key: LOG_LEVEL
+        - name: UVICORN_WORKERS  # ✅ موجود بالفعل (يقرأ من ConfigMap الذي أضفنا فيه القيمة)
+          valueFrom:
+            configMapKeyRef:
+              name: eppne-config
+              key: UVICORN_WORKERS
         resources:
           requests:
             memory: "1Gi"
@@ -111,13 +129,13 @@ spec:
             cpu: "200m"
         livenessProbe:
           httpGet:
-            path: /api/health
+            path: /health          # 🔥 تم التصحيح: إزالة /api
             port: 3000
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /api/ready
+            path: /ready           # 🔥 تم التصحيح: إزالة /api
             port: 3000
           initialDelaySeconds: 5
           periodSeconds: 5

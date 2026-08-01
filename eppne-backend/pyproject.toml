@@ -1,0 +1,7 @@
+[tool.pylance]
+typeCheckingMode = "basic"
+
+[tool.pylance.report]
+reportArgumentType = "none"
+reportGeneralTypeIssues = "none"
+reportCallIssue = "none"

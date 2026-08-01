@@ -6,7 +6,6 @@ from decimal import Decimal
 from app.domains.ai_agents.models import AgentRole, AgentStatus, ApprovalStatus
 
 
-# ========== AI Agents ==========
 class AIAgentCreate(BaseModel):
     name: str = Field(..., description="اسم الوكيل", min_length=1, max_length=255)
     role: AgentRole = Field(..., description="دور الوكيل")
@@ -38,7 +37,6 @@ class AIAgentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ========== Approval Queue ==========
 class ApprovalAction(BaseModel):
     agent_id: int = Field(..., description="معرف الوكيل")
     action_type: str = Field(..., description="نوع الإجراء", min_length=1)
@@ -71,7 +69,6 @@ class ApprovalResolution(BaseModel):
         return v
 
 
-# ========== Status Updates ==========
 class AgentStatusUpdate(BaseModel):
     status: AgentStatus = Field(..., description="الحالة الجديدة للوكيل")
 
@@ -84,7 +81,6 @@ class AgentStatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ========== Task Logs (للتحليلات) ==========
 class AITaskLogResponse(BaseModel):
     id: int
     tenant_id: int

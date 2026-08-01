@@ -1,20 +1,27 @@
-# app/domains/ai_governance/repository.py (التحديثات)
+# app/domains/ai_governance/repository.py
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, and_
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Optional, cast
 from datetime import datetime
 
 from app.domains.ai_governance.models import AgentQuota, AgentUsageLog, AgentRateLimit, AgentAuditLog
+from app.domains.ai_governance.schemas import AgentAuditLogResponse
+from app.domains.ai_agents.models import AIAgent
+from app.core.pagination import PaginatedResponse
+from app.core.errors import NotFoundError
+
 
 class AIGovernanceRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    # ========== Quotas ==========
+    # ========== Quotas (مع tenant_id) ==========
     async def create_or_update_quota(self, tenant_id: int, agent_id: int, **kwargs) -> AgentQuota:
         result = await self.db.execute(
-            select(AgentQuota).where(AgentQuota.agent_id == agent_id, AgentQuota.tenant_id == tenant_id)
+            select(AgentQuota).where(
+                and_(AgentQuota.agent_id == agent_id, AgentQuota.tenant_id == tenant_id)
+            )
         )
         quota = result.scalar_one_or_none()
         
@@ -32,22 +39,23 @@ class AIGovernanceRepository:
     async def get_active_quotas(self, agent_id: int, tenant_id: int) -> List[AgentQuota]:
         result = await self.db.execute(
             select(AgentQuota).where(
-                AgentQuota.agent_id == agent_id,
-                AgentQuota.tenant_id == tenant_id
+                and_(
+                    AgentQuota.agent_id == agent_id,
+                    AgentQuota.tenant_id == tenant_id
+                )
             )
         )
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def reset_quota_usage(self, agent_id: int, tenant_id: int) -> None:
-        """إعادة تعيين الاستخدام إلى الصفر."""
         await self.db.execute(
             update(AgentQuota)
-            .where(AgentQuota.agent_id == agent_id, AgentQuota.tenant_id == tenant_id)
+            .where(and_(AgentQuota.agent_id == agent_id, AgentQuota.tenant_id == tenant_id))
             .values(current_usage=0)
         )
         await self.db.commit()
 
-    # ========== Usage Logs ==========
+    # ========== Usage Logs (مع tenant_id في Idempotency) ==========
     async def create_usage_log(self, **kwargs) -> AgentUsageLog:
         log = AgentUsageLog(**kwargs)
         self.db.add(log)
@@ -55,9 +63,14 @@ class AIGovernanceRepository:
         await self.db.refresh(log)
         return log
 
-    async def get_usage_log_by_idempotency(self, idempotency_key: str) -> Optional[AgentUsageLog]:
+    async def get_usage_log_by_idempotency(self, idempotency_key: str, tenant_id: int) -> Optional[AgentUsageLog]:
         result = await self.db.execute(
-            select(AgentUsageLog).where(AgentUsageLog.idempotency_key == idempotency_key)
+            select(AgentUsageLog).where(
+                and_(
+                    AgentUsageLog.idempotency_key == idempotency_key,
+                    AgentUsageLog.tenant_id == tenant_id
+                )
+            )
         )
         return result.scalar_one_or_none()
 
@@ -68,7 +81,6 @@ class AIGovernanceRepository:
         start_date: datetime,
         end_date: datetime
     ) -> dict:
-        """جمع إحصائيات الاستخدام لفترة زمنية."""
         result = await self.db.execute(
             select(
                 func.count(AgentUsageLog.id).label("total_requests"),
@@ -77,9 +89,11 @@ class AIGovernanceRepository:
                 func.avg(AgentUsageLog.response_time_ms).label("avg_response_time")
             )
             .where(
-                AgentUsageLog.agent_id == agent_id,
-                AgentUsageLog.tenant_id == tenant_id,
-                AgentUsageLog.created_at.between(start_date, end_date)
+                and_(
+                    AgentUsageLog.agent_id == agent_id,
+                    AgentUsageLog.tenant_id == tenant_id,
+                    AgentUsageLog.created_at.between(start_date, end_date)
+                )
             )
         )
         row = result.one()
@@ -90,10 +104,12 @@ class AIGovernanceRepository:
             "avg_response_time": float(row.avg_response_time or 0),
         }
 
-    # ========== Rate Limits ==========
+    # ========== Rate Limits (مع tenant_id) ==========
     async def update_rate_limits(self, agent_id: int, tenant_id: int, data: dict) -> AgentRateLimit:
         result = await self.db.execute(
-            select(AgentRateLimit).where(AgentRateLimit.agent_id == agent_id, AgentRateLimit.tenant_id == tenant_id)
+            select(AgentRateLimit).where(
+                and_(AgentRateLimit.agent_id == agent_id, AgentRateLimit.tenant_id == tenant_id)
+            )
         )
         limit = result.scalar_one_or_none()
         
@@ -111,13 +127,15 @@ class AIGovernanceRepository:
     async def get_rate_limits(self, agent_id: int, tenant_id: int) -> Optional[AgentRateLimit]:
         result = await self.db.execute(
             select(AgentRateLimit).where(
-                AgentRateLimit.agent_id == agent_id,
-                AgentRateLimit.tenant_id == tenant_id
+                and_(
+                    AgentRateLimit.agent_id == agent_id,
+                    AgentRateLimit.tenant_id == tenant_id
+                )
             )
         )
         return result.scalar_one_or_none()
 
-    # ========== Audit Logs ==========
+    # ========== Audit Logs (مع PaginatedResponse و AgentAuditLogResponse) ==========
     async def create_audit_log(self, **kwargs) -> AgentAuditLog:
         log = AgentAuditLog(**kwargs)
         self.db.add(log)
@@ -125,12 +143,45 @@ class AIGovernanceRepository:
         await self.db.refresh(log)
         return log
 
-    async def get_audit_logs(self, agent_id: int, tenant_id: int, skip: int = 0, limit: int = 100) -> List[AgentAuditLog]:
-        result = await self.db.execute(
+    async def get_audit_logs(
+        self,
+        agent_id: int,
+        tenant_id: int,
+        skip: int = 0,
+        limit: int = 100
+    ) -> PaginatedResponse[AgentAuditLogResponse]:
+        query = (
             select(AgentAuditLog)
-            .where(AgentAuditLog.agent_id == agent_id, AgentAuditLog.tenant_id == tenant_id)
+            .where(
+                and_(AgentAuditLog.agent_id == agent_id, AgentAuditLog.tenant_id == tenant_id)
+            )
             .order_by(AgentAuditLog.created_at.desc())
-            .offset(skip)
-            .limit(min(limit, 200))
         )
-        return result.scalars().all()
+
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        query = query.offset(skip).limit(min(limit, 200))
+        result = await self.db.execute(query)
+        items = [AgentAuditLogResponse.model_validate(item) for item in result.scalars().all()]
+
+        return PaginatedResponse[AgentAuditLogResponse](
+            data=items,
+            total=total,
+            skip=skip,
+            limit=limit
+        )
+
+    # ========== التحقق من وجود الوكيل ==========
+    async def get_agent(self, agent_id: int, tenant_id: int) -> Optional[AIAgent]:
+        result = await self.db.execute(
+            select(AIAgent).where(
+                and_(
+                    AIAgent.id == agent_id,
+                    AIAgent.tenant_id == tenant_id,
+                    AIAgent.is_deleted == False
+                )
+            )
+        )
+        return result.scalar_one_or_none()

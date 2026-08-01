@@ -1,0 +1,40 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eppne-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # ✅ (اختياري) إجبار إعادة التوجيه من HTTP إلى HTTPS
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    # ⚠️ تم استبدال النطاقات الوهمية بنطاقات حقيقية (ضع النطاق الفعلي هنا)
+    - api.eppne.sovereign.eg        # ✅ تم التعديل (ضع نطاقك الفعلي)
+    - app.eppne.sovereign.eg        # ✅ تم التعديل (ضع نطاقك الفعلي)
+    secretName: eppne-tls
+  rules:
+  - host: api.eppne.sovereign.eg    # ✅ تم التعديل
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: eppne-backend-service
+            port:
+              number: 80             # ✅ تم التعديل من 8000 إلى 80 (يتوافق مع Service port)
+  - host: app.eppne.sovereign.eg    # ✅ تم التعديل
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: eppne-web-service
+            port:
+              number: 80             # ✅ تم التعديل من 3000 إلى 80 (يتوافق مع Service port)

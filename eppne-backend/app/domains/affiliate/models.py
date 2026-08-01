@@ -40,6 +40,7 @@ class ReferralTree(Base):
     """شجرة الإحالة المخصصة (Product-Scoped Affiliate)"""
     __tablename__ = "referral_trees"
     __table_args__ = (
+        Index("ix_referral_trees_tenant_id", "tenant_id"),
         Index("ix_referral_trees_referrer_id", "referrer_id"),
         Index("ix_referral_trees_referred_id", "referred_id"),
         Index("ix_referral_trees_unique_referred_scope",
@@ -50,10 +51,11 @@ class ReferralTree(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     referrer_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     referred_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    entity_type = Column(String(50), default="GLOBAL", nullable=False)  # GLOBAL, PRODUCT, SERVICE_CATEGORY
+    entity_type = Column(String(50), default="GLOBAL", nullable=False)
     entity_id = Column(Integer, nullable=True)
 
     depth = Column(Integer, nullable=False, default=1)
@@ -93,7 +95,7 @@ class Commission(Base):
     referral_level = Column(Integer, nullable=False)
     entity_type = Column(String(50), default="PRODUCT")
 
-    status = Column(String(20), default="PENDING")  # PENDING, CONFIRMED, PAID, CANCELLED
+    status = Column(String(20), default="PENDING")
     paid_at = Column(DateTime(timezone=True), nullable=True)
     paid_tx_hash = Column(String(100), nullable=True)
 
@@ -138,14 +140,16 @@ class AffiliateLink(Base):
     """روابط الدعوة المخصصة"""
     __tablename__ = "affiliate_links"
     __table_args__ = (
+        Index("ix_affiliate_links_tenant_id", "tenant_id"),
         Index("ix_affiliate_links_affiliate_id", "affiliate_id"),
         Index("ix_affiliate_links_target", "target"),
         Index("ix_affiliate_links_product_id", "product_id"),
         Index("ix_affiliate_links_utm_campaign", "utm_campaign"),
-        Index("ix_affiliate_links_status", "status"),  # 🔥 إضافة فهرس للعمود الجديد
+        Index("ix_affiliate_links_status", "status"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     affiliate_id = Column(Integer, ForeignKey("affiliate_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
 
     target = Column(String(255), nullable=False)
@@ -159,9 +163,8 @@ class AffiliateLink(Base):
     clicks = Column(Integer, default=0)
     conversions = Column(Integer, default=0)
 
-    # 🔥 العمود الجديد المطلوب
-    status = Column(String(20), default="ACTIVE", nullable=False)  # ACTIVE, EXPIRED, INACTIVE
-    expires_at = Column(DateTime(timezone=True), nullable=True)   # تاريخ انتهاء الصلاحية (اختياري)
+    status = Column(String(20), default="ACTIVE", nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -171,6 +174,7 @@ class AffiliateClickLog(Base):
     """سجل نقرات روابط الدعوة (للتحليلات)"""
     __tablename__ = "affiliate_click_logs"
     __table_args__ = (
+        Index("ix_affiliate_click_logs_tenant_id", "tenant_id"),
         Index("ix_affiliate_click_logs_link_id", "link_id"),
         Index("ix_affiliate_click_logs_affiliate_id", "affiliate_id"),
         Index("ix_affiliate_click_logs_ip_address", "ip_address"),
@@ -178,6 +182,7 @@ class AffiliateClickLog(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     link_id = Column(Integer, ForeignKey("affiliate_links.id", ondelete="CASCADE"), nullable=False, index=True)
     affiliate_id = Column(Integer, ForeignKey("affiliate_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
 

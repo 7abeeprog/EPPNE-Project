@@ -1,9 +1,10 @@
 # app/domains/identity/models.py
 from datetime import datetime
 from sqlalchemy import (
-    Column, BigInteger, String, Boolean, DateTime, Date, JSON, 
-    Enum as SQLEnum, Integer, ForeignKey, Index
+    Column, BigInteger, String, Boolean, DateTime, Date,
+    Enum as SQLEnum, Integer, ForeignKey, Index, CheckConstraint
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -15,12 +16,19 @@ class User(Base):
         Index("ix_users_username_lower", func.lower("username")),
         Index("ix_users_email_lower", func.lower("email")),
         Index("ix_users_public_id", "public_id"),
+        Index("ix_users_tenant_id", "tenant_id"),
+        Index("ix_users_created_at", "created_at"),
+        Index("ix_users_last_login_at", "last_login_at"),
+        CheckConstraint("char_length(username) >= 4", name="ck_username_min_length"),
+        CheckConstraint("char_length(email) > 0", name="ck_email_not_empty"),
     )
 
     id = Column(BigInteger, primary_key=True, index=True)
     public_id = Column(String, unique=True, index=True, nullable=True)
     uid = Column(String(20), unique=True, index=True, nullable=True)
     did = Column(String, unique=True, nullable=True)
+
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
 
     username = Column(String(50), unique=True, index=True, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
@@ -43,8 +51,8 @@ class User(Base):
     reputation_score = Column(Integer, default=100)
 
     language_preference = Column(String, default="ar")
-    profile_metadata = Column(JSON, default=dict)
-    preferences = Column(JSON, default=dict)
+    profile_metadata = Column(JSONB, default=dict)
+    preferences = Column(JSONB, default=dict)
 
     email_verified = Column(Boolean, default=False)
     phone_verified = Column(Boolean, default=False)
@@ -59,61 +67,27 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     idempotency_key = Column(String(100), unique=True, index=True, nullable=True)
-    # ✅ العلاقات
+
     refresh_tokens = relationship(
-        "app.domains.auth.models.RefreshToken", # ← المسار الدقيق
+        "app.domains.auth.models.RefreshToken",
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin"
     )
     
-    # ✅ تحديث العلاقة مع المحفظة (تغيير اسم الكلاس إلى IdentityWallet)
     wallet = relationship(
-        "IdentityWallet",          # ← تغيير الاسم هنا
+        "app.domains.finance.models.Wallet",
         back_populates="user",
         uselist=False,
         cascade="all, delete-orphan",
         lazy="selectin"
     )
 
-    def __repr__(self) -> str:
-        return f"<User(id={self.id}, username={self.username}, email={self.email})>"
-
-
-# ✅ تغيير اسم الكلاس من Wallet إلى IdentityWallet
-class IdentityWallet(Base):
-    """
-    ✅ محفظة المستخدم (تم فصلها عن User)
-    - تضمن Atomic Transactions منفصلة عن جدول المستخدم
-    - تمنع Deadlocks عند تنفيذ عمليات مالية متزامنة
-    """
-    __tablename__ = "identity_wallets"   # ← تغيير اسم الجدول لتجنب التضارب
-    __table_args__ = (
-        Index("ix_identity_wallets_user_id", "user_id", unique=True),  # تحديث اسم الفهرس
-        Index("ix_identity_wallets_address", "wallet_address"),
-        Index("ix_identity_wallets_is_frozen", "is_frozen"),
+    tenant = relationship(
+        "app.domains.academy.models.Tenant",
+        foreign_keys=[tenant_id],
+        lazy="selectin"
     )
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
-
-    wallet_address = Column(String(42), unique=True, index=True, nullable=True)
-    is_custodial = Column(Boolean, default=True)
-    is_frozen = Column(Boolean, default=False)
-
-    balances = Column(JSON, default=lambda: {
-        "MR_POUND": 0,
-        "MR_USDT": 0,
-        "MR7": 0,
-        "NBT": 0,
-        "MRX": 0
-    }, nullable=False)
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-
-    # العلاقة مع المستخدم (يبقى back_populates="wallet" كما هو)
-    user = relationship("User", back_populates="wallet")
-
     def __repr__(self) -> str:
-        return f"<IdentityWallet(user_id={self.user_id}, balances={self.balances})>"
+        return f"<User(id={self.id}, tenant_id={self.tenant_id}, username={self.username})>"

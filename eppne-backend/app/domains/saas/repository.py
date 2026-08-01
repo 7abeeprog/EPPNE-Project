@@ -1,8 +1,7 @@
-# app/domains/saas/repository.py
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, func, and_, or_
 from sqlalchemy.orm import selectinload
-from typing import Optional, List, Dict, Any, cast  # ✅ إضافة cast
+from typing import Optional, List, Dict, Any, cast
 from datetime import datetime, timedelta, timezone
 from app.domains.saas.schemas import TenantSubscriptionResponse, InvoiceResponse
 from app.domains.saas.models import (
@@ -15,6 +14,7 @@ from app.domains.saas.models import (
 )
 from app.core.errors import NotFoundError
 from app.core.pagination import PaginatedResponse
+
 
 class SaaSRepository:
     def __init__(self, db: AsyncSession):
@@ -52,7 +52,30 @@ class SaaSRepository:
     # ==========================================
     # 2. خطط التسعير (Plans)
     # ==========================================
-    async def get_plan_by_id(self, plan_id: int) -> Optional[ServicePlan]:
+    async def get_plan_by_id(self, plan_id: int, tenant_id: int) -> Optional[ServicePlan]:
+        """جلب الخطة والتحقق من وجود اشتراك نشط لها للمستأجر."""
+        result = await self.db.execute(
+            select(TenantSubscription)
+            .where(
+                and_(
+                    TenantSubscription.plan_id == plan_id,
+                    TenantSubscription.tenant_id == tenant_id,
+                    TenantSubscription.status.in_(["ACTIVE", "TRIAL"])
+                )
+            )
+            .limit(1)
+        )
+        sub = result.scalar_one_or_none()
+        if not sub:
+            return None
+        # إذا وجد اشتراك، نجلب الخطة
+        result_plan = await self.db.execute(
+            select(ServicePlan).where(ServicePlan.id == plan_id)
+        )
+        return result_plan.scalar_one_or_none()
+
+    async def get_plan_by_id_admin(self, plan_id: int) -> Optional[ServicePlan]:
+        """جلب الخطة بدون التحقق من المستأجر (للمشرفين)."""
         result = await self.db.execute(
             select(ServicePlan).where(ServicePlan.id == plan_id)
         )
@@ -83,11 +106,16 @@ class SaaSRepository:
     # ==========================================
     # 3. اشتراكات المستأجر (Subscriptions)
     # ==========================================
-    async def get_subscription(self, subscription_id: int) -> Optional[TenantSubscription]:
+    async def get_subscription(self, subscription_id: int, tenant_id: int) -> Optional[TenantSubscription]:
         result = await self.db.execute(
             select(TenantSubscription)
             .options(selectinload(TenantSubscription.plan))
-            .where(TenantSubscription.id == subscription_id)
+            .where(
+                and_(
+                    TenantSubscription.id == subscription_id,
+                    TenantSubscription.tenant_id == tenant_id
+                )
+            )
         )
         return result.scalar_one_or_none()
 
@@ -96,31 +124,33 @@ class SaaSRepository:
         tenant_id: int,
         service_id: int
     ) -> Optional[TenantSubscription]:
-        """جلب الاشتراك النشط لخدمة معينة"""
         result = await self.db.execute(
             select(TenantSubscription)
             .join(ServicePlan)
             .where(
-                TenantSubscription.tenant_id == tenant_id,
-                ServicePlan.service_id == service_id,
-                TenantSubscription.status.in_(["ACTIVE", "TRIAL"])
+                and_(
+                    TenantSubscription.tenant_id == tenant_id,
+                    ServicePlan.service_id == service_id,
+                    TenantSubscription.status.in_(["ACTIVE", "TRIAL"])
+                )
             )
             .order_by(TenantSubscription.created_at.desc())
             .limit(1)
         )
         return result.scalar_one_or_none()
 
-    async def get_subscriptions_for_renewal(self) -> List[TenantSubscription]:
-        """جلب الاشتراكات التي تحتاج إلى تجديد (للـ Celery)"""
+    async def get_subscriptions_for_renewal(self, tenant_id: Optional[int] = None) -> List[TenantSubscription]:
         now = datetime.now(timezone.utc)
-        result = await self.db.execute(
-            select(TenantSubscription)
-            .where(
+        query = select(TenantSubscription).where(
+            and_(
                 TenantSubscription.status == "ACTIVE",
                 TenantSubscription.auto_renew == True,
                 TenantSubscription.next_billing_date <= now
             )
         )
+        if tenant_id is not None:
+            query = query.where(TenantSubscription.tenant_id == tenant_id)
+        result = await self.db.execute(query)
         return list(result.scalars().all())
 
     async def get_tenant_subscriptions(
@@ -139,7 +169,6 @@ class SaaSRepository:
         result = await self.db.execute(paginated_query)
         items = list(result.scalars().all())
 
-        # ✅ تحويل العناصر إلى نماذج الاستجابة
         response_items = [TenantSubscriptionResponse.model_validate(item) for item in items]
         return PaginatedResponse[TenantSubscriptionResponse](
             data=response_items,
@@ -158,15 +187,16 @@ class SaaSRepository:
     async def update_subscription(
         self,
         subscription_id: int,
+        tenant_id: int,
         **kwargs
     ) -> TenantSubscription:
         await self.db.execute(
             update(TenantSubscription)
-            .where(TenantSubscription.id == subscription_id)
+            .where(and_(TenantSubscription.id == subscription_id, TenantSubscription.tenant_id == tenant_id))
             .values(**kwargs)
         )
         await self.db.commit()
-        subscription = await self.get_subscription(subscription_id)
+        subscription = await self.get_subscription(subscription_id, tenant_id)
         if not subscription:
             raise NotFoundError("الاشتراك غير موجود")
         return subscription
@@ -174,19 +204,21 @@ class SaaSRepository:
     async def update_subscription_status(
         self,
         subscription_id: int,
+        tenant_id: int,
         status: str
     ) -> TenantSubscription:
-        return await self.update_subscription(subscription_id, status=status)
+        return await self.update_subscription(subscription_id, tenant_id, status=status)
 
-    # 🔥 دالة جديدة: إحصاء الاشتراكات النشطة لخدمة
     async def get_active_subscription_count(self, service_id: int) -> int:
         result = await self.db.execute(
             select(func.count())
             .select_from(TenantSubscription)
             .join(ServicePlan)
             .where(
-                ServicePlan.service_id == service_id,
-                TenantSubscription.status.in_(["ACTIVE", "TRIAL"])
+                and_(
+                    ServicePlan.service_id == service_id,
+                    TenantSubscription.status.in_(["ACTIVE", "TRIAL"])
+                )
             )
         )
         return result.scalar() or 0
@@ -201,18 +233,18 @@ class SaaSRepository:
     ) -> Optional[TenantServiceAccess]:
         result = await self.db.execute(
             select(TenantServiceAccess).where(
-                TenantServiceAccess.tenant_id == tenant_id,
-                TenantServiceAccess.service_id == service_id
+                and_(
+                    TenantServiceAccess.tenant_id == tenant_id,
+                    TenantServiceAccess.service_id == service_id
+                )
             )
         )
         return result.scalar_one_or_none()
 
     async def get_services_with_access(self, tenant_id: int) -> List[Dict[str, Any]]:
-        """جلب جميع الخدمات مع حالة الوصول للمستأجر"""
         services = await self.get_all_services()
         result = []
         for service in services:
-            # ✅ تحويل service.id إلى int باستخدام cast
             service_id = cast(int, service.id)
             access = await self.get_tenant_service_access(tenant_id, service_id)
             subscription = await self.get_active_subscription(tenant_id, service_id)
@@ -254,15 +286,26 @@ class SaaSRepository:
     # ==========================================
     # 5. الفواتير (Invoices)
     # ==========================================
-    async def get_invoice_by_id(self, invoice_id: int) -> Optional[Invoice]:
+    async def get_invoice_by_id(self, invoice_id: int, tenant_id: int) -> Optional[Invoice]:
         result = await self.db.execute(
-            select(Invoice).where(Invoice.id == invoice_id)
+            select(Invoice).where(
+                and_(
+                    Invoice.id == invoice_id,
+                    Invoice.tenant_id == tenant_id
+                )
+            )
         )
         return result.scalar_one_or_none()
 
-    async def get_invoice_by_idempotency(self, idempotency_key: str) -> Optional[Invoice]:
+    async def get_invoice_by_idempotency(self, idempotency_key: str, tenant_id: int) -> Optional[Invoice]:
+        """جلب الفاتورة بواسطة مفتاح Idempotency مع تصفية tenant_id."""
         result = await self.db.execute(
-            select(Invoice).where(Invoice.idempotency_key == idempotency_key)
+            select(Invoice).where(
+                and_(
+                    Invoice.idempotency_key == idempotency_key,
+                    Invoice.tenant_id == tenant_id
+                )
+            )
         )
         return result.scalar_one_or_none()
 
@@ -282,7 +325,6 @@ class SaaSRepository:
         result = await self.db.execute(paginated_query)
         items = list(result.scalars().all())
 
-        # ✅ تحويل العناصر إلى نماذج الاستجابة
         response_items = [InvoiceResponse.model_validate(item) for item in items]
         return PaginatedResponse[InvoiceResponse](
             data=response_items,
@@ -298,20 +340,21 @@ class SaaSRepository:
         await self.db.refresh(invoice)
         return invoice
 
-    async def update_invoice(self, invoice_id: int, **kwargs) -> Invoice:
+    async def update_invoice(self, invoice_id: int, tenant_id: int, **kwargs) -> Invoice:
         await self.db.execute(
-            update(Invoice).where(Invoice.id == invoice_id).values(**kwargs)
+            update(Invoice)
+            .where(and_(Invoice.id == invoice_id, Invoice.tenant_id == tenant_id))
+            .values(**kwargs)
         )
         await self.db.commit()
         result = await self.db.execute(
-            select(Invoice).where(Invoice.id == invoice_id)
+            select(Invoice).where(and_(Invoice.id == invoice_id, Invoice.tenant_id == tenant_id))
         )
         invoice = result.scalar_one_or_none()
         if not invoice:
             raise NotFoundError("الفاتورة غير موجودة")
         return invoice
 
-    # 🔥 دالة جديدة: جلب جميع الفواتير (للمشرفين)
     async def get_all_invoices(self) -> List[Invoice]:
         result = await self.db.execute(select(Invoice))
         return list(result.scalars().all())
@@ -327,9 +370,11 @@ class SaaSRepository:
     ) -> Optional[TenantFeatureFlag]:
         result = await self.db.execute(
             select(TenantFeatureFlag).where(
-                TenantFeatureFlag.tenant_id == tenant_id,
-                TenantFeatureFlag.service_id == service_id,
-                TenantFeatureFlag.feature_key == feature_key
+                and_(
+                    TenantFeatureFlag.tenant_id == tenant_id,
+                    TenantFeatureFlag.service_id == service_id,
+                    TenantFeatureFlag.feature_key == feature_key
+                )
             )
         )
         return result.scalar_one_or_none()
@@ -343,7 +388,6 @@ class SaaSRepository:
     ) -> TenantFeatureFlag:
         flag = await self.get_feature_flag(tenant_id, service_id, feature_key)
         if flag:
-            # ✅ استخدام setattr بدلاً من التعيين المباشر لتجنب خطأ Pylance
             setattr(flag, 'is_enabled', enabled)
             await self.db.commit()
             await self.db.refresh(flag)

@@ -1,8 +1,9 @@
 # app/domains/digital_twin/models.py
 from sqlalchemy import (
     Column, Integer, BigInteger, String, ForeignKey, DateTime, Text,
-    Boolean, Numeric, JSON, Enum as SQLEnum, Index, CheckConstraint
+    Boolean, Numeric, Enum as SQLEnum, Index, CheckConstraint
 )
+from sqlalchemy.dialects.postgresql import JSONB  # ✅ تم إضافة الاستيراد الصحيح
 from sqlalchemy.sql import func
 from app.core.database import Base
 import enum
@@ -25,10 +26,10 @@ class LifeStatus(str, enum.Enum):
     ALIVE = "ALIVE"
     DECEASED = "DECEASED"
     PRESUMED_DEAD = "PRESUMED_DEAD"
-    LEGACY_MODE = "LEGACY_MODE"   # بعد الوفاة، يعمل كـ avatar إرثي
+    LEGACY_MODE = "LEGACY_MODE"
 
 class MilestoneType(str, enum.Enum):
-    IDENTITY_RESERVATION = "IDENTITY_RESERVATION"  # حجز هوية الجنين
+    IDENTITY_RESERVATION = "IDENTITY_RESERVATION"
     BIRTH = "BIRTH"
     GRADUATION = "GRADUATION"
     MARRIAGE = "MARRIAGE"
@@ -46,19 +47,18 @@ class DigitalTwinConfig(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
-    agent_id = Column(Integer, nullable=True)  # من قطاع AI Agents (التوأم كـ Agent)
+    agent_id = Column(Integer, nullable=True)
 
-    # إعدادات الخصوصية والاقتصاد
     global_access_level = Column(SQLEnum(TwinAccessLevel), default=TwinAccessLevel.PRIVATE)
     interaction_fee_mrusdt = Column(Numeric(15, 8), default=0)
     subscription_monthly_mrusdt = Column(Numeric(15, 8), default=0)
 
-    capabilities = Column(JSON, default=list)       # قائمة بـ TwinCapability
-    knowledge_boundaries = Column(JSON, default=dict)  # حدود معرفة التوأم (ما يمكنه فعله)
+    capabilities = Column(JSONB, default=list)
+    knowledge_boundaries = Column(JSONB, default=dict)
 
-    max_spending_limit = Column(Numeric(15, 8), default=0)  # حد الإنفاق نيابة عن المالك
+    max_spending_limit = Column(Numeric(15, 8), default=0)
 
     is_active = Column(Boolean, default=True)
     settlement_type = Column(String(50), default="WEB2_FIAT")
@@ -77,12 +77,12 @@ class TwinPermission(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     twin_config_id = Column(Integer, ForeignKey("digital_twin_configs.id"), nullable=False, index=True)
     grantee_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    grantee_rank = Column(String(50), nullable=True)        # أو منح الصلاحية بناءً على الرتبة السيادية
+    grantee_rank = Column(String(50), nullable=True)
     access_granted = Column(Boolean, default=True)
-    override_fee = Column(Boolean, default=False)          # هل يُعفى من رسوم التفاعل؟
+    override_fee = Column(Boolean, default=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -95,23 +95,23 @@ class TwinInteractionLog(Base):
         Index("ix_twin_interaction_visitor", "visitor_id"),
         Index("ix_twin_interaction_idempotency", "idempotency_key", unique=True, postgresql_where="idempotency_key IS NOT NULL"),
         Index("ix_twin_interaction_created", "created_at"),
+        Index("ix_twin_interaction_visitor_created", "visitor_id", "created_at"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     twin_config_id = Column(Integer, ForeignKey("digital_twin_configs.id"), nullable=False, index=True)
     visitor_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
-    # 🔥 Idempotency Key (لمنع تسجيل التفاعلات المكررة)
     idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
-    interaction_type = Column(String(50), nullable=False)  # TEXT, VOICE, METAVERSE_AVATAR
+    interaction_type = Column(String(50), nullable=False)
     duration_minutes = Column(Integer, default=0)
 
     fee_paid_mrusdt = Column(Numeric(15, 8), default=0)
     payout_tx_hash = Column(String(100), nullable=True)
 
-    is_affiliate_enabled = Column(Boolean, default=False)  # هل حصل الداعي على عمولة؟
+    is_affiliate_enabled = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -124,23 +124,20 @@ class TimeCapsule(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
 
-    # الرسائل والفيديوهات المشفرة
-    encrypted_payload_hash = Column(Text, nullable=False)  # هاش المحتوى المشفر
-    video_will_ipfs = Column(String(100), nullable=True)   # فيديو وصية على IPFS
+    encrypted_payload_hash = Column(Text, nullable=False)
+    video_will_ipfs = Column(String(100), nullable=True)
 
-    # نبضات الحياة
     heartbeat_interval_days = Column(Integer, default=90)
     last_heartbeat_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # من يملك حق فتح الخزنة بعد الوفاة (AI Avatar)
-    ai_avatar_access_id = Column(Integer, nullable=True)   # مؤشر لـ AIAgent
+    ai_avatar_access_id = Column(Integer, nullable=True)
 
-    status = Column(String(50), default="ALIVE")  # ALIVE, DECEASED, UNLOCKED
+    status = Column(String(50), default="ALIVE")
 
-    encrypted_credentials = Column(JSON, nullable=True)   # مفاتيح المحافظ المشفرة
+    encrypted_credentials = Column(JSONB, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -154,13 +151,13 @@ class LegacyBeneficiary(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     capsule_id = Column(Integer, ForeignKey("time_capsules.id"), nullable=False, index=True)
     beneficiary_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
-    relationship_type = Column(String(50), nullable=True)   # SON, DAUGHTER, SPOUSE, CHARITY
-    access_share_percentage = Column(Integer, default=100)  # نسبة ما سيحصل عليه من الأصول
-    heir_wallet_address = Column(String(42), nullable=False)  # محفظة الوريث
+    relationship_type = Column(String(50), nullable=True)
+    access_share_percentage = Column(Integer, default=100)
+    heir_wallet_address = Column(String(42), nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -174,12 +171,12 @@ class DigitalWill(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
 
-    will_content_ipfs = Column(String(100), nullable=False)  # نص الوصية على IPFS
-    will_nft_id = Column(String(100), unique=True, nullable=False)  # NFT لتوثيق الوصية
-    legal_witness_tx = Column(String(100), nullable=True)    # توقيع الشهود
+    will_content_ipfs = Column(String(100), nullable=False)
+    will_nft_id = Column(String(100), unique=True, nullable=False)
+    legal_witness_tx = Column(String(100), nullable=True)
 
     is_executed = Column(Boolean, default=False)
     executed_at = Column(DateTime(timezone=True), nullable=True)
@@ -197,17 +194,17 @@ class DeathOracleCheck(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
 
-    check_interval_days = Column(Integer, default=30)   # كم مرة يتم فحص النبض
+    check_interval_days = Column(Integer, default=30)
     last_confirmed_alive_at = Column(DateTime(timezone=True), server_default=func.now())
-    grace_period_days = Column(Integer, default=7)      # مهلة بعد انقطاع النبض
+    grace_period_days = Column(Integer, default=7)
 
-    status = Column(String(50), default="MONITORING")   # MONITORING, ALIVE_AND_WELL, DEATH_PENDING, DEATH_CONFIRMED
+    status = Column(String(50), default="MONITORING")
 
     official_death_certificate_ipfs = Column(String(100), nullable=True)
-    release_tx_hash = Column(String(100), nullable=True)  # هاش تفعيل توزيع الإرث
+    release_tx_hash = Column(String(100), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -222,15 +219,15 @@ class LifeMilestone(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     milestone_type = Column(SQLEnum(MilestoneType), nullable=False)
     title = Column(String(255), nullable=False)
     description = Column(String(1024), nullable=True)
 
-    milestone_nft_id = Column(String(100), unique=True, nullable=True)  # NFT كشهادة إنجاز
-    evidence_ipfs_hash = Column(String(100), nullable=True)             # دليل (شهادة ميلاد، عقد زواج، براءة اختراع)
+    milestone_nft_id = Column(String(100), unique=True, nullable=True)
+    evidence_ipfs_hash = Column(String(100), nullable=True)
 
     occurrence_date = Column(DateTime(timezone=True), nullable=False)
 
@@ -246,12 +243,12 @@ class PreBirthRecord(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     parent_1_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     parent_2_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
-    reserved_sovereign_id = Column(String(100), unique=True, nullable=False)  # الاسم السيادي المحجوز للطفل
-    trust_fund_wallet = Column(String(42), nullable=True)                     # محفظة للاستثمار للطفل
+    reserved_sovereign_id = Column(String(100), unique=True, nullable=False)
+    trust_fund_wallet = Column(String(42), nullable=True)
 
     expected_arrival_date = Column(DateTime(timezone=True), nullable=True)
     genetic_profile_hash = Column(String(100), nullable=True)

@@ -1,8 +1,9 @@
 # app/domains/commerce/models.py
 from sqlalchemy import (
     Column, Integer, BigInteger, String, ForeignKey, Text, Boolean,
-    Numeric, DateTime, JSON, Index, CheckConstraint, text
+    Numeric, DateTime, Index, CheckConstraint, text
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from app.core.database import Base
 
@@ -61,14 +62,14 @@ class Product(Base):
 
     base_price_mrusdt = Column(Numeric(30, 8), nullable=False)
 
-    seo_metadata = Column(JSON, default=dict)
-    media_gallery = Column(JSON, default=list)
+    seo_metadata = Column(JSONB, default=dict)
+    media_gallery = Column(JSONB, default=list)
 
     is_affiliate_eligible = Column(Boolean, default=True)
     affiliate_model = Column(String(50), default="FLAT_RATE")
     affiliate_reward_percentage = Column(Numeric(5, 2), default=0)
     max_affiliate_tiers = Column(Integer, default=1)
-    custom_affiliate_tiers = Column(JSON, nullable=True)
+    custom_affiliate_tiers = Column(JSONB, nullable=True)
 
     is_published = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
@@ -87,7 +88,7 @@ class ProductVariant(Base):
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
 
     sku = Column(String(100), nullable=False, index=True)
-    attributes = Column(JSON, default=dict)
+    attributes = Column(JSONB, default=dict)
 
     price_mrusdt = Column(Numeric(30, 8), nullable=False)
     discount_price = Column(Numeric(30, 8), nullable=True)
@@ -128,25 +129,28 @@ class Address(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
-# ========== الطلبات ==========
+# ========== الطلبات (مع tenant_id) ==========
 class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
         Index("ix_orders_customer_status", "customer_id", "status"),
         Index("ix_orders_store_id", "store_id"),
+        Index("ix_orders_created_status", "created_at", "status"),
         Index("ix_orders_created_at", "created_at"),
         Index("ix_orders_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
         Index("ix_orders_affiliate_code", "affiliate_code_used"),
+        Index("ix_orders_tenant_id", "tenant_id"),
+        Index("ix_orders_tenant_status", "tenant_id", "status"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     store_id = Column(Integer, ForeignKey("store_profiles.id"), nullable=False, index=True)
     customer_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    # ✅ Idempotency Key (لمنع تكرار الطلبات)
     idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
-    transaction_id = Column(Integer, nullable=True)  # ربط بـ finance.Transaction
+    transaction_id = Column(Integer, nullable=True)
 
     total_amount_mrusdt = Column(Numeric(30, 8), nullable=False)
     discount_applied = Column(Numeric(30, 8), default=0)
@@ -249,7 +253,7 @@ class AffiliateConfig(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
-# ========== طرق الدفع الإضافية ==========
+# ========== طرق الدفع الإضافية (مع tenant_id) ==========
 class PaymentRequest(Base):
     __tablename__ = "payment_requests"
     __table_args__ = (
@@ -259,15 +263,16 @@ class PaymentRequest(Base):
         Index("ix_payment_requests_status", "status"),
         Index("ix_payment_requests_payment_method", "payment_method"),
         Index("ix_payment_requests_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
+        Index("ix_payment_requests_tenant_id", "tenant_id"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     payment_method = Column(String(50), nullable=False)
     amount = Column(Numeric(30, 8), nullable=False)
     currency = Column(String(20), nullable=False)
 
-    # ✅ Idempotency Key لمنع تكرار طلبات الدفع
     idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     agent_code = Column(String(20), unique=True, nullable=True)
@@ -275,7 +280,7 @@ class PaymentRequest(Base):
     agent_confirmed_at = Column(DateTime(timezone=True), nullable=True)
 
     gateway_transaction_id = Column(String(255), nullable=True, index=True)
-    gateway_response = Column(JSON, nullable=True)
+    gateway_response = Column(JSONB, nullable=True)
 
     status = Column(String(50), default="PENDING")
     paid_at = Column(DateTime(timezone=True), nullable=True)
@@ -284,21 +289,25 @@ class PaymentRequest(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
-# ========== ✅ سجل التدقيق التجاري ==========
+# ========== ✅ سجل التدقيق التجاري (مع tenant_id) ==========
 class CommerceAuditLog(Base):
     __tablename__ = "commerce_audit_logs"
     __table_args__ = (
         Index("ix_commerce_audit_logs_user_id", "user_id"),
         Index("ix_commerce_audit_logs_order_id", "order_id"),
         Index("ix_commerce_audit_logs_action", "action"),
+        Index("ix_commerce_audit_logs_user_created", "user_id", "created_at"),
         Index("ix_commerce_audit_logs_created_at", "created_at"),
+        Index("ix_commerce_audit_logs_tenant_id", "tenant_id"),
+        Index("ix_commerce_audit_logs_tenant_user", "tenant_id", "user_id"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=True, index=True)
-    action = Column(String(50), nullable=False)  # CHECKOUT, PAYMENT_CONFIRMED, ORDER_SHIPPED, COMMISSION_DISTRIBUTED
-    details = Column(JSON, nullable=False)
+    action = Column(String(50), nullable=False)
+    details = Column(JSONB, nullable=False)
     ip_address = Column(String(45), nullable=True)
     user_agent = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -6,7 +6,7 @@ from decimal import Decimal
 import uuid
 import bleach
 
-from app.domains.ai_agents.repository import AIAgentsRepository, AIAgentRepository
+from app.domains.ai_agents.repository import AIAgentsRepository
 from app.domains.ai_agents.models import AIAgent, AgentApprovalQueue, ApprovalStatus, AgentStatus, AITaskLog
 from app.domains.ai_agents.schemas import (
     AIAgentCreate,
@@ -25,47 +25,49 @@ from app.core.redis_client import redis_client
 from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.domains.finance.service import FinanceService
 from app.domains.identity.models import User
+from app.core.pagination import PaginatedResponse
 
 
 class AIAgentsService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, tenant_id: int):
         self.db = db
+        self.tenant_id = tenant_id
         self.repo = AIAgentsRepository(db)
-        self.finance = FinanceService(db)
-        self.event_bus = EventBus(redis_client)  # type: ignore
+        self.finance = FinanceService(db, tenant_id)
+        self.event_bus = EventBus(cast(Any, redis_client))  # ✅ تجاهل النوع
 
     # ==========================================
-    # دوال مساعدة (معدلة لتوافق الأنواع)
+    # دوال مساعدة (مع tenant_id)
     # ==========================================
 
-    async def _check_tenant_access(self, tenant_id: int, resource_tenant_id: int):
-        if tenant_id != resource_tenant_id:
+    async def _check_tenant_access(self, resource_tenant_id: int):
+        if self.tenant_id != resource_tenant_id:
             raise PermissionDeniedError("ليس لديك صلاحية الوصول لهذا المورد")
 
     async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
-        """التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency."""
         if idempotency_key:
-            cached = await get_idempotency_result(idempotency_key)
+            cache_key = f"idempotency:{self.tenant_id}:{idempotency_key}"
+            cached = await get_idempotency_result(cache_key)
             if cached is not None:
                 return cached
         return None
 
     async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
-        """تخزين نتيجة العملية بعد النجاح."""
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, result)
+            cache_key = f"idempotency:{self.tenant_id}:{idempotency_key}"
+            await store_idempotency_result(cache_key, result)
 
     # ==========================================
-    # 1. إدارة الوكلاء (Agents)
+    # 1. إدارة الوكلاء (Agents) – مع tenant_id
     # ==========================================
 
-    async def create_agent(self, owner_id: int, tenant_id: int, data: Dict[str, Any]) -> AIAgent:
+    async def create_agent(self, owner_id: int, data: Dict[str, Any]) -> AIAgent:
         sanitized_name = bleach.clean(data.get("name", ""), tags=[], strip=True)
         sanitized_prompt = bleach.clean(data.get("system_prompt", ""), tags=[], strip=True)
 
         agent = await self.repo.create_agent(
             owner_id=owner_id,
-            tenant_id=tenant_id,
+            tenant_id=self.tenant_id,
             name=sanitized_name,
             role=data["role"],
             system_prompt=sanitized_prompt,
@@ -78,15 +80,18 @@ class AIAgentsService:
 
         await audit_log(
             user_id=owner_id,
-            tenant_id=tenant_id,  # type: ignore
             action="AI_AGENT_CREATED",
-            resource_id=agent.id,  # type: ignore
-            details={"name": agent.name, "role": agent.role.value if hasattr(agent.role, 'value') else str(agent.role)}
+            details={
+                "name": agent.name,
+                "role": agent.role.value if hasattr(agent.role, 'value') else str(agent.role),
+                "tenant_id": self.tenant_id,
+                "agent_id": agent.id
+            }
         )
 
         await self.event_bus.publish("ai.agent.created", {
             "agent_id": agent.id,
-            "tenant_id": tenant_id,
+            "tenant_id": self.tenant_id,
             "owner_id": owner_id,
             "name": agent.name
         })
@@ -95,54 +100,53 @@ class AIAgentsService:
 
     async def list_agents(
         self,
-        tenant_id: int,
         owner_id: Optional[int] = None,
         role: Optional[str] = None,
         status: Optional[str] = None,
         skip: int = 0,
         limit: int = 50
-    ) -> List[AIAgent]:
-        return await self.repo.list_agents(tenant_id, owner_id, role, status, skip, limit)
+    ) -> PaginatedResponse[AIAgentResponse]:
+        return await self.repo.list_agents(self.tenant_id, owner_id, role, status, skip, limit)
 
-    async def get_agent(self, agent_id: int, tenant_id: int) -> Optional[AIAgent]:
-        return await self.repo.get_agent(agent_id, tenant_id)
+    async def get_agent(self, agent_id: int) -> Optional[AIAgent]:
+        return await self.repo.get_agent(agent_id, self.tenant_id)
 
-    async def get_agent_by_owner(self, agent_id: int, owner_id: int, tenant_id: int) -> Optional[AIAgent]:
-        return await self.repo.get_agent_by_owner(agent_id, owner_id, tenant_id)
+    async def get_agent_by_owner(self, agent_id: int, owner_id: int) -> Optional[AIAgent]:
+        return await self.repo.get_agent_by_owner(agent_id, owner_id, self.tenant_id)
 
     async def update_agent_status(
         self,
         agent_id: int,
-        tenant_id: int,
         status: str,
         executor_user_id: int
     ) -> Optional[AIAgent]:
-        agent = await self.repo.get_agent(agent_id, tenant_id)
+        agent = await self.repo.get_agent(agent_id, self.tenant_id)
         if not agent:
             return None
-        await self.repo.update_agent_status(agent_id, tenant_id, status)
+        await self.repo.update_agent_status(agent_id, self.tenant_id, status)
 
         await audit_log(
             user_id=executor_user_id,
-            tenant_id=tenant_id,  # type: ignore
             action="AI_AGENT_STATUS_UPDATED",
-            resource_id=agent_id,  # type: ignore
-            details={"new_status": status}
+            details={
+                "agent_id": agent_id,
+                "new_status": status,
+                "tenant_id": self.tenant_id
+            }
         )
 
-        return await self.repo.get_agent(agent_id, tenant_id)
+        return await self.repo.get_agent(agent_id, self.tenant_id)
 
-    async def delete_agent(self, agent_id: int, tenant_id: int, soft: bool = True) -> bool:
-        return await self.repo.delete_agent(agent_id, tenant_id, soft)
+    async def delete_agent(self, agent_id: int, soft: bool = True) -> bool:
+        return await self.repo.delete_agent(agent_id, self.tenant_id, soft)
 
     # ==========================================
-    # 2. تنفيذ إجراءات الوكيل (مع Idempotency و Human-in-the-loop)
+    # 2. تنفيذ إجراءات الوكيل (مع Idempotency و tenant_id)
     # ==========================================
 
     async def execute_agent_action(
         self,
         agent_id: int,
-        tenant_id: int,
         action_type: str,
         payload: Dict[str, Any],
         executor_user_id: int,
@@ -152,7 +156,7 @@ class AIAgentsService:
         if cached:
             return cached
 
-        agent = await self.repo.get_agent(agent_id, tenant_id)
+        agent = await self.repo.get_agent(agent_id, self.tenant_id)
         if not agent:
             raise NotFoundError(f"الوكيل {agent_id} غير موجود")
         if cast(str, agent.status) != AgentStatus.ACTIVE.value and cast(str, agent.status) != "ACTIVE":
@@ -171,11 +175,10 @@ class AIAgentsService:
             task_type = TaskType.ARABIC_CHAT
             if action_type == "TRANSLATE":
                 task_type = TaskType.TRANSLATION
-            elif action_type in ("ANALYZE_FINANCE", "HEALTH_CHECK", "COMPLEX_ANALYSIS"):
-                task_type = TaskType.COMPLEX_ANALYSIS  # type: ignore
+            # إذا كان هناك أنواع أخرى، يمكن إضافتها هنا
 
             task_log = await self.repo.create_task_log(
-                tenant_id=tenant_id,
+                tenant_id=self.tenant_id,
                 agent_id=agent_id,
                 user_id=executor_user_id,
                 task_type=task_type.value if hasattr(task_type, 'value') else str(task_type),
@@ -189,7 +192,7 @@ class AIAgentsService:
 
             result = await ai_engine.generate(
                 prompt=sanitized_prompt,
-                system_prompt=agent.system_prompt,  # type: ignore
+                system_prompt=cast(str, agent.system_prompt),
                 language=sanitized_payload["language"],
                 task_type=task_type,
                 use_cache=True,
@@ -201,12 +204,12 @@ class AIAgentsService:
             if result and isinstance(result, dict):
                 cost = result.get("cost_mrusdt", Decimal('0.0'))
                 if cost:
-                    await self.repo.update_task_log_cost(task_log.id, Decimal(str(cost)))  # type: ignore
+                    await self.repo.update_task_log_cost(cast(int, task_log.id), Decimal(str(cost)))
 
         except Exception as e:
             logger.error(f"AI execution failed for agent {agent_id}: {e}")
             await self.repo.create_task_log(
-                tenant_id=tenant_id,
+                tenant_id=self.tenant_id,
                 agent_id=agent_id,
                 user_id=executor_user_id,
                 task_type="ERROR",
@@ -219,9 +222,9 @@ class AIAgentsService:
             )
             raise
 
-        if agent.requires_human_approval:  # type: ignore
+        if cast(bool, agent.requires_human_approval):
             approval = await self.repo.create_approval_request(
-                tenant_id=tenant_id,
+                tenant_id=self.tenant_id,
                 agent_id=agent_id,
                 human_approver_id=executor_user_id,
                 action_type=action_type,
@@ -245,33 +248,32 @@ class AIAgentsService:
 
         await audit_log(
             user_id=executor_user_id,
-            tenant_id=tenant_id,  # type: ignore
             action="AI_AGENT_ACTION_EXECUTED",
-            resource_id=agent_id,  # type: ignore
             details={
+                "agent_id": agent_id,
                 "action_type": action_type,
                 "status": response["status"],
-                "approval_id": response.get("approval_id")
+                "approval_id": response.get("approval_id"),
+                "tenant_id": self.tenant_id
             }
         )
 
         return response
 
     # ==========================================
-    # 3. الموافقات البشرية (Human-in-the-loop)
+    # 3. الموافقات البشرية (مع tenant_id)
     # ==========================================
 
-    async def get_pending_approvals(self, human_approver_id: int, tenant_id: int) -> List[AgentApprovalQueue]:
-        return await self.repo.get_pending_approvals(human_approver_id, tenant_id)
+    async def get_pending_approvals(self, human_approver_id: int) -> List[AgentApprovalQueue]:
+        return await self.repo.get_pending_approvals(human_approver_id, self.tenant_id)
 
     async def resolve_approval(
         self,
         approval_id: int,
-        tenant_id: int,
         human_approver_id: int,
         resolution: Dict[str, Any]
     ) -> Optional[AgentApprovalQueue]:
-        approval = await self.repo.get_approval(approval_id, tenant_id)
+        approval = await self.repo.get_approval(approval_id, self.tenant_id)
         if not approval:
             return None
 
@@ -287,7 +289,7 @@ class AIAgentsService:
         async with self.db.begin_nested():
             updated_approval = await self.repo.resolve_approval(
                 approval_id=approval_id,
-                tenant_id=tenant_id,
+                tenant_id=self.tenant_id,
                 status=status_value,
                 feedback=feedback
             )
@@ -297,12 +299,12 @@ class AIAgentsService:
 
         await audit_log(
             user_id=human_approver_id,
-            tenant_id=tenant_id,  # type: ignore
             action="AI_APPROVAL_RESOLVED",
-            resource_id=approval_id,  # type: ignore
             details={
+                "approval_id": approval_id,
                 "status": status_value,
-                "feedback": feedback
+                "feedback": feedback,
+                "tenant_id": self.tenant_id
             }
         )
 
@@ -310,29 +312,28 @@ class AIAgentsService:
 
     async def list_approvals(
         self,
-        tenant_id: int,
         agent_id: Optional[int] = None,
         status: Optional[str] = None,
         skip: int = 0,
         limit: int = 50
-    ) -> List[AgentApprovalQueue]:
-        return await self.repo.list_approvals(tenant_id, agent_id, status, skip, limit)
+    ) -> PaginatedResponse[ApprovalResponse]:
+        return await self.repo.list_approvals(self.tenant_id, agent_id, status, skip, limit)
 
-    async def get_approval(self, approval_id: int, tenant_id: int) -> Optional[AgentApprovalQueue]:
-        return await self.repo.get_approval(approval_id, tenant_id)
+    async def get_approval(self, approval_id: int) -> Optional[AgentApprovalQueue]:
+        return await self.repo.get_approval(approval_id, self.tenant_id)
 
     # ==========================================
-    # 4. التحليلات والإحصائيات (Analytics)
+    # 4. التحليلات والإحصائيات (مع tenant_id)
     # ==========================================
 
-    async def get_agent_analytics(self, agent_id: int, tenant_id: int, days: int = 30) -> Dict[str, Any]:
-        agent = await self.repo.get_agent(agent_id, tenant_id)
+    async def get_agent_analytics(self, agent_id: int, days: int = 30) -> Dict[str, Any]:
+        agent = await self.repo.get_agent(agent_id, self.tenant_id)
         if not agent:
             raise NotFoundError(f"الوكيل {agent_id} غير موجود")
-        return await self.repo.get_agent_usage_stats(agent_id, tenant_id, days)
+        return await self.repo.get_agent_usage_stats(agent_id, self.tenant_id, days)
 
-    async def get_agent_status(self, agent_id: int, tenant_id: int) -> Dict[str, Any]:
-        agent = await self.repo.get_agent(agent_id, tenant_id)
+    async def get_agent_status(self, agent_id: int) -> Dict[str, Any]:
+        agent = await self.repo.get_agent(agent_id, self.tenant_id)
         if not agent:
             raise NotFoundError(f"الوكيل {agent_id} غير موجود")
         return {
@@ -342,22 +343,22 @@ class AIAgentsService:
         }
 
     # ==========================================
-    # 5. استخدامات الـ AI للمستأجر (SaaS Dashboard)
+    # 5. استخدامات الـ AI للمستأجر (مع tenant_id)
     # ==========================================
 
-    async def get_ai_usage(self, tenant_id: int) -> Dict[str, Any]:
-        subscription = await self.repo.get_tenant_subscription(tenant_id)
-        features = subscription.features if subscription else {}  # type: ignore
+    async def get_ai_usage(self) -> Dict[str, Any]:
+        subscription = await self.repo.get_tenant_subscription(self.tenant_id)
+        features = subscription.features if subscription else {}
 
-        current_agents = await self.repo.count_agents(tenant_id)
-        monthly_calls = await self.repo.count_monthly_calls(tenant_id)
-        monthly_cost = await self.repo.get_monthly_ai_cost(tenant_id)
+        current_agents = await self.repo.count_agents(self.tenant_id)
+        monthly_calls = await self.repo.count_monthly_calls(self.tenant_id)
+        monthly_cost = await self.repo.get_monthly_ai_cost(self.tenant_id)
 
-        max_agents = features.get("max_agents", 0) if features else 0  # type: ignore
-        monthly_limit = features.get("monthly_ai_calls", 0) if features else 0  # type: ignore
+        max_agents = features.get("max_agents", 0) if features else 0
+        monthly_limit = features.get("monthly_ai_calls", 0) if features else 0
 
         return {
-            "subscription_status": subscription.status if subscription else "NO_SUBSCRIPTION",  # type: ignore
+            "subscription_status": subscription.status if subscription else "NO_SUBSCRIPTION",
             "max_agents": max_agents,
             "current_agents": current_agents,
             "monthly_calls_limit": monthly_limit,
@@ -366,37 +367,32 @@ class AIAgentsService:
             "monthly_cost_mrusdt": float(monthly_cost),
             "features": features,
         }
+
     # ==========================================
-    # 6. الفوترة الشهرية للـ AI (جديدة)
+    # 6. الفوترة الشهرية للـ AI (مع tenant_id)
     # ==========================================
 
-    async def generate_monthly_invoice(self, tenant_id: int) -> Optional[Any]:
-        """
-        توليد فاتورة استخدام الـ AI للمستأجر في الشهر الحالي.
-        تُستدعى من مهمة Celery (billing.generate_monthly_ai_invoices).
-        """
+    async def generate_monthly_invoice(self) -> Optional[Any]:
         from app.domains.invoicing.service import InvoicingService
         from datetime import timedelta
 
         try:
-            # 1. حساب إجمالي تكلفة استخدام الـ AI في الشهر الحالي
-            monthly_cost = await self.repo.get_monthly_ai_cost(tenant_id)
+            monthly_cost = await self.repo.get_monthly_ai_cost(self.tenant_id)
             if monthly_cost == Decimal(0):
-                logger.info(f"No AI usage for tenant {tenant_id}, skipping invoice.")
+                logger.info(f"No AI usage for tenant {self.tenant_id}, skipping invoice.")
                 return None
 
-            # 2. إنشاء فاتورة جديدة
-            invoicing = InvoicingService(self.db)
+            invoicing = InvoicingService(self.db, self.tenant_id)
             invoice = await invoicing.create_invoice(
-                entity_id=tenant_id,
-                user_id=0,  # سيتم تحديثه لاحقاً
+                entity_id=self.tenant_id,
+                user_id=0,
                 amount=monthly_cost,
-                description=f"Monthly AI usage invoice for tenant {tenant_id}",
+                description=f"Monthly AI usage invoice for tenant {self.tenant_id}",
                 due_date=datetime.utcnow() + timedelta(days=30),
                 invoice_type="AI_USAGE",
-                reference_id=tenant_id
+                reference_id=self.tenant_id
             )
             return invoice
         except Exception as e:
-            logger.error(f"Failed to generate monthly invoice for tenant {tenant_id}: {e}")
+            logger.error(f"Failed to generate monthly invoice for tenant {self.tenant_id}: {e}")
             raise

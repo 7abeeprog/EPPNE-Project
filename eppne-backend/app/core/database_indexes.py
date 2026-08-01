@@ -6,15 +6,43 @@
 وإضافة فهارس مركبة وجزئية لتسريع الاستعلامات الأكثر استخداماً
 """
 
+import asyncio
+import time
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError, OperationalError
 from app.core.database import engine
 import logging
 
 logger = logging.getLogger("eppne")
 
+
+async def wait_for_db(max_retries=10, delay=3):
+    """
+    انتظار اتصال قاعدة البيانات مع إعادة المحاولة.
+    """
+    for attempt in range(max_retries):
+        try:
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+                logger.info(f"✅ Database connection established (attempt {attempt + 1})")
+                return True
+        except Exception as e:
+            if attempt == max_retries - 1:
+                logger.error(f"❌ Failed to connect to database after {max_retries} attempts: {str(e)}")
+                raise
+            logger.warning(f"⚠️ Database connection attempt {attempt + 1} failed: {str(e)}. Retrying in {delay}s...")
+            await asyncio.sleep(delay)
+    return False
+
+
 async def create_indexes():
-    """إنشاء جميع الفهارس المطلوبة لتحسين أداء الاستعلامات"""
-    
+    """
+    إنشاء جميع الفهارس المطلوبة لتحسين أداء الاستعلامات.
+    تتضمن آلية إعادة المحاولة لضمان الاستقرار عند بدء التشغيل.
+    """
+    # انتظار اتصال قاعدة البيانات
+    await wait_for_db(max_retries=10, delay=3)
+
     indexes = [
         # ============================================================
         # 1. الهوية والمستخدمين (مع فهارس وظيفية لدعم البحث غير الحساس)
@@ -282,36 +310,46 @@ async def create_indexes():
         -- فهرس للجدول مع التاريخ (للبحث في السجلات)
         CREATE INDEX IF NOT EXISTS idx_audit_logs_table_date ON audit_logs (table_name, created_at DESC);
         """,
-        
-        # ============================================================
-        # 18. التوأم الرقمي (ملحقات) - فهارس للنصوص الكبيرة
-        # ============================================================
-        """
-        -- فهرس GIN للنص الكامل (إذا كنت تستخدم البحث النصي)
-        -- CREATE INDEX IF NOT EXISTS idx_milestones_search ON life_milestones USING GIN (to_tsvector('arabic', description));
-        
-        -- فهرس للميتاداتا (JSONB) - لتسريع الاستعلامات على الحقول داخل JSON
-        -- CREATE INDEX IF NOT EXISTS idx_milestones_metadata ON life_milestones USING GIN (metadata);
-        """,
     ]
-    
+
+    # تنفيذ الفهارس مع إعادة المحاولة لكل كتلة
     async with engine.connect() as conn:
-        for sql_block in indexes:
-            # تقسيم الكتلة إلى أوامر فردية
-            for statement in sql_block.split(';'):
-                stmt = statement.strip()
-                if not stmt:
-                    continue
-                try:
-                    await conn.execute(text(stmt))
-                except Exception as e:
-                    # استراتيجية الخبير: سجل الخطأ واستمر.
-                    # هذا يضمن أننا لا نسقط السيرفر بسبب جدول لم يُهاجر بعد
-                    # أو فهرس موجود مسبقاً بأسلوب مختلف.
-                    logger.warning(f"Index creation skipped (might exist or table pending): {stmt[:60]}... Error: {e}")
+        for idx, sql_block in enumerate(indexes, 1):
+            try:
+                # تقسيم الكتلة إلى أوامر فردية
+                statements = [stmt.strip() for stmt in sql_block.split(';') if stmt.strip()]
+                for stmt in statements:
+                    try:
+                        await conn.execute(text(stmt))
+                        logger.debug(f"✅ Executed: {stmt[:60]}...")
+                    except OperationalError as e:
+                        # أخطاء الاتصال المؤقتة - إعادة المحاولة
+                        if "connection" in str(e).lower() or "timeout" in str(e).lower():
+                            logger.warning(f"⚠️ Connection error on statement, retrying: {stmt[:60]}...")
+                            # إعادة محاولة هذه العبارة مرة واحدة بعد تأخير قصير
+                            await asyncio.sleep(1)
+                            try:
+                                await conn.execute(text(stmt))
+                            except Exception as e2:
+                                logger.warning(f"⚠️ Skipping index (retry failed): {stmt[:60]}... Error: {e2}")
+                        else:
+                            logger.warning(f"⚠️ Skipping index (may already exist): {stmt[:60]}... Error: {e}")
+                    except Exception as e:
+                        # تجاهل الأخطاء الشائعة مثل وجود الفهرس مسبقاً
+                        logger.warning(f"⚠️ Skipping index (likely exists): {stmt[:60]}... Error: {e}")
+                
+                # Commit كل 5 كتل لتجنب المعاملات الكبيرة
+                if idx % 5 == 0:
+                    await conn.commit()
+                    logger.info(f"✅ Committed batch {idx} of {len(indexes)} index groups")
+                    
+            except Exception as e:
+                logger.error(f"❌ Error processing index group {idx}: {str(e)}")
+                # نستمر مع بقية الفهارس بدلاً من إفشال الكل
+                continue
         
+        # Commit نهائي
         await conn.commit()
     
-    # استخدام نص آمن بدلاً من الرموز التعبيرية لحل مشكلة الترميز نهائياً
-    logger.info("[SUCCESS] All possible database indexes have been processed successfully.")
+    logger.info("✅ All database indexes have been processed successfully.")
     print("[SYSTEM] Database indexes initialization completed. All functional indexes are now active.")

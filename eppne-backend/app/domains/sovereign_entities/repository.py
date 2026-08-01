@@ -1,5 +1,6 @@
+# app/domains/sovereign_entities/repository.py
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete, func, and_, or_
+from sqlalchemy import select, update, delete, func, and_, or_, text
 from sqlalchemy.orm import selectinload, joinedload
 from typing import Optional, List, Dict, Any, cast
 from datetime import datetime
@@ -14,7 +15,7 @@ class SovereignEntitiesRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    # ========== Sovereign Entities ==========
+    # ========== Sovereign Entities (مع tenant_id) ==========
     async def create_entity(self, **kwargs) -> SovereignEntity:
         entity = SovereignEntity(**kwargs)
         self.db.add(entity)
@@ -22,15 +23,40 @@ class SovereignEntitiesRepository:
         await self.db.refresh(entity)
         return entity
 
-    async def get_entity(self, entity_id: int) -> Optional[SovereignEntity]:
+    async def get_entity(self, entity_id: int, tenant_id: int) -> Optional[SovereignEntity]:
         result = await self.db.execute(
-            select(SovereignEntity).where(SovereignEntity.id == entity_id, SovereignEntity.is_deleted == False)
+            select(SovereignEntity).where(
+                and_(
+                    SovereignEntity.id == entity_id,
+                    SovereignEntity.tenant_id == tenant_id,
+                    SovereignEntity.is_deleted == False
+                )
+            )
         )
         return result.scalar_one_or_none()
 
-    async def get_entity_by_slug(self, slug: str) -> Optional[SovereignEntity]:
+    async def get_entity_by_registration(self, registration_number: str, tenant_id: int) -> Optional[SovereignEntity]:
         result = await self.db.execute(
-            select(SovereignEntity).join(EntityPage).where(EntityPage.slug == slug, SovereignEntity.is_active == True)
+            select(SovereignEntity).where(
+                and_(
+                    SovereignEntity.registration_number == registration_number,
+                    SovereignEntity.tenant_id == tenant_id
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_entity_by_slug(self, slug: str, tenant_id: int) -> Optional[SovereignEntity]:
+        result = await self.db.execute(
+            select(SovereignEntity)
+            .join(EntityPage, EntityPage.entity_id == SovereignEntity.id)
+            .where(
+                and_(
+                    EntityPage.slug == slug,
+                    SovereignEntity.tenant_id == tenant_id,
+                    SovereignEntity.is_active == True
+                )
+            )
         )
         return result.scalar_one_or_none()
 
@@ -41,29 +67,57 @@ class SovereignEntitiesRepository:
         kyb_status: Optional[KYBStatus] = None,
         skip: int = 0,
         limit: int = 50
-    ) -> List[SovereignEntity]:
-        query = select(SovereignEntity).where(SovereignEntity.tenant_id == tenant_id, SovereignEntity.is_deleted == False)
+    ) -> dict:  # ✅ تغيير النوع إلى dict
+        query = select(SovereignEntity).where(
+            and_(
+                SovereignEntity.tenant_id == tenant_id,
+                SovereignEntity.is_deleted == False
+            )
+        )
         if entity_type:
             query = query.where(SovereignEntity.entity_type == entity_type)
         if kyb_status:
             query = query.where(SovereignEntity.kyb_status == kyb_status)
+
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+
         query = query.order_by(SovereignEntity.created_at.desc()).offset(skip).limit(limit)
         result = await self.db.execute(query)
-        return list(result.scalars().all())
+        items = list(result.scalars().all())
 
-    async def update_entity(self, entity_id: int, **kwargs) -> SovereignEntity:
-        await self.db.execute(update(SovereignEntity).where(SovereignEntity.id == entity_id).values(**kwargs))
+        return {
+            "items": items,
+            "total": total,
+            "skip": skip,
+            "limit": limit
+        }
+
+    async def update_entity(self, entity_id: int, tenant_id: int, **kwargs) -> SovereignEntity:
+        await self.db.execute(
+            update(SovereignEntity)
+            .where(and_(SovereignEntity.id == entity_id, SovereignEntity.tenant_id == tenant_id))
+            .values(**kwargs)
+        )
         await self.db.commit()
-        entity = await self.get_entity(entity_id)
+        entity = await self.get_entity(entity_id, tenant_id)
         if not entity:
             raise NotFoundError("Entity not found")
         return entity
 
-    async def delete_entity(self, entity_id: int, soft: bool = True) -> None:
+    async def delete_entity(self, entity_id: int, tenant_id: int, soft: bool = True) -> None:
         if soft:
-            await self.db.execute(update(SovereignEntity).where(SovereignEntity.id == entity_id).values(is_deleted=True, deleted_at=func.now()))
+            await self.db.execute(
+                update(SovereignEntity)
+                .where(and_(SovereignEntity.id == entity_id, SovereignEntity.tenant_id == tenant_id))
+                .values(is_deleted=True, deleted_at=func.now())
+            )
         else:
-            await self.db.execute(delete(SovereignEntity).where(SovereignEntity.id == entity_id))
+            await self.db.execute(
+                delete(SovereignEntity)
+                .where(and_(SovereignEntity.id == entity_id, SovereignEntity.tenant_id == tenant_id))
+            )
         await self.db.commit()
 
     # ========== Representatives ==========
@@ -75,11 +129,55 @@ class SovereignEntitiesRepository:
         return rep
 
     async def get_representatives(self, entity_id: int) -> List[EntityRepresentative]:
-        result = await self.db.execute(select(EntityRepresentative).where(EntityRepresentative.entity_id == entity_id, EntityRepresentative.is_active == True))
+        result = await self.db.execute(
+            select(EntityRepresentative).where(
+                and_(
+                    EntityRepresentative.entity_id == entity_id,
+                    EntityRepresentative.is_active == True
+                )
+            )
+        )
         return list(result.scalars().all())
 
+    async def get_representatives_by_user(self, user_id: int, tenant_id: int) -> List[EntityRepresentative]:
+        result = await self.db.execute(
+            select(EntityRepresentative)
+            .join(SovereignEntity, SovereignEntity.id == EntityRepresentative.entity_id)
+            .where(
+                and_(
+                    EntityRepresentative.user_id == user_id,
+                    EntityRepresentative.is_active == True,
+                    SovereignEntity.tenant_id == tenant_id,
+                    SovereignEntity.is_deleted == False
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_representative(self, entity_id: int, user_id: int, tenant_id: int) -> Optional[EntityRepresentative]:
+        result = await self.db.execute(
+            select(EntityRepresentative)
+            .join(SovereignEntity, SovereignEntity.id == EntityRepresentative.entity_id)
+            .where(
+                and_(
+                    EntityRepresentative.entity_id == entity_id,
+                    EntityRepresentative.user_id == user_id,
+                    EntityRepresentative.is_active == True,
+                    SovereignEntity.tenant_id == tenant_id
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def remove_representative(self, entity_id: int, user_id: int) -> None:
-        await self.db.execute(delete(EntityRepresentative).where(EntityRepresentative.entity_id == entity_id, EntityRepresentative.user_id == user_id))
+        await self.db.execute(
+            delete(EntityRepresentative).where(
+                and_(
+                    EntityRepresentative.entity_id == entity_id,
+                    EntityRepresentative.user_id == user_id
+                )
+            )
+        )
         await self.db.commit()
 
     # ========== KYB Documents ==========
@@ -103,22 +201,67 @@ class SovereignEntitiesRepository:
         result = await self.db.execute(select(EntityDocument).where(EntityDocument.id == doc_id))
         return result.scalar_one()
 
-    # ========== Entity Pages (Brand Builder) ==========
-    async def create_entity_page(self, **kwargs) -> EntityPage:
-        page = EntityPage(**kwargs)
+    # ========== Entity Pages ==========
+    async def create_entity_page(self, tenant_id: int, **kwargs) -> EntityPage:
+        page = EntityPage(tenant_id=tenant_id, **kwargs)
         self.db.add(page)
         await self.db.commit()
         await self.db.refresh(page)
         return page
 
-    async def get_entity_page(self, entity_id: int) -> Optional[EntityPage]:
-        result = await self.db.execute(select(EntityPage).where(EntityPage.entity_id == entity_id))
+    async def get_entity_page(self, entity_id: int, tenant_id: int) -> Optional[EntityPage]:
+        result = await self.db.execute(
+            select(EntityPage)
+            .join(SovereignEntity, SovereignEntity.id == EntityPage.entity_id)
+            .where(
+                and_(
+                    EntityPage.entity_id == entity_id,
+                    SovereignEntity.tenant_id == tenant_id
+                )
+            )
+        )
         return result.scalar_one_or_none()
 
-    async def update_entity_page(self, entity_id: int, **kwargs) -> EntityPage:
-        await self.db.execute(update(EntityPage).where(EntityPage.entity_id == entity_id).values(**kwargs))
+    async def get_entity_page_by_slug(self, slug: str, tenant_id: int) -> Optional[EntityPage]:
+        result = await self.db.execute(
+            select(EntityPage)
+            .join(SovereignEntity, SovereignEntity.id == EntityPage.entity_id)
+            .where(
+                and_(
+                    EntityPage.slug == slug,
+                    SovereignEntity.tenant_id == tenant_id
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_entity_page_by_slug_with_entity(self, slug: str, tenant_id: int) -> Optional[tuple[EntityPage, SovereignEntity]]:
+        result = await self.db.execute(
+            select(EntityPage)
+            .join(SovereignEntity, SovereignEntity.id == EntityPage.entity_id)
+            .where(
+                and_(
+                    EntityPage.slug == slug,
+                    SovereignEntity.tenant_id == tenant_id,
+                    SovereignEntity.is_active == True
+                )
+            )
+            .options(selectinload(EntityPage.entity))
+        )
+        page = result.scalar_one_or_none()
+        if page:
+            return page, page.entity
+        return None
+
+    async def update_entity_page(self, entity_id: int, tenant_id: int, **kwargs) -> EntityPage:
+        await self.db.execute(
+            update(EntityPage)
+            .where(EntityPage.entity_id == entity_id)
+            .where(SovereignEntity.tenant_id == tenant_id)
+            .values(**kwargs)
+        )
         await self.db.commit()
-        return await self.get_entity_page(entity_id)
+        return await self.get_entity_page(entity_id, tenant_id)
 
     async def increment_page_visits(self, entity_id: int) -> None:
         await self.db.execute(
@@ -130,8 +273,8 @@ class SovereignEntitiesRepository:
         await self.db.commit()
 
     # ========== Templates & Components ==========
-    async def create_template(self, **kwargs) -> EntityPageTemplate:
-        template = EntityPageTemplate(**kwargs)
+    async def create_template(self, tenant_id: int, **kwargs) -> EntityPageTemplate:
+        template = EntityPageTemplate(tenant_id=tenant_id, **kwargs)
         self.db.add(template)
         await self.db.commit()
         await self.db.refresh(template)
@@ -145,131 +288,65 @@ class SovereignEntitiesRepository:
         result = await self.db.execute(select(PageComponent).where(PageComponent.tenant_id == tenant_id, PageComponent.is_active == True))
         return list(result.scalars().all())
 
-    # ========== دوال تم استئصال ألغامها (Missing Functions) ==========
-    async def get_entity_by_registration(self, registration_number: str) -> Optional[SovereignEntity]:
-        result = await self.db.execute(
-            select(SovereignEntity).where(SovereignEntity.registration_number == registration_number)
-        )
-        return result.scalar_one_or_none()
-
-    async def get_representatives_by_user(self, user_id: int) -> List[EntityRepresentative]:
-        result = await self.db.execute(
-            select(EntityRepresentative).where(
-                EntityRepresentative.user_id == user_id, 
-                EntityRepresentative.is_active == True
-            )
-        )
-        return list(result.scalars().all())
-
-    async def list_entities_by_ids(self, entity_ids: List[int]) -> List[SovereignEntity]:
+    # ========== دوال مساعدة ==========
+    async def list_entities_by_ids(self, entity_ids: List[int], tenant_id: int) -> List[SovereignEntity]:
         if not entity_ids:
             return []
         result = await self.db.execute(
             select(SovereignEntity).where(
-                SovereignEntity.id.in_(entity_ids), 
-                SovereignEntity.is_deleted == False
+                and_(
+                    SovereignEntity.id.in_(entity_ids),
+                    SovereignEntity.tenant_id == tenant_id,
+                    SovereignEntity.is_deleted == False
+                )
             )
         )
         return list(result.scalars().all())
 
-    async def get_entity_page_by_slug(self, slug: str) -> Optional[EntityPage]:
-        result = await self.db.execute(
-            select(EntityPage).where(EntityPage.slug == slug)
-        )
-        return result.scalar_one_or_none()
-
-    async def get_representative(self, entity_id: int, user_id: int) -> Optional[EntityRepresentative]:
-        result = await self.db.execute(
-            select(EntityRepresentative).where(
-                EntityRepresentative.entity_id == entity_id, 
-                EntityRepresentative.user_id == user_id, 
-                EntityRepresentative.is_active == True
+    # ========== Entity Tree (Recursive CTE) ==========
+    async def get_entity_tree(self, root_entity_id: int, tenant_id: int) -> Optional[dict]:
+        recursive_cte = text("""
+            WITH RECURSIVE entity_tree AS (
+                SELECT id, name, entity_type, logo_url, parent_id, 1 as level
+                FROM sovereign_entities_v2
+                WHERE id = :root_id AND tenant_id = :tenant_id AND is_deleted = false
+                UNION ALL
+                SELECT e.id, e.name, e.entity_type, e.logo_url, e.parent_id, et.level + 1
+                FROM sovereign_entities_v2 e
+                INNER JOIN entity_tree et ON e.parent_id = et.id
+                WHERE e.tenant_id = :tenant_id AND e.is_deleted = false
             )
-        )
-        return result.scalar_one_or_none()
+            SELECT id, name, entity_type, logo_url, parent_id, level
+            FROM entity_tree
+            ORDER BY level, name
+        """)
 
-    # ============================================================
-    # 🆕 التحسينات الجديدة (Eager Loading & Tree)
-    # ============================================================
+        result = await self.db.execute(recursive_cte, {
+            "root_id": root_entity_id,
+            "tenant_id": tenant_id
+        })
 
-    # 🔥 تحسين: جلب صفحة الكيان مع بيانات الكيان في استعلام واحد
-    async def get_entity_page_with_entity(self, entity_id: int) -> Optional[tuple[EntityPage, SovereignEntity]]:
-        """
-        جلب صفحة الكيان مع الكيان المرتبط بها في استعلام واحد باستخدام selectinload.
-        """
-        result = await self.db.execute(
-            select(EntityPage)
-            .where(EntityPage.entity_id == entity_id)
-            .options(selectinload(EntityPage.entity))
-        )
-        page = result.scalar_one_or_none()
-        if page:
-            return page, page.entity
-        return None
+        rows = result.all()
+        if not rows:
+            return None
 
-    async def get_entity_page_by_slug_with_entity(self, slug: str) -> Optional[tuple[EntityPage, SovereignEntity]]:
-        """
-        جلب صفحة الكيان عبر slug مع الكيان المرتبط في استعلام واحد.
-        """
-        result = await self.db.execute(
-            select(EntityPage)
-            .where(EntityPage.slug == slug)
-            .options(selectinload(EntityPage.entity))
-        )
-        page = result.scalar_one_or_none()
-        if page:
-            return page, page.entity
-        return None
-
-    # 🟢 دالة استرجاع الشجرة (Hierarchical Tree)
-    async def get_entity_tree(self, root_entity_id: int) -> Optional[dict]:
-        """
-        استرجاع شجرة الكيان بالكامل (الأب مع جميع الأبناء والأحفاد) باستخدام استعلام واحد.
-        يتم البناء في الذاكرة لتجنب استعلامات متكررة للـ DB.
-        """
-        # جلب جميع الكيانات التابعة لهذا الجذر (مع الأبناء المباشرين)
-        result = await self.db.execute(
-            select(SovereignEntity)
-            .where(
-                or_(
-                    SovereignEntity.id == root_entity_id,
-                    SovereignEntity.parent_id == root_entity_id
-                ),
-                SovereignEntity.is_deleted == False
-            )
-        )
-        entities = result.scalars().all()
-        
-        # ✅ بناء شجرة (Map) باستخدام cast على المفاتيح
-        entity_map = {cast(int, e.id): e for e in entities}
-        tree = []
-        
-        # ربط الأبناء بآبائهم
-        for entity in entities:
-            if entity.parent_id is None:
-                tree.append(entity)  # الجذر
+        entity_map = {}
+        root = None
+        for row in rows:
+            entity = {
+                "id": row.id,
+                "name": row.name,
+                "entity_type": row.entity_type,
+                "logo_url": row.logo_url,
+                "parent_id": row.parent_id,
+                "children": []
+            }
+            entity_map[row.id] = entity
+            if row.parent_id is None:
+                root = entity
             else:
-                # ✅ استخدام cast عند الوصول إلى entity_map
-                parent = entity_map.get(cast(int, entity.parent_id))
+                parent = entity_map.get(row.parent_id)
                 if parent:
-                    if not hasattr(parent, 'children'):
-                        parent.children = []
-                    parent.children.append(entity)
-        
-        # إرجاع الكائن الجذر مع أبنائه
-        root = entity_map.get(root_entity_id)  # root_entity_id هو int بالفعل
-        if root:
-            return self._build_tree_dict(root)
-        return None
+                    parent["children"].append(entity)
 
-    def _build_tree_dict(self, entity: SovereignEntity) -> dict:
-        """
-        تحويل الكيان والشجرة إلى قاموس للـ JSON.
-        """
-        return {
-            "id": entity.id,
-            "name": entity.name,
-            "entity_type": entity.entity_type.value,
-            "logo_url": entity.logo_url,
-            "children": [self._build_tree_dict(child) for child in getattr(entity, 'children', [])]
-        }
+        return root

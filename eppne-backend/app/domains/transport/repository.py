@@ -1,11 +1,25 @@
-# app/domains/transport/repository.py (الإصدار النهائي المتكامل)
+# app/domains/transport/repository.py (الإصدار النهائي المُعدّل)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func, and_
 from sqlalchemy.orm import selectinload
 from typing import Optional, List
 from datetime import datetime
-from app.domains.transport.models import *
+
+# ✅ استيراد صريح لجميع النماذج من الملف المُعدّل
+from app.domains.transport.models import (
+    TransportHub,
+    Fleet,
+    Vehicle,
+    Route,
+    Trip,
+    TripBooking,
+    DeliveryTask,
+    VehicleStatus,
+    TripStatus
+)
+
 from app.core.errors import NotFoundError
+
 
 class TransportRepository:
     def __init__(self, db: AsyncSession):
@@ -111,7 +125,6 @@ class TransportRepository:
             )
         )
         await self.db.commit()
-        # تحديث حالة المركبة
         trip = await self.get_trip(trip_id, tenant_id)
         if trip:
             await self.db.execute(
@@ -132,7 +145,6 @@ class TransportRepository:
             )
         )
         await self.db.commit()
-        # تحديث حالة المركبة
         trip = await self.get_trip(trip_id, tenant_id)
         if trip:
             await self.db.execute(

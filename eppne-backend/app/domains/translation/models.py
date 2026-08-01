@@ -1,7 +1,8 @@
-# app/domains/translation/models.py (الإصدار النهائي المتكامل)
+# app/domains/translation/models.py (الإصدار النهائي المتكامل - مع ترقية JSONB)
 from sqlalchemy import (
-    Column, Integer, String, ForeignKey, DateTime, Text, Boolean, JSON, Index
+    Column, Integer, String, ForeignKey, DateTime, Text, Boolean, Index, text  # ✅ تم إضافة text
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from app.core.database import Base
 
@@ -16,12 +17,16 @@ class TranslationCache(Base):
     original_text = Column(Text, nullable=False)
     source_lang = Column(String(10), nullable=False, index=True)
 
-    # المخزن: {"en": "Hello", "fr": "Bonjour", "ar": "مرحباً"}
-    translations = Column(JSON, nullable=False, default=dict)
+    translations = Column(JSONB, nullable=False, default=dict)
 
     hit_count = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_translation_cache_tenant", "tenant_id"),
+        Index("ix_translation_cache_created_at", "created_at"),
+    )
 
 
 class TranslationRequestLog(Base):
@@ -36,23 +41,31 @@ class TranslationRequestLog(Base):
     text_length = Column(Integer)
     used_cache = Column(Boolean, default=False)
 
-    # حقول التدقيق الأمني
-    ip_address = Column(String(45), nullable=True)  # يدعم IPv6
+    ip_address = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
-    idempotency_key = Column(String(64), nullable=True, index=True)  # لتتبع تكرار المفتاح
+    idempotency_key = Column(String(64), nullable=True, index=True)
 
-    # ربط التكلفة الفعلية
     cost_mrusdt = Column(String(20), default="0")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_translation_log_tenant", "tenant_id"),
+        Index("ix_translation_log_created_at", "created_at"),
+        Index("ix_translation_log_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
+    )
 
 
 class SupportedLanguage(Base):
     __tablename__ = "supported_languages"
 
     id = Column(Integer, primary_key=True, index=True)
-    code = Column(String(10), unique=True, nullable=False)  # ar, en, fr, es, zh, ru, etc.
+    code = Column(String(10), unique=True, nullable=False)
     name = Column(String(100), nullable=False)
     native_name = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_supported_language_created_at", "created_at"),
+    )

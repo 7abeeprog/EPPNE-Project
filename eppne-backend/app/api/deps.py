@@ -37,7 +37,7 @@ async def get_current_user(
     
     try:
         payload = decode_token(access_token)
-        user_id: str = payload.get("sub")
+        user_id: str = payload.get("sub")  # type: ignore
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token (missing subject)")
     except ExpiredSignatureError:
@@ -49,7 +49,7 @@ async def get_current_user(
     user = await repo.get_by_id(int(user_id))
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    if not user.is_active:
+    if not user.is_active:  # type: ignore
         raise HTTPException(status_code=401, detail="User is inactive")
     return user
 
@@ -58,7 +58,7 @@ async def get_current_active_user(
     current_user: Annotated[User, Depends(get_current_user)]
 ) -> User:
     """التحقق من أن المستخدم نشط."""
-    if not current_user.is_active:
+    if not current_user.is_active:  # type: ignore
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
@@ -69,8 +69,12 @@ async def get_current_superuser(
     """التحقق من أن المستخدم لديه صلاحيات السوبر أدمن."""
     allowed_roles = ["EXECUTIVE_DIRECTOR", "SUPER_ADMIN"]
     current_role = getattr(current_user, "system_role", None)
-    role_value = current_role.value if hasattr(current_role, "value") else current_role
-    if role_value not in allowed_roles:
+    # ✅ إصلاح الخطأ: التحقق من None قبل الوصول إلى value
+    if current_role is not None:
+        role_value = current_role.value if hasattr(current_role, "value") else current_role
+    else:
+        role_value = None
+    if role_value not in allowed_roles:  # type: ignore
         raise PermissionDeniedError("عذراً، هذا الإجراء يتطلب صلاحيات المدير التنفيذي.")
     return current_user
 
@@ -81,38 +85,27 @@ async def get_current_superuser(
 def require_sector(sector: str) -> Callable:
     """
     مصنع اعتمادية (Dependency Factory) للتحقق من صلاحية المستخدم للوصول إلى قطاع معين.
-    
-    الاستخدام:
-        @router.get("/finance/balance", dependencies=[Depends(require_sector("finance"))])
-    
-    يعتمد على أن نموذج `User` يحتوي على حقل `sector` (أو `system_role` يحدد القطاع).
-    إذا لم يكن الحقل موجوداً، يمكن استخدام `tenant_id` أو `system_role` لتحديد القطاع.
     """
     async def sector_checker(
         current_user: User = Depends(get_current_active_user),
     ) -> User:
-        # 🔥 استخراج القطاع من المستخدم (افترض أن User لديه حقل sector)
         user_sector = getattr(current_user, "sector", None)
         if user_sector is None:
-            # إذا لم يكن هناك حقل sector، استخدم system_role أو tenant_id
-            # هنا نعتبر أن المستخدمين في قطاع معين بناءً على دورهم أو مستأجرهم
-            # يمكنك تعديل هذه المنطق حسب هيكل بياناتك الفعلي
             role = getattr(current_user, "system_role", None)
-            role_value = role.value if hasattr(role, "value") else role
-            # تعيين قطاع افتراضي بناءً على الدور (تعديل حسب الحاجة)
-            if role_value in ["EXECUTIVE_DIRECTOR", "SUPER_ADMIN"]:
-                user_sector = "all"  # السوبر أدمن لديه صلاحية كل القطاعات
+            # ✅ إصلاح الخطأ: التحقق من None قبل الوصول إلى value
+            if role is not None:
+                role_value = role.value if hasattr(role, "value") else role
             else:
-                # افتراض أن القطاع مستمد من tenant_id أو دور المستخدم
-                # هنا يمكنك إضافة منطق مخصص لربط الدور بالقطاع
-                user_sector = "academy"  # افتراضي (يجب تعديله)
+                role_value = None
+            if role_value in ["EXECUTIVE_DIRECTOR", "SUPER_ADMIN"]:
+                user_sector = "all"
+            else:
+                user_sector = "academy"
         
-        # السماح للسوبر أدمن بالوصول إلى كل القطاعات
         if user_sector == "all":
             return current_user
         
-        # التحقق من أن القطاع المطلوب يطابق قطاع المستخدم
-        if user_sector != sector:
+        if user_sector != sector:  # type: ignore
             raise PermissionDeniedError(
                 f"عذراً، لا تملك صلاحية الوصول إلى قطاع {sector}. قطاعك الحالي: {user_sector}"
             )
@@ -125,26 +118,18 @@ def require_sector(sector: str) -> Callable:
 # 🔥 صلاحيات ضابط الخصوصية (Privacy Officer) - C-04
 # ============================================================
 async def is_privacy_officer(user: User) -> bool:
-    """
-    التحقق من أن المستخدم لديه دور PRIVACY_OFFICER.
-    يتم استدعاؤها من داخل الـ Dependency.
-    """
-    # 🔥 إذا كان المستخدم لديه حقل `system_role` من نوع Enum
     role = getattr(user, "system_role", None)
     if role is None:
         return False
+    # ✅ إصلاح الخطأ: التحقق من None قبل الوصول إلى value
     role_value = role.value if hasattr(role, "value") else role
     allowed_roles = ["PRIVACY_OFFICER", "EXECUTIVE_DIRECTOR", "SUPER_ADMIN"]
-    return role_value in allowed_roles
+    return role_value in allowed_roles  # type: ignore
 
 
 async def get_current_privacy_officer(
     current_user: Annotated[User, Depends(get_current_active_user)]
 ) -> User:
-    """
-    Dependency للتحقق من أن المستخدم هو ضابط خصوصية أو لديه صلاحيات مشابهة.
-    يستخدم في نقاط النهاية المتعلقة بالخصوصية (مثل تصدير البيانات، الموافقات).
-    """
     if not await is_privacy_officer(current_user):
         raise PermissionDeniedError(
             "عذراً، هذا الإجراء يتطلب صلاحيات ضابط الخصوصية."
@@ -162,10 +147,6 @@ class SimpleTenant:
 async def get_current_tenant(
     x_tenant_id: int = Header(default=1, alias="X-Tenant-ID")
 ) -> SimpleTenant:
-    """
-    استخراج معرف المستأجر من الـ Header.
-    القيمة الافتراضية 1 مناسبة للتطوير، لكن في الإنتاج يجب أن تكون إلزامية.
-    """
     tenant = SimpleTenant()
     tenant.id = x_tenant_id
     return tenant
@@ -175,9 +156,6 @@ async def require_tenant_access(
     current_user: User = Depends(get_current_active_user),
     tenant: SimpleTenant = Depends(get_current_tenant),
 ) -> User:
-    """
-    التحقق من أن المستخدم ينتمي إلى نفس المستأجر المطلوب في الـ Header.
-    """
     if current_user.tenant_id != tenant.id:
         raise PermissionDeniedError(
             f"عذراً، أنت لا تنتمي إلى المستأجر {tenant.id}. مستأجرك: {current_user.tenant_id}"
@@ -186,16 +164,17 @@ async def require_tenant_access(
 
 
 # ============================================================
-# 📌 صلاحيات الأدوار (RBAC) - موجودة بالفعل
+# 📌 صلاحيات الأدوار (RBAC)
 # ============================================================
 def require_roles(allowed_roles: List[str]):
-    """
-    مصنع اعتمادية للتحقق من أن المستخدم لديه دور من القائمة المسموحة.
-    """
     async def role_checker(current_user: User = Depends(get_current_active_user)):
         current_role = getattr(current_user, "system_role", None)
-        role_value = current_role.value if hasattr(current_role, "value") else current_role
-        if not role_value or role_value not in allowed_roles:
+        # ✅ إصلاح الخطأ: التحقق من None قبل الوصول إلى value
+        if current_role is not None:
+            role_value = current_role.value if hasattr(current_role, "value") else current_role
+        else:
+            role_value = None
+        if not role_value or role_value not in allowed_roles:  # type: ignore
             raise PermissionDeniedError("عذراً، لا تملك الصلاحيات الكافية.")
         return current_user
     return role_checker
@@ -204,24 +183,22 @@ def require_roles(allowed_roles: List[str]):
 async def get_current_instructor_or_admin(
     current_user: User = Depends(get_current_active_user)
 ) -> User:
-    """
-    التحقق من أن المستخدم مدرب أو إداري.
-    """
     allowed_roles = ["INSTRUCTOR", "SUPER_ADMIN", "EXECUTIVE_DIRECTOR", "ADMIN"]
     current_role = getattr(current_user, "system_role", None)
-    role_value = current_role.value if hasattr(current_role, "value") else current_role
-    if role_value not in allowed_roles:
+    # ✅ إصلاح الخطأ: التحقق من None قبل الوصول إلى value
+    if current_role is not None:
+        role_value = current_role.value if hasattr(current_role, "value") else current_role
+    else:
+        role_value = None
+    if role_value not in allowed_roles:  # type: ignore
         raise PermissionDeniedError("عذراً، هذا الإجراء مخصص للمدربين والإدارة فقط.")
     return current_user
 
 
 # ============================================================
-# 📌 صلاحية الاشتراك (Subscription) - موجودة بالفعل
+# 📌 صلاحية الاشتراك (Subscription)
 # ============================================================
 def require_subscription(service_code: str):
-    """
-    مصنع اعتمادية للتحقق من أن المستأجر لديه اشتراك فعال في خدمة معينة.
-    """
     async def subscription_checker(
         current_user: User = Depends(get_current_active_user),
         db: AsyncSession = Depends(get_db),
@@ -237,12 +214,8 @@ def require_subscription(service_code: str):
 # ============================================================
 async def get_current_user_optional(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db)
 ) -> Optional[User]:
-    """
-    محاولة استخراج المستخدم من التوكن، مع إرجاع None إذا لم يكن موجوداً.
-    تستخدم في نقاط النهاية التي تسمح للضيوف (مثل محادثة AI).
-    """
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         return None
@@ -254,6 +227,6 @@ async def get_current_user_optional(
             return None
         repo = UserRepository(db)
         user = await repo.get_by_id(int(user_id))
-        return user if user and user.is_active else None
+        return user if user and user.is_active else None  # type: ignore
     except (JWTError, ExpiredSignatureError, ValueError):
         return None

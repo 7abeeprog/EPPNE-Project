@@ -4,7 +4,7 @@ namespace: eppne
 resources:
 - namespace.yaml
 - configmap.yaml
-- secret.yaml
+#- secret.yaml
 - external-secret.yaml
 - deployment.yaml
 - service.yaml
