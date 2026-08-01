@@ -1,8 +1,9 @@
-# app/domains/realestate/models.py (الإصدار النهائي المتكامل)
+# app/domains/realestate/models.py
 from sqlalchemy import (
     Column, Integer, BigInteger, String, ForeignKey, DateTime, Text,
-    Boolean, Numeric, JSON, Enum as SQLEnum, Index, CheckConstraint
+    Boolean, Numeric, Enum as SQLEnum, Index, CheckConstraint, text
 )
+from sqlalchemy.dialects.postgresql import JSONB  # ✅ تم إضافة الاستيراد الصحيح
 from sqlalchemy.sql import func
 from app.core.database import Base
 import enum
@@ -48,17 +49,17 @@ class ContractType(str, enum.Enum):
     LEASE = "LEASE"
 
 
-# ========== 1. الأراضي السيادية (مع Multi-Tenancy) ==========
+# ========== 1. الأراضي السيادية ==========
 class LandAsset(Base):
     __tablename__ = "land_assets"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     parent_id = Column(Integer, ForeignKey("land_assets.id"), nullable=True, index=True)
 
     plot_number = Column(String(100), unique=True, nullable=False, index=True)
     area_sqm = Column(Numeric(15, 2), nullable=False)
-    gps_polygon = Column(JSON, nullable=False)
+    gps_polygon = Column(JSONB, nullable=False)
     zoning = Column(SQLEnum(ZoningCategory), nullable=False)
     legal_status = Column(SQLEnum(LegalStatus), nullable=False)
 
@@ -75,6 +76,7 @@ class LandAsset(Base):
     __table_args__ = (
         Index("ix_land_assets_tenant_owner", "tenant_id", "owner_id"),
         Index("ix_land_assets_owner_zoning", "owner_id", "zoning"),
+        Index("ix_land_assets_created_at", "created_at"),
     )
 
 
@@ -83,7 +85,7 @@ class RealEstateDevelopment(Base):
     __tablename__ = "real_estate_developments"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     land_asset_id = Column(Integer, ForeignKey("land_assets.id"), nullable=False, index=True)
     entity_id = Column(Integer, nullable=True, index=True)
 
@@ -104,6 +106,7 @@ class RealEstateDevelopment(Base):
 
     __table_args__ = (
         Index("ix_developments_tenant_land", "tenant_id", "land_asset_id"),
+        Index("ix_developments_created_at", "created_at"),
     )
 
 
@@ -112,7 +115,7 @@ class PropertyUnit(Base):
     __tablename__ = "property_units"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     development_id = Column(Integer, ForeignKey("real_estate_developments.id"), nullable=False, index=True)
 
     unit_number = Column(String(50), nullable=False)
@@ -135,16 +138,17 @@ class PropertyUnit(Base):
 
     __table_args__ = (
         Index("ix_units_tenant_development", "tenant_id", "development_id"),
+        Index("ix_units_created_at", "created_at"),
     )
 
 
-# ========== 4. الملكية الجزئية (مع Idempotency) ==========
+# ========== 4. الملكية الجزئية ==========
 class PropertyOwnership(Base):
     __tablename__ = "property_ownerships"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     unit_id = Column(Integer, ForeignKey("property_units.id"), nullable=False, index=True)
     owner_user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False, index=True)
@@ -160,17 +164,19 @@ class PropertyOwnership(Base):
 
     __table_args__ = (
         Index("ix_ownership_tenant_unit_owner", "tenant_id", "unit_id", "owner_user_id"),
+        Index("ix_ownership_created_at", "created_at"),
+        Index("ix_ownership_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
         CheckConstraint("ownership_percentage > 0 AND ownership_percentage <= 100", name="check_ownership_pct"),
     )
 
 
-# ========== 5. عقود الإيجار (مع Idempotency) ==========
+# ========== 5. عقود الإيجار ==========
 class RentalContract(Base):
     __tablename__ = "rental_contracts"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     unit_id = Column(Integer, ForeignKey("property_units.id"), nullable=False, index=True)
     tenant_user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False, index=True)
@@ -188,21 +194,23 @@ class RentalContract(Base):
 
     __table_args__ = (
         Index("ix_rental_tenant_landlord", "tenant_id", "landlord_user_id"),
+        Index("ix_rental_created_at", "created_at"),
+        Index("ix_rental_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
     )
 
 
-# ========== 6. المخطط الرئيسي (Master Plan) – توسعة جديدة ==========
+# ========== 6. المخطط الرئيسي ==========
 class MasterPlan(Base):
     __tablename__ = "master_plans"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     land_asset_id = Column(Integer, ForeignKey("land_assets.id"), nullable=False, index=True)
 
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
 
-    gis_data = Column(JSON, nullable=True)
+    gis_data = Column(JSONB, nullable=True)
     bim_model_hash = Column(String(100), nullable=True)
 
     total_units_planned = Column(Integer, default=0)
@@ -213,15 +221,16 @@ class MasterPlan(Base):
 
     __table_args__ = (
         Index("ix_master_plan_tenant_land", "tenant_id", "land_asset_id"),
+        Index("ix_master_plan_created_at", "created_at"),
     )
 
 
-# ========== 7. تجزئة الأصول (Asset Tokenization) – توسعة جديدة ==========
+# ========== 7. تجزئة الأصول ==========
 class AssetTokenization(Base):
     __tablename__ = "asset_tokenizations"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     unit_id = Column(Integer, ForeignKey("property_units.id"), nullable=False, index=True)
 
     total_shares = Column(Integer, nullable=False)
@@ -239,15 +248,16 @@ class AssetTokenization(Base):
 
     __table_args__ = (
         Index("ix_tokenization_tenant_unit", "tenant_id", "unit_id"),
+        Index("ix_tokenization_created_at", "created_at"),
     )
 
 
-# ========== 8. محرك العقود الذكية (Smart Contract Engine) – توسعة جديدة ==========
+# ========== 8. محرك العقود الذكية ==========
 class SmartContractEngine(Base):
     __tablename__ = "smart_contract_engine"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
 
     contract_type = Column(SQLEnum(ContractType), nullable=False)
     reference_id = Column(Integer, nullable=False)
@@ -256,11 +266,12 @@ class SmartContractEngine(Base):
     execution_status = Column(String(50), default="PENDING")
     executed_at = Column(DateTime(timezone=True), nullable=True)
 
-    contract_metadata = Column(JSON, nullable=False)
+    contract_metadata = Column(JSONB, nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
         Index("ix_smart_contract_tenant_type", "tenant_id", "contract_type"),
+        Index("ix_smart_contract_created_at", "created_at"),
     )

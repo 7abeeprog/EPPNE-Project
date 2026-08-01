@@ -5,7 +5,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, cast
 import json
 import hashlib
 
@@ -16,7 +16,16 @@ from app.domains.academy.models import (
     CertificateIssuanceLog, CourseAnalytics, AcademyTask, TaskSubmission, AcademyCohort,
     PaymentInstallment
 )
+from app.domains.academy.schemas import (
+    CourseResponse,
+    CourseUnitResponse,
+    KnowledgeNodeResponse,
+    EnrollmentResponse,
+    TaskResponse,
+    TaskSubmissionResponse,
+)
 from app.core.errors import NotFoundError
+from app.core.pagination import PaginatedResponse
 
 try:
     from app.core.cache import redis_client
@@ -61,11 +70,18 @@ class AcademyRepository:
             pass
 
     async def _invalidate_cache(self, pattern: Optional[str] = None):
-        pass
+        if not redis_client or not pattern:
+            return
+        try:
+            client = await redis_client.get_client()
+            keys = []
+            async for key in client.scan_iter(match=f"repo:*{pattern}*"):
+                keys.append(key)
+            if keys:
+                await client.delete(*keys)
+        except Exception:
+            pass
 
-    # ============================================================
-    # 🔥 دوال مساعدة للـ Pagination الإلزامي
-    # ============================================================
     async def _paginate_query(self, query, skip: int = 0, limit: int = 100):
         safe_limit = min(limit, 1000)
         return query.offset(skip).limit(safe_limit)
@@ -93,6 +109,12 @@ class AcademyRepository:
             await self._set_cache(cache_key, {c: getattr(tenant, c) for c in tenant.__table__.columns.keys()})
         return tenant
 
+    async def get_org_entity(self, org_entity_id: int) -> Optional[OrganizationEntity]:
+        result = await self.db.execute(
+            select(OrganizationEntity).where(OrganizationEntity.id == org_entity_id)
+        )
+        return result.scalar_one_or_none()
+
     async def create_org_entity(self, **kwargs) -> OrganizationEntity:
         entity = OrganizationEntity(**kwargs)
         self.db.add(entity)
@@ -117,6 +139,14 @@ class AcademyRepository:
         await self.db.commit()
         await self.db.refresh(instructor)
         return instructor
+
+    async def get_instructor(self, instructor_id: int, tenant_id: int) -> Optional[Instructor]:
+        result = await self.db.execute(
+            select(Instructor).where(
+                and_(Instructor.id == instructor_id, Instructor.tenant_id == tenant_id)
+            )
+        )
+        return result.scalar_one_or_none()
 
     # ============================================================
     # 3. Bootcamps & Tracks
@@ -183,7 +213,7 @@ class AcademyRepository:
         return list(result.scalars().all())
 
     # ============================================================
-    # 5. Courses (مع Caching متقدم)
+    # 5. Courses
     # ============================================================
     async def create_course(self, **kwargs) -> Course:
         course = Course(**kwargs)
@@ -193,72 +223,91 @@ class AcademyRepository:
         await self._invalidate_cache("courses")
         return course
 
-    async def get_course(self, course_id: int) -> Optional[Course]:
-        cache_key = self._get_cache_key("course", course_id)
+    async def get_course(self, course_id: int, tenant_id: int) -> Optional[Course]:
+        cache_key = self._get_cache_key("course", course_id, tenant_id)
         cached = await self._get_cache(cache_key)
         if cached:
             return Course(**cached)
-        result = await self.db.execute(select(Course).where(Course.id == course_id))
+        result = await self.db.execute(
+            select(Course).where(
+                and_(Course.id == course_id, Course.tenant_id == tenant_id)
+            )
+        )
         course = result.scalar_one_or_none()
         if course:
             await self._set_cache(cache_key, {c: getattr(course, c) for c in course.__table__.columns.keys()}, ttl=600)
         return course
 
-    async def update_course(self, course_id: int, **kwargs) -> Course:
-        course = await self.get_course(course_id)
+    async def update_course(self, course_id: int, tenant_id: int, **kwargs) -> Course:
+        course = await self.get_course(course_id, tenant_id)
         if not course:
             raise NotFoundError("Course not found")
         for key, value in kwargs.items():
             setattr(course, key, value)
         await self.db.commit()
         await self.db.refresh(course)
-        await self._invalidate_cache(f"course_{course_id}")
+        await self._invalidate_cache(f"course_{course_id}_{tenant_id}")
         await self._invalidate_cache("courses")
+        await self._invalidate_cache("published_courses")
         return course
 
     async def list_published_courses(
         self, tenant_id: int, skip: int = 0, limit: int = 100
-    ) -> List[Course]:
+    ) -> PaginatedResponse[CourseResponse]:
         cache_key = self._get_cache_key("published_courses", tenant_id, skip, limit)
         cached = await self._get_cache(cache_key)
         if cached:
-            return [Course(**item) for item in cached]
+            items = [CourseResponse(**item) for item in cached]
+            return PaginatedResponse(data=items, total=len(items), skip=skip, limit=limit)
         query = (
             select(Course)
             .where(
-                Course.tenant_id == tenant_id,
-                Course.is_published == True,
-                Course.is_active == True
+                and_(
+                    Course.tenant_id == tenant_id,
+                    Course.is_published == True,
+                    Course.is_active == True
+                )
             )
             .order_by(Course.created_at.desc())
         )
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+
         query = await self._paginate_query(query, skip, limit)
         result = await self.db.execute(query)
         courses = list(result.scalars().all())
         if courses:
             await self._set_cache(
                 cache_key,
-                [{c: getattr(crs, c) for c in crs.__table__.columns.keys()} for crs in courses],
+                [CourseResponse.model_validate(crs).model_dump() for crs in courses],
                 ttl=120
             )
-        return courses
+        items = [CourseResponse.model_validate(crs) for crs in courses]
+        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
 
-    async def list_all_courses(self, skip: int = 0, limit: int = 100) -> List[Course]:
-        query = select(Course).order_by(Course.created_at.desc())
+    async def list_all_courses(self, tenant_id: int, skip: int = 0, limit: int = 100) -> PaginatedResponse[CourseResponse]:
+        query = select(Course).where(Course.tenant_id == tenant_id).order_by(Course.created_at.desc())
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
         query = await self._paginate_query(query, skip, limit)
         result = await self.db.execute(query)
-        return list(result.scalars().all())
+        items = [CourseResponse.model_validate(crs) for crs in result.scalars().all()]
+        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
 
-    async def get_courses_by_ids(self, course_ids: List[int]) -> List[Course]:
+    async def get_courses_by_ids(self, course_ids: List[int], tenant_id: int) -> List[Course]:
         if not course_ids:
             return []
         result = await self.db.execute(
-            select(Course).where(Course.id.in_(course_ids))
+            select(Course).where(
+                and_(Course.id.in_(course_ids), Course.tenant_id == tenant_id)
+            )
         )
         return list(result.scalars().all())
 
     # ============================================================
-    # 6. Nodes, Units, Materials, Quizzes
+    # 6. Course Units
     # ============================================================
     async def create_course_unit(self, **kwargs) -> CourseUnit:
         unit = CourseUnit(**kwargs)
@@ -268,19 +317,32 @@ class AcademyRepository:
         return unit
 
     async def get_course_units(
-        self, course_id: int, skip: int = 0, limit: int = 100
-    ) -> List[CourseUnit]:
+        self, course_id: int, tenant_id: int, skip: int = 0, limit: int = 100
+    ) -> PaginatedResponse[CourseUnitResponse]:
+        course = await self.get_course(course_id, tenant_id)
+        if not course:
+            raise NotFoundError("Course not found")
         query = (
             select(CourseUnit)
             .where(CourseUnit.course_id == course_id)
             .order_by(CourseUnit.order_index)
         )
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
         query = await self._paginate_query(query, skip, limit)
         result = await self.db.execute(query)
-        return list(result.scalars().all())
+        items = [CourseUnitResponse.model_validate(unit) for unit in result.scalars().all()]
+        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
 
-    async def update_course_unit(self, unit_id: int, title: str) -> Optional[CourseUnit]:
-        unit = await self.db.execute(select(CourseUnit).where(CourseUnit.id == unit_id))
+    async def update_course_unit(self, unit_id: int, tenant_id: int, title: str) -> Optional[CourseUnit]:
+        unit = await self.db.execute(
+            select(CourseUnit)
+            .join(Course, Course.id == CourseUnit.course_id)
+            .where(
+                and_(CourseUnit.id == unit_id, Course.tenant_id == tenant_id)
+            )
+        )
         unit = unit.scalar_one_or_none()
         if unit:
             setattr(unit, "title", title)
@@ -288,8 +350,14 @@ class AcademyRepository:
             await self.db.refresh(unit)
         return unit
 
-    async def delete_course_unit(self, unit_id: int) -> bool:
-        unit = await self.db.execute(select(CourseUnit).where(CourseUnit.id == unit_id))
+    async def delete_course_unit(self, unit_id: int, tenant_id: int) -> bool:
+        unit = await self.db.execute(
+            select(CourseUnit)
+            .join(Course, Course.id == CourseUnit.course_id)
+            .where(
+                and_(CourseUnit.id == unit_id, Course.tenant_id == tenant_id)
+            )
+        )
         unit = unit.scalar_one_or_none()
         if unit:
             await self.db.delete(unit)
@@ -297,6 +365,9 @@ class AcademyRepository:
             return True
         return False
 
+    # ============================================================
+    # 7. Knowledge Nodes
+    # ============================================================
     async def create_node(self, **kwargs) -> KnowledgeNode:
         node = KnowledgeNode(**kwargs)
         self.db.add(node)
@@ -305,32 +376,45 @@ class AcademyRepository:
         return node
 
     async def get_course_nodes(
-        self, course_id: int, skip: int = 0, limit: int = 100
-    ) -> List[KnowledgeNode]:
+        self, course_id: int, tenant_id: int, skip: int = 0, limit: int = 100
+    ) -> PaginatedResponse[KnowledgeNodeResponse]:
+        course = await self.get_course(course_id, tenant_id)
+        if not course:
+            raise NotFoundError("Course not found")
         query = (
             select(KnowledgeNode)
             .where(KnowledgeNode.course_id == course_id)
             .order_by(KnowledgeNode.order_index)
         )
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
         query = await self._paginate_query(query, skip, limit)
         result = await self.db.execute(query)
-        return list(result.scalars().all())
+        items = [KnowledgeNodeResponse.model_validate(node) for node in result.scalars().all()]
+        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
 
     async def get_node(self, node_id: int) -> Optional[KnowledgeNode]:
         result = await self.db.execute(select(KnowledgeNode).where(KnowledgeNode.id == node_id))
         return result.scalar_one_or_none()
 
-    async def update_node(self, node_id: int, title: str) -> Optional[KnowledgeNode]:
+    async def update_node(self, node_id: int, tenant_id: int, title: str) -> Optional[KnowledgeNode]:
         node = await self.get_node(node_id)
         if node:
+            course = await self.get_course(cast(int, node.course_id), tenant_id)
+            if not course:
+                return None
             setattr(node, "title", title)
             await self.db.commit()
             await self.db.refresh(node)
         return node
 
-    async def delete_node(self, node_id: int) -> bool:
+    async def delete_node(self, node_id: int, tenant_id: int) -> bool:
         node = await self.get_node(node_id)
         if node:
+            course = await self.get_course(cast(int, node.course_id), tenant_id)
+            if not course:
+                return False
             await self.db.delete(node)
             await self.db.commit()
             return True
@@ -365,7 +449,7 @@ class AcademyRepository:
         return result.scalar_one_or_none()
 
     # ============================================================
-    # 7. Enrollment (مع Pagination إلزامي)
+    # 8. Enrollment
     # ============================================================
     async def enroll(self, **kwargs) -> Enrollment:
         enrollment = Enrollment(**kwargs)
@@ -374,29 +458,38 @@ class AcademyRepository:
         await self.db.refresh(enrollment)
         return enrollment
 
-    async def get_enrollment(self, user_id: int, course_id: int) -> Optional[Enrollment]:
+    async def get_enrollment(self, user_id: int, course_id: int, tenant_id: int) -> Optional[Enrollment]:
         result = await self.db.execute(
             select(Enrollment).where(
-                Enrollment.user_id == user_id,
-                Enrollment.course_id == course_id
+                and_(
+                    Enrollment.user_id == user_id,
+                    Enrollment.course_id == course_id,
+                    Enrollment.tenant_id == tenant_id
+                )
             )
         )
         return result.scalar_one_or_none()
 
     async def get_user_enrollments(
-        self, user_id: int, skip: int = 0, limit: int = 100
-    ) -> List[Enrollment]:
+        self, user_id: int, tenant_id: int, skip: int = 0, limit: int = 100
+    ) -> PaginatedResponse[EnrollmentResponse]:
         query = (
             select(Enrollment)
-            .where(Enrollment.user_id == user_id)
+            .where(
+                and_(Enrollment.user_id == user_id, Enrollment.tenant_id == tenant_id)
+            )
             .order_by(Enrollment.created_at.desc())
         )
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
         query = await self._paginate_query(query, skip, limit)
         result = await self.db.execute(query)
-        return list(result.scalars().all())
+        items = [EnrollmentResponse.model_validate(enr) for enr in result.scalars().all()]
+        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
 
-    async def update_progress(self, user_id: int, course_id: int, progress: float) -> Enrollment:
-        enrollment = await self.get_enrollment(user_id, course_id)
+    async def update_progress(self, user_id: int, course_id: int, tenant_id: int, progress: float) -> Optional[Enrollment]:
+        enrollment = await self.get_enrollment(user_id, course_id, tenant_id)
         if enrollment:
             setattr(enrollment, "progress_percentage", progress)
             if progress >= 100:
@@ -407,7 +500,7 @@ class AcademyRepository:
         return enrollment
 
     # ============================================================
-    # 8. Tasks & Submissions (مع تحسين الأداء)
+    # 9. Tasks & Submissions
     # ============================================================
     async def create_task(self, data: dict) -> AcademyTask:
         task = AcademyTask(**data)
@@ -416,17 +509,30 @@ class AcademyRepository:
         await self.db.refresh(task)
         return task
 
-    async def get_task(self, task_id: int) -> Optional[AcademyTask]:
-        result = await self.db.execute(select(AcademyTask).where(AcademyTask.id == task_id))
+    async def get_task(self, task_id: int, tenant_id: int) -> Optional[AcademyTask]:
+        result = await self.db.execute(
+            select(AcademyTask)
+            .join(Course, Course.id == AcademyTask.course_id)
+            .where(
+                and_(AcademyTask.id == task_id, Course.tenant_id == tenant_id)
+            )
+        )
         return result.scalar_one_or_none()
 
     async def get_tasks_by_course(
-        self, course_id: int, skip: int = 0, limit: int = 100
-    ) -> List[AcademyTask]:
+        self, course_id: int, tenant_id: int, skip: int = 0, limit: int = 100
+    ) -> PaginatedResponse[TaskResponse]:
+        course = await self.get_course(course_id, tenant_id)
+        if not course:
+            raise NotFoundError("Course not found")
         query = select(AcademyTask).where(AcademyTask.course_id == course_id)
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
         query = await self._paginate_query(query, skip, limit)
         result = await self.db.execute(query)
-        return list(result.scalars().all())
+        items = [TaskResponse.model_validate(task) for task in result.scalars().all()]
+        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
 
     async def submit_task(self, **kwargs) -> TaskSubmission:
         submission = TaskSubmission(**kwargs)
@@ -436,26 +542,43 @@ class AcademyRepository:
         return submission
 
     async def get_pending_submissions(
-        self, task_id: int, skip: int = 0, limit: int = 100
-    ) -> List[TaskSubmission]:
+        self, task_id: int, tenant_id: int, skip: int = 0, limit: int = 100
+    ) -> PaginatedResponse[TaskSubmissionResponse]:
+        task = await self.get_task(task_id, tenant_id)
+        if not task:
+            raise NotFoundError("Task not found")
         query = (
             select(TaskSubmission)
             .options(selectinload(TaskSubmission.user))
             .where(
-                TaskSubmission.task_id == task_id,
-                TaskSubmission.status == "SUBMITTED"
+                and_(
+                    TaskSubmission.task_id == task_id,
+                    TaskSubmission.status == "SUBMITTED"
+                )
             )
             .order_by(TaskSubmission.submitted_at.asc())
         )
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
         query = await self._paginate_query(query, skip, limit)
         result = await self.db.execute(query)
-        return list(result.scalars().all())
+        items = [TaskSubmissionResponse.model_validate(sub) for sub in result.scalars().all()]
+        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
 
     async def grade_submission(
-        self, submission_id: int, grade: float, feedback: str, status: str
+        self, submission_id: int, tenant_id: int, grade: float, feedback: str, status: str
     ) -> Optional[TaskSubmission]:
         submission = await self.db.execute(
-            select(TaskSubmission).where(TaskSubmission.id == submission_id)
+            select(TaskSubmission)
+            .join(AcademyTask, AcademyTask.id == TaskSubmission.task_id)
+            .join(Course, Course.id == AcademyTask.course_id)
+            .where(
+                and_(
+                    TaskSubmission.id == submission_id,
+                    Course.tenant_id == tenant_id
+                )
+            )
         )
         submission = submission.scalar_one_or_none()
         if submission:
@@ -467,19 +590,27 @@ class AcademyRepository:
         return submission
 
     async def get_student_submissions(
-        self, user_id: int, skip: int = 0, limit: int = 100
-    ) -> List[TaskSubmission]:
+        self, user_id: int, tenant_id: int, skip: int = 0, limit: int = 100
+    ) -> PaginatedResponse[TaskSubmissionResponse]:
         query = (
             select(TaskSubmission)
-            .where(TaskSubmission.user_id == user_id)
+            .join(AcademyTask, AcademyTask.id == TaskSubmission.task_id)
+            .join(Course, Course.id == AcademyTask.course_id)
+            .where(
+                and_(TaskSubmission.user_id == user_id, Course.tenant_id == tenant_id)
+            )
             .order_by(TaskSubmission.submitted_at.desc())
         )
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
         query = await self._paginate_query(query, skip, limit)
         result = await self.db.execute(query)
-        return list(result.scalars().all())
+        items = [TaskSubmissionResponse.model_validate(sub) for sub in result.scalars().all()]
+        return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
 
     # ============================================================
-    # 9. Live Sessions
+    # 10. Live Sessions
     # ============================================================
     async def create_live_session(self, node_id: int, data: dict) -> LiveSession:
         session_data = data.copy()
@@ -493,7 +624,7 @@ class AcademyRepository:
         return live_session
 
     # ============================================================
-    # 10. AI & Analytics
+    # 11. AI & Analytics
     # ============================================================
     async def get_or_create_digital_twin(self, user_id: int) -> StudentDigitalTwin:
         result = await self.db.execute(
@@ -514,26 +645,31 @@ class AcademyRepository:
         await self.db.refresh(analysis)
         return analysis
 
-    async def get_course_analytics(self, course_id: int) -> Optional[CourseAnalytics]:
+    async def get_course_analytics(self, course_id: int, tenant_id: int) -> Optional[CourseAnalytics]:
         result = await self.db.execute(
-            select(CourseAnalytics).where(CourseAnalytics.course_id == course_id)
+            select(CourseAnalytics).where(
+                and_(CourseAnalytics.course_id == course_id, CourseAnalytics.tenant_id == tenant_id)
+            )
         )
         return result.scalar_one_or_none()
 
     async def update_course_analytics(
         self,
         course_id: int,
+        tenant_id: int,
         increment_enrollments: bool = False,
         increment_completions: bool = False,
         grade: Optional[float] = None,
         revenue: Optional[float] = None
-    ) -> CourseAnalytics:
-        analytics = await self.get_course_analytics(course_id)
+    ) -> Optional[CourseAnalytics]:
+        analytics = await self.get_course_analytics(course_id, tenant_id)
         if not analytics:
-            analytics = CourseAnalytics(course_id=course_id)
+            course = await self.get_course(course_id, tenant_id)
+            if not course:
+                return None
+            analytics = CourseAnalytics(course_id=course_id, tenant_id=tenant_id)
             self.db.add(analytics)
 
-        # 🧹 استخراج القيم الآمنة
         current_enrollments = int(getattr(analytics, "total_enrollments", 0) or 0)
         current_completions = int(getattr(analytics, "total_completions", 0) or 0)
         current_avg = float(getattr(analytics, "average_grade", 0.0) or 0.0)
@@ -556,31 +692,42 @@ class AcademyRepository:
         return analytics
 
     # ============================================================
-    # 11. Financial Summary & Leaderboard
+    # 12. Financial Summary & Leaderboard
     # ============================================================
-    async def get_financial_summary(self) -> dict:
+    async def get_financial_summary(self, tenant_id: int) -> dict:
         now = datetime.now(timezone.utc)
         paid_result = await self.db.execute(
             select(func.coalesce(func.sum(Enrollment.paid_amount), 0))
+            .where(Enrollment.tenant_id == tenant_id)
         )
         total_paid = float(paid_result.scalar() or 0)
         overdue_result = await self.db.execute(
             select(func.coalesce(func.sum(PaymentInstallment.amount_due), 0))
             .where(
-                PaymentInstallment.is_paid == False,
-                PaymentInstallment.due_date < now
+                and_(
+                    PaymentInstallment.tenant_id == tenant_id,
+                    PaymentInstallment.is_paid == False,
+                    PaymentInstallment.due_date < now
+                )
             )
         )
         total_overdue = float(overdue_result.scalar() or 0)
         return {"total_paid": total_paid, "total_overdue": total_overdue}
 
-    async def get_academy_leaderboard(self, limit: int = 10) -> List[dict]:
+    async def get_academy_leaderboard(self, tenant_id: int, limit: int = 10) -> List[dict]:
         query = (
             select(
                 TaskSubmission.user_id,
                 func.sum(TaskSubmission.grade).label("total_xp")
             )
-            .where(TaskSubmission.status == "GRADED")
+            .join(AcademyTask, AcademyTask.id == TaskSubmission.task_id)
+            .join(Course, Course.id == AcademyTask.course_id)
+            .where(
+                and_(
+                    TaskSubmission.status == "GRADED",
+                    Course.tenant_id == tenant_id
+                )
+            )
             .group_by(TaskSubmission.user_id)
             .order_by(func.sum(TaskSubmission.grade).desc())
             .limit(min(limit, 100))
@@ -597,36 +744,52 @@ class AcademyRepository:
         return leaderboard
 
     # ============================================================
-    # 12. إحصائيات لوحة تحكم المدرب
+    # 13. Instructor Statistics
     # ============================================================
-    async def count_instructor_courses(self, instructor_id: int) -> int:
+    async def count_instructor_courses(self, instructor_id: int, tenant_id: int) -> int:
         result = await self.db.execute(
             select(func.count(Course.id))
-            .where(Course.instructor_id == instructor_id)
-        )
-        return result.scalar() or 0
-
-    async def count_distinct_students_in_instructor_courses(self, instructor_id: int) -> int:
-        course_ids_query = select(Course.id).where(Course.instructor_id == instructor_id)
-        result = await self.db.execute(
-            select(func.count(Enrollment.user_id.distinct()))
-            .where(Enrollment.course_id.in_(course_ids_query))
-        )
-        return result.scalar() or 0
-
-    async def count_pending_submissions_for_instructor(self, instructor_id: int) -> int:
-        course_ids_query = select(Course.id).where(Course.instructor_id == instructor_id)
-        result = await self.db.execute(
-            select(func.count(TaskSubmission.id))
             .where(
-                TaskSubmission.course_id.in_(course_ids_query),
-                TaskSubmission.status == "SUBMITTED"
+                and_(Course.instructor_id == instructor_id, Course.tenant_id == tenant_id)
             )
         )
         return result.scalar() or 0
 
-    async def count_certificates_for_instructor(self, instructor_id: int) -> int:
-        course_ids_query = select(Course.id).where(Course.instructor_id == instructor_id)
+    async def count_distinct_students_in_instructor_courses(self, instructor_id: int, tenant_id: int) -> int:
+        course_ids_query = select(Course.id).where(
+            and_(Course.instructor_id == instructor_id, Course.tenant_id == tenant_id)
+        )
+        result = await self.db.execute(
+            select(func.count(Enrollment.user_id.distinct()))
+            .where(
+                and_(
+                    Enrollment.course_id.in_(course_ids_query),
+                    Enrollment.tenant_id == tenant_id
+                )
+            )
+        )
+        return result.scalar() or 0
+
+    async def count_pending_submissions_for_instructor(self, instructor_id: int, tenant_id: int) -> int:
+        course_ids_query = select(Course.id).where(
+            and_(Course.instructor_id == instructor_id, Course.tenant_id == tenant_id)
+        )
+        result = await self.db.execute(
+            select(func.count(TaskSubmission.id))
+            .join(AcademyTask, AcademyTask.id == TaskSubmission.task_id)
+            .where(
+                and_(
+                    AcademyTask.course_id.in_(course_ids_query),
+                    TaskSubmission.status == "SUBMITTED"
+                )
+            )
+        )
+        return result.scalar() or 0
+
+    async def count_certificates_for_instructor(self, instructor_id: int, tenant_id: int) -> int:
+        course_ids_query = select(Course.id).where(
+            and_(Course.instructor_id == instructor_id, Course.tenant_id == tenant_id)
+        )
         result = await self.db.execute(
             select(func.count(SpiritualCertificate.id))
             .where(SpiritualCertificate.course_id.in_(course_ids_query))

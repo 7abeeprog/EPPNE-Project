@@ -1,4 +1,4 @@
-# app/domains/agritech/schemas.py (الإصدار النهائي المتكامل مع تصحيح Optional)
+# app/domains/agritech/schemas.py
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime

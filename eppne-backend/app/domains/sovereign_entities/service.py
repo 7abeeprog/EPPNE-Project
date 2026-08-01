@@ -1,3 +1,4 @@
+# app/domains/sovereign_entities/service.py
 # pyright: reportGeneralTypeIssues=false
 # pyright: reportCallIssue=false
 # pyright: reportAttributeAccessIssue=false
@@ -9,6 +10,7 @@
 والتكامل مع قطاعات المناقصات، التأمين، والدعوات.
 """
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update, and_
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, List, Dict, Any, cast
@@ -17,6 +19,7 @@ import re
 
 from app.domains.sovereign_entities.repository import SovereignEntitiesRepository
 from app.domains.finance.service import FinanceService
+from app.domains.identity.repository import UserRepository
 from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
 from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
@@ -31,48 +34,49 @@ from sqlalchemy.sql import func
 
 
 class SovereignEntitiesService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, tenant_id: int):
         self.db = db
+        self.tenant_id = tenant_id
         self.repo = SovereignEntitiesRepository(db)
-        self.finance = FinanceService(db)
+        self.finance = FinanceService(db, tenant_id)
         self.event_bus = EventBus(cast(Any, redis_client))
 
     # ==============================
-    # 0. دوال Idempotency الموحّدة
+    # 0. دوال Idempotency الموحّدة (مع tenant_id)
     # ==============================
 
     async def _validate_idempotency(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
-        """التحقق من وجود نتيجة مخزنة مسبقاً لمفتاح Idempotency."""
         if idempotency_key:
-            cached = await get_idempotency_result(idempotency_key)
+            cache_key = f"idempotency:{self.tenant_id}:{idempotency_key}"
+            cached = await get_idempotency_result(cache_key)
             if cached is not None:
                 return cached
         return None
 
     async def _store_idempotency(self, idempotency_key: str, result: Dict[str, Any]):
-        """تخزين نتيجة العملية بعد النجاح."""
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, result)
+            cache_key = f"idempotency:{self.tenant_id}:{idempotency_key}"
+            await store_idempotency_result(cache_key, result)
 
     # ==============================
-    # 1. إدارة الكيانات الأساسية
+    # 1. إدارة الكيانات الأساسية (مع tenant_id)
     # ==============================
 
-    async def create_entity(self, user_id: int, tenant_id: int, data: dict) -> SovereignEntity:
-        """إنشاء كيان سيادي جديد (شركة، وزارة، منظمة، إلخ)"""
+    async def create_entity(self, user_id: int, data: dict) -> SovereignEntity:
         if data.get("registration_number"):
-            existing = await self.repo.get_entity_by_registration(data["registration_number"])
+            existing = await self.repo.get_entity_by_registration(data["registration_number"], self.tenant_id)
             if existing:
-                raise PermissionDeniedError("Entity with this registration number already exists")
+                raise ValidationError("Entity with this registration number already exists")
 
         entity = await self.repo.create_entity(
-            tenant_id=tenant_id,
+            tenant_id=self.tenant_id,
             created_by=user_id,
             **data
         )
 
         slug = self._generate_slug(data["name"]) + f"-{entity.id}"
         await self.repo.create_entity_page(
+            tenant_id=self.tenant_id,
             entity_id=entity.id,
             slug=slug,
             custom_structure=None
@@ -85,9 +89,9 @@ class SovereignEntitiesService:
             can_sign_contracts=True
         )
 
-        await audit_log(  # type: ignore[call-arg]
+        await audit_log(
             user_id=user_id,
-            tenant_id=tenant_id,
+            tenant_id=self.tenant_id,
             action="ENTITY_CREATED",
             resource_id=entity.id,
             details={"name": entity.name, "type": entity.entity_type.value}
@@ -95,53 +99,56 @@ class SovereignEntitiesService:
 
         await self.event_bus.publish("entity.created", {
             "entity_id": entity.id,
-            "tenant_id": tenant_id,
+            "tenant_id": self.tenant_id,
             "name": entity.name
         })
 
         return entity
 
     async def get_entity(self, entity_id: int) -> SovereignEntity:
-        entity = await self.repo.get_entity(entity_id)
+        entity = await self.repo.get_entity(entity_id, self.tenant_id)
         if not entity:
             raise NotFoundError("Entity not found")
         return entity
 
     async def list_entities(
         self,
-        tenant_id: int,
         entity_type: Optional[SovereignEntityType] = None,
         kyb_status: Optional[KYBStatus] = None,
         skip: int = 0,
         limit: int = 50
-    ) -> List[SovereignEntity]:
-        """قائمة الكيانات مع فلترة حسب النوع وحالة KYB."""
-        return await self.repo.list_entities(tenant_id, entity_type, kyb_status, skip, limit)
+    ) -> dict:  # ✅ تغيير النوع إلى dict
+        return await self.repo.list_entities(
+            tenant_id=self.tenant_id,
+            entity_type=entity_type,
+            kyb_status=kyb_status,
+            skip=skip,
+            limit=limit
+        )
 
     async def get_my_entities(self, user_id: int) -> List[SovereignEntity]:
-        """جلب الكيانات التي يمثلها المستخدم."""
-        reps = await self.repo.get_representatives_by_user(user_id)
+        reps = await self.repo.get_representatives_by_user(user_id, self.tenant_id)
         entity_ids = [cast(int, r.entity_id) for r in reps]
-        return await self.repo.list_entities_by_ids(entity_ids)
+        return await self.repo.list_entities_by_ids(entity_ids, self.tenant_id)
 
     async def update_entity(self, entity_id: int, user_id: int, data: dict) -> SovereignEntity:
-        entity = await self.repo.get_entity(entity_id)
+        entity = await self.repo.get_entity(entity_id, self.tenant_id)
         if not entity:
             raise NotFoundError("Entity not found")
         if not await self._is_representative(entity_id, user_id):
             raise PermissionDeniedError("You are not authorized to update this entity")
-        return await self.repo.update_entity(entity_id, **data)
+        return await self.repo.update_entity(entity_id, self.tenant_id, **data)
 
     async def delete_entity(self, entity_id: int, user_id: int, soft: bool = True) -> None:
-        entity = await self.repo.get_entity(entity_id)
+        entity = await self.repo.get_entity(entity_id, self.tenant_id)
         if not entity:
             raise NotFoundError("Entity not found")
         if not await self._is_representative(entity_id, user_id):
             raise PermissionDeniedError("You are not authorized to delete this entity")
-        await self.repo.delete_entity(entity_id, soft)
+        await self.repo.delete_entity(entity_id, self.tenant_id, soft)
 
     # ==============================
-    # 2. إدارة الممثلين (Representatives)
+    # 2. إدارة الممثلين (مع tenant_id)
     # ==============================
 
     async def add_representative(self, entity_id: int, admin_user_id: int, data: dict) -> EntityRepresentative:
@@ -155,18 +162,16 @@ class SovereignEntitiesService:
         await self.repo.remove_representative(entity_id, user_id_to_remove)
 
     async def get_representatives(self, entity_id: int) -> List[EntityRepresentative]:
-        """جلب قائمة ممثلي الكيان."""
         return await self.repo.get_representatives(entity_id)
 
     # ==============================
-    # 3. التحقق من الكيانات (KYB)
+    # 3. KYB (مع tenant_id)
     # ==============================
 
     async def upload_kyb_document(
         self,
         entity_id: int,
         user_id: int,
-        tenant_id: int,
         document_type: str,
         document_url: str
     ) -> EntityDocument:
@@ -181,7 +186,6 @@ class SovereignEntitiesService:
         )
 
     async def get_kyb_documents(self, entity_id: int, user_id: int) -> List[EntityDocument]:
-        """جلب مستندات KYB للكيان (يتطلب صلاحية ممثل)."""
         if not await self._is_representative(entity_id, user_id):
             raise PermissionDeniedError("Only entity representative can view documents")
         return await self.repo.get_documents(entity_id)
@@ -193,12 +197,13 @@ class SovereignEntitiesService:
         status: str,
         rejection_reason: Optional[str] = None
     ) -> SovereignEntity:
-        entity = await self.repo.get_entity(entity_id)
+        entity = await self.repo.get_entity(entity_id, self.tenant_id)
         if not entity:
             raise NotFoundError("Entity not found")
         if status == "VERIFIED":
             await self.repo.update_entity(
                 entity_id,
+                self.tenant_id,
                 kyb_status=KYBStatus.VERIFIED,
                 verified_by=admin_id,
                 verified_at=func.now()
@@ -206,25 +211,27 @@ class SovereignEntitiesService:
         else:
             await self.repo.update_entity(
                 entity_id,
+                self.tenant_id,
                 kyb_status=KYBStatus.REJECTED,
                 rejection_reason=rejection_reason
             )
-        return await self.repo.get_entity(entity_id)
+        return await self.repo.get_entity(entity_id, self.tenant_id)
 
     # ==============================
-    # 4. بناء الهوية المؤسسية (Brand Builder)
+    # 4. بناء الهوية المؤسسية (مع tenant_id)
     # ==============================
 
     async def get_entity_page(self, entity_id: int, include_private: bool = False) -> dict:
-        entity = await self.repo.get_entity(entity_id)
+        entity = await self.repo.get_entity(entity_id, self.tenant_id)
         if not entity:
             raise NotFoundError("Entity not found")
 
-        page = await self.repo.get_entity_page(entity_id)
+        page = await self.repo.get_entity_page(entity_id, self.tenant_id)
 
         if not page:
             slug = self._generate_slug(cast(str, entity.name)) + f"-{entity.id}"
             page = await self.repo.create_entity_page(
+                tenant_id=self.tenant_id,
                 entity_id=entity.id,
                 slug=slug,
                 custom_structure=None
@@ -232,7 +239,7 @@ class SovereignEntitiesService:
 
         await self.repo.increment_page_visits(entity_id)
 
-        page = await self.repo.get_entity_page(entity_id)
+        page = await self.repo.get_entity_page(entity_id, self.tenant_id)
 
         if not page:
             raise NotFoundError("Entity page not found after creation")
@@ -265,16 +272,22 @@ class SovereignEntitiesService:
     async def update_entity_page(self, entity_id: int, user_id: int, data: dict) -> EntityPage:
         if not await self._is_representative(entity_id, user_id):
             raise PermissionDeniedError("Only entity representative can edit the page")
-        return await self.repo.update_entity_page(entity_id, **data)
+        updated = await self.repo.update_entity_page(entity_id, self.tenant_id, **data)
+        if data.get("slug"):
+            await redis_client.delete(f"entity_page:public:{data['slug']}")
+        return updated
 
     async def publish_entity_page(self, entity_id: int, user_id: int) -> EntityPage:
         if not await self._is_representative(entity_id, user_id):
             raise PermissionDeniedError("Only entity representative can publish the page")
-        return await self.repo.update_entity_page(entity_id, published_at=datetime.utcnow())
+        updated = await self.repo.update_entity_page(entity_id, self.tenant_id, published_at=datetime.utcnow())
+        page = await self.repo.get_entity_page(entity_id, self.tenant_id)
+        if page and page.slug:
+            await redis_client.delete(f"entity_page:public:{page.slug}")
+        return updated
 
     async def get_public_entity_page(self, slug: str) -> dict:
-        """جلب الصفحة العامة مع تحميل بيانات الكيان في استعلام واحد."""
-        page, entity = await self.repo.get_entity_page_by_slug_with_entity(slug)
+        page, entity = await self.repo.get_entity_page_by_slug_with_entity(slug, self.tenant_id)
         if not page or not entity:
             raise NotFoundError("Page not found")
         if not entity.is_active:
@@ -299,27 +312,24 @@ class SovereignEntitiesService:
         }
 
     # ==============================
-    # 5. قوالب ومكونات الصفحات
+    # 5. قوالب ومكونات الصفحات (مع tenant_id)
     # ==============================
 
-    async def create_page_template(self, tenant_id: int, user_id: int, data: dict) -> EntityPageTemplate:
-        """إنشاء قالب صفحة جديد (للمشرفين)."""
-        return await self.repo.create_template(tenant_id=tenant_id, **data)
+    async def create_page_template(self, user_id: int, data: dict) -> EntityPageTemplate:
+        return await self.repo.create_template(tenant_id=self.tenant_id, **data)
 
-    async def list_templates(self, tenant_id: int) -> List[EntityPageTemplate]:
-        """قائمة قوالب الصفحات للمستأجر."""
-        return await self.repo.list_templates(tenant_id)
+    async def list_templates(self) -> List[EntityPageTemplate]:
+        return await self.repo.list_templates(self.tenant_id)
 
-    async def list_components(self, tenant_id: int) -> List[PageComponent]:
-        """قائمة مكونات الصفحات للمستأجر."""
-        return await self.repo.list_components(tenant_id)
+    async def list_components(self) -> List[PageComponent]:
+        return await self.repo.list_components(self.tenant_id)
 
     # ==============================
-    # 6. التكامل مع القطاعات الأخرى – الإيداع (مع Idempotency محسّن)
+    # 6. التكامل المالي (مع tenant_id)
     # ==============================
 
     async def get_entity_balance(self, entity_id: int) -> Decimal:
-        entity = await self.repo.get_entity(entity_id)
+        entity = await self.repo.get_entity(entity_id, self.tenant_id)
         if not entity:
             raise NotFoundError("Entity not found")
         return cast(Decimal, entity.treasury_balance_mrusdt)
@@ -333,11 +343,6 @@ class SovereignEntitiesService:
         notes: Optional[str] = None,
         idempotency_key: Optional[str] = None
     ) -> dict:
-        """
-        إيداع مبلغ في خزينة الكيان (مثل تحويل من حساب رئيسي أو أرباح).
-        يدعم Idempotency لمنع تكرار الإيداع.
-        """
-        # 1. التحقق من Idempotency
         if idempotency_key:
             cached = await self._validate_idempotency(idempotency_key)
             if cached is not None:
@@ -346,26 +351,32 @@ class SovereignEntitiesService:
         if not await self._is_authorized_representative(entity_id, admin_user_id, [EntityRole.OWNER, EntityRole.EXECUTIVE_DIRECTOR]):
             raise PermissionDeniedError("Only owner or executive director can deposit to entity wallet")
 
-        entity = await self.repo.get_entity(entity_id)
+        entity = await self.repo.get_entity(entity_id, self.tenant_id)
         if not entity:
             raise NotFoundError("Entity not found")
 
+        user_repo = UserRepository(self.db)
+        user = await user_repo.get_by_id(admin_user_id, self.tenant_id)
+        if not user:
+            raise NotFoundError("User not found")
+        receiver_email = cast(str, user.email)
+
         async with self.db.begin_nested():
             new_balance = cast(Decimal, entity.treasury_balance_mrusdt) + amount
-            await self.repo.update_entity(entity_id, treasury_balance_mrusdt=new_balance)
+            await self.repo.update_entity(entity_id, self.tenant_id, treasury_balance_mrusdt=new_balance)
 
-            tx_hash = await self.finance.record_deposit(  # type: ignore[attr-defined]
-                entity_id=entity_id,
-                user_id=admin_user_id,
-                amount=amount,
+            tx_hash = await self.finance.transfer(
+                sender_id=admin_user_id,
+                receiver_email=receiver_email,
                 currency=currency,
+                amount=amount,
+                idempotency_key=idempotency_key or f"DEPOSIT-{uuid.uuid4().hex[:12]}",
                 notes=notes or f"Deposit to entity {entity.name}",
-                idempotency_key=idempotency_key
             )
 
-            await audit_log(  # type: ignore[call-arg]
+            await audit_log(
                 user_id=admin_user_id,
-                tenant_id=entity.tenant_id,
+                tenant_id=self.tenant_id,
                 action="ENTITY_DEPOSIT",
                 resource_id=entity_id,
                 details={"amount": float(cast(Decimal, amount)), "currency": currency}
@@ -384,15 +395,10 @@ class SovereignEntitiesService:
             "currency": currency
         }
 
-        # تخزين النتيجة كاملة
         if idempotency_key:
             await self._store_idempotency(idempotency_key, result)
 
         return result
-
-    # ==============================
-    # 7. التحويل من الكيان (مع Idempotency محسّن)
-    # ==============================
 
     async def transfer_from_entity(
         self,
@@ -404,21 +410,17 @@ class SovereignEntitiesService:
         notes: Optional[str] = None,
         idempotency_key: Optional[str] = None
     ) -> str:
-        """
-        تحويل من خزينة الكيان إلى عنوان خارجي (مع Idempotency).
-        """
-        # 1. التحقق من Idempotency
         if idempotency_key:
             cached = await self._validate_idempotency(idempotency_key)
             if cached is not None:
                 return cached.get("transaction_hash", "")
 
-        entity = await self.repo.get_entity(entity_id)
+        entity = await self.repo.get_entity(entity_id, self.tenant_id)
         if not entity:
             raise NotFoundError("Entity not found")
 
-        rep = await self.repo.get_representative(entity_id, from_representative_id)
-        if not rep or not rep.can_sign_contracts:  # type: ignore
+        rep = await self.repo.get_representative(entity_id, from_representative_id, self.tenant_id)
+        if not rep or not rep.can_sign_contracts:
             raise PermissionDeniedError("You are not authorized to sign transfers from this entity")
 
         if cast(Decimal, entity.treasury_balance_mrusdt) < amount:
@@ -430,16 +432,16 @@ class SovereignEntitiesService:
                 receiver_email=to_address,
                 currency=currency,
                 amount=amount,
+                idempotency_key=idempotency_key or "",
                 notes=notes or f"Transfer from entity {entity.name}",
-                idempotency_key=idempotency_key or ""
             )
 
             new_balance = cast(Decimal, entity.treasury_balance_mrusdt) - amount
-            await self.repo.update_entity(entity_id, treasury_balance_mrusdt=new_balance)
+            await self.repo.update_entity(entity_id, self.tenant_id, treasury_balance_mrusdt=new_balance)
 
-            await audit_log(  # type: ignore[call-arg]
+            await audit_log(
                 user_id=from_representative_id,
-                tenant_id=entity.tenant_id,
+                tenant_id=self.tenant_id,
                 action="ENTITY_TRANSFER",
                 resource_id=entity_id,
                 details={
@@ -469,26 +471,23 @@ class SovereignEntitiesService:
         return tx_hash
 
     # ==============================
-    # 8. الهيكل التنظيمي (Tree)
+    # 7. الهيكل التنظيمي (Tree)
     # ==============================
 
     async def get_entity_tree(self, entity_id: int) -> Optional[dict]:
-        """
-        جلب شجرة الكيان بالكامل (للعرض في واجهة الإدارة).
-        """
-        entity = await self.repo.get_entity(entity_id)
+        entity = await self.repo.get_entity(entity_id, self.tenant_id)
         if not entity:
             raise NotFoundError("Entity not found")
-        tree = await self.repo.get_entity_tree(entity_id)
+        tree = await self.repo.get_entity_tree(entity_id, self.tenant_id)
         return tree
 
     # ==============================
-    # 9. دوال مساعدة
+    # 8. دوال مساعدة
     # ==============================
 
     async def _is_representative(self, entity_id: int, user_id: int) -> bool:
         reps = await self.repo.get_representatives(entity_id)
-        return any(r.user_id == user_id for r in reps)  # type: ignore
+        return any(r.user_id == user_id for r in reps)
 
     async def _is_authorized_representative(
         self,
@@ -498,7 +497,7 @@ class SovereignEntitiesService:
     ) -> bool:
         reps = await self.repo.get_representatives(entity_id)
         for r in reps:
-            if r.user_id == user_id and r.role in allowed_roles:  # type: ignore
+            if r.user_id == user_id and r.role in allowed_roles:
                 return True
         return False
 

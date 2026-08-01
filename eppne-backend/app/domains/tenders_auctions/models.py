@@ -1,7 +1,9 @@
+# app/domains/tenders_auctions/models.py
 from sqlalchemy import (
     Column, Integer, String, ForeignKey, DateTime, Text,
-    Boolean, Numeric, JSON, Enum as SQLEnum, Index, CheckConstraint
+    Boolean, Numeric, Enum as SQLEnum, Index, CheckConstraint, text
 )
+from sqlalchemy.dialects.postgresql import JSONB  # ✅ تم إضافة الاستيراد الصحيح
 from sqlalchemy.sql import func
 import enum
 from app.core.database import Base
@@ -40,7 +42,7 @@ class SovereignTender(Base):
 
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
-    scope_of_work = Column(JSON, nullable=False)
+    scope_of_work = Column(JSONB, nullable=False)
 
     estimated_budget_mrusdt = Column(Numeric(30, 8), nullable=False)
     min_bid_mrusdt = Column(Numeric(30, 8), nullable=True)
@@ -62,6 +64,8 @@ class SovereignTender(Base):
     __table_args__ = (
         CheckConstraint("submission_deadline > submission_start", name="check_tender_dates"),
         Index("ix_tender_tenant_status", "tenant_id", "status"),
+        Index("ix_tender_created_at", "created_at"),
+        Index("ix_tender_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
     )
 
 # ========== 2. العطاءات (Tender Bids) ==========
@@ -75,7 +79,7 @@ class TenderBid(Base):
     tender_id = Column(Integer, ForeignKey("sovereign_tenders.id"), nullable=False, index=True)
     bidder_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
-    technical_envelope = Column(JSON, nullable=False)
+    technical_envelope = Column(JSONB, nullable=False)
     encrypted_financial_envelope = Column(Text, nullable=False)
 
     technical_score = Column(Numeric(5, 2), nullable=True)
@@ -90,6 +94,8 @@ class TenderBid(Base):
     __table_args__ = (
         Index("ix_tender_bid_tenant", "tenant_id"),
         Index("ix_tender_bid_unique", "tender_id", "bidder_id", unique=True),
+        Index("ix_tender_bid_created_at", "created_at"),
+        Index("ix_tender_bid_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
     )
 
 # ========== 3. المزادات (Auctions) ==========
@@ -127,6 +133,8 @@ class SovereignAuction(Base):
         CheckConstraint("end_time > start_time", name="check_auction_dates"),
         Index("ix_auction_tenant", "tenant_id"),
         Index("ix_auction_status_times", "status", "start_time", "end_time"),
+        Index("ix_auction_created_at", "created_at"),
+        Index("ix_auction_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
     )
 
 # ========== 4. المزايدات الحية (Live Bids) ==========
@@ -149,4 +157,6 @@ class LiveBid(Base):
         CheckConstraint("bid_amount_mrusdt > 0", name="check_bid_positive"),
         Index("ix_live_bid_tenant_auction", "tenant_id", "auction_id"),
         Index("ix_live_bid_auction_amount", "auction_id", "bid_amount_mrusdt"),
+        Index("ix_live_bid_created_at", "created_at"),
+        Index("ix_live_bid_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
     )

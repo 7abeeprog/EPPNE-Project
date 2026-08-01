@@ -5,7 +5,7 @@ from typing import Optional, cast
 from datetime import datetime, timedelta
 
 from app.core.database import get_db
-from app.api.deps import get_current_superuser, get_current_tenant
+from app.api.deps import get_current_active_user, get_current_superuser, get_current_tenant
 from app.domains.identity.models import User
 from app.domains.ai_governance.service import AIGovernanceService
 from app.domains.ai_governance.schemas import (
@@ -15,16 +15,13 @@ from app.domains.ai_governance.schemas import (
     AgentRateLimitResponse,
     AgentUsageSummary,
     AgentAuditLogResponse,
+    AgentQuotaRemainingResponse,
 )
 from app.domains.academy.models import AcademyTenant
 from app.core.rate_limiter import rate_limit
 
 router = APIRouter(prefix="/ai-governance", tags=["AI Agent Governance"])
 
-
-# ============================================================
-# 1. إدارة الحصص (Quotas)
-# ============================================================
 
 @router.post("/agents/{agent_id}/quotas", response_model=AgentQuotaResponse)
 @rate_limit(max_requests=20, window_seconds=60)
@@ -36,13 +33,9 @@ async def set_agent_quota(
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    تعيين حصة لوكيل (يتطلب صلاحيات مشرف).
-    """
-    service = AIGovernanceService(db)
+    service = AIGovernanceService(db, cast(int, tenant.id))
     quota = await service.set_quota(
         admin_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
         agent_id=agent_id,
         quota_data=data.model_dump(),
         ip_address=request.client.host if request.client else None
@@ -54,22 +47,48 @@ async def set_agent_quota(
 async def get_agent_quotas(
     agent_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = AIGovernanceService(db, cast(int, tenant.id))
+    if not await service._check_agent_ownership(agent_id, cast(int, current_user.id)):
+        if not getattr(current_user, "system_role", "") in ["SUPER_ADMIN", "EXECUTIVE_DIRECTOR"]:
+            raise HTTPException(status_code=403, detail="Access denied to this agent's quotas")
+    return await service.get_agent_quotas(agent_id)
+
+
+@router.get("/agents/{agent_id}/quotas/remaining", response_model=AgentQuotaRemainingResponse)
+async def get_agent_remaining_quotas(
+    agent_id: int,
+    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = AIGovernanceService(db, cast(int, tenant.id))
+    if not await service._check_agent_ownership(agent_id, cast(int, current_user.id)):
+        if not getattr(current_user, "system_role", "") in ["SUPER_ADMIN", "EXECUTIVE_DIRECTOR"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+    remaining = await service.get_remaining_quotas(agent_id)
+    return remaining
+
+
+@router.post("/agents/{agent_id}/quotas/reset", status_code=204)
+@rate_limit(max_requests=10, window_seconds=60)
+async def reset_agent_quotas(
+    agent_id: int,
+    request: Request,
+    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب جميع الحصص النشطة لوكيل معين (يتطلب صلاحيات مشرف).
-    """
-    service = AIGovernanceService(db)
-    return await service.get_agent_quotas(
+    service = AIGovernanceService(db, cast(int, tenant.id))
+    await service.reset_quotas(
         agent_id=agent_id,
-        tenant_id=cast(int, tenant.id)
+        admin_id=cast(int, current_user.id),
+        ip_address=request.client.host if request.client else None
     )
+    return None
 
-
-# ============================================================
-# 2. حدود المعدل (Rate Limits)
-# ============================================================
 
 @router.put("/agents/{agent_id}/rate-limit", response_model=AgentRateLimitResponse)
 @rate_limit(max_requests=20, window_seconds=60)
@@ -81,13 +100,9 @@ async def update_rate_limit(
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    تحديث حدود المعدل للوكيل (يتطلب صلاحيات مشرف).
-    """
-    service = AIGovernanceService(db)
+    service = AIGovernanceService(db, cast(int, tenant.id))
     limits = await service.update_rate_limits(
         agent_id=agent_id,
-        tenant_id=cast(int, tenant.id),
         admin_id=cast(int, current_user.id),
         data=data.model_dump(exclude_unset=True),
         ip_address=request.client.host if request.client else None
@@ -99,25 +114,18 @@ async def update_rate_limit(
 async def get_rate_limit(
     agent_id: int,
     tenant: AcademyTenant = Depends(get_current_tenant),
-    current_user: User = Depends(get_current_superuser),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب حدود المعدل للوكيل (يتطلب صلاحيات مشرف).
-    """
-    service = AIGovernanceService(db)
-    limits = await service.get_rate_limits(
-        agent_id=agent_id,
-        tenant_id=cast(int, tenant.id)
-    )
+    service = AIGovernanceService(db, cast(int, tenant.id))
+    if not await service._check_agent_ownership(agent_id, cast(int, current_user.id)):
+        if not getattr(current_user, "system_role", "") in ["SUPER_ADMIN", "EXECUTIVE_DIRECTOR"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+    limits = await service.get_rate_limits(agent_id)
     if not limits:
         raise HTTPException(status_code=404, detail="Rate limits not found for this agent")
     return limits
 
-
-# ============================================================
-# 3. سجلات التدقيق (Audit Logs)
-# ============================================================
 
 @router.get("/agents/{agent_id}/audit-logs", response_model=list[AgentAuditLogResponse])
 async def get_agent_audit_logs(
@@ -128,21 +136,14 @@ async def get_agent_audit_logs(
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب سجلات التدقيق لوكيل معين (يتطلب صلاحيات مشرف).
-    """
-    service = AIGovernanceService(db)
-    return await service.get_audit_logs(
+    service = AIGovernanceService(db, cast(int, tenant.id))
+    result = await service.get_audit_logs(
         agent_id=agent_id,
-        tenant_id=cast(int, tenant.id),
         skip=skip,
         limit=limit
     )
+    return result.data
 
-
-# ============================================================
-# 4. ملخص الاستخدام (Usage Summary)
-# ============================================================
 
 @router.get("/agents/{agent_id}/usage-summary", response_model=AgentUsageSummary)
 async def get_usage_summary(
@@ -152,11 +153,7 @@ async def get_usage_summary(
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    جلب ملخص الاستخدام للوكيل في فترة زمنية محددة (يتطلب صلاحيات مشرف).
-    الفترات المدعومة: DAILY, WEEKLY, MONTHLY, YEARLY (افتراضي: MONTHLY)
-    """
-    service = AIGovernanceService(db)
+    service = AIGovernanceService(db, cast(int, tenant.id))
     now = datetime.utcnow()
     period_map = {
         "DAILY": 1,
@@ -169,16 +166,11 @@ async def get_usage_summary(
 
     return await service.get_usage_summary(
         agent_id=agent_id,
-        tenant_id=cast(int, tenant.id),
         start_date=start_date,
         end_date=now,
         period=period.upper()
     )
 
-
-# ============================================================
-# 5. نقطة التحقق من الحصص (للخدمات الداخلية)
-# ============================================================
 
 @router.post("/agents/{agent_id}/check-and-consume")
 async def check_and_consume(
@@ -193,21 +185,20 @@ async def check_and_consume(
     tenant: AcademyTenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    نقطة تحقق داخلية للخدمات الأخرى للتحقق من الحصص وتسجيل الاستهلاك.
-    هذه النقطة لا تتطلب صلاحيات لأنها تُستخدم من قبل وكلاء آخرين.
-    """
     from decimal import Decimal
-    service = AIGovernanceService(db)
-    result = await service.check_and_consume(
-        tenant_id=cast(int, tenant.id),
-        agent_id=agent_id,
-        user_id=user_id,
-        action_type=action_type,
-        tokens=tokens,
-        cost=Decimal(str(cost)),
-        idempotency_key=idempotency_key,
-        request_tokens=request_tokens,
-        completion_tokens=completion_tokens
-    )
-    return {"allowed": result}
+    service = AIGovernanceService(db, cast(int, tenant.id))
+    try:
+        result = await service.check_and_consume(
+            agent_id=agent_id,
+            user_id=user_id,
+            action_type=action_type,
+            tokens=tokens,
+            cost=Decimal(str(cost)),
+            idempotency_key=idempotency_key,
+            request_tokens=request_tokens,
+            completion_tokens=completion_tokens
+        )
+        return {"allowed": result["allowed"], "idempotent": result.get("idempotent", False)}
+    except Exception as e:
+        retry_after = getattr(e, "retry_after", None)
+        return {"allowed": False, "error": str(e), "retry_after": retry_after}

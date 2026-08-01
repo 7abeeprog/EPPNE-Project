@@ -1,8 +1,9 @@
-# app/domains/agritech/models.py (الإصدار النهائي المتكامل)
+# app/domains/agritech/models.py
 from sqlalchemy import (
     Column, Integer, BigInteger, String, ForeignKey, DateTime, Text,
-    Boolean, Numeric, JSON, Enum as SQLEnum, Index, CheckConstraint
+    Boolean, Numeric, Enum as SQLEnum, Index, CheckConstraint
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from app.core.database import Base
 import enum
@@ -75,12 +76,12 @@ class SmartFarm(Base):
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     is_deleted = Column(Boolean, default=False)
 
-# ========== 2. قطاعات المزرعة (مع Multi-Tenancy) ==========
+# ========== 2. قطاعات المزرعة ==========
 class FarmZone(Base):
     __tablename__ = "farm_zones"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     farm_id = Column(Integer, ForeignKey("smart_farms.id"), nullable=False, index=True)
     smart_asset_id = Column(Integer, ForeignKey("smart_assets.id"), nullable=True)
 
@@ -98,13 +99,13 @@ class FarmZone(Base):
         Index("ix_farmzone_tenant_farm", "tenant_id", "farm_id"),
     )
 
-# ========== 3. الدورات الزراعية (مع Multi-Tenancy + Idempotency) ==========
+# ========== 3. الدورات الزراعية ==========
 class CropCycle(Base):
     __tablename__ = "crop_cycles"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
     zone_id = Column(Integer, ForeignKey("farm_zones.id"), nullable=False, index=True)
 
     crop_name = Column(String(150), nullable=False)
@@ -123,13 +124,13 @@ class CropCycle(Base):
         CheckConstraint("expected_harvest_date > planting_date", name="check_harvest_after_planting"),
     )
 
-# ========== 4. الحصاد (مع Multi-Tenancy + Idempotency) ==========
+# ========== 4. الحصاد ==========
 class HarvestBatch(Base):
     __tablename__ = "harvest_batches"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
     cycle_id = Column(Integer, ForeignKey("crop_cycles.id"), nullable=False, index=True)
 
     harvest_date = Column(DateTime(timezone=True), server_default=func.now())
@@ -148,12 +149,12 @@ class HarvestBatch(Base):
         Index("ix_harvest_tenant_cycle", "tenant_id", "cycle_id"),
     )
 
-# ========== 5. الثروة الحيوانية (مع Multi-Tenancy) ==========
+# ========== 5. الثروة الحيوانية ==========
 class BioAssetCohort(Base):
     __tablename__ = "bio_asset_cohorts"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     zone_id = Column(Integer, ForeignKey("farm_zones.id"), nullable=False, index=True)
 
     bio_type = Column(SQLEnum(BioAssetType), nullable=False)
@@ -171,13 +172,13 @@ class BioAssetCohort(Base):
         Index("ix_bio_tenant_zone", "tenant_id", "zone_id"),
     )
 
-# ========== 6. الإنتاج الحيواني (مع Multi-Tenancy + Idempotency) ==========
+# ========== 6. الإنتاج الحيواني ==========
 class BioProductYield(Base):
     __tablename__ = "bio_product_yields"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
     cohort_id = Column(Integer, ForeignKey("bio_asset_cohorts.id"), nullable=False, index=True)
 
     product_type = Column(SQLEnum(BioProductType), nullable=False)
@@ -193,12 +194,12 @@ class BioProductYield(Base):
         Index("ix_bioyield_tenant_cohort", "tenant_id", "cohort_id"),
     )
 
-# ========== 7. سلسلة التوريد (مع Multi-Tenancy) ==========
+# ========== 7. سلسلة التوريد ==========
 class SupplyChainStage(Base):
     __tablename__ = "supply_chain_stages"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
 
     traceable_type = Column(String(50), nullable=False)
     traceable_id = Column(Integer, nullable=False, index=True)
@@ -219,12 +220,12 @@ class SupplyChainStage(Base):
         Index("ix_traceable_stage", "traceable_type", "traceable_id", "stage_order"),
     )
 
-# ========== 8. QR للتتبع (مع Multi-Tenancy) ==========
+# ========== 8. QR للتتبع ==========
 class TraceabilityQR(Base):
     __tablename__ = "traceability_qrs"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     traceable_type = Column(String(50), nullable=False)
     traceable_id = Column(Integer, nullable=False, index=True)
     qr_code = Column(String(255), unique=True, nullable=False)
@@ -268,12 +269,12 @@ class AgriculturalCertificate(Base):
         Index("ix_cert_entity", "certified_entity_type", "certified_entity_id"),
     )
 
-# ========== 10. مستشعرات التربة (مع Multi-Tenancy) ==========
+# ========== 10. مستشعرات التربة ==========
 class SoilSensorReading(Base):
     __tablename__ = "soil_sensor_readings"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     zone_id = Column(Integer, ForeignKey("farm_zones.id"), nullable=False, index=True)
     sensor_device_id = Column(String(100), nullable=False)
 
@@ -300,13 +301,13 @@ class WeatherAlert(Base):
 
     alert_type = Column(String(50), nullable=False)
     severity = Column(String(20), default="WARNING")
-    location_gps = Column(JSON, nullable=True)
+    location_gps = Column(JSONB, nullable=True)
     message = Column(Text, nullable=False)
 
     start_time = Column(DateTime(timezone=True), nullable=False)
     end_time = Column(DateTime(timezone=True), nullable=True)
 
-    affected_farm_ids = Column(JSON, default=list)
+    affected_farm_ids = Column(JSONB, default=list)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     is_active = Column(Boolean, default=True)

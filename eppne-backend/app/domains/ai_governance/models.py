@@ -1,7 +1,8 @@
 # app/domains/ai_governance/models.py
 from sqlalchemy import (
-    Column, Integer, String, ForeignKey, DateTime, Text, Boolean, Numeric, JSON, Enum as SQLEnum, Index
+    Column, Integer, String, ForeignKey, DateTime, Text, Boolean, Numeric, Enum as SQLEnum, Index
 )
+from sqlalchemy.dialects.postgresql import JSONB  # ✅ تم إضافة الاستيراد الصحيح
 from sqlalchemy.sql import func
 from app.core.database import Base
 import enum
@@ -30,10 +31,10 @@ class AgentQuota(Base):
 
     limit_type = Column(SQLEnum(LimitType), nullable=False)
     period = Column(SQLEnum(UsagePeriod), nullable=False)
-    limit_value = Column(Numeric(15, 2), nullable=False)   # عدد الطلبات، التوكنات، أو التكلفة
+    limit_value = Column(Numeric(15, 2), nullable=False)
 
     current_usage = Column(Numeric(15, 2), default=0)
-    reset_at = Column(DateTime(timezone=True), nullable=False)   # موعد إعادة تعيين العداد
+    reset_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -60,17 +61,21 @@ class AgentUsageLog(Base):
     status = Column(String(20), default="SUCCESS")
     error_message = Column(Text, nullable=True)
 
-    # 🔥 Idempotency Key (لمنع تسجيل الاستخدام المكرر)
     idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_usage_log_tenant_agent", "tenant_id", "agent_id"),
+        Index("ix_usage_log_created_action", "created_at", "action_type"),
+    )
 
 
 class AgentRateLimit(Base):
     __tablename__ = "agent_rate_limits"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     agent_id = Column(Integer, ForeignKey("ai_agents.id"), nullable=False, index=True)
 
     requests_per_minute = Column(Integer, default=60)
@@ -88,15 +93,16 @@ class AgentAuditLog(Base):
     __tablename__ = "agent_audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     agent_id = Column(Integer, ForeignKey("ai_agents.id"), nullable=False)
     admin_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     action = Column(String(100), nullable=False)  # CREATE, UPDATE, SUSPEND, ACTIVATE, CHANGE_QUOTA
-    old_value = Column(JSON, nullable=True)
-    new_value = Column(JSON, nullable=True)
+    old_value = Column(JSONB, nullable=True)
+    new_value = Column(JSONB, nullable=True)
     ip_address = Column(String(45), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         Index("ix_audit_tenant_agent", "tenant_id", "agent_id"),
+        Index("ix_audit_created_action", "created_at", "action"),
     )

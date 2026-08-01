@@ -1,13 +1,14 @@
 # app/domains/ai_agents/models.py
 from sqlalchemy import (
     Column, Integer, String, ForeignKey, DateTime, Text,
-    Boolean, Numeric, JSON, Enum as SQLEnum, Index
+    Boolean, Numeric, Enum as SQLEnum, Index
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from app.core.database import Base
 import enum
 
-# ========== الأنواع المساعدة ==========
+
 class AgentRole(str, enum.Enum):
     CEO = "CEO"
     SWARM_ORCHESTRATOR = "SWARM_ORCHESTRATOR"
@@ -24,28 +25,27 @@ class AgentRole(str, enum.Enum):
     DIGITAL_TWIN = "DIGITAL_TWIN"
     SUPPORT = "SUPPORT"
 
+
 class AgentStatus(str, enum.Enum):
     IDLE = "IDLE"
     ACTIVE = "ACTIVE"
     LEARNING = "LEARNING"
     SUSPENDED = "SUSPENDED"
 
+
 class ApprovalStatus(str, enum.Enum):
     PENDING = "PENDING"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
-    CANCELLED = "CANCELLED"  # 🔥 إلغاء الطلب
+    CANCELLED = "CANCELLED"
 
 
-# ============================================================
-# 1. الوكلاء الرقميون (مع فرض العزل السيادي)
-# ============================================================
 class AIAgent(Base):
     __tablename__ = "ai_agents"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 إلزامي
-    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)             # 🔥 إلزامي
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     name = Column(String(255), nullable=False)
     role = Column(SQLEnum(AgentRole), nullable=False)
@@ -72,26 +72,22 @@ class AIAgent(Base):
     )
 
 
-# ============================================================
-# 2. صمام الأمان البشري (Human-in-the-loop) مع Idempotency
-# ============================================================
 class AgentApprovalQueue(Base):
     __tablename__ = "agent_approval_queue"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     agent_id = Column(Integer, ForeignKey("ai_agents.id"), nullable=False, index=True)
     human_approver_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
-    action_type = Column(String(100), nullable=False)   # مثلاً: "TRANSFER_FUNDS", "SIGN_CONTRACT"
-    proposed_payload = Column(JSON, nullable=False)     # البيانات المقترحة للتنفيذ
+    action_type = Column(String(100), nullable=False)
+    proposed_payload = Column(JSONB, nullable=False)
 
-    # 🔥 Idempotency Key (لمنع التكرار)
     idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     status = Column(SQLEnum(ApprovalStatus), default=ApprovalStatus.PENDING)
     resolved_at = Column(DateTime(timezone=True), nullable=True)
-    human_feedback = Column(Text, nullable=True)        # تعليق الموافق/الرافض
+    human_feedback = Column(Text, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -102,30 +98,25 @@ class AgentApprovalQueue(Base):
     )
 
 
-# ============================================================
-# 3. سجل استهلاك الذكاء الاصطناعي (Pay-per-Compute)
-# ============================================================
 class AITaskLog(Base):
     __tablename__ = "ai_task_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     agent_id = Column(Integer, ForeignKey("ai_agents.id"), nullable=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
-    task_type = Column(String(50), index=True)          # "CHAT", "ANALYSIS", "DECISION", "EXECUTION"
+    task_type = Column(String(50), index=True)
 
-    # 🔥 Idempotency Key (لمنع تسجيل المهام المكررة)
     idempotency_key = Column(String(255), nullable=True, index=True)
 
     prompt_tokens = Column(Integer, default=0)
     completion_tokens = Column(Integer, default=0)
-    cost_mrusdt = Column(Numeric(15, 8), default=0)     # التكلفة المحسوبة
+    cost_mrusdt = Column(Numeric(15, 8), default=0)
 
     settlement_type = Column(String(50), default="WEB3_CRYPTO")
     payment_tx_hash = Column(String(100), nullable=True)
 
-    # 🔥 النموذج المستخدم فعلياً (يُسجل من LLMFactory)
     used_model = Column(String(50), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -133,5 +124,6 @@ class AITaskLog(Base):
     __table_args__ = (
         Index("ix_tasklog_tenant_task", "tenant_id", "task_type"),
         Index("ix_tasklog_agent_created", "agent_id", "created_at"),
-        Index("ix_tasklog_used_model", "used_model"),  # فهرس لتسريع تحليلات النماذج
+        Index("ix_tasklog_used_model", "used_model"),
+        Index("ix_tasklog_created_type", "created_at", "task_type"),
     )

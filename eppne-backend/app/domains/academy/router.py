@@ -8,7 +8,7 @@ import hashlib
 import uuid
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user, get_current_superuser, get_current_instructor_or_admin, require_subscription
+from app.api.deps import get_current_active_user, get_current_superuser, get_current_instructor_or_admin, require_subscription, get_current_tenant
 from app.domains.identity.models import User
 
 from app.domains.academy.service import AcademyService
@@ -61,7 +61,7 @@ async def create_tenant(
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, 0)
     return await service.create_tenant(**data.model_dump())
 
 @router.get("/tenants/by-domain", response_model=TenantResponse)
@@ -80,9 +80,10 @@ async def get_tenant_by_domain(
 async def create_org_entity(
     data: OrganizationEntityCreate,
     current_user: User = Depends(get_current_superuser),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.create_org_entity(**data.model_dump())
 
 @router.get("/entities", response_model=list[OrganizationEntityResponse])
@@ -99,18 +100,14 @@ async def list_org_entities(
 # ============================================================
 # Bootcamps & Tracks
 # ============================================================
-@router.post(
-    "/bootcamps",
-    response_model=BootcampResponse,
-    status_code=201,
-    dependencies=[Depends(require_subscription("academy"))],
-)
+@router.post("/bootcamps", response_model=BootcampResponse, status_code=201, dependencies=[Depends(require_subscription("academy"))])
 async def create_bootcamp(
     data: BootcampCreate,
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.create_bootcamp(data.model_dump(), cast(int, current_user.id))
 
 @router.get("/bootcamps", response_model=list[BootcampResponse])
@@ -128,9 +125,10 @@ async def list_bootcamps(
 async def create_track(
     data: TrackCreate,
     current_user: User = Depends(get_current_superuser),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.create_track(data.model_dump())
 
 @router.get("/tracks", response_model=list[TrackResponse])
@@ -157,9 +155,10 @@ async def list_tracks(
 async def create_cohort(
     data: CohortCreate,
     current_user: User = Depends(get_current_superuser),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.create_cohort(data.model_dump())
 
 @router.get("/cohorts", response_model=list[CohortResponse])
@@ -176,40 +175,38 @@ async def list_cohorts(
 # ============================================================
 # Courses Management
 # ============================================================
-@router.post(
-    "/courses",
-    response_model=CourseResponse,
-    status_code=201,
-    dependencies=[Depends(require_subscription("academy"))],
-)
+@router.post("/courses", response_model=CourseResponse, status_code=201, dependencies=[Depends(require_subscription("academy"))])
 async def create_course(
     data: CourseCreate,
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.create_course(data.model_dump(), cast(int, current_user.id))
 
 @router.get("/courses", response_model=list[CourseResponse])
 async def get_courses(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    tenant_id: int = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     repo = AcademyRepository(db)
-    courses = await repo.list_all_courses(skip=skip, limit=limit)
-    return courses
+    result = await repo.list_all_courses(tenant_id, skip=skip, limit=limit)
+    return result.data
 
 @router.get("/courses/{course_id}", response_model=CourseResponse)
 async def get_course_by_id(
     course_id: int,
+    tenant_id: int = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(rate_limit)
 ):
     repo = AcademyRepository(db)
-    course = await repo.get_course(course_id)
+    course = await repo.get_course(course_id, tenant_id)
     if not course:
         raise HTTPException(status_code=404, detail="الكورس غير موجود")
     return course
@@ -219,25 +216,27 @@ async def update_course(
     course_id: int,
     data: CourseUpdate,
     current_user: User = Depends(get_current_instructor_or_admin),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     course = await service.update_course(course_id, data.model_dump(exclude_unset=True), cast(int, current_user.id))
     if not course:
         raise HTTPException(status_code=404, detail="الكورس غير موجود")
     return course
 
 # ============================================================
-# 🚀 Store & Student Enrollments (مع Tenant ديناميكي)
+# 🚀 Store & Student Enrollments
 # ============================================================
 @router.get("/store/courses", response_model=list[CourseResponse])
 async def get_store_courses(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.get_store_courses(cast(int, current_user.id), skip=skip, limit=limit)
 
 @router.get("/student/my-enrollments", response_model=list[EnrollmentResponse])
@@ -245,39 +244,44 @@ async def get_my_enrollments(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
-    return await service.get_user_enrollments(cast(int, current_user.id), skip=skip, limit=limit)
+    service = AcademyService(db, tenant_id)
+    result = await service.get_user_enrollments(cast(int, current_user.id), skip=skip, limit=limit)
+    return result.data
 
 @router.post("/store/courses/{course_id}/enroll", response_model=EnrollmentResponse)
 async def enroll_in_course(
     course_id: int,
     data: EnrollmentCreate,
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.enroll_in_course(
         user_id=cast(int, current_user.id),
         course_id=course_id,
         cohort_id=data.cohort_id,
         payment_method=data.payment_method,
-        payment_ref=data.payment_ref or ""
+        payment_ref=data.payment_ref or "",
+        affiliate_code=data.affiliate_code
     )
 
 @router.post("/enroll", response_model=EnrollmentResponse)
 async def enroll_in_course_simple(
     course_id: int,
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.enroll_in_course(
         user_id=cast(int, current_user.id),
         course_id=course_id,
         cohort_id=None,
-        payment_method="FREE",  # ✅ تم التصحيح من None إلى "FREE"
+        payment_method="FREE",
         payment_ref=""
     )
 
@@ -286,9 +290,10 @@ async def update_enrollment_progress(
     course_id: int,
     data: ProgressUpdate,
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     enrollment = await service.update_progress(cast(int, current_user.id), course_id, data.progress_percentage)
     if not enrollment:
         raise HTTPException(status_code=404, detail="غير مسجل في هذا الكورس")
@@ -302,9 +307,10 @@ async def create_course_unit(
     course_id: int,
     data: CourseUnitCreate,
     current_user: User = Depends(get_current_instructor_or_admin),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.create_course_unit(course_id, data.model_dump())
 
 @router.get("/courses/{course_id}/units", response_model=list[CourseUnitResponse])
@@ -313,19 +319,22 @@ async def get_course_units(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
-    return await service.get_course_units(course_id, skip=skip, limit=limit)
+    service = AcademyService(db, tenant_id)
+    result = await service.get_course_units(course_id, skip=skip, limit=limit)
+    return result.data
 
 @router.put("/units/{unit_id}", response_model=CourseUnitResponse)
 async def update_unit(
     unit_id: int,
     data: UpdateTitleSchema,
     current_user: User = Depends(get_current_instructor_or_admin),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     unit = await service.update_course_unit(unit_id, data.title)
     if not unit:
         raise HTTPException(status_code=404, detail="الوحدة غير موجودة")
@@ -335,9 +344,10 @@ async def update_unit(
 async def delete_unit(
     unit_id: int,
     current_user: User = Depends(get_current_instructor_or_admin),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     success = await service.delete_course_unit(unit_id)
     if not success:
         raise HTTPException(status_code=404, detail="الوحدة غير موجودة")
@@ -347,9 +357,10 @@ async def delete_unit(
 async def create_node(
     data: KnowledgeNodeCreate,
     current_user: User = Depends(get_current_instructor_or_admin),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.create_knowledge_node(data.model_dump())
 
 @router.get("/courses/{course_id}/nodes", response_model=list[KnowledgeNodeResponse])
@@ -358,19 +369,22 @@ async def get_course_nodes(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
-    return await service.get_course_nodes(course_id, skip=skip, limit=limit)
+    service = AcademyService(db, tenant_id)
+    result = await service.get_course_nodes(course_id, skip=skip, limit=limit)
+    return result.data
 
 @router.put("/nodes/{node_id}", response_model=KnowledgeNodeResponse)
 async def update_node(
     node_id: int,
     data: UpdateTitleSchema,
     current_user: User = Depends(get_current_instructor_or_admin),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     node = await service.update_knowledge_node(node_id, data.title)
     if not node:
         raise HTTPException(status_code=404, detail="الدرس غير موجود")
@@ -380,9 +394,10 @@ async def update_node(
 async def delete_node(
     node_id: int,
     current_user: User = Depends(get_current_instructor_or_admin),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     success = await service.delete_knowledge_node(node_id)
     if not success:
         raise HTTPException(status_code=404, detail="الدرس غير موجود")
@@ -393,9 +408,10 @@ async def create_node_live_session(
     node_id: int,
     data: LiveSessionCreate,
     current_user: User = Depends(get_current_instructor_or_admin),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.create_live_session(node_id, data.model_dump())
 
 # ============================================================
@@ -406,18 +422,20 @@ async def create_material(
     node_id: int,
     data: NodeMaterialCreate,
     current_user: User = Depends(get_current_instructor_or_admin),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.create_node_material(node_id, data.model_dump())
 
 @router.get("/nodes/{node_id}/materials", response_model=list[NodeMaterialResponse])
 async def get_materials(
     node_id: int,
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.get_node_materials(node_id)
 
 @router.post("/nodes/{node_id}/quiz", response_model=QuizResponse, status_code=201)
@@ -425,9 +443,10 @@ async def create_node_quiz(
     node_id: int,
     data: QuizCreate,
     current_user: User = Depends(get_current_instructor_or_admin),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.create_quiz(node_id, data.model_dump())
 
 # ============================================================
@@ -439,9 +458,10 @@ async def upload_file(
     file: UploadFile = File(...),
     course_id: int = Query(..., description="معرف الكورس لربط الصورة به"),
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     file_content = await file.read()
     file_url = await service.upload_course_thumbnail(
         course_id=course_id,
@@ -463,9 +483,10 @@ async def upload_file(
 async def create_task(
     data: TaskCreate,
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.create_task(data.model_dump())
 
 @router.get("/courses/{course_id}/tasks", response_model=list[TaskResponse])
@@ -474,19 +495,22 @@ async def get_course_tasks(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
-    return await service.get_course_tasks(course_id, skip=skip, limit=limit)
+    service = AcademyService(db, tenant_id)
+    result = await service.get_course_tasks(course_id, skip=skip, limit=limit)
+    return result.data
 
 @router.post("/tasks/{task_id}/submit", response_model=TaskSubmissionResponse)
 async def submit_task(
     task_id: int,
     data: TaskSubmissionCreate,
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.submit_task(cast(int, current_user.id), task_id, data.model_dump())
 
 # ============================================================
@@ -498,19 +522,22 @@ async def get_task_submissions(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_instructor_or_admin),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
-    return await service.get_task_submissions(task_id, skip=skip, limit=limit)
+    service = AcademyService(db, tenant_id)
+    result = await service.get_task_submissions(task_id, skip=skip, limit=limit)
+    return result.data
 
 @router.put("/instructor/submissions/{submission_id}/grade", response_model=TaskSubmissionResponse)
 async def grade_student_submission(
     submission_id: int,
     data: TaskGradeUpdate,
     current_user: User = Depends(get_current_instructor_or_admin),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     submission = await service.grade_submission(
         submission_id,
         float(data.grade),
@@ -526,20 +553,23 @@ async def get_my_submissions(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
-    return await service.get_my_submissions(cast(int, current_user.id), skip=skip, limit=limit)
+    service = AcademyService(db, tenant_id)
+    result = await service.get_my_submissions(cast(int, current_user.id), skip=skip, limit=limit)
+    return result.data
 
 # ============================================================
-# Instructor Statistics (لوحة تحكم المدرب) ✅ الجوهرة الجديدة
+# Instructor Statistics (لوحة تحكم المدرب)
 # ============================================================
 @router.get("/instructor/stats")
 async def get_instructor_stats(
     current_user: User = Depends(get_current_instructor_or_admin),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.get_instructor_stats(cast(int, current_user.id))
 
 # ============================================================
@@ -548,9 +578,10 @@ async def get_instructor_stats(
 @router.get("/reports/financial", response_model=FinancialSummaryResponse)
 async def get_financial_summary(
     current_user: User = Depends(get_current_superuser),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.get_financial_summary()
 
 # ============================================================
@@ -560,10 +591,11 @@ async def get_financial_summary(
 async def get_leaderboard(
     limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(rate_limit)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     return await service.get_leaderboard(limit)
 
 # ============================================================
@@ -572,8 +604,9 @@ async def get_leaderboard(
 @router.get("/digital-twin/me", response_model=StudentDigitalTwinResponse)
 async def get_my_digital_twin(
     current_user: User = Depends(get_current_active_user),
+    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AcademyService(db)
+    service = AcademyService(db, tenant_id)
     twin = await service.get_or_create_digital_twin(cast(int, current_user.id))
     return twin

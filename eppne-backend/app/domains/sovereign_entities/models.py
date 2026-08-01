@@ -5,8 +5,9 @@
 """
 from sqlalchemy import (
     Column, Integer, BigInteger, String, ForeignKey, DateTime, Text,
-    Boolean, Numeric, JSON, Enum as SQLEnum, Index, CheckConstraint
+    Boolean, Numeric, Enum as SQLEnum, Index, CheckConstraint
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from app.core.database import Base
 import enum
@@ -78,7 +79,7 @@ class SovereignEntity(Base):
 
     # التحقق (KYB)
     kyb_status = Column(SQLEnum(KYBStatus), default=KYBStatus.PENDING, index=True)
-    kyb_documents = Column(JSON, default=list)            # قائمة بالمستندات المرفوعة
+    kyb_documents = Column(JSONB, default=list)            # قائمة بالمستندات المرفوعة
     verified_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     verified_at = Column(DateTime(timezone=True), nullable=True)
     rejection_reason = Column(Text, nullable=True)
@@ -137,7 +138,7 @@ class EntityPageTemplate(Base):
     thumbnail_url = Column(String(512), nullable=True)
 
     # قالب الصفحة (JSON قابل للتصدير)
-    page_structure = Column(JSON, nullable=False)   # مكونات الصفحة (sections, blocks)
+    page_structure = Column(JSONB, nullable=False)   # مكونات الصفحة (sections, blocks)
     is_public = Column(Boolean, default=True)
     is_default = Column(Boolean, default=False)
 
@@ -150,10 +151,13 @@ class EntityPage(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     entity_id = Column(Integer, ForeignKey("sovereign_entities_v2.id"), unique=True, nullable=False, index=True)
+    
+    # 🔥 إضافة tenant_id مع ForeignKey وفهرس
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
 
     # إما قالب مسبق أو محتوى مخصص
     template_id = Column(Integer, ForeignKey("entity_page_templates.id"), nullable=True)
-    custom_structure = Column(JSON, nullable=True)   # إذا تم تعديل القالب
+    custom_structure = Column(JSONB, nullable=True)   # إذا تم تعديل القالب
 
     # SEO والإعدادات
     slug = Column(String(255), unique=True, nullable=False, index=True)  # المسار: /entity/ministry-of-agriculture
@@ -162,7 +166,7 @@ class EntityPage(Base):
     custom_domain = Column(String(255), unique=True, nullable=True)      # نطاق مخصص (subdomain.example.com)
 
     # صفحات إضافية (About, Services, Contact, إلخ)
-    custom_pages = Column(JSON, default=list)   # [{slug: "about", title: "عن الشركة", content: {...}}]
+    custom_pages = Column(JSONB, default=list)   # [{slug: "about", title: "عن الشركة", content: {...}}]
 
     # إحصائيات الصفحة
     visits_count = Column(Integer, default=0)
@@ -171,6 +175,10 @@ class EntityPage(Base):
     published_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_entity_pages_tenant_id", "tenant_id"),  # 🔥 فهرس جديد
+    )
 
 
 # ========== 4. مكونات الصفحة (Draggable Blocks) – لمكتبة المكونات ==========
@@ -182,7 +190,7 @@ class PageComponent(Base):
 
     name = Column(String(255), nullable=False)
     component_type = Column(String(50), nullable=False)  # hero, features, testimonials, pricing, contact, gallery, etc.
-    default_props = Column(JSON, default=dict)           # الخصائص الافتراضية (نص، صور، روابط)
+    default_props = Column(JSONB, default=dict)           # الخصائص الافتراضية (نص، صور، روابط)
     preview_image = Column(String(512), nullable=True)
 
     is_active = Column(Boolean, default=True)

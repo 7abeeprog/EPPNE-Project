@@ -8,7 +8,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: eppne-backend
-  minReplicas: 3
+  minReplicas: 5                   # ✅ تم الرفع من 3 إلى 5 (ليتساوى مع replicas في Deployment)
   maxReplicas: 20
   metrics:
   - type: Resource
@@ -51,7 +51,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: eppne-web
-  minReplicas: 2
+  minReplicas: 2                   # ✅ تم الإبقاء على 2 (مناسب للواجهة الأمامية)
   maxReplicas: 10
   metrics:
   - type: Resource

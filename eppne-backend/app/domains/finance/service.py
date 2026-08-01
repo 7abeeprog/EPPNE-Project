@@ -5,50 +5,52 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional, cast
 
-from app.domains.finance.repository import WalletRepository, TransactionRepository, SystemStateRepository
-from app.domains.finance.models import Wallet, AuditLog
+from app.domains.finance.repository import WalletRepository, TransactionRepository, SystemStateRepository, AuditLogRepository
+from app.domains.finance.models import Wallet
 from app.domains.finance.schemas import PaginatedTransactionResponse, TransactionResponse
 from app.core.errors import InsufficientBalanceError, PermissionDeniedError, NotFoundError, ValidationError
 from app.core.logging_conf import logger
 from app.core.event_bus import EventBus
 from app.domains.identity.models import User
+from app.domains.identity.repository import UserRepository
 
 
 class FinanceService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, tenant_id: int):
         self.db = db
+        self.tenant_id = tenant_id
         self.wallet_repo = WalletRepository(db)
         self.tx_repo = TransactionRepository(db)
         self.state_repo = SystemStateRepository(db)
+        self.audit_repo = AuditLogRepository(db)
         self.event_bus = EventBus()
 
     async def get_or_create_wallet(self, user_id: int) -> Wallet:
-        wallet = await self.wallet_repo.get_by_user_id(user_id)
+        wallet = await self.wallet_repo.get_by_user_id(user_id, self.tenant_id)
         if not wallet:
-            wallet = await self.wallet_repo.create(user_id)
+            wallet = await self.wallet_repo.create(user_id, self.tenant_id)
         return wallet
 
     async def get_or_create_wallet_for_update(self, user_id: int) -> Wallet:
-        wallet = await self.wallet_repo.get_by_user_id_for_update(user_id)
+        wallet = await self.wallet_repo.get_by_user_id_for_update(user_id, self.tenant_id)
         if not wallet:
-            wallet = await self.wallet_repo.create(user_id)
-            wallet = await self.wallet_repo.get_by_user_id_for_update(user_id)
+            wallet = await self.wallet_repo.create(user_id, self.tenant_id)
+            wallet = await self.wallet_repo.get_by_user_id_for_update(user_id, self.tenant_id)
         return wallet
 
     async def _create_audit_log(self, user_id: int, action: str, details: dict, ip: Optional[str] = None, ua: Optional[str] = None):
-        log = AuditLog(
+        await self.audit_repo.create(
             user_id=user_id,
+            tenant_id=self.tenant_id,
             action=action,
             details=details,
             ip_address=ip,
-            user_agent=ua,
+            user_agent=ua
         )
-        self.db.add(log)
-        await self.db.commit()
 
     async def get_balances(self, user_id: int, hide_crypto: bool = False) -> dict:
         wallet = await self.get_or_create_wallet(user_id)
-        balances = getattr(wallet, "balances", {})  # type: ignore
+        balances = getattr(wallet, "balances", {})
         if hide_crypto:
             return {"LOYALTY_POINTS": sum(balances.values())}
         return balances
@@ -67,24 +69,27 @@ class FinanceService:
         if not idempotency_key:
             raise ValidationError("Idempotency key is required")
 
-        existing_tx = await self.tx_repo.get_by_idempotency_key(idempotency_key)
+        existing_tx = await self.tx_repo.get_by_idempotency_key(idempotency_key, self.tenant_id)
         if existing_tx:
             logger.warning(f"Duplicate transfer request detected: {idempotency_key}")
             return existing_tx
 
-        from app.domains.identity.repository import UserRepository
         user_repo = UserRepository(self.db)
-        receiver = await user_repo.get_by_email(receiver_email)
+        receiver = await user_repo.get_by_email(receiver_email, self.tenant_id)
         if not receiver:
             raise NotFoundError("المستلم غير موجود")
 
+        if receiver.tenant_id != self.tenant_id:
+            raise PermissionDeniedError("المستلم لا يخص هذا المستأجر")
+
         state = await self.state_repo.get_state()
-        crypto_mode = str(getattr(state, "crypto_mode", "FULL_CRYPTO"))  # type: ignore
+        crypto_mode = str(getattr(state, "crypto_mode", "FULL_CRYPTO"))
         if crypto_mode == "POINTS_ONLY" and currency != "LOYALTY_POINTS":
             raise PermissionDeniedError("العملات المشفرة معطلة حالياً")
 
+        amount_decimal = Decimal(str(amount))
+
         async with self.db.begin_nested():
-            # استخدام cast لتأكيد الأنواع وإسكات Pylance نهائياً
             first_id, second_id = sorted([sender_id, cast(int, receiver.id)])
             first_wallet = await self.get_or_create_wallet_for_update(first_id)
             second_wallet = await self.get_or_create_wallet_for_update(second_id)
@@ -92,35 +97,33 @@ class FinanceService:
             sender_wallet = first_wallet if first_id == sender_id else second_wallet
             receiver_wallet = second_wallet if second_id == receiver.id else first_wallet
 
-            sender_frozen = cast(bool, getattr(sender_wallet, "is_frozen", False))
-            receiver_frozen = cast(bool, getattr(receiver_wallet, "is_frozen", False))
-            
-            if sender_frozen:
+            # 🛠️ تجاهل خطأ Pylance باستخدام # type: ignore
+            if cast(bool, sender_wallet.is_frozen):  # type: ignore
                 raise PermissionDeniedError("محفظتك مجمدة. يرجى التواصل مع الدعم.")
-            if receiver_frozen:
+            if cast(bool, receiver_wallet.is_frozen):  # type: ignore
                 raise PermissionDeniedError("محفظة المستلم مجمدة.")
 
-            sender_balances = getattr(sender_wallet, "balances", {}).copy()  # type: ignore
+            sender_balances = getattr(sender_wallet, "balances", {}).copy()
             sender_current = Decimal(str(sender_balances.get(currency, 0)))
-            if sender_current < amount:
+            if sender_current < amount_decimal:
                 raise InsufficientBalanceError(f"رصيد غير كافٍ من {currency}")
 
-            sender_balances[currency] = float(sender_current - amount)  # type: ignore
-            receiver_balances = getattr(receiver_wallet, "balances", {}).copy()  # type: ignore
-            receiver_balances[currency] = receiver_balances.get(currency, 0) + float(amount)  # type: ignore
+            sender_balances[currency] = float(sender_current - amount_decimal)
+            receiver_balances = getattr(receiver_wallet, "balances", {}).copy()
+            receiver_balances[currency] = float(Decimal(str(receiver_balances.get(currency, 0))) + amount_decimal)
 
-            await self.wallet_repo.update_balances(sender_wallet.id, sender_balances)  # type: ignore
-            await self.wallet_repo.update_balances(receiver_wallet.id, receiver_balances)  # type: ignore
+            await self.wallet_repo.update_balances(cast(int, sender_wallet.id), sender_balances)
+            await self.wallet_repo.update_balances(cast(int, receiver_wallet.id), receiver_balances)
 
             tx_hash = f"TX-{uuid.uuid4().hex[:12].upper()}"
             tx = await self.tx_repo.create(
                 tx_hash=tx_hash,
                 idempotency_key=idempotency_key,
                 sender_id=sender_id,
-                receiver_id=receiver.id,  # type: ignore
-                from_wallet_id=sender_wallet.id,  # type: ignore
-                to_wallet_id=receiver_wallet.id,  # type: ignore
-                amount=float(amount),
+                receiver_id=receiver.id,
+                from_wallet_id=sender_wallet.id,
+                to_wallet_id=receiver_wallet.id,
+                amount=float(amount_decimal),
                 currency=currency,
                 tx_type="TRANSFER",
                 status="COMPLETED",
@@ -131,10 +134,10 @@ class FinanceService:
             user_id=sender_id,
             action="TRANSFER",
             details={
-                "receiver_id": receiver.id,  # type: ignore
+                "receiver_id": receiver.id,
                 "receiver_email": receiver_email,
                 "currency": currency,
-                "amount": float(amount),
+                "amount": float(amount_decimal),
                 "tx_hash": tx_hash,
             },
             ip=ip,
@@ -159,38 +162,38 @@ class FinanceService:
         if not idempotency_key:
             raise ValidationError("Idempotency key is required")
 
-        existing_tx = await self.tx_repo.get_by_idempotency_key(idempotency_key)
+        existing_tx = await self.tx_repo.get_by_idempotency_key(idempotency_key, self.tenant_id)
         if existing_tx:
             logger.warning(f"Duplicate swap request detected: {idempotency_key}")
             return existing_tx
 
         state = await self.state_repo.get_state()
-        crypto_mode = str(getattr(state, "crypto_mode", "FULL_CRYPTO"))  # type: ignore
+        crypto_mode = str(getattr(state, "crypto_mode", "FULL_CRYPTO"))
         if crypto_mode == "POINTS_ONLY":
             raise PermissionDeniedError("خدمة الصرافة معطلة في وضع النقاط فقط")
 
-        rates = getattr(state, "exchange_rates", {}).copy()  # type: ignore
+        rates = getattr(state, "exchange_rates", {}).copy()
         if from_currency not in rates or to_currency not in rates:
             raise ValidationError("عملة غير مدعومة")
 
-        value_in_base = float(amount_in) * rates[from_currency]  # type: ignore
-        amount_out = Decimal(value_in_base / rates[to_currency])  # type: ignore
+        amount_in_decimal = Decimal(str(amount_in))
+        value_in_base = amount_in_decimal * Decimal(str(rates[from_currency]))
+        amount_out = value_in_base / Decimal(str(rates[to_currency]))
 
         async with self.db.begin_nested():
             wallet = await self.get_or_create_wallet_for_update(user_id)
 
-            wallet_frozen = bool(getattr(wallet, "is_frozen", False))  # type: ignore
-            if wallet_frozen:  # type: ignore
+            if cast(bool, wallet.is_frozen):  # type: ignore
                 raise PermissionDeniedError("محفظتك مجمدة")
 
-            balances = getattr(wallet, "balances", {}).copy()  # type: ignore
+            balances = getattr(wallet, "balances", {}).copy()
             current_from = Decimal(str(balances.get(from_currency, 0)))
-            if current_from < amount_in:
+            if current_from < amount_in_decimal:
                 raise InsufficientBalanceError(f"رصيد غير كافٍ من {from_currency}")
 
-            balances[from_currency] = float(current_from - amount_in)  # type: ignore
-            balances[to_currency] = balances.get(to_currency, 0) + float(amount_out)  # type: ignore
-            await self.wallet_repo.update_balances(wallet.id, balances)  # type: ignore
+            balances[from_currency] = float(current_from - amount_in_decimal)
+            balances[to_currency] = float(Decimal(str(balances.get(to_currency, 0))) + amount_out)
+            await self.wallet_repo.update_balances(cast(int, wallet.id), balances)
 
             tx_hash_out = f"SWAP-OUT-{uuid.uuid4().hex[:12].upper()}"
             tx_hash_in = f"SWAP-IN-{uuid.uuid4().hex[:12].upper()}"
@@ -199,10 +202,10 @@ class FinanceService:
                 tx_hash=tx_hash_out,
                 idempotency_key=f"{idempotency_key}-out",
                 sender_id=user_id,
-                from_wallet_id=wallet.id,  # type: ignore
-                amount=float(amount_in),
+                from_wallet_id=wallet.id,
+                amount=float(amount_in_decimal),
                 currency=from_currency,
-                exchange_rate_applied=rates[from_currency] / rates[to_currency],  # type: ignore
+                exchange_rate_applied=float(Decimal(str(rates[from_currency])) / Decimal(str(rates[to_currency]))),
                 tx_type="SWAP_OUT",
                 status="COMPLETED",
             )
@@ -210,10 +213,10 @@ class FinanceService:
                 tx_hash=tx_hash_in,
                 idempotency_key=f"{idempotency_key}-in",
                 receiver_id=user_id,
-                to_wallet_id=wallet.id,  # type: ignore
+                to_wallet_id=wallet.id,
                 amount=float(amount_out),
                 currency=to_currency,
-                exchange_rate_applied=rates[to_currency] / rates[from_currency],  # type: ignore
+                exchange_rate_applied=float(Decimal(str(rates[to_currency])) / Decimal(str(rates[from_currency]))),
                 tx_type="SWAP_IN",
                 status="COMPLETED",
             )
@@ -223,21 +226,21 @@ class FinanceService:
             action="SWAP",
             details={
                 "from_currency": from_currency,
-                "from_amount": float(amount_in),
+                "from_amount": float(amount_in_decimal),
                 "to_currency": to_currency,
                 "to_amount": float(amount_out),
-                "rate": rates[to_currency] / rates[from_currency],  # type: ignore
+                "rate": float(Decimal(str(rates[to_currency])) / Decimal(str(rates[from_currency]))),
             },
             ip=ip,
             ua=ua,
         )
 
         return {
-            "from_amount": float(amount_in),
+            "from_amount": float(amount_in_decimal),
             "from_currency": from_currency,
             "to_amount": float(amount_out),
             "to_currency": to_currency,
-            "rate_applied": rates[to_currency] / rates[from_currency],  # type: ignore
+            "rate_applied": float(Decimal(str(rates[to_currency])) / Decimal(str(rates[from_currency]))),
             "tx_hash": tx_hash_in
         }
 
@@ -253,27 +256,28 @@ class FinanceService:
         if not idempotency_key:
             raise ValidationError("Idempotency key is required")
 
-        existing_tx = await self.tx_repo.get_by_idempotency_key(idempotency_key)
+        existing_tx = await self.tx_repo.get_by_idempotency_key(idempotency_key, self.tenant_id)
         if existing_tx:
             logger.warning(f"Duplicate mint request detected: {idempotency_key}")
             return existing_tx
 
         state = await self.state_repo.get_state()
-        current_supply = getattr(state, "total_supply", {}).get(currency, 0)  # type: ignore
-        max_supply = getattr(state, "max_supply", {}).get(currency, 0)  # type: ignore
+        current_supply = getattr(state, "total_supply", {}).get(currency, 0)
+        max_supply = getattr(state, "max_supply", {}).get(currency, 0)
 
-        if current_supply + float(amount) > max_supply:  # type: ignore
+        amount_decimal = Decimal(str(amount))
+        if Decimal(str(current_supply)) + amount_decimal > Decimal(str(max_supply)):
             raise ValidationError(f"لا يمكن سك {currency}: سيتم تجاوز الحد الأقصى ({max_supply})")
 
         async with self.db.begin_nested():
             wallet = await self.get_or_create_wallet_for_update(admin_id)
-            balances = getattr(wallet, "balances", {}).copy()  # type: ignore
-            balances[currency] = balances.get(currency, 0) + float(amount)  # type: ignore
-            await self.wallet_repo.update_balances(wallet.id, balances)  # type: ignore
+            balances = getattr(wallet, "balances", {}).copy()
+            balances[currency] = float(Decimal(str(balances.get(currency, 0))) + amount_decimal)
+            await self.wallet_repo.update_balances(cast(int, wallet.id), balances)
 
-            new_total = current_supply + float(amount)  # type: ignore
-            setattr(state, "total_supply", {**getattr(state, "total_supply", {}), currency: new_total})  # type: ignore
-            setattr(state, "updated_by_id", admin_id)  # type: ignore
+            new_total = float(Decimal(str(current_supply)) + amount_decimal)
+            setattr(state, "total_supply", {**getattr(state, "total_supply", {}), currency: new_total})
+            setattr(state, "updated_by_id", admin_id)
             await self.db.commit()
 
             tx_hash = f"MINT-{uuid.uuid4().hex[:12].upper()}"
@@ -281,8 +285,8 @@ class FinanceService:
                 tx_hash=tx_hash,
                 idempotency_key=idempotency_key,
                 receiver_id=admin_id,
-                to_wallet_id=wallet.id,  # type: ignore
-                amount=float(amount),
+                to_wallet_id=wallet.id,
+                amount=float(amount_decimal),
                 currency=currency,
                 tx_type="MINT",
                 status="COMPLETED",
@@ -294,7 +298,7 @@ class FinanceService:
             action="MINT",
             details={
                 "currency": currency,
-                "amount": float(amount),
+                "amount": float(amount_decimal),
                 "new_total_supply": new_total,
                 "tx_hash": tx_hash,
             },
@@ -317,8 +321,9 @@ class FinanceService:
         start = datetime.fromisoformat(start_date) if start_date else None
         end = datetime.fromisoformat(end_date) if end_date else None
 
-        items = await self.tx_repo.get_by_user_paginated(
+        result = await self.tx_repo.get_by_user_paginated(
             user_id=user_id,
+            tenant_id=self.tenant_id,
             skip=skip,
             limit=limit,
             start_date=start,
@@ -329,6 +334,7 @@ class FinanceService:
 
         total = await self.tx_repo.count_by_user(
             user_id=user_id,
+            tenant_id=self.tenant_id,
             start_date=start,
             end_date=end,
             currency=currency,
@@ -336,7 +342,7 @@ class FinanceService:
         )
 
         return PaginatedTransactionResponse(
-            data=items,
+            data=result["items"],
             total=total,
             skip=skip,
             limit=limit

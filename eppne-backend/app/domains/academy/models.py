@@ -1,4 +1,6 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Boolean, Numeric, JSON, Enum as SQLEnum, Index, Float
+# app/domains/academy/models.py
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Boolean, Numeric, Enum as SQLEnum, Index, Float, CheckConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -10,7 +12,7 @@ from app.core.enums import SovereignRank
 class AcademyTenant(Base):
     __tablename__ = "academy_tenants"
     __table_args__ = (
-        Index("ix_tenant_domain_active", "domain", "is_active"),  # للبحث السريع بالنطاق الفعال
+        Index("ix_tenant_domain_active", "domain", "is_active"),
         Index("ix_tenant_admin", "admin_id"),
         Index("ix_tenant_name", "name"),
     )
@@ -18,7 +20,7 @@ class AcademyTenant(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False, unique=True)
     domain = Column(String(255), unique=True, index=True, nullable=False)
-    branding = Column(JSON, default=dict)
+    branding = Column(JSONB, default=dict)
     admin_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -30,7 +32,7 @@ class AcademyTenant(Base):
 class OrganizationEntity(Base):
     __tablename__ = "organization_entities"
     __table_args__ = (
-        Index("ix_org_tenant_entity_type", "tenant_id", "entity_type"),  # تصفية حسب النوع ضمن المستأجر
+        Index("ix_org_tenant_entity_type", "tenant_id", "entity_type"),
         Index("ix_org_tenant_active", "tenant_id", "is_active"),
         Index("ix_org_parent_id", "parent_id"),
         Index("ix_org_name", "name"),
@@ -52,7 +54,7 @@ class OrganizationEntity(Base):
         back_populates="parent",
         lazy="selectin",
         cascade="all, delete-orphan",
-        order_by="OrganizationEntity.name"  # ترتيب ثابت لتجنب المفاجآت
+        order_by="OrganizationEntity.name"
     )
 
 # ============================================
@@ -63,14 +65,16 @@ class Instructor(Base):
     __table_args__ = (
         Index("ix_instructor_org_entity", "org_entity_id"),
         Index("ix_instructor_approved", "is_approved"),
-        Index("ix_instructor_user_org", "user_id", "org_entity_id"),  # استعلامات المدرب ضمن كيانه
+        Index("ix_instructor_user_org", "user_id", "org_entity_id"),
+        Index("ix_instructor_tenant_id", "tenant_id"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
     org_entity_id = Column(Integer, ForeignKey("organization_entities.id"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     bio = Column(Text, nullable=True)
-    expertise_areas = Column(JSON, default=list)
+    expertise_areas = Column(JSONB, default=list)
     revenue_share_percentage = Column(Numeric(5, 2), default=70.0)
     is_approved = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -135,14 +139,13 @@ class Track(Base):
 class Course(Base):
     __tablename__ = "academy_courses"
     __table_args__ = (
-        # 🚀 الفهارس الأهم في النظام (ستُستخدم ملايين المرات)
-        Index("ix_course_tenant_published", "tenant_id", "is_published", "is_active"),  # تصفية متجر الكورسات
+        Index("ix_course_tenant_published", "tenant_id", "is_published", "is_active"),
         Index("ix_course_org_entity", "org_entity_id"),
         Index("ix_course_track", "track_id"),
         Index("ix_course_bootcamp", "bootcamp_id"),
         Index("ix_course_instructor", "instructor_id"),
         Index("ix_course_tenant_active", "tenant_id", "is_active"),
-        Index("ix_course_price_currency", "price_mrusdt", "currency"),  # لتقارير المالية
+        Index("ix_course_price_currency", "price_mrusdt", "currency"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -150,7 +153,7 @@ class Course(Base):
     org_entity_id = Column(Integer, ForeignKey("organization_entities.id"), nullable=False, index=True)
     track_id = Column(Integer, ForeignKey("academy_tracks.id"), nullable=True, index=True)
     bootcamp_id = Column(Integer, ForeignKey("academy_bootcamps.id"), nullable=True, index=True)
-    instructor_id = Column(Integer, ForeignKey("academy_instructors.id"), nullable=True, index=True)
+    instructor_id = Column(Integer, ForeignKey("academy_instructors.id", ondelete="SET NULL"), nullable=True, index=True)
 
     title = Column(String(255), nullable=False)
     description = Column(Text)
@@ -231,35 +234,38 @@ class Quiz(Base):
     passing_score = Column(Numeric(5, 2), default=70.0)
     max_attempts = Column(Integer, default=3)
     time_limit_minutes = Column(Integer, nullable=True)
-    questions = Column(JSON, default=list)
+    questions = Column(JSONB, default=list)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 # ============================================
-# 7. الاشتراكات (الأهم في الأداء)
+# 7. الاشتراكات (مع tenant_id)
 # ============================================
 class Enrollment(Base):
     __tablename__ = "academy_enrollments"
     __table_args__ = (
-        # 🚀 أسرع استعلام في النظام (جلب اشتراكات طالب معين)
-        Index("ix_enrollment_user_course", "user_id", "course_id", unique=True),  # يضمن عدم تكرار الاشتراك
+        Index("ix_enrollment_user_course", "user_id", "course_id", unique=True),
         Index("ix_enrollment_course_status", "course_id", "status"),
         Index("ix_enrollment_user_status", "user_id", "status"),
         Index("ix_enrollment_cohort", "cohort_id"),
         Index("ix_enrollment_payment_status", "payment_status"),
         Index("ix_enrollment_completed", "is_completed"),
-        Index("ix_enrollment_updated", "updated_at"),  # للتقارير الزمنية
+        Index("ix_enrollment_created_status", "created_at", "status"),
+        Index("ix_enrollment_updated", "updated_at"),
+        Index("ix_enrollment_tenant_id", "tenant_id"),
+        Index("ix_enrollment_tenant_status", "tenant_id", "status"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    course_id = Column(Integer, ForeignKey("academy_courses.id"), nullable=False, index=True)
-    cohort_id = Column(Integer, ForeignKey("academy_cohorts.id"), nullable=True, index=True)
+    course_id = Column(Integer, ForeignKey("academy_courses.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    cohort_id = Column(Integer, ForeignKey("academy_cohorts.id", ondelete="SET NULL"), nullable=True, index=True)
     
     payment_method = Column(String(50), default="WALLET")
     payment_status = Column(String(50), default="PENDING")
     payment_ref = Column(String(100), nullable=True)
-    paid_amount = Column(Numeric(10, 2), default=0)
+    paid_amount = Column(Numeric(30, 8), default=0)
     status = Column(String(50), default="ACTIVE")
     
     progress_percentage = Column(Numeric(5, 2), default=0)
@@ -305,7 +311,7 @@ class LiveAttendance(Base):
     __table_args__ = (
         Index("ix_attendance_session", "session_id"),
         Index("ix_attendance_user", "user_id"),
-        Index("ix_attendance_session_user", "session_id", "user_id", unique=True),  # منع تسجيل الحضور المكرر
+        Index("ix_attendance_session_user", "session_id", "user_id", unique=True),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -332,7 +338,7 @@ class SpiritualCertificate(Base):
     course_id = Column(Integer, ForeignKey("academy_courses.id"), index=True)
     certificate_hash = Column(String(64), unique=True, index=True)
     grade = Column(Integer, nullable=False)
-    ai_training_metadata = Column(JSON, default=dict)
+    ai_training_metadata = Column(JSONB, default=dict)
     issued_at = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -370,7 +376,7 @@ class CertificateIssuanceLog(Base):
     blockchain_tx_hash = Column(String(100), nullable=True)
 
 # ============================================
-# 10. التقارير والتحليلات
+# 10. التقارير والتحليلات (مع tenant_id)
 # ============================================
 class CourseAnalytics(Base):
     __tablename__ = "course_analytics"
@@ -378,10 +384,12 @@ class CourseAnalytics(Base):
         Index("ix_analytics_course", "course_id", unique=True),
         Index("ix_analytics_revenue", "revenue_generated_mrusdt"),
         Index("ix_analytics_updated", "updated_at"),
+        Index("ix_analytics_tenant_id", "tenant_id"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     course_id = Column(Integer, ForeignKey("academy_courses.id"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     total_enrollments = Column(Integer, default=0)
     total_completions = Column(Integer, default=0)
     average_grade = Column(Numeric(5, 2), default=0)
@@ -415,7 +423,6 @@ class AcademyTask(Base):
 class TaskSubmission(Base):
     __tablename__ = "task_submissions"
     __table_args__ = (
-        # 🚀 استعلامات المدرب (جلب التسليمات المعلقة لكل تكليف)
         Index("ix_submission_task_status", "task_id", "status"),
         Index("ix_submission_user", "user_id"),
         Index("ix_submission_status", "status"),
@@ -447,9 +454,9 @@ class StudentDigitalTwin(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
-    cognitive_map = Column(JSON, default=dict)
+    cognitive_map = Column(JSONB, default=dict)
     learning_style = Column(String(50), default="VISUAL")
-    ai_recommendations = Column(JSON, default=list)
+    ai_recommendations = Column(JSONB, default=list)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -470,29 +477,30 @@ class ClassroomCameraAnalysis(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     detected_faces_count = Column(Integer, default=0)
     attention_score = Column(Numeric(5, 2), nullable=True)
-    emotions_summary = Column(JSON, default=dict)
+    emotions_summary = Column(JSONB, default=dict)
     active_speaker_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    raw_analysis_log = Column(JSON, default=dict)
+    raw_analysis_log = Column(JSONB, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 # ============================================
-# 13. 🚀 النموذج المفقود (الأقساط المالية)
+# 13. الأقساط المالية (مع tenant_id)
 # ============================================
 class PaymentInstallment(Base):
-    """جدول الأقساط المالية - لدعم نظام التقسيط للمستخدمين"""
     __tablename__ = "payment_installments"
     __table_args__ = (
         Index("ix_installment_user", "user_id"),
         Index("ix_installment_enrollment", "enrollment_id"),
         Index("ix_installment_due_date", "due_date"),
         Index("ix_installment_paid", "is_paid"),
-        Index("ix_installment_overdue", "due_date", "is_paid"),  # استعلام المتأخرات
+        Index("ix_installment_overdue", "due_date", "is_paid"),
+        Index("ix_installment_tenant_id", "tenant_id"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     enrollment_id = Column(Integer, ForeignKey("academy_enrollments.id"), nullable=False, index=True)
-    amount_due = Column(Numeric(30, 8), nullable=False)  # المبلغ المستحق
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    amount_due = Column(Numeric(30, 8), nullable=False)
     currency = Column(String(20), default="MR_USDT")
     due_date = Column(DateTime(timezone=True), nullable=False)
     is_paid = Column(Boolean, default=False)

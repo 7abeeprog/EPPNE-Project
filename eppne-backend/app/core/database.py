@@ -1,4 +1,5 @@
 # app/core/database.py
+import os  # ✅ تمت إضافته للقراءة الآمنة من متغيرات البيئة
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 from app.core.config import settings
@@ -6,11 +7,16 @@ from app.core.config import settings
 # ==========================================
 # 1. إعداد محرك قاعدة البيانات (Database Engine)
 # ==========================================
+
+# ✅ قراءة الإعدادات مباشرة من متغيرات البيئة مع قيم افتراضية للإنتاج (تم رفعها إلى 100 و 200)
+pool_size = int(os.getenv("DATABASE_POOL_SIZE", 100))
+max_overflow = int(os.getenv("DATABASE_MAX_OVERFLOW", 200))
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,  # اجعلها True في بيئة التطوير لو أردت رؤية أوامر SQL في الترمينال
-    pool_size=getattr(settings, "DATABASE_POOL_SIZE", 20),   # استخدام 20 كقيمة احتياطية
-    max_overflow=getattr(settings, "DATABASE_MAX_OVERFLOW", 10),  # استخدام 10 كقيمة احتياطية
+    pool_size=pool_size,  # ✅ تم التعديل هنا
+    max_overflow=max_overflow,  # ✅ تم التعديل هنا
     pool_timeout=60,  # ✅ إضافة 60 ثانية كوقت انتظار لتجنب أخطاء الـ Timeout
     pool_pre_ping=True,  # لضمان التحقق من صحة الاتصال قبل تنفيذه (يمنع أخطاء الاتصالات الميتة)
 )

@@ -208,5 +208,5 @@ class VisaWebhookPayload(BaseModel):
     currency: str
     status: str  # SUCCESS, FAILED
     gateway_reference: str
-    signature: str  # لتأكيد صحة الـ webhook
+    signature: str
     idempotency_key: Optional[str] = Field(default=None, description="مفتاح عدم التكرار")

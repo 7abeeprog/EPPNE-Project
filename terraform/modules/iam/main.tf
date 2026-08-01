@@ -1,5 +1,18 @@
 # .ai-generated/terraform/modules/iam/main.tf
-# دور IAM لـ Backend Service Account
+
+# 🔥 جلب Account ID تلقائياً
+data "aws_caller_identity" "current" {}
+
+# 🔥 جلب OIDC Provider من EKS Cluster (يعتمد على أن EKS تم إنشاؤه)
+data "aws_eks_cluster" "cluster" {
+  name = "eppne-${var.environment}-cluster"
+}
+
+data "aws_iam_openid_connect_provider" "cluster" {
+  url = data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer
+}
+
+# ---- دور Backend ----
 resource "aws_iam_role" "backend_role" {
   name = "eppne-${var.environment}-backend-role"
 
@@ -9,21 +22,18 @@ resource "aws_iam_role" "backend_role" {
       {
         Effect = "Allow"
         Principal = {
-          Federated = "arn:aws:iam::ACCOUNT_ID:oidc-provider/oidc.eks.${var.region}.amazonaws.com/id/XXXXX"  # TODO: استبدل بعد إنشاء EKS
+          Federated = data.aws_iam_openid_connect_provider.cluster.arn
         }
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
           StringEquals = {
-            "oidc.eks.${var.region}.amazonaws.com/id/XXXXX:sub" = "system:serviceaccount:default:backend-sa"
+            "${data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer}:sub" = "system:serviceaccount:default:backend-sa"
           }
         }
       }
     ]
   })
-
-  tags = {
-    Environment = var.environment
-  }
+  tags = { Environment = var.environment }
 }
 
 resource "aws_iam_policy" "backend_policy" {
@@ -38,7 +48,7 @@ resource "aws_iam_policy" "backend_policy" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
-        Resource = "arn:aws:secretsmanager:${var.region}:ACCOUNT_ID:secret:eppne/${var.environment}/*"  # TODO: استبدل ACCOUNT_ID
+        Resource = "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:eppne/${var.environment}/*"
       },
       {
         Effect = "Allow"
@@ -56,58 +66,4 @@ resource "aws_iam_policy" "backend_policy" {
 resource "aws_iam_role_policy_attachment" "backend_policy_attach" {
   role       = aws_iam_role.backend_role.name
   policy_arn = aws_iam_policy.backend_policy.arn
-}
-
-# دور IAM لـ AI Service Account
-resource "aws_iam_role" "ai_role" {
-  name = "eppne-${var.environment}-ai-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Federated = "arn:aws:iam::ACCOUNT_ID:oidc-provider/oidc.eks.${var.region}.amazonaws.com/id/XXXXX"
-        }
-        Action = "sts:AssumeRoleWithWebIdentity"
-        Condition = {
-          StringEquals = {
-            "oidc.eks.${var.region}.amazonaws.com/id/XXXXX:sub" = "system:serviceaccount:default:ai-sa"
-          }
-        }
-      }
-    ]
-  })
-
-  tags = {
-    Environment = var.environment
-  }
-}
-
-# دور IAM لـ Frontend Service Account (للملفات الثابتة)
-resource "aws_iam_role" "frontend_role" {
-  name = "eppne-${var.environment}-frontend-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Federated = "arn:aws:iam::ACCOUNT_ID:oidc-provider/oidc.eks.${var.region}.amazonaws.com/id/XXXXX"
-        }
-        Action = "sts:AssumeRoleWithWebIdentity"
-        Condition = {
-          StringEquals = {
-            "oidc.eks.${var.region}.amazonaws.com/id/XXXXX:sub" = "system:serviceaccount:default:frontend-sa"
-          }
-        }
-      }
-    ]
-  })
-
-  tags = {
-    Environment = var.environment
-  }
 }

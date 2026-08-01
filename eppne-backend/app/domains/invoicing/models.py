@@ -1,39 +1,37 @@
 # app/domains/invoicing/models.py
 """
 نماذج قاعدة البيانات لقطاع الفواتير (Invoicing).
-يدعم: أنواع الفواتير، الحالات، الربط بالمراجع (Orders, Subscriptions).
+يدعم: أنواع الفواتير، الحالات، الربط بالمراجع (Orders, Subscriptions, وأي مرجع عام).
 """
 import enum
 from sqlalchemy import (
     Column, Integer, BigInteger, String, ForeignKey, Text, Boolean,
-    Numeric, DateTime, JSON, Enum as SQLEnum, Index, CheckConstraint
+    Numeric, DateTime, Enum as SQLEnum, Index, CheckConstraint, text
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from app.core.database import Base
 
 
 class InvoiceStatus(str, enum.Enum):
-    """حالات الفاتورة."""
-    DRAFT = "DRAFT"          # مسودة (غير مرسلة)
-    PENDING = "PENDING"      # معلقة (في انتظار الدفع)
-    PAID = "PAID"            # مدفوعة
-    OVERDUE = "OVERDUE"      # متأخرة (تجاوزت تاريخ الاستحقاق)
-    CANCELLED = "CANCELLED"  # ملغية
+    DRAFT = "DRAFT"
+    PENDING = "PENDING"
+    PAID = "PAID"
+    OVERDUE = "OVERDUE"
+    CANCELLED = "CANCELLED"
 
 
 class InvoiceType(str, enum.Enum):
-    """أنواع الفواتير."""
-    SERVICE = "SERVICE"              # خدمات عامة
-    AI_USAGE = "AI_USAGE"            # استخدام الذكاء الاصطناعي
-    SUBSCRIPTION = "SUBSCRIPTION"    # اشتراكات
-    SAAS = "SAAS"                    # اشتراكات SaaS
-    PRODUCT = "PRODUCT"              # منتجات (من التجارة)
-    RENTAL = "RENTAL"                # إيجارات
-    OTHER = "OTHER"                  # أخرى
+    SERVICE = "SERVICE"
+    AI_USAGE = "AI_USAGE"
+    SUBSCRIPTION = "SUBSCRIPTION"
+    SAAS = "SAAS"
+    PRODUCT = "PRODUCT"
+    RENTAL = "RENTAL"
+    OTHER = "OTHER"
 
 
 class Invoice(Base):
-    """جدول الفواتير الأساسي."""
     __tablename__ = "invoices"
     __table_args__ = (
         Index("ix_invoices_tenant_id", "tenant_id"),
@@ -41,9 +39,14 @@ class Invoice(Base):
         Index("ix_invoices_status", "status"),
         Index("ix_invoices_due_date", "due_date"),
         Index("ix_invoices_invoice_number", "invoice_number", unique=True),
+        Index("ix_invoices_order_id", "order_id"),
+        Index("ix_invoices_subscription_id", "subscription_id"),
         Index("ix_invoices_reference_id", "reference_id"),
-        Index("ix_invoices_idempotency_key", "idempotency_key", unique=True),
         Index("ix_invoices_invoice_type", "invoice_type"),
+        Index("ix_invoices_created_at", "created_at"),
+        Index("ix_invoices_updated_at", "updated_at"),
+        Index("ix_invoices_tenant_status_due", "tenant_id", "status", "due_date"),
+        Index("ix_invoices_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
         CheckConstraint("amount >= 0", name="check_amount_non_negative"),
     )
 
@@ -51,33 +54,29 @@ class Invoice(Base):
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
 
-    # رقم الفاتورة الفريد (قابل للقراءة من قبل المستخدم)
     invoice_number = Column(String(50), unique=True, nullable=False, index=True)
 
-    # نوع الفاتورة وحالتها
     invoice_type = Column(SQLEnum(InvoiceType), nullable=False, default=InvoiceType.SERVICE)
     status = Column(SQLEnum(InvoiceStatus), nullable=False, default=InvoiceStatus.PENDING)
 
-    # البيانات المالية
     amount = Column(Numeric(30, 8), nullable=False)
     currency = Column(String(10), nullable=False, default="MR_USDT")
 
-    # البيانات الوصفية
     description = Column(Text, nullable=True)
-    reference_id = Column(Integer, nullable=True)  # يمكن ربطه بـ order_id, subscription_id, etc.
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="SET NULL"), nullable=True)
+    subscription_id = Column(Integer, ForeignKey("saas_tenant_subscriptions.id", ondelete="SET NULL"), nullable=True)
+    
+    reference_id = Column(Integer, nullable=True, index=True)
+
     idempotency_key = Column(String(100), nullable=True, unique=True)
 
-    # التواريخ
     issue_date = Column(DateTime(timezone=True), server_default=func.now())
     due_date = Column(DateTime(timezone=True), nullable=False)
     paid_at = Column(DateTime(timezone=True), nullable=True)
 
-    # بيانات إضافية
     notes = Column(Text, nullable=True)
-    invoice_metadata = Column(JSON, nullable=True) # تخزين بيانات إضافية (مثل تفاصيل الضرائب، عناوين)
+    invoice_metadata = Column(JSONB, nullable=True)
 
-
-    # تتبع التعديلات
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

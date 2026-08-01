@@ -1,18 +1,18 @@
-"""EPPNE_Absolute_Baseline
+"""Initial migration - all 34 sectors - final
 
-Revision ID: 07832f6c4879
+Revision ID: 71820e4fe1f3
 Revises: 
-Create Date: 2026-07-06 11:56:25.120300
+Create Date: 2026-07-27 19:40:34.302422
 
 """
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '07832f6c4879'
+revision: str = '71820e4fe1f3'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -23,11 +23,13 @@ def upgrade() -> None:
     op.create_table('idempotency_records',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('key', sa.String(length=64), nullable=False),
-    sa.Column('response_data', sa.JSON(), nullable=False),
+    sa.Column('response_data', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_idempotency_expires', 'idempotency_records', ['expires_at'], unique=False)
+    op.create_index('ix_idempotency_key', 'idempotency_records', ['key'], unique=False)
     op.create_index(op.f('ix_idempotency_records_expires_at'), 'idempotency_records', ['expires_at'], unique=False)
     op.create_index(op.f('ix_idempotency_records_id'), 'idempotency_records', ['id'], unique=False)
     op.create_index(op.f('ix_idempotency_records_key'), 'idempotency_records', ['key'], unique=True)
@@ -39,7 +41,7 @@ def upgrade() -> None:
     sa.Column('price_monthly', sa.Numeric(precision=30, scale=8), nullable=False),
     sa.Column('price_yearly', sa.Numeric(precision=30, scale=8), nullable=False),
     sa.Column('currency', sa.String(length=20), nullable=True),
-    sa.Column('features', sa.JSON(), nullable=True),
+    sa.Column('features', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -67,12 +69,13 @@ def upgrade() -> None:
     op.create_table('social_contract_templates',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
-    sa.Column('template_schema', sa.JSON(), nullable=False),
+    sa.Column('template_schema', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
     )
+    op.create_index('ix_social_contract_template_created_at', 'social_contract_templates', ['created_at'], unique=False)
     op.create_index(op.f('ix_social_contract_templates_id'), 'social_contract_templates', ['id'], unique=False)
     op.create_table('supported_languages',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -84,6 +87,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('code')
     )
+    op.create_index('ix_supported_language_created_at', 'supported_languages', ['created_at'], unique=False)
     op.create_index(op.f('ix_supported_languages_id'), 'supported_languages', ['id'], unique=False)
     op.create_table('users',
     sa.Column('id', sa.BigInteger(), nullable=False),
@@ -93,8 +97,8 @@ def upgrade() -> None:
     sa.Column('username', sa.String(length=50), nullable=False),
     sa.Column('email', sa.String(), nullable=False),
     sa.Column('hashed_password', sa.String(), nullable=False),
-    sa.Column('name_ar', sa.String(), nullable=False),
-    sa.Column('name_en', sa.String(), nullable=False),
+    sa.Column('name_ar', sa.String(length=100), nullable=True),
+    sa.Column('name_en', sa.String(), nullable=True),
     sa.Column('birth_date', sa.Date(), nullable=True),
     sa.Column('death_date', sa.Date(), nullable=True),
     sa.Column('marriage_status', sa.Enum('SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED', name='marriagestatus'), nullable=True),
@@ -106,8 +110,8 @@ def upgrade() -> None:
     sa.Column('kyc_status', sa.Enum('UNVERIFIED', 'PENDING', 'VERIFIED', 'REJECTED', name='kycstatus'), nullable=True),
     sa.Column('reputation_score', sa.Integer(), nullable=True),
     sa.Column('language_preference', sa.String(), nullable=True),
-    sa.Column('profile_metadata', sa.JSON(), nullable=True),
-    sa.Column('preferences', sa.JSON(), nullable=True),
+    sa.Column('profile_metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('preferences', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('email_verified', sa.Boolean(), nullable=True),
     sa.Column('phone_verified', sa.Boolean(), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
@@ -117,12 +121,14 @@ def upgrade() -> None:
     sa.Column('last_login_user_agent', sa.String(length=255), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('idempotency_key', sa.String(length=100), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('did')
     )
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
     op.create_index('ix_users_email_lower', 'users', [sa.text("lower('email')")], unique=False)
     op.create_index(op.f('ix_users_id'), 'users', ['id'], unique=False)
+    op.create_index(op.f('ix_users_idempotency_key'), 'users', ['idempotency_key'], unique=True)
     op.create_index(op.f('ix_users_public_id'), 'users', ['public_id'], unique=True)
     op.create_index(op.f('ix_users_uid'), 'users', ['uid'], unique=True)
     op.create_index(op.f('ix_users_username'), 'users', ['username'], unique=True)
@@ -140,6 +146,8 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_utility_grid_entity', 'utility_grids', ['entity_id'], unique=False)
+    op.create_index('ix_utility_grid_type', 'utility_grids', ['grid_type'], unique=False)
     op.create_index(op.f('ix_utility_grids_development_id'), 'utility_grids', ['development_id'], unique=False)
     op.create_index(op.f('ix_utility_grids_entity_id'), 'utility_grids', ['entity_id'], unique=False)
     op.create_index(op.f('ix_utility_grids_grid_type'), 'utility_grids', ['grid_type'], unique=False)
@@ -148,7 +156,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('domain', sa.String(length=255), nullable=False),
-    sa.Column('branding', sa.JSON(), nullable=True),
+    sa.Column('branding', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('admin_id', sa.Integer(), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -181,7 +189,7 @@ def upgrade() -> None:
     )
     op.create_index('ix_addresses_country_city', 'addresses', ['country', 'city'], unique=False)
     op.create_index(op.f('ix_addresses_id'), 'addresses', ['id'], unique=False)
-    op.create_index(op.f('ix_addresses_user_id'), 'addresses', ['user_id'], unique=False)
+    op.create_index('ix_addresses_user_id', 'addresses', ['user_id'], unique=False)
     op.create_table('affiliate_trees',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
@@ -201,7 +209,7 @@ def upgrade() -> None:
     sa.Column('id', sa.BigInteger(), nullable=False),
     sa.Column('user_id', sa.BigInteger(), nullable=False),
     sa.Column('action', sa.String(length=50), nullable=False),
-    sa.Column('details', sa.JSON(), nullable=False),
+    sa.Column('details', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('ip_address', sa.String(length=45), nullable=True),
     sa.Column('user_agent', sa.String(length=255), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -211,7 +219,8 @@ def upgrade() -> None:
     op.create_index('ix_audit_logs_action', 'audit_logs', ['action'], unique=False)
     op.create_index('ix_audit_logs_created_at', 'audit_logs', ['created_at'], unique=False)
     op.create_index(op.f('ix_audit_logs_id'), 'audit_logs', ['id'], unique=False)
-    op.create_index(op.f('ix_audit_logs_user_id'), 'audit_logs', ['user_id'], unique=False)
+    op.create_index('ix_audit_logs_user_created', 'audit_logs', ['user_id', 'created_at'], unique=False)
+    op.create_index('ix_audit_logs_user_id', 'audit_logs', ['user_id'], unique=False)
     op.create_table('auth_refresh_tokens',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
@@ -232,6 +241,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_auth_refresh_tokens_user_id'), 'auth_refresh_tokens', ['user_id'], unique=False)
     op.create_index('ix_refresh_token_expires_at', 'auth_refresh_tokens', ['expires_at'], unique=False)
     op.create_index('ix_refresh_token_revoked', 'auth_refresh_tokens', ['revoked'], unique=False)
+    op.create_index('ix_refresh_token_user_expires', 'auth_refresh_tokens', ['user_id', 'expires_at'], unique=False)
     op.create_index('ix_refresh_token_user_id', 'auth_refresh_tokens', ['user_id'], unique=False)
     op.create_table('data_consent_logs',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -268,24 +278,8 @@ def upgrade() -> None:
     op.create_index(op.f('ix_data_erasure_requests_user_id'), 'data_erasure_requests', ['user_id'], unique=False)
     op.create_index('ix_erasure_pending', 'data_erasure_requests', ['status'], unique=False, postgresql_where=sa.text("status = 'PENDING'"))
     op.create_index('ix_erasure_processed', 'data_erasure_requests', ['processed_at'], unique=False)
+    op.create_index('ix_erasure_status_created', 'data_erasure_requests', ['status', 'created_at'], unique=False)
     op.create_index('ix_erasure_user_status', 'data_erasure_requests', ['user_id', 'status'], unique=False)
-    op.create_table('identity_wallets',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('user_id', sa.BigInteger(), nullable=False),
-    sa.Column('wallet_address', sa.String(length=42), nullable=True),
-    sa.Column('is_custodial', sa.Boolean(), nullable=True),
-    sa.Column('is_frozen', sa.Boolean(), nullable=True),
-    sa.Column('balances', sa.JSON(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('ix_identity_wallets_address', 'identity_wallets', ['wallet_address'], unique=False)
-    op.create_index(op.f('ix_identity_wallets_id'), 'identity_wallets', ['id'], unique=False)
-    op.create_index('ix_identity_wallets_is_frozen', 'identity_wallets', ['is_frozen'], unique=False)
-    op.create_index(op.f('ix_identity_wallets_user_id'), 'identity_wallets', ['user_id'], unique=True)
-    op.create_index(op.f('ix_identity_wallets_wallet_address'), 'identity_wallets', ['wallet_address'], unique=True)
     op.create_table('iot_request_logs',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.BigInteger(), nullable=True),
@@ -294,15 +288,19 @@ def upgrade() -> None:
     sa.Column('ip_address', sa.String(length=45), nullable=True),
     sa.Column('user_agent', sa.Text(), nullable=True),
     sa.Column('idempotency_key', sa.String(length=64), nullable=True),
-    sa.Column('request_body', sa.JSON(), nullable=True),
+    sa.Column('request_body', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('status_code', sa.Integer(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_iot_request_created', 'iot_request_logs', ['created_at'], unique=False)
+    op.create_index('ix_iot_request_endpoint', 'iot_request_logs', ['endpoint'], unique=False)
+    op.create_index('ix_iot_request_idempotency', 'iot_request_logs', ['idempotency_key'], unique=False)
     op.create_index(op.f('ix_iot_request_logs_id'), 'iot_request_logs', ['id'], unique=False)
     op.create_index(op.f('ix_iot_request_logs_idempotency_key'), 'iot_request_logs', ['idempotency_key'], unique=False)
     op.create_index(op.f('ix_iot_request_logs_user_id'), 'iot_request_logs', ['user_id'], unique=False)
+    op.create_index('ix_iot_request_user', 'iot_request_logs', ['user_id'], unique=False)
     op.create_table('notification_devices',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
@@ -315,6 +313,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index('ix_device_token_unique', 'notification_devices', ['device_token'], unique=True)
+    op.create_index('ix_device_user_active', 'notification_devices', ['user_id', 'is_active'], unique=False)
     op.create_index(op.f('ix_notification_devices_id'), 'notification_devices', ['id'], unique=False)
     op.create_index(op.f('ix_notification_devices_user_id'), 'notification_devices', ['user_id'], unique=False)
     op.create_table('privacy_settings',
@@ -351,8 +350,8 @@ def upgrade() -> None:
     op.create_index('ix_referral_trees_entity_id', 'referral_trees', ['entity_id'], unique=False)
     op.create_index('ix_referral_trees_entity_type', 'referral_trees', ['entity_type'], unique=False)
     op.create_index(op.f('ix_referral_trees_id'), 'referral_trees', ['id'], unique=False)
-    op.create_index('ix_referral_trees_referred_id', 'referral_trees', ['referred_id'], unique=False)
-    op.create_index(op.f('ix_referral_trees_referrer_id'), 'referral_trees', ['referrer_id'], unique=False)
+    op.create_index(op.f('ix_referral_trees_referred_id'), 'referral_trees', ['referred_id'], unique=False)
+    op.create_index('ix_referral_trees_referrer_id', 'referral_trees', ['referrer_id'], unique=False)
     op.create_index('ix_referral_trees_unique_referred_scope', 'referral_trees', ['referred_id', 'entity_type', sa.text('COALESCE(entity_id, 0)')], unique=True)
     op.create_table('saas_service_plans',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -362,7 +361,7 @@ def upgrade() -> None:
     sa.Column('price_monthly', sa.Numeric(precision=30, scale=8), nullable=False),
     sa.Column('price_yearly', sa.Numeric(precision=30, scale=8), nullable=False),
     sa.Column('currency', sa.String(length=20), nullable=True),
-    sa.Column('features', sa.JSON(), nullable=True),
+    sa.Column('features', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('max_users', sa.Integer(), nullable=True),
     sa.Column('max_products', sa.Integer(), nullable=True),
     sa.Column('max_courses', sa.Integer(), nullable=True),
@@ -382,8 +381,8 @@ def upgrade() -> None:
     sa.Column('owner_id', sa.BigInteger(), nullable=True),
     sa.Column('asset_code', sa.String(length=100), nullable=False),
     sa.Column('asset_class', sa.Enum('SURVEILLANCE', 'SMART_BIO_UNIT', 'ACCESS_GATE', 'HVAC', 'UTILITY_METER', 'INDUSTRIAL_ROBOT', name='assetclass'), nullable=False),
-    sa.Column('location_gps', sa.JSON(), nullable=True),
-    sa.Column('specs', sa.JSON(), nullable=True),
+    sa.Column('location_gps', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('specs', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('is_online', sa.Boolean(), nullable=True),
     sa.Column('health_status', sa.Enum('EXCELLENT', 'GOOD', 'NEEDS_MAINTENANCE', 'OFFLINE', 'CRITICAL_FAILURE', name='devicehealthstatus'), nullable=True),
     sa.Column('hardware_did', sa.String(length=255), nullable=True),
@@ -396,6 +395,9 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('hardware_did')
     )
+    op.create_index('ix_smart_asset_class', 'smart_assets', ['asset_class'], unique=False)
+    op.create_index('ix_smart_asset_entity', 'smart_assets', ['entity_id'], unique=False)
+    op.create_index('ix_smart_asset_owner', 'smart_assets', ['owner_id'], unique=False)
     op.create_index(op.f('ix_smart_assets_asset_class'), 'smart_assets', ['asset_class'], unique=False)
     op.create_index(op.f('ix_smart_assets_asset_code'), 'smart_assets', ['asset_code'], unique=True)
     op.create_index(op.f('ix_smart_assets_entity_id'), 'smart_assets', ['entity_id'], unique=False)
@@ -421,9 +423,9 @@ def upgrade() -> None:
     op.create_table('student_digital_twins',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('cognitive_map', sa.JSON(), nullable=True),
+    sa.Column('cognitive_map', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('learning_style', sa.String(length=50), nullable=True),
-    sa.Column('ai_recommendations', sa.JSON(), nullable=True),
+    sa.Column('ai_recommendations', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
@@ -437,9 +439,9 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('crypto_mode', sa.String(length=20), nullable=False),
     sa.Column('is_trading_active', sa.Boolean(), nullable=True),
-    sa.Column('exchange_rates', sa.JSON(), nullable=False),
-    sa.Column('max_supply', sa.JSON(), nullable=False),
-    sa.Column('total_supply', sa.JSON(), nullable=False),
+    sa.Column('exchange_rates', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('max_supply', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('total_supply', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('updated_by_id', sa.BigInteger(), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['updated_by_id'], ['users.id'], ),
@@ -452,10 +454,11 @@ def upgrade() -> None:
     sa.Column('user_id', sa.BigInteger(), nullable=False),
     sa.Column('wallet_address', sa.String(length=42), nullable=True),
     sa.Column('is_custodial', sa.Boolean(), nullable=True),
-    sa.Column('balances', sa.JSON(), nullable=False),
+    sa.Column('balances', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('is_frozen', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint("(balances->>'MR_POUND')::numeric >= 0 AND (balances->>'MR_USDT')::numeric >= 0 AND (balances->>'MR7')::numeric >= 0 AND (balances->>'NBT')::numeric >= 0 AND (balances->>'MRX')::numeric >= 0", name='check_wallet_balances_non_negative'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
@@ -505,8 +508,8 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_affiliate_profiles_id'), 'affiliate_profiles', ['id'], unique=False)
     op.create_index('ix_affiliate_profiles_is_active', 'affiliate_profiles', ['is_active'], unique=False)
-    op.create_index(op.f('ix_affiliate_profiles_referral_code'), 'affiliate_profiles', ['referral_code'], unique=True)
-    op.create_index('ix_affiliate_profiles_tenant_id', 'affiliate_profiles', ['tenant_id'], unique=False)
+    op.create_index('ix_affiliate_profiles_referral_code', 'affiliate_profiles', ['referral_code'], unique=True)
+    op.create_index(op.f('ix_affiliate_profiles_tenant_id'), 'affiliate_profiles', ['tenant_id'], unique=False)
     op.create_index('ix_affiliate_profiles_user_id', 'affiliate_profiles', ['user_id'], unique=True)
     op.create_table('agricultural_certificates',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -536,7 +539,6 @@ def upgrade() -> None:
     op.create_index(op.f('ix_agricultural_certificates_id'), 'agricultural_certificates', ['id'], unique=False)
     op.create_index(op.f('ix_agricultural_certificates_status'), 'agricultural_certificates', ['status'], unique=False)
     op.create_index(op.f('ix_agricultural_certificates_tenant_id'), 'agricultural_certificates', ['tenant_id'], unique=False)
-    op.create_index('ix_cert_entity', 'agricultural_certificates', ['certified_entity_type', 'certified_entity_id'], unique=False)
     op.create_table('ai_agents',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -568,8 +570,8 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('seek_type', sa.JSON(), nullable=False),
-    sa.Column('ai_preferences', sa.JSON(), nullable=False),
+    sa.Column('seek_type', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('ai_preferences', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('is_discoverable', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -577,6 +579,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_ai_match_profile_created_at', 'ai_match_profiles', ['created_at'], unique=False)
     op.create_index(op.f('ix_ai_match_profiles_id'), 'ai_match_profiles', ['id'], unique=False)
     op.create_index(op.f('ix_ai_match_profiles_tenant_id'), 'ai_match_profiles', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_ai_match_profiles_user_id'), 'ai_match_profiles', ['user_id'], unique=True)
@@ -629,9 +632,9 @@ def upgrade() -> None:
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('trigger_type', sa.Enum('WEBHOOK', 'SCHEDULE', 'EVENT', 'MANUAL', name='triggertype'), nullable=False),
-    sa.Column('trigger_config', sa.JSON(), nullable=False),
-    sa.Column('nodes', sa.JSON(), nullable=False),
-    sa.Column('edges', sa.JSON(), nullable=False),
+    sa.Column('trigger_config', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('nodes', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('edges', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('max_retries', sa.Integer(), nullable=True),
     sa.Column('retry_delay_seconds', sa.Integer(), nullable=True),
     sa.Column('timeout_seconds', sa.Integer(), nullable=True),
@@ -650,6 +653,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_automation_workflows_id'), 'automation_workflows', ['id'], unique=False)
     op.create_index(op.f('ix_automation_workflows_tenant_id'), 'automation_workflows', ['tenant_id'], unique=False)
     op.create_index('ix_workflow_tenant_active', 'automation_workflows', ['tenant_id', 'is_active'], unique=False)
+    op.create_index('ix_workflow_trigger_type', 'automation_workflows', ['trigger_type'], unique=False)
     op.create_table('command_ai_recommendations',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -657,7 +661,7 @@ def upgrade() -> None:
     sa.Column('title', sa.String(length=255), nullable=False),
     sa.Column('description', sa.Text(), nullable=False),
     sa.Column('impact_estimate', sa.String(length=255), nullable=True),
-    sa.Column('analysis_data', sa.JSON(), nullable=False),
+    sa.Column('analysis_data', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('confidence_score', sa.Numeric(precision=5, scale=2), nullable=True),
     sa.Column('status', sa.String(length=50), nullable=True),
     sa.Column('applied_by', sa.Integer(), nullable=True),
@@ -671,6 +675,7 @@ def upgrade() -> None:
     )
     op.create_index('ix_ai_recommendation_status', 'command_ai_recommendations', ['status'], unique=False)
     op.create_index('ix_ai_recommendation_tenant', 'command_ai_recommendations', ['tenant_id'], unique=False)
+    op.create_index('ix_ai_recommendation_type_status', 'command_ai_recommendations', ['recommendation_type', 'status'], unique=False)
     op.create_index(op.f('ix_command_ai_recommendations_id'), 'command_ai_recommendations', ['id'], unique=False)
     op.create_index(op.f('ix_command_ai_recommendations_tenant_id'), 'command_ai_recommendations', ['tenant_id'], unique=False)
     op.create_table('command_brand_settings',
@@ -684,7 +689,7 @@ def upgrade() -> None:
     sa.Column('secondary_color', sa.String(length=7), nullable=True),
     sa.Column('font_family', sa.String(length=100), nullable=True),
     sa.Column('tier', sa.Enum('FREE', 'BASIC', 'PROFESSIONAL', 'ENTERPRISE', name='brandtier'), nullable=True),
-    sa.Column('features', sa.JSON(), nullable=True),
+    sa.Column('features', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('billing_email', sa.String(length=255), nullable=True),
     sa.Column('billing_address', sa.Text(), nullable=True),
     sa.Column('tax_id', sa.String(length=100), nullable=True),
@@ -709,15 +714,15 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('dashboard_type', sa.Enum('SUPER_ADMIN', 'BRAND_ADMIN', 'OPERATOR', name='dashboardtype'), nullable=False),
-    sa.Column('layout', sa.JSON(), nullable=True),
-    sa.Column('widgets', sa.JSON(), nullable=True),
-    sa.Column('theme', sa.JSON(), nullable=True),
+    sa.Column('layout', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('widgets', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('theme', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('brand_name', sa.String(length=255), nullable=True),
     sa.Column('brand_logo_url', sa.String(length=512), nullable=True),
     sa.Column('primary_color', sa.String(length=7), nullable=True),
     sa.Column('secondary_color', sa.String(length=7), nullable=True),
-    sa.Column('notification_preferences', sa.JSON(), nullable=True),
-    sa.Column('report_preferences', sa.JSON(), nullable=True),
+    sa.Column('notification_preferences', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('report_preferences', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_by', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -739,7 +744,7 @@ def upgrade() -> None:
     sa.Column('metric_unit', sa.String(length=50), nullable=True),
     sa.Column('recorded_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('period', sa.String(length=20), nullable=True),
-    sa.Column('dimensions', sa.JSON(), nullable=True),
+    sa.Column('dimensions', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -749,6 +754,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_command_platform_metrics_recorded_at'), 'command_platform_metrics', ['recorded_at'], unique=False)
     op.create_index(op.f('ix_command_platform_metrics_tenant_id'), 'command_platform_metrics', ['tenant_id'], unique=False)
     op.create_index('ix_platform_metric_name_time', 'command_platform_metrics', ['metric_name', 'recorded_at'], unique=False)
+    op.create_index('ix_platform_metric_period', 'command_platform_metrics', ['period'], unique=False)
     op.create_index('ix_platform_metric_tenant', 'command_platform_metrics', ['tenant_id'], unique=False)
     op.create_table('command_reports',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -757,8 +763,8 @@ def upgrade() -> None:
     sa.Column('report_type', sa.Enum('FINANCIAL', 'OPERATIONAL', 'USER_GROWTH', 'SECTOR_PERFORMANCE', 'SYSTEM_HEALTH', name='reporttype'), nullable=False),
     sa.Column('title', sa.String(length=255), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
-    sa.Column('report_data', sa.JSON(), nullable=False),
-    sa.Column('filters', sa.JSON(), nullable=True),
+    sa.Column('report_data', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('filters', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('period_start', sa.DateTime(timezone=True), nullable=False),
     sa.Column('period_end', sa.DateTime(timezone=True), nullable=False),
     sa.Column('format', sa.String(length=20), nullable=True),
@@ -774,6 +780,7 @@ def upgrade() -> None:
     )
     op.create_index('ix_command_report_tenant', 'command_reports', ['tenant_id'], unique=False)
     op.create_index('ix_command_report_type', 'command_reports', ['report_type'], unique=False)
+    op.create_index('ix_command_report_type_created', 'command_reports', ['report_type', 'created_at'], unique=False)
     op.create_index(op.f('ix_command_reports_id'), 'command_reports', ['id'], unique=False)
     op.create_index(op.f('ix_command_reports_tenant_id'), 'command_reports', ['tenant_id'], unique=False)
     op.create_table('command_system_alerts',
@@ -784,7 +791,7 @@ def upgrade() -> None:
     sa.Column('title', sa.String(length=255), nullable=False),
     sa.Column('description', sa.Text(), nullable=False),
     sa.Column('source', sa.String(length=255), nullable=True),
-    sa.Column('meta_data', sa.JSON(), nullable=True),
+    sa.Column('meta_data', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('status', sa.Enum('ACTIVE', 'ACKNOWLEDGED', 'RESOLVED', name='alertstatus'), nullable=True),
     sa.Column('acknowledged_by', sa.Integer(), nullable=True),
     sa.Column('acknowledged_at', sa.DateTime(timezone=True), nullable=True),
@@ -801,6 +808,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_command_system_alerts_tenant_id'), 'command_system_alerts', ['tenant_id'], unique=False)
     op.create_index('ix_system_alert_severity', 'command_system_alerts', ['severity'], unique=False)
     op.create_index('ix_system_alert_status', 'command_system_alerts', ['status'], unique=False)
+    op.create_index('ix_system_alert_status_severity', 'command_system_alerts', ['status', 'severity'], unique=False)
     op.create_index('ix_system_alert_tenant', 'command_system_alerts', ['tenant_id'], unique=False)
     op.create_table('command_user_sessions',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -825,6 +833,7 @@ def upgrade() -> None:
     op.create_index('ix_user_session_active', 'command_user_sessions', ['is_active'], unique=False)
     op.create_index('ix_user_session_tenant', 'command_user_sessions', ['tenant_id'], unique=False)
     op.create_index('ix_user_session_user', 'command_user_sessions', ['user_id'], unique=False)
+    op.create_index('ix_user_session_user_active', 'command_user_sessions', ['user_id', 'is_active'], unique=False)
     op.create_table('communication_templates',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -843,6 +852,8 @@ def upgrade() -> None:
     op.create_index(op.f('ix_communication_templates_name'), 'communication_templates', ['name'], unique=False)
     op.create_index(op.f('ix_communication_templates_tenant_id'), 'communication_templates', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_communication_templates_trigger_event'), 'communication_templates', ['trigger_event'], unique=False)
+    op.create_index('ix_template_active', 'communication_templates', ['is_active'], unique=False)
+    op.create_index('ix_template_tenant_event', 'communication_templates', ['tenant_id', 'trigger_event'], unique=False)
     op.create_table('crm_campaigns',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -850,13 +861,13 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('campaign_type', sa.Enum('BOOTCAMP', 'COURSE', 'SERVICE', 'PRODUCT', 'EVENT', name='campaigntype'), nullable=False),
-    sa.Column('target_audience', sa.JSON(), nullable=True),
+    sa.Column('target_audience', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('budget_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('spent_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('start_date', sa.DateTime(timezone=True), nullable=False),
     sa.Column('end_date', sa.DateTime(timezone=True), nullable=True),
     sa.Column('status', sa.Enum('DRAFT', 'ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELLED', name='campaignstatus'), nullable=True),
-    sa.Column('channels', sa.JSON(), nullable=True),
+    sa.Column('channels', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('total_leads', sa.Integer(), nullable=True),
     sa.Column('converted_leads', sa.Integer(), nullable=True),
     sa.Column('created_by', sa.Integer(), nullable=False),
@@ -869,6 +880,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_campaign_created_at', 'crm_campaigns', ['created_at'], unique=False)
+    op.create_index('ix_campaign_idempotency_key', 'crm_campaigns', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_campaign_tenant', 'crm_campaigns', ['tenant_id'], unique=False)
     op.create_index('ix_campaign_tenant_status', 'crm_campaigns', ['tenant_id', 'status'], unique=False)
     op.create_index(op.f('ix_crm_campaigns_id'), 'crm_campaigns', ['id'], unique=False)
@@ -889,7 +902,7 @@ def upgrade() -> None:
     sa.Column('source_reference', sa.String(length=255), nullable=True),
     sa.Column('status', sa.Enum('NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED', 'LOST', name='leadstatus'), nullable=True),
     sa.Column('score', sa.Integer(), nullable=True),
-    sa.Column('social_profiles', sa.JSON(), nullable=True),
+    sa.Column('social_profiles', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('notes', sa.Text(), nullable=True),
     sa.Column('assigned_to', sa.Integer(), nullable=True),
     sa.Column('converted_user_id', sa.Integer(), nullable=True),
@@ -908,6 +921,8 @@ def upgrade() -> None:
     op.create_index(op.f('ix_crm_leads_idempotency_key'), 'crm_leads', ['idempotency_key'], unique=True)
     op.create_index(op.f('ix_crm_leads_status'), 'crm_leads', ['status'], unique=False)
     op.create_index(op.f('ix_crm_leads_tenant_id'), 'crm_leads', ['tenant_id'], unique=False)
+    op.create_index('ix_lead_created_at', 'crm_leads', ['created_at'], unique=False)
+    op.create_index('ix_lead_idempotency_key', 'crm_leads', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_lead_tenant_email', 'crm_leads', ['tenant_id', 'email'], unique=False)
     op.create_index('ix_lead_tenant_status', 'crm_leads', ['tenant_id', 'status'], unique=False)
     op.create_table('death_oracle_checks',
@@ -939,8 +954,8 @@ def upgrade() -> None:
     sa.Column('global_access_level', sa.Enum('PRIVATE', 'FAMILY', 'PAID_ONLY', 'PUBLIC', name='twinaccesslevel'), nullable=True),
     sa.Column('interaction_fee_mrusdt', sa.Numeric(precision=15, scale=8), nullable=True),
     sa.Column('subscription_monthly_mrusdt', sa.Numeric(precision=15, scale=8), nullable=True),
-    sa.Column('capabilities', sa.JSON(), nullable=True),
-    sa.Column('knowledge_boundaries', sa.JSON(), nullable=True),
+    sa.Column('capabilities', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('knowledge_boundaries', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('max_spending_limit', sa.Numeric(precision=15, scale=8), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('settlement_type', sa.String(length=50), nullable=True),
@@ -999,6 +1014,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_employee_insurance_profiles_status'), 'employee_insurance_profiles', ['status'], unique=False)
     op.create_index(op.f('ix_employee_insurance_profiles_tenant_id'), 'employee_insurance_profiles', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_employee_insurance_profiles_user_id'), 'employee_insurance_profiles', ['user_id'], unique=True)
+    op.create_index('ix_employee_profile_created_at', 'employee_insurance_profiles', ['created_at'], unique=False)
     op.create_index('ix_employee_profile_tenant', 'employee_insurance_profiles', ['tenant_id'], unique=False)
     op.create_table('entertainment_venues',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -1014,6 +1030,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_entertainment_venues_entity_id'), 'entertainment_venues', ['entity_id'], unique=False)
     op.create_index(op.f('ix_entertainment_venues_id'), 'entertainment_venues', ['id'], unique=False)
     op.create_index(op.f('ix_entertainment_venues_tenant_id'), 'entertainment_venues', ['tenant_id'], unique=False)
+    op.create_index('ix_venue_created_at', 'entertainment_venues', ['created_at'], unique=False)
     op.create_index('ix_venue_tenant', 'entertainment_venues', ['tenant_id'], unique=False)
     op.create_table('entity_page_templates',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -1021,7 +1038,7 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('thumbnail_url', sa.String(length=512), nullable=True),
-    sa.Column('page_structure', sa.JSON(), nullable=False),
+    sa.Column('page_structure', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('is_public', sa.Boolean(), nullable=True),
     sa.Column('is_default', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -1031,20 +1048,6 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_entity_page_templates_id'), 'entity_page_templates', ['id'], unique=False)
     op.create_index(op.f('ix_entity_page_templates_tenant_id'), 'entity_page_templates', ['tenant_id'], unique=False)
-    op.create_table('fleets',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('entity_id', sa.Integer(), nullable=False),
-    sa.Column('name', sa.String(length=255), nullable=False),
-    sa.Column('is_active', sa.Boolean(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_fleets_entity_id'), 'fleets', ['entity_id'], unique=False)
-    op.create_index(op.f('ix_fleets_id'), 'fleets', ['id'], unique=False)
-    op.create_index(op.f('ix_fleets_tenant_id'), 'fleets', ['tenant_id'], unique=False)
     op.create_table('future_scenarios',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -1052,8 +1055,8 @@ def upgrade() -> None:
     sa.Column('scenario_title', sa.String(length=255), nullable=False),
     sa.Column('description', sa.Text(), nullable=False),
     sa.Column('target_year', sa.Integer(), nullable=False),
-    sa.Column('assumptions', sa.JSON(), nullable=True),
-    sa.Column('ai_analysis_report', sa.JSON(), nullable=True),
+    sa.Column('assumptions', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('ai_analysis_report', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('ai_agent_id', sa.Integer(), nullable=True),
     sa.Column('status', sa.Enum('DRAFTING', 'HUMAN_REVIEW', 'CONFIRMED', name='scenariostatus'), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -1064,6 +1067,9 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_future_scenario_created_at', 'future_scenarios', ['created_at'], unique=False)
+    op.create_index('ix_future_scenario_status', 'future_scenarios', ['status'], unique=False)
+    op.create_index('ix_future_scenario_tenant', 'future_scenarios', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_future_scenarios_id'), 'future_scenarios', ['id'], unique=False)
     op.create_index(op.f('ix_future_scenarios_tenant_id'), 'future_scenarios', ['tenant_id'], unique=False)
     op.create_table('group_features',
@@ -1077,6 +1083,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('feature_name')
     )
+    op.create_index('ix_group_feature_created_at', 'group_features', ['created_at'], unique=False)
     op.create_index('ix_group_feature_tenant', 'group_features', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_group_features_id'), 'group_features', ['id'], unique=False)
     op.create_index(op.f('ix_group_features_tenant_id'), 'group_features', ['tenant_id'], unique=False)
@@ -1087,13 +1094,14 @@ def upgrade() -> None:
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('price_monthly_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('price_yearly_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
-    sa.Column('included_features', sa.JSON(), nullable=True),
+    sa.Column('included_features', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_group_subscription_plan_created_at', 'group_subscription_plans', ['created_at'], unique=False)
     op.create_index(op.f('ix_group_subscription_plans_id'), 'group_subscription_plans', ['id'], unique=False)
     op.create_index(op.f('ix_group_subscription_plans_tenant_id'), 'group_subscription_plans', ['tenant_id'], unique=False)
     op.create_index('ix_subscription_plan_tenant', 'group_subscription_plans', ['tenant_id'], unique=False)
@@ -1103,8 +1111,8 @@ def upgrade() -> None:
     sa.Column('entity_id', sa.Integer(), nullable=True),
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('facility_category', sa.Enum('HOSPITAL', 'CLINIC', 'LABORATORY', 'PHARMACY', 'VETERINARY', 'AGRICULTURAL_RESEARCH', 'MARINE_BIOLOGY', name='facilitycategory'), nullable=False),
-    sa.Column('supported_targets', sa.JSON(), nullable=True),
-    sa.Column('specialties', sa.JSON(), nullable=True),
+    sa.Column('supported_targets', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('specialties', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('facility_wallet_address', sa.String(length=42), nullable=True),
     sa.Column('on_chain_identity', sa.String(length=255), nullable=True),
@@ -1122,41 +1130,14 @@ def upgrade() -> None:
     op.create_index(op.f('ix_health_facilities_tenant_id'), 'health_facilities', ['tenant_id'], unique=False)
     op.create_index('ix_health_facility_category', 'health_facilities', ['tenant_id', 'facility_category'], unique=False)
     op.create_index('ix_health_facility_tenant', 'health_facilities', ['tenant_id', 'is_active'], unique=False)
-    op.create_table('insurance_policies',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('issuer_entity_id', sa.Integer(), nullable=False),
-    sa.Column('name', sa.String(length=255), nullable=False),
-    sa.Column('policy_type', sa.Enum('MEDICAL', 'ACCIDENT', 'LIFE', 'FLEET', 'CARGO', 'PROJECT', 'EMPLOYEE_BENEFITS', name='policytype'), nullable=False),
-    sa.Column('description', sa.Text(), nullable=True),
-    sa.Column('base_premium_mrusdt', sa.Numeric(precision=30, scale=8), nullable=False),
-    sa.Column('premium_cycle', sa.Enum('ONE_TIME', 'MONTHLY', 'QUARTERLY', 'ANNUALLY', name='premiumcycle'), nullable=True),
-    sa.Column('max_coverage_limit_mrusdt', sa.Numeric(precision=30, scale=8), nullable=False),
-    sa.Column('terms_and_conditions', sa.JSON(), nullable=True),
-    sa.Column('is_active', sa.Boolean(), nullable=True),
-    sa.Column('smart_contract_address', sa.String(length=42), nullable=True),
-    sa.Column('created_by', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('is_deleted', sa.Boolean(), nullable=True),
-    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_insurance_policies_id'), 'insurance_policies', ['id'], unique=False)
-    op.create_index(op.f('ix_insurance_policies_issuer_entity_id'), 'insurance_policies', ['issuer_entity_id'], unique=False)
-    op.create_index(op.f('ix_insurance_policies_policy_type'), 'insurance_policies', ['policy_type'], unique=False)
-    op.create_index(op.f('ix_insurance_policies_tenant_id'), 'insurance_policies', ['tenant_id'], unique=False)
-    op.create_index('ix_policy_type_active', 'insurance_policies', ['policy_type', 'is_active'], unique=False)
     op.create_table('job_listings',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('employer_id', sa.Integer(), nullable=False),
     sa.Column('title', sa.String(length=255), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
-    sa.Column('required_skills', sa.JSON(), nullable=True),
-    sa.Column('required_certificate_ids', sa.JSON(), nullable=True),
+    sa.Column('required_skills', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('required_certificate_ids', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('required_rank', sa.String(length=50), nullable=True),
     sa.Column('salary_min', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('salary_max', sa.Numeric(precision=30, scale=8), nullable=True),
@@ -1183,7 +1164,7 @@ def upgrade() -> None:
     sa.Column('parent_id', sa.Integer(), nullable=True),
     sa.Column('plot_number', sa.String(length=100), nullable=False),
     sa.Column('area_sqm', sa.Numeric(precision=15, scale=2), nullable=False),
-    sa.Column('gps_polygon', sa.JSON(), nullable=False),
+    sa.Column('gps_polygon', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('zoning', sa.Enum('RESIDENTIAL', 'COMMERCIAL', 'INDUSTRIAL', 'AGRICULTURAL', 'LOGISTICS', 'ENTERTAINMENT', 'ADMINISTRATIVE', name='zoningcategory'), nullable=False),
     sa.Column('legal_status', sa.Enum('REGISTERED', 'GOVERNMENT_ALLOCATION', 'UNDER_LEGALIZATION', 'USUFRUCT', 'DISPUTED', name='legalstatus'), nullable=False),
     sa.Column('current_value_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
@@ -1198,6 +1179,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_land_assets_created_at', 'land_assets', ['created_at'], unique=False)
     op.create_index(op.f('ix_land_assets_id'), 'land_assets', ['id'], unique=False)
     op.create_index(op.f('ix_land_assets_owner_id'), 'land_assets', ['owner_id'], unique=False)
     op.create_index('ix_land_assets_owner_zoning', 'land_assets', ['owner_id', 'zoning'], unique=False)
@@ -1237,7 +1219,7 @@ def upgrade() -> None:
     sa.Column('confidence_score', sa.Numeric(precision=5, scale=2), nullable=True),
     sa.Column('seasonality_factor', sa.Numeric(precision=5, scale=2), nullable=True),
     sa.Column('trend_factor', sa.Numeric(precision=5, scale=2), nullable=True),
-    sa.Column('external_factors', sa.JSON(), nullable=True),
+    sa.Column('external_factors', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('ai_agent_id', sa.Integer(), nullable=True),
     sa.Column('ai_model_version', sa.String(length=50), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -1257,7 +1239,7 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('warehouse_type', sa.Enum('CENTRAL', 'REGIONAL', 'RETAIL', 'COLD_STORAGE', 'HAZARDOUS', 'FARM', name='warehousetype'), nullable=False),
     sa.Column('location', sa.String(length=255), nullable=False),
-    sa.Column('gps_location', sa.JSON(), nullable=True),
+    sa.Column('gps_location', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('total_capacity_sqm', sa.Numeric(precision=15, scale=2), nullable=False),
     sa.Column('used_capacity_sqm', sa.Numeric(precision=15, scale=2), nullable=True),
     sa.Column('total_capacity_units', sa.Integer(), nullable=False),
@@ -1288,6 +1270,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_mail_thread_created', 'mail_threads', ['created_at'], unique=False)
+    op.create_index('ix_mail_thread_tenant', 'mail_threads', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_mail_threads_id'), 'mail_threads', ['id'], unique=False)
     op.create_index(op.f('ix_mail_threads_tenant_id'), 'mail_threads', ['tenant_id'], unique=False)
     op.create_table('maintenance_logs',
@@ -1308,10 +1292,13 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['technician_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_maintenance_asset', 'maintenance_logs', ['asset_id'], unique=False)
+    op.create_index('ix_maintenance_grid', 'maintenance_logs', ['grid_id'], unique=False)
     op.create_index(op.f('ix_maintenance_logs_asset_id'), 'maintenance_logs', ['asset_id'], unique=False)
     op.create_index(op.f('ix_maintenance_logs_grid_id'), 'maintenance_logs', ['grid_id'], unique=False)
     op.create_index(op.f('ix_maintenance_logs_id'), 'maintenance_logs', ['id'], unique=False)
     op.create_index(op.f('ix_maintenance_logs_technician_id'), 'maintenance_logs', ['technician_id'], unique=False)
+    op.create_index('ix_maintenance_resolved', 'maintenance_logs', ['is_resolved'], unique=False)
     op.create_table('marketplace_services',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -1322,17 +1309,17 @@ def upgrade() -> None:
     sa.Column('thumbnail_url', sa.String(length=512), nullable=True),
     sa.Column('demo_url', sa.String(length=512), nullable=True),
     sa.Column('documentation_url', sa.String(length=512), nullable=True),
-    sa.Column('database_schema', sa.JSON(), nullable=True),
-    sa.Column('api_blueprint', sa.JSON(), nullable=True),
+    sa.Column('database_schema', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('api_blueprint', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('frontend_template_url', sa.String(length=512), nullable=True),
-    sa.Column('default_config', sa.JSON(), nullable=True),
-    sa.Column('requires_modules', sa.JSON(), nullable=True),
+    sa.Column('default_config', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('requires_modules', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('min_sovereign_rank', sa.String(length=50), nullable=True),
     sa.Column('base_price_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('subscription_price_basic_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('subscription_price_pro_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('subscription_price_enterprise_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
-    sa.Column('available_addons', sa.JSON(), nullable=True),
+    sa.Column('available_addons', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('is_featured', sa.Boolean(), nullable=True),
     sa.Column('created_by', sa.Integer(), nullable=False),
@@ -1344,6 +1331,9 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_marketplace_service_created_at', 'marketplace_services', ['created_at'], unique=False)
+    op.create_index('ix_marketplace_service_tenant', 'marketplace_services', ['tenant_id'], unique=False)
+    op.create_index('ix_marketplace_service_type', 'marketplace_services', ['service_type'], unique=False)
     op.create_index(op.f('ix_marketplace_services_id'), 'marketplace_services', ['id'], unique=False)
     op.create_index(op.f('ix_marketplace_services_service_type'), 'marketplace_services', ['service_type'], unique=False)
     op.create_index(op.f('ix_marketplace_services_tenant_id'), 'marketplace_services', ['tenant_id'], unique=False)
@@ -1359,9 +1349,9 @@ def upgrade() -> None:
     sa.Column('blood_type', sa.String(length=10), nullable=True),
     sa.Column('health_score', sa.Integer(), nullable=True),
     sa.Column('athletic_class', sa.String(length=50), nullable=True),
-    sa.Column('chronic_diseases', sa.JSON(), nullable=True),
-    sa.Column('allergies', sa.JSON(), nullable=True),
-    sa.Column('current_medications', sa.JSON(), nullable=True),
+    sa.Column('chronic_diseases', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('allergies', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('current_medications', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('encrypted_ipfs_hash', sa.String(length=100), nullable=True),
     sa.Column('emergency_contact', sa.String(length=255), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -1371,6 +1361,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_medical_profile_created_at', 'medical_profiles', ['created_at'], unique=False)
     op.create_index('ix_medical_profile_tenant_type', 'medical_profiles', ['tenant_id', 'target_entity_type'], unique=False)
     op.create_index(op.f('ix_medical_profiles_id'), 'medical_profiles', ['id'], unique=False)
     op.create_index(op.f('ix_medical_profiles_tenant_id'), 'medical_profiles', ['tenant_id'], unique=False)
@@ -1381,7 +1372,7 @@ def upgrade() -> None:
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('title', sa.String(length=255), nullable=False),
     sa.Column('body', sa.Text(), nullable=False),
-    sa.Column('data', sa.JSON(), nullable=True),
+    sa.Column('data', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('channel', sa.Enum('EMAIL', 'SMS', 'PUSH', 'WEBSOCKET', 'IN_APP', name='notificationchannel'), nullable=True),
     sa.Column('priority', sa.Enum('LOW', 'NORMAL', 'HIGH', 'CRITICAL', name='notificationpriority'), nullable=True),
     sa.Column('is_read', sa.Boolean(), nullable=True),
@@ -1400,6 +1391,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_notifications_tenant_id'), 'notifications', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_notifications_user_id'), 'notifications', ['user_id'], unique=False)
     op.create_index('ix_notifications_user_read', 'notifications', ['user_id', 'is_read'], unique=False)
+    op.create_index('ix_notifications_user_unread', 'notifications', ['user_id', 'is_read'], unique=False, postgresql_where=sa.text('is_read = false'))
     op.create_table('organization_entities',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -1427,7 +1419,7 @@ def upgrade() -> None:
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('component_type', sa.String(length=50), nullable=False),
-    sa.Column('default_props', sa.JSON(), nullable=True),
+    sa.Column('default_props', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('preview_image', sa.String(length=512), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -1436,33 +1428,6 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_page_components_id'), 'page_components', ['id'], unique=False)
     op.create_index(op.f('ix_page_components_tenant_id'), 'page_components', ['tenant_id'], unique=False)
-    op.create_table('pension_records',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
-    sa.Column('beneficiary_id', sa.Integer(), nullable=False),
-    sa.Column('source_entity_id', sa.Integer(), nullable=True),
-    sa.Column('pension_type', sa.String(length=50), nullable=True),
-    sa.Column('monthly_amount_mrusdt', sa.Numeric(precision=30, scale=8), nullable=False),
-    sa.Column('total_disbursed_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
-    sa.Column('start_date', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('end_date', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('status', sa.Enum('ACTIVE', 'SUSPENDED', 'TERMINATED', name='pensionstatus'), nullable=True),
-    sa.Column('streaming_contract_address', sa.String(length=42), nullable=True),
-    sa.Column('last_payout_tx', sa.String(length=100), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['beneficiary_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_pension_records_beneficiary_id'), 'pension_records', ['beneficiary_id'], unique=False)
-    op.create_index(op.f('ix_pension_records_id'), 'pension_records', ['id'], unique=False)
-    op.create_index(op.f('ix_pension_records_idempotency_key'), 'pension_records', ['idempotency_key'], unique=True)
-    op.create_index(op.f('ix_pension_records_pension_type'), 'pension_records', ['pension_type'], unique=False)
-    op.create_index(op.f('ix_pension_records_status'), 'pension_records', ['status'], unique=False)
-    op.create_index(op.f('ix_pension_records_tenant_id'), 'pension_records', ['tenant_id'], unique=False)
-    op.create_index('ix_pension_tenant', 'pension_records', ['tenant_id'], unique=False)
     op.create_table('planetary_campaigns',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -1483,6 +1448,9 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_planetary_campaign_created_at', 'planetary_campaigns', ['created_at'], unique=False)
+    op.create_index('ix_planetary_campaign_status', 'planetary_campaigns', ['status'], unique=False)
+    op.create_index('ix_planetary_campaign_tenant', 'planetary_campaigns', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_planetary_campaigns_id'), 'planetary_campaigns', ['id'], unique=False)
     op.create_index(op.f('ix_planetary_campaigns_tenant_id'), 'planetary_campaigns', ['tenant_id'], unique=False)
     op.create_table('pre_birth_records',
@@ -1556,7 +1524,8 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('certificate_nft_id')
     )
-    #op.create_index('ix_cert_entity', 'quality_certificates', ['certified_entity_type', 'certified_entity_id'], unique=False)
+    op.create_index('ix_cert_status', 'quality_certificates', ['status'], unique=False)
+    op.create_index('ix_cert_tenant', 'quality_certificates', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_quality_certificates_certified_entity_id'), 'quality_certificates', ['certified_entity_id'], unique=False)
     op.create_index(op.f('ix_quality_certificates_id'), 'quality_certificates', ['id'], unique=False)
     op.create_index(op.f('ix_quality_certificates_tenant_id'), 'quality_certificates', ['tenant_id'], unique=False)
@@ -1566,7 +1535,7 @@ def upgrade() -> None:
     sa.Column('plan_id', sa.Integer(), nullable=False),
     sa.Column('idempotency_key', sa.String(length=255), nullable=True),
     sa.Column('status', sa.String(length=50), nullable=True),
-    sa.Column('features', sa.JSON(), nullable=True),
+    sa.Column('features', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('last_billed_month', sa.DateTime(timezone=True), nullable=True),
     sa.Column('trial_end_date', sa.DateTime(timezone=True), nullable=True),
     sa.Column('start_date', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -1619,8 +1588,8 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_saas_tenant_service_access_id'), 'saas_tenant_service_access', ['id'], unique=False)
-    op.create_index('ix_saas_tenant_service_access_service_id', 'saas_tenant_service_access', ['service_id'], unique=False)
-    op.create_index('ix_saas_tenant_service_access_tenant_id', 'saas_tenant_service_access', ['tenant_id'], unique=False)
+    op.create_index(op.f('ix_saas_tenant_service_access_service_id'), 'saas_tenant_service_access', ['service_id'], unique=False)
+    op.create_index(op.f('ix_saas_tenant_service_access_tenant_id'), 'saas_tenant_service_access', ['tenant_id'], unique=False)
     op.create_index('ix_saas_tenant_service_access_unique', 'saas_tenant_service_access', ['tenant_id', 'service_id'], unique=True)
     op.create_table('saas_tenant_subscriptions',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -1647,7 +1616,7 @@ def upgrade() -> None:
     op.create_index('ix_saas_tenant_subscriptions_next_billing', 'saas_tenant_subscriptions', ['next_billing_date'], unique=False)
     op.create_index('ix_saas_tenant_subscriptions_plan_id', 'saas_tenant_subscriptions', ['plan_id'], unique=False)
     op.create_index('ix_saas_tenant_subscriptions_status', 'saas_tenant_subscriptions', ['status'], unique=False)
-    op.create_index('ix_saas_tenant_subscriptions_tenant_id', 'saas_tenant_subscriptions', ['tenant_id'], unique=False)
+    op.create_index(op.f('ix_saas_tenant_subscriptions_tenant_id'), 'saas_tenant_subscriptions', ['tenant_id'], unique=False)
     op.create_table('service_addons',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -1655,9 +1624,9 @@ def upgrade() -> None:
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('addon_type', sa.String(length=50), nullable=False),
     sa.Column('version', sa.String(length=20), nullable=True),
-    sa.Column('compatible_service_types', sa.JSON(), nullable=True),
-    sa.Column('database_schema', sa.JSON(), nullable=True),
-    sa.Column('api_blueprint', sa.JSON(), nullable=True),
+    sa.Column('compatible_service_types', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('database_schema', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('api_blueprint', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('frontend_component_url', sa.String(length=512), nullable=True),
     sa.Column('price_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
@@ -1668,6 +1637,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_addon_created_at', 'service_addons', ['created_at'], unique=False)
     op.create_index('ix_addon_tenant_type', 'service_addons', ['tenant_id', 'addon_type'], unique=False)
     op.create_index(op.f('ix_service_addons_id'), 'service_addons', ['id'], unique=False)
     op.create_index(op.f('ix_service_addons_tenant_id'), 'service_addons', ['tenant_id'], unique=False)
@@ -1679,36 +1649,16 @@ def upgrade() -> None:
     sa.Column('blockchain_tx_hash', sa.String(length=100), nullable=True),
     sa.Column('execution_status', sa.String(length=50), nullable=True),
     sa.Column('executed_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('contract_metadata', sa.JSON(), nullable=False),
+    sa.Column('contract_metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_smart_contract_created_at', 'smart_contract_engine', ['created_at'], unique=False)
     op.create_index(op.f('ix_smart_contract_engine_id'), 'smart_contract_engine', ['id'], unique=False)
     op.create_index(op.f('ix_smart_contract_engine_tenant_id'), 'smart_contract_engine', ['tenant_id'], unique=False)
     op.create_index('ix_smart_contract_tenant_type', 'smart_contract_engine', ['tenant_id', 'contract_type'], unique=False)
-    op.create_table('social_groups',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('creator_id', sa.Integer(), nullable=False),
-    sa.Column('name', sa.String(length=255), nullable=False),
-    sa.Column('description', sa.Text(), nullable=True),
-    sa.Column('privacy', sa.Enum('PUBLIC', 'PRIVATE', 'SECRET', name='groupprivacy'), nullable=True),
-    sa.Column('linked_project_id', sa.Integer(), nullable=True),
-    sa.Column('dao_contract_address', sa.String(length=42), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('is_deleted', sa.Boolean(), nullable=True),
-    sa.ForeignKeyConstraint(['creator_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_social_groups_creator_id'), 'social_groups', ['creator_id'], unique=False)
-    op.create_index(op.f('ix_social_groups_id'), 'social_groups', ['id'], unique=False)
-    op.create_index(op.f('ix_social_groups_name'), 'social_groups', ['name'], unique=False)
-    op.create_index(op.f('ix_social_groups_tenant_id'), 'social_groups', ['tenant_id'], unique=False)
     op.create_table('social_pages',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -1727,41 +1677,13 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_social_page_created_at', 'social_pages', ['created_at'], unique=False)
     op.create_index(op.f('ix_social_pages_entity_id'), 'social_pages', ['entity_id'], unique=False)
     op.create_index(op.f('ix_social_pages_id'), 'social_pages', ['id'], unique=False)
     op.create_index(op.f('ix_social_pages_name'), 'social_pages', ['name'], unique=False)
     op.create_index(op.f('ix_social_pages_owner_id'), 'social_pages', ['owner_id'], unique=False)
     op.create_index(op.f('ix_social_pages_slug'), 'social_pages', ['slug'], unique=True)
     op.create_index(op.f('ix_social_pages_tenant_id'), 'social_pages', ['tenant_id'], unique=False)
-    op.create_table('social_posts',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('author_id', sa.Integer(), nullable=False),
-    sa.Column('page_id', sa.Integer(), nullable=True),
-    sa.Column('group_id', sa.Integer(), nullable=True),
-    sa.Column('content', sa.Text(), nullable=True),
-    sa.Column('post_type', sa.Enum('TEXT', 'IMAGE', 'VIDEO', 'POLL', 'DOCUMENT', name='posttype'), nullable=True),
-    sa.Column('media_urls', sa.JSON(), nullable=True),
-    sa.Column('likes_count', sa.Integer(), nullable=True),
-    sa.Column('comments_count', sa.Integer(), nullable=True),
-    sa.Column('shares_count', sa.Integer(), nullable=True),
-    sa.Column('share_reward_mr7', sa.Numeric(precision=15, scale=8), nullable=True),
-    sa.Column('on_chain_post_tx', sa.String(length=100), nullable=True),
-    sa.Column('green_tag_verified', sa.Boolean(), nullable=True),
-    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('is_deleted', sa.Boolean(), nullable=True),
-    sa.ForeignKeyConstraint(['author_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('ix_social_posts_author', 'social_posts', ['author_id', 'created_at'], unique=False)
-    op.create_index(op.f('ix_social_posts_author_id'), 'social_posts', ['author_id'], unique=False)
-    op.create_index(op.f('ix_social_posts_id'), 'social_posts', ['id'], unique=False)
-    op.create_index(op.f('ix_social_posts_idempotency_key'), 'social_posts', ['idempotency_key'], unique=True)
-    op.create_index(op.f('ix_social_posts_tenant_id'), 'social_posts', ['tenant_id'], unique=False)
     op.create_table('social_smart_contracts',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -1770,7 +1692,7 @@ def upgrade() -> None:
     sa.Column('template_id', sa.Integer(), nullable=True),
     sa.Column('contract_type', sa.String(length=50), nullable=True),
     sa.Column('title', sa.String(length=255), nullable=False),
-    sa.Column('terms_and_conditions', sa.JSON(), nullable=False),
+    sa.Column('terms_and_conditions', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('status', sa.String(length=50), nullable=True),
     sa.Column('smart_contract_address', sa.String(length=42), nullable=True),
     sa.Column('blockchain_tx_hash', sa.String(length=100), nullable=True),
@@ -1779,11 +1701,13 @@ def upgrade() -> None:
     sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('is_deleted', sa.Boolean(), nullable=True),
     sa.ForeignKeyConstraint(['creator_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['template_id'], ['social_contract_templates.id'], ),
+    sa.ForeignKeyConstraint(['template_id'], ['social_contract_templates.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('blockchain_tx_hash')
     )
+    op.create_index('ix_social_smart_contract_created_at', 'social_smart_contracts', ['created_at'], unique=False)
+    op.create_index('ix_social_smart_contract_idempotency_key', 'social_smart_contracts', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index(op.f('ix_social_smart_contracts_contract_type'), 'social_smart_contracts', ['contract_type'], unique=False)
     op.create_index(op.f('ix_social_smart_contracts_creator_id'), 'social_smart_contracts', ['creator_id'], unique=False)
     op.create_index(op.f('ix_social_smart_contracts_id'), 'social_smart_contracts', ['id'], unique=False)
@@ -1814,6 +1738,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_auction_created_at', 'sovereign_auctions', ['created_at'], unique=False)
+    op.create_index('ix_auction_idempotency_key', 'sovereign_auctions', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_auction_status_times', 'sovereign_auctions', ['status', 'start_time', 'end_time'], unique=False)
     op.create_index('ix_auction_tenant', 'sovereign_auctions', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_sovereign_auctions_id'), 'sovereign_auctions', ['id'], unique=False)
@@ -1840,7 +1766,7 @@ def upgrade() -> None:
     sa.Column('primary_color', sa.String(length=7), nullable=True),
     sa.Column('secondary_color', sa.String(length=7), nullable=True),
     sa.Column('kyb_status', sa.Enum('PENDING', 'UNDER_REVIEW', 'VERIFIED', 'REJECTED', 'SUSPENDED', name='kybstatus'), nullable=True),
-    sa.Column('kyb_documents', sa.JSON(), nullable=True),
+    sa.Column('kyb_documents', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('verified_by', sa.Integer(), nullable=True),
     sa.Column('verified_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('rejection_reason', sa.Text(), nullable=True),
@@ -1896,7 +1822,7 @@ def upgrade() -> None:
     sa.Column('idempotency_key', sa.String(length=255), nullable=True),
     sa.Column('title', sa.String(length=255), nullable=False),
     sa.Column('description', sa.Text(), nullable=False),
-    sa.Column('scope_of_work', sa.JSON(), nullable=False),
+    sa.Column('scope_of_work', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('estimated_budget_mrusdt', sa.Numeric(precision=30, scale=8), nullable=False),
     sa.Column('min_bid_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('max_bid_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
@@ -1917,6 +1843,8 @@ def upgrade() -> None:
     op.create_index(op.f('ix_sovereign_tenders_id'), 'sovereign_tenders', ['id'], unique=False)
     op.create_index(op.f('ix_sovereign_tenders_idempotency_key'), 'sovereign_tenders', ['idempotency_key'], unique=True)
     op.create_index(op.f('ix_sovereign_tenders_tenant_id'), 'sovereign_tenders', ['tenant_id'], unique=False)
+    op.create_index('ix_tender_created_at', 'sovereign_tenders', ['created_at'], unique=False)
+    op.create_index('ix_tender_idempotency_key', 'sovereign_tenders', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_tender_tenant_status', 'sovereign_tenders', ['tenant_id', 'status'], unique=False)
     op.create_table('sports_organizations',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -1937,6 +1865,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_sports_organizations_id'), 'sports_organizations', ['id'], unique=False)
     op.create_index(op.f('ix_sports_organizations_owner_id'), 'sports_organizations', ['owner_id'], unique=False)
     op.create_index(op.f('ix_sports_organizations_tenant_id'), 'sports_organizations', ['tenant_id'], unique=False)
+    op.create_index('ix_sportsorg_created_at', 'sports_organizations', ['created_at'], unique=False)
     op.create_index('ix_sportsorg_tenant_owner', 'sports_organizations', ['tenant_id', 'owner_id'], unique=False)
     op.create_table('store_profiles',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -1990,7 +1919,7 @@ def upgrade() -> None:
     sa.Column('last_heartbeat_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('ai_avatar_access_id', sa.Integer(), nullable=True),
     sa.Column('status', sa.String(length=50), nullable=True),
-    sa.Column('encrypted_credentials', sa.JSON(), nullable=True),
+    sa.Column('encrypted_credentials', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
@@ -2016,18 +1945,17 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['erasure_request_id'], ['data_erasure_requests.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('ix_tombstone_erasure', 'tombstone_records', ['erasure_request_id'], unique=False)
+    op.create_index('ix_tombstone_created', 'tombstone_records', ['created_at'], unique=False)
     op.create_index(op.f('ix_tombstone_records_id'), 'tombstone_records', ['id'], unique=False)
     op.create_index(op.f('ix_tombstone_records_record_id'), 'tombstone_records', ['record_id'], unique=False)
     op.create_index(op.f('ix_tombstone_records_table_name'), 'tombstone_records', ['table_name'], unique=False)
-    op.create_index('ix_tombstone_table_record', 'tombstone_records', ['table_name', 'record_id'], unique=False)
     op.create_table('tourism_destinations',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('destination_type', sa.Enum('LOCAL', 'INTERNATIONAL', 'CRUISE_PORT', 'SPACE_STATION', name='destinationtype'), nullable=False),
     sa.Column('planet_body', sa.String(length=50), nullable=True),
-    sa.Column('gps_location', sa.JSON(), nullable=True),
+    sa.Column('gps_location', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -2035,6 +1963,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_tourism_destination_created_at', 'tourism_destinations', ['created_at'], unique=False)
+    op.create_index('ix_tourism_destination_tenant', 'tourism_destinations', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_tourism_destinations_id'), 'tourism_destinations', ['id'], unique=False)
     op.create_index(op.f('ix_tourism_destinations_name'), 'tourism_destinations', ['name'], unique=False)
     op.create_index(op.f('ix_tourism_destinations_tenant_id'), 'tourism_destinations', ['tenant_id'], unique=False)
@@ -2059,6 +1989,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_program_created_at', 'tourism_programs', ['created_at'], unique=False)
+    op.create_index('ix_program_idempotency_key', 'tourism_programs', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_program_tenant', 'tourism_programs', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_tourism_programs_id'), 'tourism_programs', ['id'], unique=False)
     op.create_index(op.f('ix_tourism_programs_idempotency_key'), 'tourism_programs', ['idempotency_key'], unique=True)
@@ -2099,6 +2031,7 @@ def upgrade() -> None:
     sa.Column('smart_contract_ref', sa.String(length=42), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint('amount > 0', name='check_transaction_amount_positive'),
     sa.ForeignKeyConstraint(['from_wallet_id'], ['wallets.id'], ),
     sa.ForeignKeyConstraint(['receiver_id'], ['users.id'], ),
     sa.ForeignKeyConstraint(['sender_id'], ['users.id'], ),
@@ -2106,11 +2039,12 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('blockchain_hash')
     )
+    op.create_index('ix_transactions_created_status', 'transactions', ['created_at', 'status'], unique=False)
     op.create_index(op.f('ix_transactions_currency'), 'transactions', ['currency'], unique=False)
     op.create_index('ix_transactions_currency_status', 'transactions', ['currency', 'status'], unique=False)
     op.create_index(op.f('ix_transactions_from_wallet_id'), 'transactions', ['from_wallet_id'], unique=False)
     op.create_index(op.f('ix_transactions_id'), 'transactions', ['id'], unique=False)
-    op.create_index('ix_transactions_idempotency_key', 'transactions', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.create_index(op.f('ix_transactions_idempotency_key'), 'transactions', ['idempotency_key'], unique=True)
     op.create_index('ix_transactions_receiver_created', 'transactions', ['receiver_id', 'created_at'], unique=False)
     op.create_index(op.f('ix_transactions_receiver_id'), 'transactions', ['receiver_id'], unique=False)
     op.create_index('ix_transactions_sender_created', 'transactions', ['sender_id', 'created_at'], unique=False)
@@ -2119,21 +2053,24 @@ def upgrade() -> None:
     op.create_index(op.f('ix_transactions_to_wallet_id'), 'transactions', ['to_wallet_id'], unique=False)
     op.create_index(op.f('ix_transactions_tx_hash'), 'transactions', ['tx_hash'], unique=True)
     op.create_index(op.f('ix_transactions_tx_type'), 'transactions', ['tx_type'], unique=False)
+    op.create_index('ix_transactions_tx_type_created', 'transactions', ['tx_type', 'created_at'], unique=False)
     op.create_table('translation_cache',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('text_hash', sa.String(length=64), nullable=False),
     sa.Column('original_text', sa.Text(), nullable=False),
     sa.Column('source_lang', sa.String(length=10), nullable=False),
-    sa.Column('translations', sa.JSON(), nullable=False),
+    sa.Column('translations', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('hit_count', sa.Integer(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_translation_cache_created_at', 'translation_cache', ['created_at'], unique=False)
     op.create_index(op.f('ix_translation_cache_id'), 'translation_cache', ['id'], unique=False)
     op.create_index(op.f('ix_translation_cache_source_lang'), 'translation_cache', ['source_lang'], unique=False)
+    op.create_index('ix_translation_cache_tenant', 'translation_cache', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_translation_cache_tenant_id'), 'translation_cache', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_translation_cache_text_hash'), 'translation_cache', ['text_hash'], unique=True)
     op.create_table('translation_request_logs',
@@ -2153,28 +2090,13 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_translation_log_created_at', 'translation_request_logs', ['created_at'], unique=False)
+    op.create_index('ix_translation_log_idempotency_key', 'translation_request_logs', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.create_index('ix_translation_log_tenant', 'translation_request_logs', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_translation_request_logs_id'), 'translation_request_logs', ['id'], unique=False)
     op.create_index(op.f('ix_translation_request_logs_idempotency_key'), 'translation_request_logs', ['idempotency_key'], unique=False)
     op.create_index(op.f('ix_translation_request_logs_tenant_id'), 'translation_request_logs', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_translation_request_logs_user_id'), 'translation_request_logs', ['user_id'], unique=False)
-    op.create_table('transport_hubs',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('entity_id', sa.Integer(), nullable=True),
-    sa.Column('name', sa.String(length=255), nullable=False),
-    sa.Column('hub_type', sa.String(length=50), nullable=False),
-    sa.Column('region', sa.String(length=100), nullable=True),
-    sa.Column('gps_location', sa.JSON(), nullable=False),
-    sa.Column('is_active', sa.Boolean(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_transport_hubs_entity_id'), 'transport_hubs', ['entity_id'], unique=False)
-    op.create_index(op.f('ix_transport_hubs_id'), 'transport_hubs', ['id'], unique=False)
-    op.create_index(op.f('ix_transport_hubs_name'), 'transport_hubs', ['name'], unique=False)
-    op.create_index(op.f('ix_transport_hubs_tenant_id'), 'transport_hubs', ['tenant_id'], unique=False)
     op.create_table('user_connections',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -2188,10 +2110,12 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.CheckConstraint('user_a_id != user_b_id', name='check_no_self_connection'),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.ForeignKeyConstraint(['user_a_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['user_b_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['user_a_id'], ['users.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['user_b_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_user_connection_created_at', 'user_connections', ['created_at'], unique=False)
+    op.create_index('ix_user_connection_idempotency_key', 'user_connections', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_user_connection_pair', 'user_connections', ['user_a_id', 'user_b_id'], unique=True)
     op.create_index(op.f('ix_user_connections_id'), 'user_connections', ['id'], unique=False)
     op.create_index(op.f('ix_user_connections_idempotency_key'), 'user_connections', ['idempotency_key'], unique=True)
@@ -2212,11 +2136,12 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index('ix_occasion_tenant', 'user_occasions', ['tenant_id'], unique=False)
     op.create_index('ix_occasion_user_date', 'user_occasions', ['user_id', 'occasion_date'], unique=False)
+    op.create_index('ix_user_occasion_created_at', 'user_occasions', ['created_at'], unique=False)
     op.create_index(op.f('ix_user_occasions_id'), 'user_occasions', ['id'], unique=False)
     op.create_index(op.f('ix_user_occasions_tenant_id'), 'user_occasions', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_user_occasions_user_id'), 'user_occasions', ['user_id'], unique=False)
@@ -2236,6 +2161,9 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['grid_id'], ['utility_grids.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_utility_reading_asset', 'utility_readings', ['asset_id'], unique=False)
+    op.create_index('ix_utility_reading_grid', 'utility_readings', ['grid_id'], unique=False)
+    op.create_index('ix_utility_reading_type_time', 'utility_readings', ['reading_type', 'reading_timestamp'], unique=False)
     op.create_index(op.f('ix_utility_readings_asset_id'), 'utility_readings', ['asset_id'], unique=False)
     op.create_index(op.f('ix_utility_readings_grid_id'), 'utility_readings', ['grid_id'], unique=False)
     op.create_index(op.f('ix_utility_readings_id'), 'utility_readings', ['id'], unique=False)
@@ -2246,11 +2174,11 @@ def upgrade() -> None:
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('alert_type', sa.String(length=50), nullable=False),
     sa.Column('severity', sa.String(length=20), nullable=True),
-    sa.Column('location_gps', sa.JSON(), nullable=True),
+    sa.Column('location_gps', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('message', sa.Text(), nullable=False),
     sa.Column('start_time', sa.DateTime(timezone=True), nullable=False),
     sa.Column('end_time', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('affected_farm_ids', sa.JSON(), nullable=True),
+    sa.Column('affected_farm_ids', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
@@ -2266,8 +2194,8 @@ def upgrade() -> None:
     sa.Column('description', sa.Text(), nullable=False),
     sa.Column('timeline_year', sa.Integer(), nullable=True),
     sa.Column('geo_location', sa.String(length=255), nullable=True),
-    sa.Column('verified_sources', sa.JSON(), nullable=True),
-    sa.Column('extra_data', sa.JSON(), nullable=True),
+    sa.Column('verified_sources', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('extra_data', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_by', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -2277,6 +2205,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_zamakana_node_created_at', 'zamakana_nodes', ['created_at'], unique=False)
     op.create_index('ix_zamakana_node_title', 'zamakana_nodes', ['title'], unique=False)
     op.create_index('ix_zamakana_node_type_year', 'zamakana_nodes', ['node_type', 'timeline_year'], unique=False)
     op.create_index(op.f('ix_zamakana_nodes_id'), 'zamakana_nodes', ['id'], unique=False)
@@ -2320,7 +2249,7 @@ def upgrade() -> None:
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('org_entity_id', sa.Integer(), nullable=False),
     sa.Column('bio', sa.Text(), nullable=True),
-    sa.Column('expertise_areas', sa.JSON(), nullable=True),
+    sa.Column('expertise_areas', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('revenue_share_percentage', sa.Numeric(precision=5, scale=2), nullable=True),
     sa.Column('is_approved', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -2342,7 +2271,7 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('facility_type', sa.Enum('HOTEL', 'APARTMENT', 'HOSTEL', 'CRUISE_CABIN', 'SPACE_POD', 'RESORT', name='accommodationtype'), nullable=False),
     sa.Column('star_rating', sa.Integer(), nullable=True),
-    sa.Column('amenities', sa.JSON(), nullable=True),
+    sa.Column('amenities', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('smart_contract_address', sa.String(length=42), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -2350,16 +2279,18 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_accommodation_created_at', 'accommodation_facilities', ['created_at'], unique=False)
     op.create_index(op.f('ix_accommodation_facilities_destination_id'), 'accommodation_facilities', ['destination_id'], unique=False)
     op.create_index(op.f('ix_accommodation_facilities_id'), 'accommodation_facilities', ['id'], unique=False)
     op.create_index(op.f('ix_accommodation_facilities_tenant_id'), 'accommodation_facilities', ['tenant_id'], unique=False)
+    op.create_index('ix_accommodation_tenant', 'accommodation_facilities', ['tenant_id'], unique=False)
     op.create_table('agent_approval_queue',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('agent_id', sa.Integer(), nullable=False),
     sa.Column('human_approver_id', sa.Integer(), nullable=False),
     sa.Column('action_type', sa.String(length=100), nullable=False),
-    sa.Column('proposed_payload', sa.JSON(), nullable=False),
+    sa.Column('proposed_payload', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('idempotency_key', sa.String(length=255), nullable=True),
     sa.Column('status', sa.Enum('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', name='approvalstatus'), nullable=True),
     sa.Column('resolved_at', sa.DateTime(timezone=True), nullable=True),
@@ -2384,8 +2315,8 @@ def upgrade() -> None:
     sa.Column('agent_id', sa.Integer(), nullable=False),
     sa.Column('admin_user_id', sa.Integer(), nullable=False),
     sa.Column('action', sa.String(length=100), nullable=False),
-    sa.Column('old_value', sa.JSON(), nullable=True),
-    sa.Column('new_value', sa.JSON(), nullable=True),
+    sa.Column('old_value', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('new_value', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('ip_address', sa.String(length=45), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['admin_user_id'], ['users.id'], ),
@@ -2395,6 +2326,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_agent_audit_logs_id'), 'agent_audit_logs', ['id'], unique=False)
     op.create_index(op.f('ix_agent_audit_logs_tenant_id'), 'agent_audit_logs', ['tenant_id'], unique=False)
+    op.create_index('ix_audit_created_action', 'agent_audit_logs', ['created_at', 'action'], unique=False)
     op.create_index('ix_audit_tenant_agent', 'agent_audit_logs', ['tenant_id', 'agent_id'], unique=False)
     op.create_table('agent_quotas',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -2457,6 +2389,8 @@ def upgrade() -> None:
     op.create_index(op.f('ix_agent_usage_logs_id'), 'agent_usage_logs', ['id'], unique=False)
     op.create_index(op.f('ix_agent_usage_logs_idempotency_key'), 'agent_usage_logs', ['idempotency_key'], unique=True)
     op.create_index(op.f('ix_agent_usage_logs_tenant_id'), 'agent_usage_logs', ['tenant_id'], unique=False)
+    op.create_index('ix_usage_log_created_action', 'agent_usage_logs', ['created_at', 'action_type'], unique=False)
+    op.create_index('ix_usage_log_tenant_agent', 'agent_usage_logs', ['tenant_id', 'agent_id'], unique=False)
     op.create_table('ai_health_prognosis',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -2464,7 +2398,7 @@ def upgrade() -> None:
     sa.Column('risk_level', sa.Enum('SAFE', 'MONITOR', 'WARNING', 'CRITICAL', name='risklevel'), nullable=False),
     sa.Column('predicted_condition', sa.String(length=255), nullable=False),
     sa.Column('confidence_score', sa.Numeric(precision=5, scale=2), nullable=False),
-    sa.Column('preventive_recommendations', sa.JSON(), nullable=False),
+    sa.Column('preventive_recommendations', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('is_acknowledged', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['medical_profile_id'], ['medical_profiles.id'], ),
@@ -2474,6 +2408,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_ai_health_prognosis_id'), 'ai_health_prognosis', ['id'], unique=False)
     op.create_index(op.f('ix_ai_health_prognosis_medical_profile_id'), 'ai_health_prognosis', ['medical_profile_id'], unique=False)
     op.create_index(op.f('ix_ai_health_prognosis_tenant_id'), 'ai_health_prognosis', ['tenant_id'], unique=False)
+    op.create_index('ix_ai_prognosis_created_at', 'ai_health_prognosis', ['created_at'], unique=False)
     op.create_index('ix_ai_prognosis_tenant', 'ai_health_prognosis', ['tenant_id'], unique=False)
     op.create_table('ai_task_logs',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -2501,23 +2436,24 @@ def upgrade() -> None:
     op.create_index(op.f('ix_ai_task_logs_tenant_id'), 'ai_task_logs', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_ai_task_logs_user_id'), 'ai_task_logs', ['user_id'], unique=False)
     op.create_index('ix_tasklog_agent_created', 'ai_task_logs', ['agent_id', 'created_at'], unique=False)
+    op.create_index('ix_tasklog_created_type', 'ai_task_logs', ['created_at', 'task_type'], unique=False)
     op.create_index('ix_tasklog_tenant_task', 'ai_task_logs', ['tenant_id', 'task_type'], unique=False)
     op.create_index('ix_tasklog_used_model', 'ai_task_logs', ['used_model'], unique=False)
     op.create_table('automation_executions',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('workflow_id', sa.Integer(), nullable=False),
     sa.Column('triggered_by', sa.String(length=100), nullable=True),
-    sa.Column('trigger_payload', sa.JSON(), nullable=True),
+    sa.Column('trigger_payload', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('trigger_ip', sa.String(length=45), nullable=True),
     sa.Column('trigger_user_agent', sa.String(length=255), nullable=True),
     sa.Column('status', sa.Enum('PENDING', 'RUNNING', 'SUCCESS', 'FAILED', 'RETRY', 'CANCELLED', name='executionstatus'), nullable=True),
     sa.Column('started_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('finished_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('current_node_id', sa.String(length=100), nullable=True),
-    sa.Column('node_results', sa.JSON(), nullable=True),
+    sa.Column('node_results', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('error_message', sa.Text(), nullable=True),
     sa.Column('retry_count', sa.Integer(), nullable=True),
-    sa.Column('context', sa.JSON(), nullable=True),
+    sa.Column('context', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['workflow_id'], ['automation_workflows.id'], ),
@@ -2526,6 +2462,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_automation_executions_id'), 'automation_executions', ['id'], unique=False)
     op.create_index(op.f('ix_automation_executions_workflow_id'), 'automation_executions', ['workflow_id'], unique=False)
     op.create_index('ix_execution_created', 'automation_executions', ['created_at'], unique=False)
+    op.create_index('ix_execution_status_created', 'automation_executions', ['status', 'created_at'], unique=False)
     op.create_index('ix_execution_trigger_ip', 'automation_executions', ['trigger_ip'], unique=False)
     op.create_index('ix_execution_workflow_status', 'automation_executions', ['workflow_id', 'status'], unique=False)
     op.create_table('biometric_logs',
@@ -2534,7 +2471,7 @@ def upgrade() -> None:
     sa.Column('medical_profile_id', sa.Integer(), nullable=True),
     sa.Column('source', sa.Enum('WEARABLE', 'OPTICAL_CAMERA', 'MEDICAL_DEVICE', 'IOT_SENSOR', 'DRONE_IMAGERY', 'SATELLITE', name='biometricsource'), nullable=False),
     sa.Column('device_id', sa.String(length=100), nullable=True),
-    sa.Column('aggregated_metrics', sa.JSON(), nullable=False),
+    sa.Column('aggregated_metrics', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('recorded_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['medical_profile_id'], ['medical_profiles.id'], ),
@@ -2578,7 +2515,7 @@ def upgrade() -> None:
     sa.Column('interaction_type', sa.Enum('EMAIL', 'PHONE', 'CHAT', 'MEETING', 'SOCIAL_MEDIA', name='interactiontype'), nullable=False),
     sa.Column('title', sa.String(length=255), nullable=True),
     sa.Column('content', sa.Text(), nullable=False),
-    sa.Column('meta_data', sa.JSON(), nullable=True),
+    sa.Column('meta_data', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['lead_id'], ['crm_leads.id'], ),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
@@ -2589,6 +2526,8 @@ def upgrade() -> None:
     op.create_index(op.f('ix_crm_interactions_idempotency_key'), 'crm_interactions', ['idempotency_key'], unique=True)
     op.create_index(op.f('ix_crm_interactions_lead_id'), 'crm_interactions', ['lead_id'], unique=False)
     op.create_index(op.f('ix_crm_interactions_tenant_id'), 'crm_interactions', ['tenant_id'], unique=False)
+    op.create_index('ix_interaction_created_at', 'crm_interactions', ['created_at'], unique=False)
+    op.create_index('ix_interaction_idempotency_key', 'crm_interactions', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_interaction_tenant_lead', 'crm_interactions', ['tenant_id', 'lead_id'], unique=False)
     op.create_table('crm_tickets',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -2614,6 +2553,8 @@ def upgrade() -> None:
     op.create_index(op.f('ix_crm_tickets_idempotency_key'), 'crm_tickets', ['idempotency_key'], unique=True)
     op.create_index(op.f('ix_crm_tickets_status'), 'crm_tickets', ['status'], unique=False)
     op.create_index(op.f('ix_crm_tickets_tenant_id'), 'crm_tickets', ['tenant_id'], unique=False)
+    op.create_index('ix_ticket_created_at', 'crm_tickets', ['created_at'], unique=False)
+    op.create_index('ix_ticket_idempotency_key', 'crm_tickets', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_ticket_tenant', 'crm_tickets', ['tenant_id'], unique=False)
     op.create_table('crowd_juries',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -2648,17 +2589,19 @@ def upgrade() -> None:
     sa.Column('gift_type', sa.String(length=50), nullable=False),
     sa.Column('gift_value_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('gift_message', sa.Text(), nullable=True),
-    sa.Column('gift_metadata', sa.JSON(), nullable=True),
+    sa.Column('gift_metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('sent_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('is_redeemed', sa.Boolean(), nullable=True),
     sa.Column('redeemed_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['occasion_id'], ['user_occasions.id'], ),
-    sa.ForeignKeyConstraint(['receiver_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['sender_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['occasion_id'], ['user_occasions.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['receiver_id'], ['users.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['sender_id'], ['users.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_digital_gift_created_at', 'digital_gifts', ['created_at'], unique=False)
+    op.create_index('ix_digital_gift_idempotency_key', 'digital_gifts', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_digital_gift_receiver', 'digital_gifts', ['receiver_id'], unique=False)
     op.create_index('ix_digital_gift_sender', 'digital_gifts', ['sender_id'], unique=False)
     op.create_index('ix_digital_gift_tenant', 'digital_gifts', ['tenant_id'], unique=False)
@@ -2675,8 +2618,8 @@ def upgrade() -> None:
     sa.Column('facility_id', sa.Integer(), nullable=True),
     sa.Column('fleet_vehicle_id', sa.Integer(), nullable=True),
     sa.Column('emergency_type', sa.Enum('MEDICAL_CRITICAL', 'BIO_HAZARD', 'ATHLETIC_INJURY', 'VETERINARY_EMERGENCY', 'AGRICULTURAL_PLAGUE', 'ALGAE_BLOOM', name='emergencytype'), nullable=False),
-    sa.Column('gps_location', sa.JSON(), nullable=False),
-    sa.Column('vital_signs_on_route', sa.JSON(), nullable=True),
+    sa.Column('gps_location', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('vital_signs_on_route', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('dispatch_time', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('arrival_time', sa.DateTime(timezone=True), nullable=True),
     sa.Column('status', sa.Enum('PENDING', 'DISPATCHED', 'ON_SCENE', 'IN_TRANSIT', 'COMPLETED', 'CANCELLED', name='dispatchstatus'), nullable=True),
@@ -2687,6 +2630,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_dispatch_created_at', 'emergency_dispatches', ['created_at'], unique=False)
+    op.create_index('ix_dispatch_idempotency_key', 'emergency_dispatches', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_dispatch_tenant_status', 'emergency_dispatches', ['tenant_id', 'status'], unique=False)
     op.create_index(op.f('ix_emergency_dispatches_id'), 'emergency_dispatches', ['id'], unique=False)
     op.create_index(op.f('ix_emergency_dispatches_idempotency_key'), 'emergency_dispatches', ['idempotency_key'], unique=True)
@@ -2713,6 +2658,8 @@ def upgrade() -> None:
     op.create_index(op.f('ix_entertainment_events_idempotency_key'), 'entertainment_events', ['idempotency_key'], unique=True)
     op.create_index(op.f('ix_entertainment_events_tenant_id'), 'entertainment_events', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_entertainment_events_venue_id'), 'entertainment_events', ['venue_id'], unique=False)
+    op.create_index('ix_event_created_at', 'entertainment_events', ['created_at'], unique=False)
+    op.create_index('ix_event_idempotency_key', 'entertainment_events', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_event_tenant_venue', 'entertainment_events', ['tenant_id', 'venue_id'], unique=False)
     op.create_table('entity_documents',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -2737,12 +2684,12 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('entity_id', sa.Integer(), nullable=False),
     sa.Column('template_id', sa.Integer(), nullable=True),
-    sa.Column('custom_structure', sa.JSON(), nullable=True),
+    sa.Column('custom_structure', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('slug', sa.String(length=255), nullable=False),
     sa.Column('meta_title', sa.String(length=255), nullable=True),
     sa.Column('meta_description', sa.Text(), nullable=True),
     sa.Column('custom_domain', sa.String(length=255), nullable=True),
-    sa.Column('custom_pages', sa.JSON(), nullable=True),
+    sa.Column('custom_pages', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('visits_count', sa.Integer(), nullable=True),
     sa.Column('last_visit_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('published_at', sa.DateTime(timezone=True), nullable=True),
@@ -2789,6 +2736,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_facility_department_created_at', 'facility_departments', ['created_at'], unique=False)
     op.create_index(op.f('ix_facility_departments_facility_id'), 'facility_departments', ['facility_id'], unique=False)
     op.create_index(op.f('ix_facility_departments_id'), 'facility_departments', ['id'], unique=False)
     op.create_index(op.f('ix_facility_departments_tenant_id'), 'facility_departments', ['tenant_id'], unique=False)
@@ -2800,42 +2748,18 @@ def upgrade() -> None:
     sa.Column('reminder_sent_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('is_acknowledged', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['friend_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['occasion_id'], ['user_occasions.id'], ),
+    sa.ForeignKeyConstraint(['friend_id'], ['users.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['occasion_id'], ['user_occasions.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_gift_reminder_created_at', 'gift_reminders', ['created_at'], unique=False)
     op.create_index('ix_gift_reminder_occasion', 'gift_reminders', ['occasion_id'], unique=False)
     op.create_index('ix_gift_reminder_tenant', 'gift_reminders', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_gift_reminders_friend_id'), 'gift_reminders', ['friend_id'], unique=False)
     op.create_index(op.f('ix_gift_reminders_id'), 'gift_reminders', ['id'], unique=False)
     op.create_index(op.f('ix_gift_reminders_occasion_id'), 'gift_reminders', ['occasion_id'], unique=False)
     op.create_index(op.f('ix_gift_reminders_tenant_id'), 'gift_reminders', ['tenant_id'], unique=False)
-    op.create_table('group_subscriptions',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
-    sa.Column('group_id', sa.Integer(), nullable=False),
-    sa.Column('plan_id', sa.Integer(), nullable=False),
-    sa.Column('start_date', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('end_date', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('auto_renew', sa.Boolean(), nullable=True),
-    sa.Column('status', sa.String(length=50), nullable=True),
-    sa.Column('payment_tx_hash', sa.String(length=100), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['group_id'], ['social_groups.id'], ),
-    sa.ForeignKeyConstraint(['plan_id'], ['group_subscription_plans.id'], ),
-    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('ix_group_subscription_group', 'group_subscriptions', ['group_id'], unique=False)
-    op.create_index('ix_group_subscription_tenant', 'group_subscriptions', ['tenant_id'], unique=False)
-    op.create_index(op.f('ix_group_subscriptions_group_id'), 'group_subscriptions', ['group_id'], unique=False)
-    op.create_index(op.f('ix_group_subscriptions_id'), 'group_subscriptions', ['id'], unique=False)
-    op.create_index(op.f('ix_group_subscriptions_idempotency_key'), 'group_subscriptions', ['idempotency_key'], unique=True)
-    op.create_index(op.f('ix_group_subscriptions_plan_id'), 'group_subscriptions', ['plan_id'], unique=False)
-    op.create_index(op.f('ix_group_subscriptions_tenant_id'), 'group_subscriptions', ['tenant_id'], unique=False)
     op.create_table('human_feedbacks',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -2850,52 +2774,43 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_human_feedback_created_at', 'human_feedbacks', ['created_at'], unique=False)
+    op.create_index('ix_human_feedback_idempotency_key', 'human_feedbacks', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.create_index('ix_human_feedback_scenario', 'human_feedbacks', ['scenario_id'], unique=False)
     op.create_index('ix_human_feedback_tenant', 'human_feedbacks', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_human_feedbacks_id'), 'human_feedbacks', ['id'], unique=False)
     op.create_index(op.f('ix_human_feedbacks_idempotency_key'), 'human_feedbacks', ['idempotency_key'], unique=True)
     op.create_index(op.f('ix_human_feedbacks_scenario_id'), 'human_feedbacks', ['scenario_id'], unique=False)
     op.create_index(op.f('ix_human_feedbacks_tenant_id'), 'human_feedbacks', ['tenant_id'], unique=False)
-    op.create_table('insurance_subscriptions',
+    op.create_table('insurance_policies',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
-    sa.Column('policy_id', sa.Integer(), nullable=False),
-    sa.Column('subscriber_user_id', sa.Integer(), nullable=True),
-    sa.Column('fleet_id', sa.Integer(), nullable=True),
-    sa.Column('land_asset_id', sa.Integer(), nullable=True),
-    sa.Column('project_id', sa.Integer(), nullable=True),
-    sa.Column('bio_asset_id', sa.Integer(), nullable=True),
-    sa.Column('shipment_id', sa.Integer(), nullable=True),
-    sa.Column('employment_contract_id', sa.Integer(), nullable=True),
-    sa.Column('beneficiaries_json', sa.JSON(), nullable=True),
-    sa.Column('start_date', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('end_date', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('status', sa.String(length=50), nullable=True),
-    sa.Column('policy_nft_id', sa.String(length=100), nullable=True),
-    sa.Column('subscription_tx_hash', sa.String(length=100), nullable=True),
+    sa.Column('issuer_entity_id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=255), nullable=False),
+    sa.Column('policy_type', sa.Enum('MEDICAL', 'ACCIDENT', 'LIFE', 'FLEET', 'CARGO', 'PROJECT', 'EMPLOYEE_BENEFITS', name='policytype'), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('base_premium_mrusdt', sa.Numeric(precision=30, scale=8), nullable=False),
+    sa.Column('premium_cycle', sa.Enum('ONE_TIME', 'MONTHLY', 'QUARTERLY', 'ANNUALLY', name='premiumcycle'), nullable=True),
+    sa.Column('max_coverage_limit_mrusdt', sa.Numeric(precision=30, scale=8), nullable=False),
+    sa.Column('terms_and_conditions', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=True),
+    sa.Column('smart_contract_address', sa.String(length=42), nullable=True),
+    sa.Column('created_by', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.CheckConstraint('((subscriber_user_id IS NOT NULL)::int + (fleet_id IS NOT NULL)::int + (land_asset_id IS NOT NULL)::int + (project_id IS NOT NULL)::int + (bio_asset_id IS NOT NULL)::int + (shipment_id IS NOT NULL)::int + (employment_contract_id IS NOT NULL)::int) = 1', name='chk_exclusive_insurance_target'),
-    sa.ForeignKeyConstraint(['policy_id'], ['insurance_policies.id'], ),
-    sa.ForeignKeyConstraint(['subscriber_user_id'], ['users.id'], ),
+    sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('is_deleted', sa.Boolean(), nullable=True),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['issuer_entity_id'], ['sovereign_entities_v2.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('policy_nft_id')
+    sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_insurance_subscriptions_bio_asset_id'), 'insurance_subscriptions', ['bio_asset_id'], unique=False)
-    op.create_index(op.f('ix_insurance_subscriptions_employment_contract_id'), 'insurance_subscriptions', ['employment_contract_id'], unique=False)
-    op.create_index(op.f('ix_insurance_subscriptions_fleet_id'), 'insurance_subscriptions', ['fleet_id'], unique=False)
-    op.create_index(op.f('ix_insurance_subscriptions_id'), 'insurance_subscriptions', ['id'], unique=False)
-    op.create_index(op.f('ix_insurance_subscriptions_idempotency_key'), 'insurance_subscriptions', ['idempotency_key'], unique=True)
-    op.create_index(op.f('ix_insurance_subscriptions_land_asset_id'), 'insurance_subscriptions', ['land_asset_id'], unique=False)
-    op.create_index(op.f('ix_insurance_subscriptions_policy_id'), 'insurance_subscriptions', ['policy_id'], unique=False)
-    op.create_index(op.f('ix_insurance_subscriptions_project_id'), 'insurance_subscriptions', ['project_id'], unique=False)
-    op.create_index(op.f('ix_insurance_subscriptions_shipment_id'), 'insurance_subscriptions', ['shipment_id'], unique=False)
-    op.create_index(op.f('ix_insurance_subscriptions_status'), 'insurance_subscriptions', ['status'], unique=False)
-    op.create_index(op.f('ix_insurance_subscriptions_subscriber_user_id'), 'insurance_subscriptions', ['subscriber_user_id'], unique=False)
-    op.create_index(op.f('ix_insurance_subscriptions_tenant_id'), 'insurance_subscriptions', ['tenant_id'], unique=False)
-    op.create_index('ix_subscription_status_dates', 'insurance_subscriptions', ['status', 'start_date', 'end_date'], unique=False)
-    op.create_index('ix_subscription_tenant', 'insurance_subscriptions', ['tenant_id'], unique=False)
+    op.create_index(op.f('ix_insurance_policies_id'), 'insurance_policies', ['id'], unique=False)
+    op.create_index(op.f('ix_insurance_policies_issuer_entity_id'), 'insurance_policies', ['issuer_entity_id'], unique=False)
+    op.create_index(op.f('ix_insurance_policies_policy_type'), 'insurance_policies', ['policy_type'], unique=False)
+    op.create_index(op.f('ix_insurance_policies_tenant_id'), 'insurance_policies', ['tenant_id'], unique=False)
+    op.create_index('ix_policy_created_at', 'insurance_policies', ['created_at'], unique=False)
+    op.create_index('ix_policy_type_active', 'insurance_policies', ['policy_type', 'is_active'], unique=False)
     op.create_table('job_applications',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('job_id', sa.Integer(), nullable=False),
@@ -2956,6 +2871,8 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index('ix_live_bid_auction_amount', 'live_bids', ['auction_id', 'bid_amount_mrusdt'], unique=False)
+    op.create_index('ix_live_bid_created_at', 'live_bids', ['created_at'], unique=False)
+    op.create_index('ix_live_bid_idempotency_key', 'live_bids', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_live_bid_tenant_auction', 'live_bids', ['tenant_id', 'auction_id'], unique=False)
     op.create_index(op.f('ix_live_bids_auction_id'), 'live_bids', ['auction_id'], unique=False)
     op.create_index(op.f('ix_live_bids_bidder_id'), 'live_bids', ['bidder_id'], unique=False)
@@ -3068,6 +2985,10 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['thread_id'], ['mail_threads.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_mail_message_created', 'mail_messages', ['created_at'], unique=False)
+    op.create_index('ix_mail_message_recipient', 'mail_messages', ['recipient_id'], unique=False)
+    op.create_index('ix_mail_message_sender', 'mail_messages', ['sender_id'], unique=False)
+    op.create_index('ix_mail_message_thread', 'mail_messages', ['thread_id'], unique=False)
     op.create_index(op.f('ix_mail_messages_id'), 'mail_messages', ['id'], unique=False)
     op.create_index(op.f('ix_mail_messages_idempotency_key'), 'mail_messages', ['idempotency_key'], unique=True)
     op.create_index(op.f('ix_mail_messages_recipient_id'), 'mail_messages', ['recipient_id'], unique=False)
@@ -3079,7 +3000,7 @@ def upgrade() -> None:
     sa.Column('land_asset_id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
-    sa.Column('gis_data', sa.JSON(), nullable=True),
+    sa.Column('gis_data', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('bim_model_hash', sa.String(length=100), nullable=True),
     sa.Column('total_units_planned', sa.Integer(), nullable=True),
     sa.Column('total_area_sqm', sa.Numeric(precision=15, scale=2), nullable=False),
@@ -3089,6 +3010,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_master_plan_created_at', 'master_plans', ['created_at'], unique=False)
     op.create_index('ix_master_plan_tenant_land', 'master_plans', ['tenant_id', 'land_asset_id'], unique=False)
     op.create_index(op.f('ix_master_plans_id'), 'master_plans', ['id'], unique=False)
     op.create_index(op.f('ix_master_plans_land_asset_id'), 'master_plans', ['land_asset_id'], unique=False)
@@ -3103,11 +3025,12 @@ def upgrade() -> None:
     sa.Column('sent_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('status', sa.String(length=50), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['friend_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['occasion_id'], ['user_occasions.id'], ),
+    sa.ForeignKeyConstraint(['friend_id'], ['users.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['occasion_id'], ['user_occasions.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_occasion_reminder_created_at', 'occasion_reminders', ['created_at'], unique=False)
     op.create_index(op.f('ix_occasion_reminders_id'), 'occasion_reminders', ['id'], unique=False)
     op.create_index(op.f('ix_occasion_reminders_occasion_id'), 'occasion_reminders', ['occasion_id'], unique=False)
     op.create_index(op.f('ix_occasion_reminders_tenant_id'), 'occasion_reminders', ['tenant_id'], unique=False)
@@ -3136,11 +3059,42 @@ def upgrade() -> None:
     )
     op.create_index('ix_orders_affiliate_code', 'orders', ['affiliate_code_used'], unique=False)
     op.create_index('ix_orders_created_at', 'orders', ['created_at'], unique=False)
+    op.create_index('ix_orders_created_status', 'orders', ['created_at', 'status'], unique=False)
     op.create_index(op.f('ix_orders_customer_id'), 'orders', ['customer_id'], unique=False)
     op.create_index('ix_orders_customer_status', 'orders', ['customer_id', 'status'], unique=False)
     op.create_index(op.f('ix_orders_id'), 'orders', ['id'], unique=False)
     op.create_index('ix_orders_idempotency_key', 'orders', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index(op.f('ix_orders_store_id'), 'orders', ['store_id'], unique=False)
+    op.create_table('pension_records',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('tenant_id', sa.Integer(), nullable=False),
+    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
+    sa.Column('beneficiary_id', sa.Integer(), nullable=False),
+    sa.Column('source_entity_id', sa.Integer(), nullable=True),
+    sa.Column('pension_type', sa.String(length=50), nullable=True),
+    sa.Column('monthly_amount_mrusdt', sa.Numeric(precision=30, scale=8), nullable=False),
+    sa.Column('total_disbursed_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
+    sa.Column('start_date', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('end_date', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('status', sa.Enum('ACTIVE', 'SUSPENDED', 'TERMINATED', name='pensionstatus'), nullable=True),
+    sa.Column('streaming_contract_address', sa.String(length=42), nullable=True),
+    sa.Column('last_payout_tx', sa.String(length=100), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.ForeignKeyConstraint(['beneficiary_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['source_entity_id'], ['sovereign_entities_v2.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('ix_pension_created_at', 'pension_records', ['created_at'], unique=False)
+    op.create_index('ix_pension_idempotency_key', 'pension_records', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.create_index(op.f('ix_pension_records_beneficiary_id'), 'pension_records', ['beneficiary_id'], unique=False)
+    op.create_index(op.f('ix_pension_records_id'), 'pension_records', ['id'], unique=False)
+    op.create_index(op.f('ix_pension_records_idempotency_key'), 'pension_records', ['idempotency_key'], unique=True)
+    op.create_index(op.f('ix_pension_records_pension_type'), 'pension_records', ['pension_type'], unique=False)
+    op.create_index(op.f('ix_pension_records_status'), 'pension_records', ['status'], unique=False)
+    op.create_index(op.f('ix_pension_records_tenant_id'), 'pension_records', ['tenant_id'], unique=False)
+    op.create_index('ix_pension_tenant', 'pension_records', ['tenant_id'], unique=False)
     op.create_table('physical_gift_requests',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -3152,18 +3106,20 @@ def upgrade() -> None:
     sa.Column('product_name', sa.String(length=255), nullable=False),
     sa.Column('product_description', sa.Text(), nullable=True),
     sa.Column('product_price_mrusdt', sa.Numeric(precision=30, scale=8), nullable=False),
-    sa.Column('shipping_address', sa.JSON(), nullable=False),
+    sa.Column('shipping_address', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('shipping_status', sa.String(length=50), nullable=True),
     sa.Column('payment_tx_hash', sa.String(length=100), nullable=True),
     sa.Column('order_tracking_number', sa.String(length=100), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['occasion_id'], ['user_occasions.id'], ),
-    sa.ForeignKeyConstraint(['receiver_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['sender_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['occasion_id'], ['user_occasions.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['receiver_id'], ['users.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['sender_id'], ['users.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_physical_gift_created_at', 'physical_gift_requests', ['created_at'], unique=False)
+    op.create_index('ix_physical_gift_idempotency_key', 'physical_gift_requests', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_physical_gift_receiver', 'physical_gift_requests', ['receiver_id'], unique=False)
     op.create_index(op.f('ix_physical_gift_requests_id'), 'physical_gift_requests', ['id'], unique=False)
     op.create_index(op.f('ix_physical_gift_requests_idempotency_key'), 'physical_gift_requests', ['idempotency_key'], unique=True)
@@ -3182,7 +3138,7 @@ def upgrade() -> None:
     sa.Column('medical_profile_id', sa.Integer(), nullable=True),
     sa.Column('sport_category', sa.Enum('PHYSICAL', 'MENTAL', 'E_SPORTS', 'HYBRID', name='sportcategory'), nullable=False),
     sa.Column('position_or_role', sa.String(length=100), nullable=True),
-    sa.Column('performance_stats', sa.JSON(), nullable=True),
+    sa.Column('performance_stats', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('market_value_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('is_insured', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -3194,6 +3150,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_player_created_at', 'player_profiles', ['created_at'], unique=False)
     op.create_index(op.f('ix_player_profiles_agency_id'), 'player_profiles', ['agency_id'], unique=False)
     op.create_index(op.f('ix_player_profiles_club_id'), 'player_profiles', ['club_id'], unique=False)
     op.create_index(op.f('ix_player_profiles_id'), 'player_profiles', ['id'], unique=False)
@@ -3214,7 +3171,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_product_categories_id'), 'product_categories', ['id'], unique=False)
     op.create_index(op.f('ix_product_categories_name'), 'product_categories', ['name'], unique=False)
-    op.create_index('ix_product_categories_parent_id', 'product_categories', ['parent_id'], unique=False)
+    op.create_index(op.f('ix_product_categories_parent_id'), 'product_categories', ['parent_id'], unique=False)
     op.create_index(op.f('ix_product_categories_store_id'), 'product_categories', ['store_id'], unique=False)
     op.create_table('professional_licenses',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -3266,6 +3223,8 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('ticket_nft_id')
     )
+    op.create_index('ix_participant_created_at', 'program_participants', ['created_at'], unique=False)
+    op.create_index('ix_participant_idempotency_key', 'program_participants', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_participant_tenant_program', 'program_participants', ['tenant_id', 'program_id'], unique=False)
     op.create_index(op.f('ix_program_participants_id'), 'program_participants', ['id'], unique=False)
     op.create_index(op.f('ix_program_participants_idempotency_key'), 'program_participants', ['idempotency_key'], unique=True)
@@ -3348,6 +3307,9 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_raw_material_batches_id'), 'raw_material_batches', ['id'], unique=False)
     op.create_index(op.f('ix_raw_material_batches_tenant_id'), 'raw_material_batches', ['tenant_id'], unique=False)
+    op.create_index('ix_raw_material_quality', 'raw_material_batches', ['quality_check_passed'], unique=False)
+    op.create_index('ix_raw_material_supplier', 'raw_material_batches', ['supplier_id'], unique=False)
+    op.create_index('ix_raw_material_tenant', 'raw_material_batches', ['tenant_id'], unique=False)
     op.create_table('real_estate_developments',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -3368,6 +3330,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_developments_created_at', 'real_estate_developments', ['created_at'], unique=False)
     op.create_index('ix_developments_tenant_land', 'real_estate_developments', ['tenant_id', 'land_asset_id'], unique=False)
     op.create_index(op.f('ix_real_estate_developments_entity_id'), 'real_estate_developments', ['entity_id'], unique=False)
     op.create_index(op.f('ix_real_estate_developments_id'), 'real_estate_developments', ['id'], unique=False)
@@ -3381,7 +3344,7 @@ def upgrade() -> None:
     sa.Column('amount', sa.Numeric(precision=30, scale=8), nullable=False),
     sa.Column('currency', sa.String(length=20), nullable=True),
     sa.Column('description', sa.Text(), nullable=True),
-    sa.Column('items', sa.JSON(), nullable=True),
+    sa.Column('items', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('status', sa.String(length=50), nullable=True),
     sa.Column('due_date', sa.DateTime(timezone=True), nullable=True),
     sa.Column('paid_at', sa.DateTime(timezone=True), nullable=True),
@@ -3408,8 +3371,8 @@ def upgrade() -> None:
     sa.Column('deployment_status', sa.Enum('PENDING', 'DEPLOYING', 'ACTIVE', 'FAILED', 'SUSPENDED', name='deploymentstatus'), nullable=True),
     sa.Column('deployment_log', sa.Text(), nullable=True),
     sa.Column('subscription_plan', sa.Enum('FREE', 'BASIC', 'PROFESSIONAL', 'ENTERPRISE', name='subscriptionplan'), nullable=True),
-    sa.Column('purchased_addons', sa.JSON(), nullable=True),
-    sa.Column('custom_config', sa.JSON(), nullable=True),
+    sa.Column('purchased_addons', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('custom_config', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('paid_amount_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('subscription_start', sa.DateTime(timezone=True), nullable=True),
     sa.Column('subscription_end', sa.DateTime(timezone=True), nullable=True),
@@ -3423,6 +3386,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_license_created_at', 'service_licenses', ['created_at'], unique=False)
+    op.create_index('ix_license_idempotency_key', 'service_licenses', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_license_status', 'service_licenses', ['deployment_status'], unique=False)
     op.create_index('ix_license_tenant_service', 'service_licenses', ['tenant_id', 'service_id'], unique=False)
     op.create_index(op.f('ix_service_licenses_id'), 'service_licenses', ['id'], unique=False)
@@ -3434,14 +3399,16 @@ def upgrade() -> None:
     sa.Column('service_id', sa.Integer(), nullable=False),
     sa.Column('version', sa.String(length=20), nullable=False),
     sa.Column('changelog', sa.Text(), nullable=True),
-    sa.Column('database_schema', sa.JSON(), nullable=True),
-    sa.Column('api_blueprint', sa.JSON(), nullable=True),
+    sa.Column('database_schema', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('api_blueprint', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('frontend_template_url', sa.String(length=512), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['service_id'], ['marketplace_services.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_service_version_created_at', 'service_versions', ['created_at'], unique=False)
+    op.create_index('ix_service_version_service', 'service_versions', ['service_id'], unique=False)
     op.create_index(op.f('ix_service_versions_id'), 'service_versions', ['id'], unique=False)
     op.create_index(op.f('ix_service_versions_service_id'), 'service_versions', ['service_id'], unique=False)
     op.create_table('smart_farms',
@@ -3476,109 +3443,42 @@ def upgrade() -> None:
     sa.Column('signer_id', sa.Integer(), nullable=False),
     sa.Column('digital_signature_hash', sa.String(length=512), nullable=False),
     sa.Column('signed_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['contract_id'], ['social_smart_contracts.id'], ),
-    sa.ForeignKeyConstraint(['signer_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['contract_id'], ['social_smart_contracts.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['signer_id'], ['users.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_contract_signature_created_at', 'social_contract_signatures', ['signed_at'], unique=False)
+    op.create_index('ix_contract_signature_idempotency_key', 'social_contract_signatures', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_contract_signature_unique', 'social_contract_signatures', ['contract_id', 'signer_id'], unique=True)
     op.create_index(op.f('ix_social_contract_signatures_contract_id'), 'social_contract_signatures', ['contract_id'], unique=False)
     op.create_index(op.f('ix_social_contract_signatures_id'), 'social_contract_signatures', ['id'], unique=False)
     op.create_index(op.f('ix_social_contract_signatures_idempotency_key'), 'social_contract_signatures', ['idempotency_key'], unique=True)
     op.create_index(op.f('ix_social_contract_signatures_signer_id'), 'social_contract_signatures', ['signer_id'], unique=False)
     op.create_index(op.f('ix_social_contract_signatures_tenant_id'), 'social_contract_signatures', ['tenant_id'], unique=False)
-    op.create_table('social_events',
+    op.create_table('social_groups',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('creator_id', sa.Integer(), nullable=False),
-    sa.Column('group_id', sa.Integer(), nullable=True),
-    sa.Column('page_id', sa.Integer(), nullable=True),
-    sa.Column('title', sa.String(length=255), nullable=False),
+    sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
-    sa.Column('event_type', sa.String(length=50), nullable=True),
-    sa.Column('start_time', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('end_time', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('location_details', sa.JSON(), nullable=True),
-    sa.Column('requires_approval', sa.Boolean(), nullable=True),
-    sa.Column('approval_status', sa.Enum('PENDING', 'APPROVED', 'REJECTED', name='eventapprovalstatus'), nullable=True),
-    sa.Column('approved_by_id', sa.Integer(), nullable=True),
-    sa.Column('is_published', sa.Boolean(), nullable=True),
+    sa.Column('privacy', sa.Enum('PUBLIC', 'PRIVATE', 'SECRET', name='groupprivacy'), nullable=True),
+    sa.Column('linked_project_id', sa.Integer(), nullable=True),
+    sa.Column('dao_contract_address', sa.String(length=42), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('is_deleted', sa.Boolean(), nullable=True),
-    sa.ForeignKeyConstraint(['approved_by_id'], ['users.id'], ),
     sa.ForeignKeyConstraint(['creator_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['group_id'], ['social_groups.id'], ),
+    sa.ForeignKeyConstraint(['linked_project_id'], ['projects.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_social_events_creator_id'), 'social_events', ['creator_id'], unique=False)
-    op.create_index(op.f('ix_social_events_event_type'), 'social_events', ['event_type'], unique=False)
-    op.create_index(op.f('ix_social_events_group_id'), 'social_events', ['group_id'], unique=False)
-    op.create_index(op.f('ix_social_events_id'), 'social_events', ['id'], unique=False)
-    op.create_index(op.f('ix_social_events_tenant_id'), 'social_events', ['tenant_id'], unique=False)
-    op.create_table('social_group_members',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
-    sa.Column('group_id', sa.Integer(), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('role', sa.String(length=50), nullable=True),
-    sa.Column('joined_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['group_id'], ['social_groups.id'], ),
-    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('ix_group_member_unique', 'social_group_members', ['group_id', 'user_id'], unique=True)
-    op.create_index(op.f('ix_social_group_members_group_id'), 'social_group_members', ['group_id'], unique=False)
-    op.create_index(op.f('ix_social_group_members_id'), 'social_group_members', ['id'], unique=False)
-    op.create_index(op.f('ix_social_group_members_idempotency_key'), 'social_group_members', ['idempotency_key'], unique=True)
-    op.create_index(op.f('ix_social_group_members_tenant_id'), 'social_group_members', ['tenant_id'], unique=False)
-    op.create_index(op.f('ix_social_group_members_user_id'), 'social_group_members', ['user_id'], unique=False)
-    op.create_table('social_post_comments',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
-    sa.Column('post_id', sa.Integer(), nullable=False),
-    sa.Column('author_id', sa.Integer(), nullable=False),
-    sa.Column('parent_comment_id', sa.Integer(), nullable=True),
-    sa.Column('content', sa.Text(), nullable=False),
-    sa.Column('likes_count', sa.Integer(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('is_deleted', sa.Boolean(), nullable=True),
-    sa.ForeignKeyConstraint(['author_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['parent_comment_id'], ['social_post_comments.id'], ),
-    sa.ForeignKeyConstraint(['post_id'], ['social_posts.id'], ),
-    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_social_post_comments_author_id'), 'social_post_comments', ['author_id'], unique=False)
-    op.create_index(op.f('ix_social_post_comments_id'), 'social_post_comments', ['id'], unique=False)
-    op.create_index(op.f('ix_social_post_comments_idempotency_key'), 'social_post_comments', ['idempotency_key'], unique=True)
-    op.create_index(op.f('ix_social_post_comments_post_id'), 'social_post_comments', ['post_id'], unique=False)
-    op.create_index(op.f('ix_social_post_comments_tenant_id'), 'social_post_comments', ['tenant_id'], unique=False)
-    op.create_table('social_post_likes',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
-    sa.Column('post_id', sa.Integer(), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['post_id'], ['social_posts.id'], ),
-    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('ix_social_like_unique', 'social_post_likes', ['post_id', 'user_id'], unique=True)
-    op.create_index(op.f('ix_social_post_likes_id'), 'social_post_likes', ['id'], unique=False)
-    op.create_index(op.f('ix_social_post_likes_idempotency_key'), 'social_post_likes', ['idempotency_key'], unique=True)
-    op.create_index(op.f('ix_social_post_likes_post_id'), 'social_post_likes', ['post_id'], unique=False)
-    op.create_index(op.f('ix_social_post_likes_tenant_id'), 'social_post_likes', ['tenant_id'], unique=False)
-    op.create_index(op.f('ix_social_post_likes_user_id'), 'social_post_likes', ['user_id'], unique=False)
+    op.create_index('ix_social_group_created_at', 'social_groups', ['created_at'], unique=False)
+    op.create_index(op.f('ix_social_groups_creator_id'), 'social_groups', ['creator_id'], unique=False)
+    op.create_index(op.f('ix_social_groups_id'), 'social_groups', ['id'], unique=False)
+    op.create_index(op.f('ix_social_groups_name'), 'social_groups', ['name'], unique=False)
+    op.create_index(op.f('ix_social_groups_tenant_id'), 'social_groups', ['tenant_id'], unique=False)
     op.create_table('sovereign_invitations_v2',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -3614,6 +3514,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_invitation_created_at', 'sovereign_invitations_v2', ['created_at'], unique=False)
+    op.create_index('ix_invitation_idempotency_key', 'sovereign_invitations_v2', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_invitation_sender', 'sovereign_invitations_v2', ['sender_user_id', 'sender_entity_id'], unique=False)
     op.create_index('ix_invitation_status_expiry', 'sovereign_invitations_v2', ['status', 'expires_at'], unique=False)
     op.create_index('ix_invitation_target', 'sovereign_invitations_v2', ['target_type', 'target_user_id'], unique=False)
@@ -3626,7 +3528,7 @@ def upgrade() -> None:
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('part_name', sa.String(length=255), nullable=False),
     sa.Column('part_number', sa.String(length=100), nullable=False),
-    sa.Column('compatible_machines', sa.JSON(), nullable=True),
+    sa.Column('compatible_machines', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('stock_quantity', sa.Integer(), nullable=True),
     sa.Column('min_stock_threshold', sa.Integer(), nullable=True),
     sa.Column('unit_price_mrusdt', sa.Numeric(precision=30, scale=8), nullable=False),
@@ -3641,6 +3543,9 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('part_number')
     )
+    op.create_index('ix_spare_part_stock', 'spare_parts', ['stock_quantity'], unique=False)
+    op.create_index('ix_spare_part_supplier', 'spare_parts', ['supplier_id'], unique=False)
+    op.create_index('ix_spare_part_tenant', 'spare_parts', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_spare_parts_id'), 'spare_parts', ['id'], unique=False)
     op.create_index(op.f('ix_spare_parts_tenant_id'), 'spare_parts', ['tenant_id'], unique=False)
     op.create_table('syndicate_elections',
@@ -3707,7 +3612,7 @@ def upgrade() -> None:
     sa.Column('idempotency_key', sa.String(length=255), nullable=True),
     sa.Column('tender_id', sa.Integer(), nullable=False),
     sa.Column('bidder_id', sa.Integer(), nullable=False),
-    sa.Column('technical_envelope', sa.JSON(), nullable=False),
+    sa.Column('technical_envelope', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('encrypted_financial_envelope', sa.Text(), nullable=False),
     sa.Column('technical_score', sa.Numeric(precision=5, scale=2), nullable=True),
     sa.Column('financial_amount_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
@@ -3720,6 +3625,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tender_id'], ['sovereign_tenders.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_tender_bid_created_at', 'tender_bids', ['created_at'], unique=False)
+    op.create_index('ix_tender_bid_idempotency_key', 'tender_bids', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_tender_bid_tenant', 'tender_bids', ['tenant_id'], unique=False)
     op.create_index('ix_tender_bid_unique', 'tender_bids', ['tender_id', 'bidder_id'], unique=True)
     op.create_index(op.f('ix_tender_bids_bidder_id'), 'tender_bids', ['bidder_id'], unique=False)
@@ -3747,7 +3654,11 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['verified_by'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_time_pledge_campaign', 'time_pledges', ['campaign_id'], unique=False)
+    op.create_index('ix_time_pledge_created_at', 'time_pledges', ['created_at'], unique=False)
+    op.create_index('ix_time_pledge_idempotency_key', 'time_pledges', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_time_pledge_tenant', 'time_pledges', ['tenant_id'], unique=False)
+    op.create_index('ix_time_pledge_user', 'time_pledges', ['user_id'], unique=False)
     op.create_index(op.f('ix_time_pledges_campaign_id'), 'time_pledges', ['campaign_id'], unique=False)
     op.create_index(op.f('ix_time_pledges_id'), 'time_pledges', ['id'], unique=False)
     op.create_index(op.f('ix_time_pledges_idempotency_key'), 'time_pledges', ['idempotency_key'], unique=True)
@@ -3764,34 +3675,18 @@ def upgrade() -> None:
     sa.Column('prize_pool_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('start_date', sa.DateTime(timezone=True), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=True),
-    sa.Column('standings_json', sa.JSON(), nullable=True),
+    sa.Column('standings_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['organizer_agency_id'], ['sports_organizations.id'], ),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_tournament_created_at', 'tournaments', ['created_at'], unique=False)
+    op.create_index('ix_tournament_idempotency_key', 'tournaments', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_tournament_tenant', 'tournaments', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_tournaments_id'), 'tournaments', ['id'], unique=False)
     op.create_index(op.f('ix_tournaments_idempotency_key'), 'tournaments', ['idempotency_key'], unique=True)
     op.create_index(op.f('ix_tournaments_tenant_id'), 'tournaments', ['tenant_id'], unique=False)
-    op.create_table('transport_routes',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('name', sa.String(length=255), nullable=False),
-    sa.Column('start_hub_id', sa.Integer(), nullable=False),
-    sa.Column('end_hub_id', sa.Integer(), nullable=False),
-    sa.Column('waypoints', sa.JSON(), nullable=True),
-    sa.Column('distance_km', sa.Numeric(precision=10, scale=2), nullable=False),
-    sa.Column('estimated_duration_minutes', sa.Integer(), nullable=False),
-    sa.Column('is_active', sa.Boolean(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['end_hub_id'], ['transport_hubs.id'], ),
-    sa.ForeignKeyConstraint(['start_hub_id'], ['transport_hubs.id'], ),
-    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_transport_routes_id'), 'transport_routes', ['id'], unique=False)
-    op.create_index(op.f('ix_transport_routes_tenant_id'), 'transport_routes', ['tenant_id'], unique=False)
     op.create_table('twin_interaction_logs',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -3818,6 +3713,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_twin_interaction_logs_visitor_id'), 'twin_interaction_logs', ['visitor_id'], unique=False)
     op.create_index('ix_twin_interaction_tenant_twin', 'twin_interaction_logs', ['tenant_id', 'twin_config_id'], unique=False)
     op.create_index('ix_twin_interaction_visitor', 'twin_interaction_logs', ['visitor_id'], unique=False)
+    op.create_index('ix_twin_interaction_visitor_created', 'twin_interaction_logs', ['visitor_id', 'created_at'], unique=False)
     op.create_table('twin_permissions',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -3839,30 +3735,6 @@ def upgrade() -> None:
     op.create_index(op.f('ix_twin_permissions_id'), 'twin_permissions', ['id'], unique=False)
     op.create_index(op.f('ix_twin_permissions_tenant_id'), 'twin_permissions', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_twin_permissions_twin_config_id'), 'twin_permissions', ['twin_config_id'], unique=False)
-    op.create_table('vehicles',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('fleet_id', sa.Integer(), nullable=False),
-    sa.Column('smart_asset_id', sa.Integer(), nullable=True),
-    sa.Column('license_plate', sa.String(length=50), nullable=False),
-    sa.Column('vehicle_type', sa.Enum('BICYCLE', 'MOTORCYCLE', 'CAR', 'BUS', 'TRUCK', 'SHIP', 'AIRCRAFT', 'SPACECRAFT', 'TRAIN', name='transporttype'), nullable=False),
-    sa.Column('capacity_kg', sa.Numeric(precision=15, scale=2), nullable=True),
-    sa.Column('capacity_passengers', sa.Integer(), nullable=True),
-    sa.Column('fuel_type', sa.String(length=50), nullable=True),
-    sa.Column('carbon_per_km', sa.Numeric(precision=10, scale=4), nullable=True),
-    sa.Column('status', sa.Enum('AVAILABLE', 'IN_TRIP', 'MAINTENANCE', 'OUT_OF_SERVICE', name='vehiclestatus'), nullable=True),
-    sa.Column('current_location', sa.JSON(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['fleet_id'], ['fleets.id'], ),
-    sa.ForeignKeyConstraint(['smart_asset_id'], ['smart_assets.id'], ),
-    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_vehicles_fleet_id'), 'vehicles', ['fleet_id'], unique=False)
-    op.create_index(op.f('ix_vehicles_id'), 'vehicles', ['id'], unique=False)
-    op.create_index(op.f('ix_vehicles_license_plate'), 'vehicles', ['license_plate'], unique=True)
-    op.create_index(op.f('ix_vehicles_tenant_id'), 'vehicles', ['tenant_id'], unique=False)
     op.create_table('zamakana_edges',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -3880,6 +3752,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_zamakana_edge_created_at', 'zamakana_edges', ['created_at'], unique=False)
+    op.create_index('ix_zamakana_edge_idempotency_key', 'zamakana_edges', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_zamakana_edge_pair', 'zamakana_edges', ['source_node_id', 'target_node_id'], unique=True)
     op.create_index('ix_zamakana_edge_tenant', 'zamakana_edges', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_zamakana_edges_id'), 'zamakana_edges', ['id'], unique=False)
@@ -3922,6 +3796,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_accommodation_rooms_facility_id'), 'accommodation_rooms', ['facility_id'], unique=False)
     op.create_index(op.f('ix_accommodation_rooms_id'), 'accommodation_rooms', ['id'], unique=False)
     op.create_index(op.f('ix_accommodation_rooms_tenant_id'), 'accommodation_rooms', ['tenant_id'], unique=False)
+    op.create_index('ix_room_created_at', 'accommodation_rooms', ['created_at'], unique=False)
     op.create_index('ix_room_tenant_facility', 'accommodation_rooms', ['tenant_id', 'facility_id'], unique=False)
     op.create_table('automation_node_logs',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -3931,8 +3806,8 @@ def upgrade() -> None:
     sa.Column('started_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('finished_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('status', sa.String(length=20), nullable=True),
-    sa.Column('input_data', sa.JSON(), nullable=True),
-    sa.Column('output_data', sa.JSON(), nullable=True),
+    sa.Column('input_data', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('output_data', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('error_message', sa.Text(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['execution_id'], ['automation_executions.id'], ),
@@ -3940,11 +3815,12 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_automation_node_logs_execution_id'), 'automation_node_logs', ['execution_id'], unique=False)
     op.create_index(op.f('ix_automation_node_logs_id'), 'automation_node_logs', ['id'], unique=False)
+    op.create_index('ix_nodelog_execution_status', 'automation_node_logs', ['execution_id', 'status'], unique=False)
     op.create_table('client_insights',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('invitation_id', sa.Integer(), nullable=False),
-    sa.Column('ai_analysis', sa.JSON(), nullable=False),
+    sa.Column('ai_analysis', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('recommended_discount', sa.Numeric(precision=5, scale=2), nullable=True),
     sa.Column('recommended_message_template', sa.Text(), nullable=True),
     sa.Column('readiness_score', sa.Integer(), nullable=True),
@@ -3956,13 +3832,14 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_client_insights_id'), 'client_insights', ['id'], unique=False)
     op.create_index(op.f('ix_client_insights_tenant_id'), 'client_insights', ['tenant_id'], unique=False)
+    op.create_index('ix_insight_created_at', 'client_insights', ['created_at'], unique=False)
     op.create_index('ix_insight_tenant', 'client_insights', ['tenant_id'], unique=False)
     op.create_table('commerce_audit_logs',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('order_id', sa.Integer(), nullable=True),
     sa.Column('action', sa.String(length=50), nullable=False),
-    sa.Column('details', sa.JSON(), nullable=False),
+    sa.Column('details', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('ip_address', sa.String(length=45), nullable=True),
     sa.Column('user_agent', sa.String(length=255), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -3974,6 +3851,7 @@ def upgrade() -> None:
     op.create_index('ix_commerce_audit_logs_created_at', 'commerce_audit_logs', ['created_at'], unique=False)
     op.create_index(op.f('ix_commerce_audit_logs_id'), 'commerce_audit_logs', ['id'], unique=False)
     op.create_index(op.f('ix_commerce_audit_logs_order_id'), 'commerce_audit_logs', ['order_id'], unique=False)
+    op.create_index('ix_commerce_audit_logs_user_created', 'commerce_audit_logs', ['user_id', 'created_at'], unique=False)
     op.create_index('ix_commerce_audit_logs_user_id', 'commerce_audit_logs', ['user_id'], unique=False)
     op.create_table('commission_records',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -3991,7 +3869,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('ix_commission_records_beneficiary_id', 'commission_records', ['beneficiary_id'], unique=False)
+    op.create_index(op.f('ix_commission_records_beneficiary_id'), 'commission_records', ['beneficiary_id'], unique=False)
     op.create_index(op.f('ix_commission_records_id'), 'commission_records', ['id'], unique=False)
     op.create_index('ix_commission_records_level_earned', 'commission_records', ['level_earned'], unique=False)
     op.create_index('ix_commission_records_order_id', 'commission_records', ['order_id'], unique=False)
@@ -4009,6 +3887,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_comment_created_at', 'crm_ticket_comments', ['created_at'], unique=False)
     op.create_index('ix_comment_tenant_ticket', 'crm_ticket_comments', ['tenant_id', 'ticket_id'], unique=False)
     op.create_index(op.f('ix_crm_ticket_comments_id'), 'crm_ticket_comments', ['id'], unique=False)
     op.create_index(op.f('ix_crm_ticket_comments_tenant_id'), 'crm_ticket_comments', ['tenant_id'], unique=False)
@@ -4032,6 +3911,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_customization_created_at', 'customization_requests', ['created_at'], unique=False)
+    op.create_index('ix_customization_idempotency_key', 'customization_requests', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_customization_license', 'customization_requests', ['license_id'], unique=False)
     op.create_index(op.f('ix_customization_requests_id'), 'customization_requests', ['id'], unique=False)
     op.create_index(op.f('ix_customization_requests_idempotency_key'), 'customization_requests', ['idempotency_key'], unique=True)
@@ -4066,7 +3947,7 @@ def upgrade() -> None:
     sa.Column('employer_id', sa.Integer(), nullable=False),
     sa.Column('job_title', sa.String(length=255), nullable=False),
     sa.Column('base_salary', sa.Numeric(precision=30, scale=8), nullable=False),
-    sa.Column('allowances', sa.JSON(), nullable=True),
+    sa.Column('allowances', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('currency', sa.String(length=20), nullable=True),
     sa.Column('start_date', sa.DateTime(timezone=True), nullable=False),
     sa.Column('end_date', sa.DateTime(timezone=True), nullable=True),
@@ -4089,6 +3970,7 @@ def upgrade() -> None:
     sa.UniqueConstraint('application_id')
     )
     op.create_index('ix_contract_employee_status', 'employment_contracts', ['employee_id', 'status'], unique=False)
+    op.create_index('ix_contract_idempotency_key', 'employment_contracts', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_contract_tenant_employee', 'employment_contracts', ['tenant_id', 'employee_id'], unique=False)
     op.create_index('ix_contract_tenant_status', 'employment_contracts', ['tenant_id', 'status'], unique=False)
     op.create_index(op.f('ix_employment_contracts_employee_id'), 'employment_contracts', ['employee_id'], unique=False)
@@ -4117,35 +3999,76 @@ def upgrade() -> None:
     op.create_index(op.f('ix_farm_zones_id'), 'farm_zones', ['id'], unique=False)
     op.create_index(op.f('ix_farm_zones_tenant_id'), 'farm_zones', ['tenant_id'], unique=False)
     op.create_index('ix_farmzone_tenant_farm', 'farm_zones', ['tenant_id', 'farm_id'], unique=False)
-    op.create_table('insurance_claims',
+    op.create_table('group_subscriptions',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('idempotency_key', sa.String(length=255), nullable=True),
-    sa.Column('subscription_id', sa.Integer(), nullable=False),
-    sa.Column('claimant_user_id', sa.Integer(), nullable=False),
-    sa.Column('incident_date', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('incident_description', sa.Text(), nullable=False),
-    sa.Column('evidence_urls', sa.JSON(), nullable=True),
-    sa.Column('claimed_amount_mrusdt', sa.Numeric(precision=30, scale=8), nullable=False),
-    sa.Column('approved_amount_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
-    sa.Column('status', sa.Enum('SUBMITTED', 'UNDER_INVESTIGATION', 'APPROVED', 'REJECTED', 'PAID', name='claimstatus'), nullable=True),
-    sa.Column('investigation_notes', sa.Text(), nullable=True),
-    sa.Column('oracle_verification_hash', sa.String(length=100), nullable=True),
-    sa.Column('payout_tx_hash', sa.String(length=100), nullable=True),
+    sa.Column('group_id', sa.Integer(), nullable=False),
+    sa.Column('plan_id', sa.Integer(), nullable=False),
+    sa.Column('start_date', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('end_date', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('auto_renew', sa.Boolean(), nullable=True),
+    sa.Column('status', sa.String(length=50), nullable=True),
+    sa.Column('payment_tx_hash', sa.String(length=100), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['claimant_user_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['subscription_id'], ['insurance_subscriptions.id'], ),
+    sa.ForeignKeyConstraint(['group_id'], ['social_groups.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['plan_id'], ['group_subscription_plans.id'], ondelete='RESTRICT'),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('ix_claim_tenant', 'insurance_claims', ['tenant_id'], unique=False)
-    op.create_index(op.f('ix_insurance_claims_claimant_user_id'), 'insurance_claims', ['claimant_user_id'], unique=False)
-    op.create_index(op.f('ix_insurance_claims_id'), 'insurance_claims', ['id'], unique=False)
-    op.create_index(op.f('ix_insurance_claims_idempotency_key'), 'insurance_claims', ['idempotency_key'], unique=True)
-    op.create_index(op.f('ix_insurance_claims_status'), 'insurance_claims', ['status'], unique=False)
-    op.create_index(op.f('ix_insurance_claims_subscription_id'), 'insurance_claims', ['subscription_id'], unique=False)
-    op.create_index(op.f('ix_insurance_claims_tenant_id'), 'insurance_claims', ['tenant_id'], unique=False)
+    op.create_index('ix_group_subscription_created_at', 'group_subscriptions', ['created_at'], unique=False)
+    op.create_index('ix_group_subscription_group', 'group_subscriptions', ['group_id'], unique=False)
+    op.create_index('ix_group_subscription_idempotency_key', 'group_subscriptions', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.create_index('ix_group_subscription_tenant', 'group_subscriptions', ['tenant_id'], unique=False)
+    op.create_index(op.f('ix_group_subscriptions_group_id'), 'group_subscriptions', ['group_id'], unique=False)
+    op.create_index(op.f('ix_group_subscriptions_id'), 'group_subscriptions', ['id'], unique=False)
+    op.create_index(op.f('ix_group_subscriptions_idempotency_key'), 'group_subscriptions', ['idempotency_key'], unique=True)
+    op.create_index(op.f('ix_group_subscriptions_plan_id'), 'group_subscriptions', ['plan_id'], unique=False)
+    op.create_index(op.f('ix_group_subscriptions_tenant_id'), 'group_subscriptions', ['tenant_id'], unique=False)
+    op.create_table('insurance_subscriptions',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('tenant_id', sa.Integer(), nullable=False),
+    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
+    sa.Column('policy_id', sa.Integer(), nullable=False),
+    sa.Column('subscriber_user_id', sa.Integer(), nullable=True),
+    sa.Column('fleet_id', sa.Integer(), nullable=True),
+    sa.Column('land_asset_id', sa.Integer(), nullable=True),
+    sa.Column('project_id', sa.Integer(), nullable=True),
+    sa.Column('bio_asset_id', sa.Integer(), nullable=True),
+    sa.Column('shipment_id', sa.Integer(), nullable=True),
+    sa.Column('employment_contract_id', sa.Integer(), nullable=True),
+    sa.Column('beneficiaries_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('start_date', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('end_date', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('status', sa.String(length=50), nullable=True),
+    sa.Column('policy_nft_id', sa.String(length=100), nullable=True),
+    sa.Column('subscription_tx_hash', sa.String(length=100), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.CheckConstraint('((subscriber_user_id IS NOT NULL)::int + (fleet_id IS NOT NULL)::int + (land_asset_id IS NOT NULL)::int + (project_id IS NOT NULL)::int + (bio_asset_id IS NOT NULL)::int + (shipment_id IS NOT NULL)::int + (employment_contract_id IS NOT NULL)::int) = 1', name='chk_exclusive_insurance_target'),
+    sa.ForeignKeyConstraint(['policy_id'], ['insurance_policies.id'], ),
+    sa.ForeignKeyConstraint(['subscriber_user_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('policy_nft_id')
+    )
+    op.create_index(op.f('ix_insurance_subscriptions_bio_asset_id'), 'insurance_subscriptions', ['bio_asset_id'], unique=False)
+    op.create_index(op.f('ix_insurance_subscriptions_employment_contract_id'), 'insurance_subscriptions', ['employment_contract_id'], unique=False)
+    op.create_index(op.f('ix_insurance_subscriptions_fleet_id'), 'insurance_subscriptions', ['fleet_id'], unique=False)
+    op.create_index(op.f('ix_insurance_subscriptions_id'), 'insurance_subscriptions', ['id'], unique=False)
+    op.create_index(op.f('ix_insurance_subscriptions_idempotency_key'), 'insurance_subscriptions', ['idempotency_key'], unique=True)
+    op.create_index(op.f('ix_insurance_subscriptions_land_asset_id'), 'insurance_subscriptions', ['land_asset_id'], unique=False)
+    op.create_index(op.f('ix_insurance_subscriptions_policy_id'), 'insurance_subscriptions', ['policy_id'], unique=False)
+    op.create_index(op.f('ix_insurance_subscriptions_project_id'), 'insurance_subscriptions', ['project_id'], unique=False)
+    op.create_index(op.f('ix_insurance_subscriptions_shipment_id'), 'insurance_subscriptions', ['shipment_id'], unique=False)
+    op.create_index(op.f('ix_insurance_subscriptions_status'), 'insurance_subscriptions', ['status'], unique=False)
+    op.create_index(op.f('ix_insurance_subscriptions_subscriber_user_id'), 'insurance_subscriptions', ['subscriber_user_id'], unique=False)
+    op.create_index(op.f('ix_insurance_subscriptions_tenant_id'), 'insurance_subscriptions', ['tenant_id'], unique=False)
+    op.create_index('ix_subscription_created_at', 'insurance_subscriptions', ['created_at'], unique=False)
+    op.create_index('ix_subscription_idempotency_key', 'insurance_subscriptions', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.create_index('ix_subscription_status_dates', 'insurance_subscriptions', ['status', 'start_date', 'end_date'], unique=False)
+    op.create_index('ix_subscription_tenant', 'insurance_subscriptions', ['tenant_id'], unique=False)
     op.create_table('invitation_conversations',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -4163,6 +4086,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['visitor_user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_conversation_created_at', 'invitation_conversations', ['created_at'], unique=False)
+    op.create_index('ix_conversation_idempotency_key', 'invitation_conversations', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_conversation_tenant', 'invitation_conversations', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_invitation_conversations_id'), 'invitation_conversations', ['id'], unique=False)
     op.create_index(op.f('ix_invitation_conversations_idempotency_key'), 'invitation_conversations', ['idempotency_key'], unique=True)
@@ -4180,7 +4105,7 @@ def upgrade() -> None:
     sa.Column('location_country', sa.String(length=100), nullable=True),
     sa.Column('page_visited', sa.String(length=255), nullable=True),
     sa.Column('time_spent_seconds', sa.Integer(), nullable=True),
-    sa.Column('actions', sa.JSON(), nullable=True),
+    sa.Column('actions', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['invitation_id'], ['sovereign_invitations_v2.id'], ),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
@@ -4190,6 +4115,8 @@ def upgrade() -> None:
     op.create_index(op.f('ix_invitation_tracking_idempotency_key'), 'invitation_tracking', ['idempotency_key'], unique=True)
     op.create_index(op.f('ix_invitation_tracking_invitation_id'), 'invitation_tracking', ['invitation_id'], unique=False)
     op.create_index(op.f('ix_invitation_tracking_tenant_id'), 'invitation_tracking', ['tenant_id'], unique=False)
+    op.create_index('ix_tracking_created_at', 'invitation_tracking', ['created_at'], unique=False)
+    op.create_index('ix_tracking_idempotency_key', 'invitation_tracking', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_tracking_tenant_invitation', 'invitation_tracking', ['tenant_id', 'invitation_id'], unique=False)
     op.create_table('logistics_equipment_maintenance',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -4292,6 +4219,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['message_id'], ['mail_messages.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_mail_attachment_message', 'mail_attachments', ['message_id'], unique=False)
     op.create_index(op.f('ix_mail_attachments_id'), 'mail_attachments', ['id'], unique=False)
     op.create_index(op.f('ix_mail_attachments_message_id'), 'mail_attachments', ['message_id'], unique=False)
     op.create_table('mailbox_items',
@@ -4310,6 +4238,9 @@ def upgrade() -> None:
     op.create_index(op.f('ix_mailbox_items_id'), 'mailbox_items', ['id'], unique=False)
     op.create_index(op.f('ix_mailbox_items_message_id'), 'mailbox_items', ['message_id'], unique=False)
     op.create_index(op.f('ix_mailbox_items_owner_id'), 'mailbox_items', ['owner_id'], unique=False)
+    op.create_index('ix_mailbox_message_owner', 'mailbox_items', ['message_id', 'owner_id'], unique=True)
+    op.create_index('ix_mailbox_owner_folder', 'mailbox_items', ['owner_id', 'folder'], unique=False)
+    op.create_index('ix_mailbox_owner_unread', 'mailbox_items', ['owner_id', 'is_read'], unique=False, postgresql_where=sa.text('is_read = false'))
     op.create_table('medical_appointments',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -4332,6 +4263,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_appointment_created_at', 'medical_appointments', ['created_at'], unique=False)
+    op.create_index('ix_appointment_idempotency_key', 'medical_appointments', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_appointment_tenant_patient', 'medical_appointments', ['tenant_id', 'patient_user_id'], unique=False)
     op.create_index(op.f('ix_medical_appointments_doctor_id'), 'medical_appointments', ['doctor_id'], unique=False)
     op.create_index(op.f('ix_medical_appointments_id'), 'medical_appointments', ['id'], unique=False)
@@ -4354,14 +4287,12 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['owner_id'], ['users.id'], ),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('idempotency_key'),
     sa.UniqueConstraint('nft_token_id'),
     sa.UniqueConstraint('qr_code_data')
     )
-    op.create_index(op.f('ix_nft_tickets_event_id'), 'nft_tickets', ['event_id'], unique=False)
-    op.create_index(op.f('ix_nft_tickets_id'), 'nft_tickets', ['id'], unique=False)
-    op.create_index(op.f('ix_nft_tickets_idempotency_key'), 'nft_tickets', ['idempotency_key'], unique=True)
-    op.create_index(op.f('ix_nft_tickets_owner_id'), 'nft_tickets', ['owner_id'], unique=False)
-    op.create_index(op.f('ix_nft_tickets_tenant_id'), 'nft_tickets', ['tenant_id'], unique=False)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_ticket_created_at ON nft_tickets (created_at);")
+    op.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_ticket_idempotency_key ON nft_tickets (idempotency_key) WHERE idempotency_key IS NOT NULL;")
     op.create_index('ix_ticket_tenant_event', 'nft_tickets', ['tenant_id', 'event_id'], unique=False)
     op.create_table('payment_requests',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -4374,7 +4305,7 @@ def upgrade() -> None:
     sa.Column('agent_id', sa.Integer(), nullable=True),
     sa.Column('agent_confirmed_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('gateway_transaction_id', sa.String(length=255), nullable=True),
-    sa.Column('gateway_response', sa.JSON(), nullable=True),
+    sa.Column('gateway_response', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('status', sa.String(length=50), nullable=True),
     sa.Column('paid_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -4387,7 +4318,7 @@ def upgrade() -> None:
     op.create_index('ix_payment_requests_agent_code', 'payment_requests', ['agent_code'], unique=True)
     op.create_index(op.f('ix_payment_requests_gateway_transaction_id'), 'payment_requests', ['gateway_transaction_id'], unique=False)
     op.create_index(op.f('ix_payment_requests_id'), 'payment_requests', ['id'], unique=False)
-    op.create_index('ix_payment_requests_idempotency_key', 'payment_requests', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.create_index(op.f('ix_payment_requests_idempotency_key'), 'payment_requests', ['idempotency_key'], unique=True)
     op.create_index('ix_payment_requests_order_id', 'payment_requests', ['order_id'], unique=False)
     op.create_index('ix_payment_requests_payment_method', 'payment_requests', ['payment_method'], unique=False)
     op.create_index('ix_payment_requests_status', 'payment_requests', ['status'], unique=False)
@@ -4421,6 +4352,8 @@ def upgrade() -> None:
     op.create_index(op.f('ix_player_transfers_idempotency_key'), 'player_transfers', ['idempotency_key'], unique=True)
     op.create_index(op.f('ix_player_transfers_player_id'), 'player_transfers', ['player_id'], unique=False)
     op.create_index(op.f('ix_player_transfers_tenant_id'), 'player_transfers', ['tenant_id'], unique=False)
+    op.create_index('ix_transfer_created_at', 'player_transfers', ['created_at'], unique=False)
+    op.create_index('ix_transfer_idempotency_key', 'player_transfers', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_transfer_tenant', 'player_transfers', ['tenant_id'], unique=False)
     op.create_table('products',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -4430,13 +4363,13 @@ def upgrade() -> None:
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('product_type', sa.String(length=50), nullable=False),
     sa.Column('base_price_mrusdt', sa.Numeric(precision=30, scale=8), nullable=False),
-    sa.Column('seo_metadata', sa.JSON(), nullable=True),
-    sa.Column('media_gallery', sa.JSON(), nullable=True),
+    sa.Column('seo_metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('media_gallery', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('is_affiliate_eligible', sa.Boolean(), nullable=True),
     sa.Column('affiliate_model', sa.String(length=50), nullable=True),
     sa.Column('affiliate_reward_percentage', sa.Numeric(precision=5, scale=2), nullable=True),
     sa.Column('max_affiliate_tiers', sa.Integer(), nullable=True),
-    sa.Column('custom_affiliate_tiers', sa.JSON(), nullable=True),
+    sa.Column('custom_affiliate_tiers', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('is_published', sa.Boolean(), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -4450,7 +4383,7 @@ def upgrade() -> None:
     op.create_index('ix_products_is_active', 'products', ['is_active'], unique=False)
     op.create_index(op.f('ix_products_store_id'), 'products', ['store_id'], unique=False)
     op.create_index('ix_products_store_published', 'products', ['store_id', 'is_published'], unique=False)
-    op.create_index(op.f('ix_products_title'), 'products', ['title'], unique=False)
+    op.create_index('ix_products_title', 'products', ['title'], unique=False)
     op.create_table('property_units',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -4476,6 +4409,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_property_units_development_id'), 'property_units', ['development_id'], unique=False)
     op.create_index(op.f('ix_property_units_id'), 'property_units', ['id'], unique=False)
     op.create_index(op.f('ix_property_units_tenant_id'), 'property_units', ['tenant_id'], unique=False)
+    op.create_index('ix_units_created_at', 'property_units', ['created_at'], unique=False)
     op.create_index('ix_units_tenant_development', 'property_units', ['tenant_id', 'development_id'], unique=False)
     op.create_table('service_addon_purchases',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -4489,31 +4423,100 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index('ix_addon_purchase_addon', 'service_addon_purchases', ['addon_id'], unique=False)
+    op.create_index('ix_addon_purchase_created_at', 'service_addon_purchases', ['purchased_at'], unique=False)
+    op.create_index('ix_addon_purchase_idempotency_key', 'service_addon_purchases', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_addon_purchase_license', 'service_addon_purchases', ['license_id'], unique=False)
-    op.create_index('ix_addon_purchase_license_addon', 'service_addon_purchases', ['license_id', 'addon_id'], unique=True, postgresql_where='idempotency_key IS NULL')
+    op.create_index('ix_addon_purchase_license_addon', 'service_addon_purchases', ['license_id', 'addon_id'], unique=True, postgresql_where=sa.text('idempotency_key IS NULL'))
     op.create_index(op.f('ix_service_addon_purchases_addon_id'), 'service_addon_purchases', ['addon_id'], unique=False)
     op.create_index(op.f('ix_service_addon_purchases_id'), 'service_addon_purchases', ['id'], unique=False)
     op.create_index(op.f('ix_service_addon_purchases_idempotency_key'), 'service_addon_purchases', ['idempotency_key'], unique=True)
     op.create_index(op.f('ix_service_addon_purchases_license_id'), 'service_addon_purchases', ['license_id'], unique=False)
-    op.create_table('social_event_attendees',
+    op.create_table('social_events',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('tenant_id', sa.Integer(), nullable=False),
+    sa.Column('creator_id', sa.Integer(), nullable=False),
+    sa.Column('group_id', sa.Integer(), nullable=True),
+    sa.Column('page_id', sa.Integer(), nullable=True),
+    sa.Column('title', sa.String(length=255), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('event_type', sa.String(length=50), nullable=True),
+    sa.Column('start_time', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('end_time', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('location_details', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('requires_approval', sa.Boolean(), nullable=True),
+    sa.Column('approval_status', sa.Enum('PENDING', 'APPROVED', 'REJECTED', name='eventapprovalstatus'), nullable=True),
+    sa.Column('approved_by_id', sa.Integer(), nullable=True),
+    sa.Column('is_published', sa.Boolean(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('is_deleted', sa.Boolean(), nullable=True),
+    sa.ForeignKeyConstraint(['approved_by_id'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['creator_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['group_id'], ['social_groups.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['page_id'], ['social_pages.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('ix_social_event_created_at', 'social_events', ['created_at'], unique=False)
+    op.create_index(op.f('ix_social_events_creator_id'), 'social_events', ['creator_id'], unique=False)
+    op.create_index(op.f('ix_social_events_event_type'), 'social_events', ['event_type'], unique=False)
+    op.create_index(op.f('ix_social_events_group_id'), 'social_events', ['group_id'], unique=False)
+    op.create_index(op.f('ix_social_events_id'), 'social_events', ['id'], unique=False)
+    op.create_index(op.f('ix_social_events_tenant_id'), 'social_events', ['tenant_id'], unique=False)
+    op.create_table('social_group_members',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('idempotency_key', sa.String(length=255), nullable=True),
-    sa.Column('event_id', sa.Integer(), nullable=False),
+    sa.Column('group_id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('status', sa.String(length=50), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['event_id'], ['social_events.id'], ),
+    sa.Column('role', sa.String(length=50), nullable=True),
+    sa.Column('joined_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.ForeignKeyConstraint(['group_id'], ['social_groups.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('ix_event_attendee_unique', 'social_event_attendees', ['event_id', 'user_id'], unique=True)
-    op.create_index(op.f('ix_social_event_attendees_event_id'), 'social_event_attendees', ['event_id'], unique=False)
-    op.create_index(op.f('ix_social_event_attendees_id'), 'social_event_attendees', ['id'], unique=False)
-    op.create_index(op.f('ix_social_event_attendees_idempotency_key'), 'social_event_attendees', ['idempotency_key'], unique=True)
-    op.create_index(op.f('ix_social_event_attendees_tenant_id'), 'social_event_attendees', ['tenant_id'], unique=False)
-    op.create_index(op.f('ix_social_event_attendees_user_id'), 'social_event_attendees', ['user_id'], unique=False)
+    op.create_index('ix_group_member_created_at', 'social_group_members', ['joined_at'], unique=False)
+    op.create_index('ix_group_member_idempotency_key', 'social_group_members', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.create_index('ix_group_member_unique', 'social_group_members', ['group_id', 'user_id'], unique=True)
+    op.create_index(op.f('ix_social_group_members_group_id'), 'social_group_members', ['group_id'], unique=False)
+    op.create_index(op.f('ix_social_group_members_id'), 'social_group_members', ['id'], unique=False)
+    op.create_index(op.f('ix_social_group_members_idempotency_key'), 'social_group_members', ['idempotency_key'], unique=True)
+    op.create_index(op.f('ix_social_group_members_tenant_id'), 'social_group_members', ['tenant_id'], unique=False)
+    op.create_index(op.f('ix_social_group_members_user_id'), 'social_group_members', ['user_id'], unique=False)
+    op.create_table('social_posts',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('tenant_id', sa.Integer(), nullable=False),
+    sa.Column('author_id', sa.Integer(), nullable=False),
+    sa.Column('page_id', sa.Integer(), nullable=True),
+    sa.Column('group_id', sa.Integer(), nullable=True),
+    sa.Column('content', sa.Text(), nullable=True),
+    sa.Column('post_type', sa.Enum('TEXT', 'IMAGE', 'VIDEO', 'POLL', 'DOCUMENT', name='posttype'), nullable=True),
+    sa.Column('media_urls', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('likes_count', sa.Integer(), nullable=True),
+    sa.Column('comments_count', sa.Integer(), nullable=True),
+    sa.Column('shares_count', sa.Integer(), nullable=True),
+    sa.Column('share_reward_mr7', sa.Numeric(precision=15, scale=8), nullable=True),
+    sa.Column('on_chain_post_tx', sa.String(length=100), nullable=True),
+    sa.Column('green_tag_verified', sa.Boolean(), nullable=True),
+    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('is_deleted', sa.Boolean(), nullable=True),
+    sa.ForeignKeyConstraint(['author_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['group_id'], ['social_groups.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['page_id'], ['social_pages.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('ix_social_posts_author', 'social_posts', ['author_id', 'created_at'], unique=False)
+    op.create_index(op.f('ix_social_posts_author_id'), 'social_posts', ['author_id'], unique=False)
+    op.create_index('ix_social_posts_created_at', 'social_posts', ['created_at'], unique=False)
+    op.create_index(op.f('ix_social_posts_id'), 'social_posts', ['id'], unique=False)
+    op.create_index(op.f('ix_social_posts_idempotency_key'), 'social_posts', ['idempotency_key'], unique=True)
+    op.create_index(op.f('ix_social_posts_tenant_id'), 'social_posts', ['tenant_id'], unique=False)
     op.create_table('sports_matches',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -4533,43 +4536,13 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tournament_id'], ['tournaments.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_match_created_at', 'sports_matches', ['created_at'], unique=False)
+    op.create_index('ix_match_idempotency_key', 'sports_matches', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_match_tenant_tournament', 'sports_matches', ['tenant_id', 'tournament_id'], unique=False)
     op.create_index(op.f('ix_sports_matches_id'), 'sports_matches', ['id'], unique=False)
     op.create_index(op.f('ix_sports_matches_idempotency_key'), 'sports_matches', ['idempotency_key'], unique=True)
     op.create_index(op.f('ix_sports_matches_tenant_id'), 'sports_matches', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_sports_matches_tournament_id'), 'sports_matches', ['tournament_id'], unique=False)
-    op.create_table('transport_trips',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('route_id', sa.Integer(), nullable=False),
-    sa.Column('vehicle_id', sa.Integer(), nullable=False),
-    sa.Column('driver_id', sa.Integer(), nullable=False),
-    sa.Column('trip_category', sa.Enum('PASSENGER', 'FREIGHT', 'MASS_TRANSIT', 'TOURISM', 'MEDICAL', 'EDUCATIONAL', name='tripcategory'), nullable=False),
-    sa.Column('scheduled_start', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('scheduled_end', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('actual_start', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('actual_end', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('status', sa.Enum('SCHEDULED', 'ONGOING', 'COMPLETED', 'CANCELLED', 'DELAYED', name='tripstatus'), nullable=True),
-    sa.Column('total_distance_km', sa.Numeric(precision=10, scale=2), nullable=True),
-    sa.Column('carbon_footprint_kg', sa.Numeric(precision=15, scale=2), nullable=True),
-    sa.Column('base_fare_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
-    sa.Column('total_fare_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
-    sa.Column('payment_tx_hash', sa.String(length=100), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['driver_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['route_id'], ['transport_routes.id'], ),
-    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.ForeignKeyConstraint(['vehicle_id'], ['vehicles.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_transport_trips_driver_id'), 'transport_trips', ['driver_id'], unique=False)
-    op.create_index(op.f('ix_transport_trips_id'), 'transport_trips', ['id'], unique=False)
-    op.create_index(op.f('ix_transport_trips_route_id'), 'transport_trips', ['route_id'], unique=False)
-    op.create_index(op.f('ix_transport_trips_tenant_id'), 'transport_trips', ['tenant_id'], unique=False)
-    op.create_index(op.f('ix_transport_trips_vehicle_id'), 'transport_trips', ['vehicle_id'], unique=False)
-    op.create_index('ix_trips_driver_status', 'transport_trips', ['driver_id', 'status'], unique=False)
-    op.create_index('ix_trips_schedule', 'transport_trips', ['scheduled_start', 'scheduled_end'], unique=False)
     op.create_table('academy_courses',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -4589,7 +4562,7 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['bootcamp_id'], ['academy_bootcamps.id'], ),
-    sa.ForeignKeyConstraint(['instructor_id'], ['academy_instructors.id'], ),
+    sa.ForeignKeyConstraint(['instructor_id'], ['academy_instructors.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['org_entity_id'], ['organization_entities.id'], ),
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.ForeignKeyConstraint(['track_id'], ['academy_tracks.id'], ),
@@ -4633,7 +4606,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_affiliate_commission_tiers_id'), 'affiliate_commission_tiers', ['id'], unique=False)
     op.create_index('ix_affiliate_commission_tiers_target_product', 'affiliate_commission_tiers', ['target_product_id'], unique=False)
-    op.create_index('ix_affiliate_commission_tiers_tenant_id', 'affiliate_commission_tiers', ['tenant_id'], unique=False)
+    op.create_index(op.f('ix_affiliate_commission_tiers_tenant_id'), 'affiliate_commission_tiers', ['tenant_id'], unique=False)
     op.create_index('ix_affiliate_commission_tiers_unique', 'affiliate_commission_tiers', ['tenant_id', 'entity_type', 'target_product_id'], unique=True)
     op.create_table('affiliate_links',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -4646,6 +4619,8 @@ def upgrade() -> None:
     sa.Column('utm_campaign', sa.String(length=100), nullable=True),
     sa.Column('clicks', sa.Integer(), nullable=True),
     sa.Column('conversions', sa.Integer(), nullable=True),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('expires_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['affiliate_id'], ['affiliate_profiles.id'], ondelete='CASCADE'),
@@ -4655,6 +4630,7 @@ def upgrade() -> None:
     op.create_index('ix_affiliate_links_affiliate_id', 'affiliate_links', ['affiliate_id'], unique=False)
     op.create_index(op.f('ix_affiliate_links_id'), 'affiliate_links', ['id'], unique=False)
     op.create_index('ix_affiliate_links_product_id', 'affiliate_links', ['product_id'], unique=False)
+    op.create_index('ix_affiliate_links_status', 'affiliate_links', ['status'], unique=False)
     op.create_index('ix_affiliate_links_target', 'affiliate_links', ['target'], unique=False)
     op.create_index('ix_affiliate_links_utm_campaign', 'affiliate_links', ['utm_campaign'], unique=False)
     op.create_table('asset_tokenizations',
@@ -4677,6 +4653,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_asset_tokenizations_id'), 'asset_tokenizations', ['id'], unique=False)
     op.create_index(op.f('ix_asset_tokenizations_tenant_id'), 'asset_tokenizations', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_asset_tokenizations_unit_id'), 'asset_tokenizations', ['unit_id'], unique=False)
+    op.create_index('ix_tokenization_created_at', 'asset_tokenizations', ['created_at'], unique=False)
     op.create_index('ix_tokenization_tenant_unit', 'asset_tokenizations', ['tenant_id', 'unit_id'], unique=False)
     op.create_table('attendance_records',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -4685,8 +4662,8 @@ def upgrade() -> None:
     sa.Column('date', sa.DateTime(timezone=True), nullable=False),
     sa.Column('check_in', sa.DateTime(timezone=True), nullable=True),
     sa.Column('check_out', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('check_in_location', sa.JSON(), nullable=True),
-    sa.Column('check_out_location', sa.JSON(), nullable=True),
+    sa.Column('check_in_location', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('check_out_location', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('hours_worked', sa.Numeric(precision=5, scale=2), nullable=True),
     sa.Column('overtime_hours', sa.Numeric(precision=5, scale=2), nullable=True),
     sa.Column('status', sa.Enum('PRESENT', 'ABSENT', 'LATE', 'HALF_DAY', name='attendancestatus'), nullable=True),
@@ -4698,6 +4675,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index('ix_attendance_contract_date', 'attendance_records', ['contract_id', 'date'], unique=True)
+    op.create_index('ix_attendance_idempotency_key', 'attendance_records', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index(op.f('ix_attendance_records_contract_id'), 'attendance_records', ['contract_id'], unique=False)
     op.create_index(op.f('ix_attendance_records_id'), 'attendance_records', ['id'], unique=False)
     op.create_index(op.f('ix_attendance_records_idempotency_key'), 'attendance_records', ['idempotency_key'], unique=True)
@@ -4747,33 +4725,6 @@ def upgrade() -> None:
     op.create_index(op.f('ix_crop_cycles_tenant_id'), 'crop_cycles', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_crop_cycles_zone_id'), 'crop_cycles', ['zone_id'], unique=False)
     op.create_index('ix_cropcycle_tenant_zone', 'crop_cycles', ['tenant_id', 'zone_id'], unique=False)
-    op.create_table('delivery_tasks',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('order_id', sa.Integer(), nullable=True),
-    sa.Column('trip_id', sa.Integer(), nullable=True),
-    sa.Column('sender_id', sa.Integer(), nullable=False),
-    sa.Column('receiver_id', sa.Integer(), nullable=False),
-    sa.Column('pickup_address', sa.JSON(), nullable=False),
-    sa.Column('dropoff_address', sa.JSON(), nullable=False),
-    sa.Column('estimated_distance_km', sa.Numeric(precision=10, scale=2), nullable=True),
-    sa.Column('status', sa.String(length=50), nullable=True),
-    sa.Column('delivery_proof_hash', sa.String(length=100), nullable=True),
-    sa.Column('delivery_fee_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
-    sa.Column('payment_tx_hash', sa.String(length=100), nullable=True),
-    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['receiver_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['sender_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.ForeignKeyConstraint(['trip_id'], ['transport_trips.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_delivery_tasks_id'), 'delivery_tasks', ['id'], unique=False)
-    op.create_index(op.f('ix_delivery_tasks_idempotency_key'), 'delivery_tasks', ['idempotency_key'], unique=True)
-    op.create_index(op.f('ix_delivery_tasks_tenant_id'), 'delivery_tasks', ['tenant_id'], unique=False)
-    op.create_index(op.f('ix_delivery_tasks_trip_id'), 'delivery_tasks', ['trip_id'], unique=False)
     op.create_table('election_votes',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -4813,9 +4764,41 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('appointment_id')
     )
+    op.create_index('ix_consultation_created_at', 'health_consultations', ['created_at'], unique=False)
     op.create_index('ix_consultation_tenant', 'health_consultations', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_health_consultations_id'), 'health_consultations', ['id'], unique=False)
     op.create_index(op.f('ix_health_consultations_tenant_id'), 'health_consultations', ['tenant_id'], unique=False)
+    op.create_table('insurance_claims',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('tenant_id', sa.Integer(), nullable=False),
+    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
+    sa.Column('subscription_id', sa.Integer(), nullable=False),
+    sa.Column('claimant_user_id', sa.Integer(), nullable=False),
+    sa.Column('incident_date', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('incident_description', sa.Text(), nullable=False),
+    sa.Column('evidence_urls', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('claimed_amount_mrusdt', sa.Numeric(precision=30, scale=8), nullable=False),
+    sa.Column('approved_amount_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
+    sa.Column('status', sa.Enum('SUBMITTED', 'UNDER_INVESTIGATION', 'APPROVED', 'REJECTED', 'PAID', name='claimstatus'), nullable=True),
+    sa.Column('investigation_notes', sa.Text(), nullable=True),
+    sa.Column('oracle_verification_hash', sa.String(length=100), nullable=True),
+    sa.Column('payout_tx_hash', sa.String(length=100), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.ForeignKeyConstraint(['claimant_user_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['subscription_id'], ['insurance_subscriptions.id'], ),
+    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('ix_claim_created_at', 'insurance_claims', ['created_at'], unique=False)
+    op.create_index('ix_claim_idempotency_key', 'insurance_claims', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.create_index('ix_claim_tenant', 'insurance_claims', ['tenant_id'], unique=False)
+    op.create_index(op.f('ix_insurance_claims_claimant_user_id'), 'insurance_claims', ['claimant_user_id'], unique=False)
+    op.create_index(op.f('ix_insurance_claims_id'), 'insurance_claims', ['id'], unique=False)
+    op.create_index(op.f('ix_insurance_claims_idempotency_key'), 'insurance_claims', ['idempotency_key'], unique=True)
+    op.create_index(op.f('ix_insurance_claims_status'), 'insurance_claims', ['status'], unique=False)
+    op.create_index(op.f('ix_insurance_claims_subscription_id'), 'insurance_claims', ['subscription_id'], unique=False)
+    op.create_index(op.f('ix_insurance_claims_tenant_id'), 'insurance_claims', ['tenant_id'], unique=False)
     op.create_table('leave_requests',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -4835,6 +4818,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_leave_created_at', 'leave_requests', ['created_at'], unique=False)
     op.create_index(op.f('ix_leave_requests_contract_id'), 'leave_requests', ['contract_id'], unique=False)
     op.create_index(op.f('ix_leave_requests_id'), 'leave_requests', ['id'], unique=False)
     op.create_index(op.f('ix_leave_requests_tenant_id'), 'leave_requests', ['tenant_id'], unique=False)
@@ -4879,7 +4863,7 @@ def upgrade() -> None:
     sa.Column('entity_id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('facility_type', sa.Enum('HEAVY_FACTORY', 'ASSEMBLY_LINE', 'BIO_REFINERY', 'FARM_PROCESSING', name='facilitytype'), nullable=False),
-    sa.Column('location_gps', sa.JSON(), nullable=True),
+    sa.Column('location_gps', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('manager_id', sa.BigInteger(), nullable=False),
     sa.Column('safety_compliance_score', sa.Numeric(precision=5, scale=2), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
@@ -4896,6 +4880,9 @@ def upgrade() -> None:
     op.create_index(op.f('ix_manufacturing_facilities_id'), 'manufacturing_facilities', ['id'], unique=False)
     op.create_index(op.f('ix_manufacturing_facilities_real_estate_unit_id'), 'manufacturing_facilities', ['real_estate_unit_id'], unique=False)
     op.create_index(op.f('ix_manufacturing_facilities_tenant_id'), 'manufacturing_facilities', ['tenant_id'], unique=False)
+    op.create_index('ix_manufacturing_facility_entity', 'manufacturing_facilities', ['entity_id'], unique=False)
+    op.create_index('ix_manufacturing_facility_tenant', 'manufacturing_facilities', ['tenant_id'], unique=False)
+    op.create_index('ix_manufacturing_facility_type', 'manufacturing_facilities', ['facility_type'], unique=False)
     op.create_table('payroll_records',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -4904,7 +4891,7 @@ def upgrade() -> None:
     sa.Column('base_salary', sa.Numeric(precision=30, scale=8), nullable=False),
     sa.Column('bonuses', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('overtime_pay', sa.Numeric(precision=30, scale=8), nullable=True),
-    sa.Column('deductions', sa.JSON(), nullable=True),
+    sa.Column('deductions', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('net_salary', sa.Numeric(precision=30, scale=8), nullable=False),
     sa.Column('status', sa.Enum('DRAFT', 'APPROVED', 'PAID', name='payrollstatus'), nullable=True),
     sa.Column('payment_tx_hash', sa.String(length=100), nullable=True),
@@ -4917,6 +4904,8 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index('ix_payroll_contract_month', 'payroll_records', ['contract_id', 'month'], unique=True)
+    op.create_index('ix_payroll_created_at', 'payroll_records', ['created_at'], unique=False)
+    op.create_index('ix_payroll_idempotency_key', 'payroll_records', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_payroll_month', 'payroll_records', ['month'], unique=False)
     op.create_index(op.f('ix_payroll_records_contract_id'), 'payroll_records', ['contract_id'], unique=False)
     op.create_index(op.f('ix_payroll_records_id'), 'payroll_records', ['id'], unique=False)
@@ -4928,7 +4917,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('product_id', sa.Integer(), nullable=False),
     sa.Column('sku', sa.String(length=100), nullable=False),
-    sa.Column('attributes', sa.JSON(), nullable=True),
+    sa.Column('attributes', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('price_mrusdt', sa.Numeric(precision=30, scale=8), nullable=False),
     sa.Column('discount_price', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('discount_end_date', sa.DateTime(timezone=True), nullable=True),
@@ -4963,6 +4952,8 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('deed_nft_token_id')
     )
+    op.create_index('ix_ownership_created_at', 'property_ownerships', ['created_at'], unique=False)
+    op.create_index('ix_ownership_idempotency_key', 'property_ownerships', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_ownership_tenant_unit_owner', 'property_ownerships', ['tenant_id', 'unit_id', 'owner_user_id'], unique=False)
     op.create_index(op.f('ix_property_ownerships_id'), 'property_ownerships', ['id'], unique=False)
     op.create_index(op.f('ix_property_ownerships_idempotency_key'), 'property_ownerships', ['idempotency_key'], unique=True)
@@ -4995,7 +4986,76 @@ def upgrade() -> None:
     op.create_index(op.f('ix_rental_contracts_tenant_id'), 'rental_contracts', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_rental_contracts_tenant_user_id'), 'rental_contracts', ['tenant_user_id'], unique=False)
     op.create_index(op.f('ix_rental_contracts_unit_id'), 'rental_contracts', ['unit_id'], unique=False)
+    op.create_index('ix_rental_created_at', 'rental_contracts', ['created_at'], unique=False)
+    op.create_index('ix_rental_idempotency_key', 'rental_contracts', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.create_index('ix_rental_tenant_landlord', 'rental_contracts', ['tenant_id', 'landlord_user_id'], unique=False)
+    op.create_table('social_event_attendees',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('tenant_id', sa.Integer(), nullable=False),
+    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
+    sa.Column('event_id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('status', sa.String(length=50), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.ForeignKeyConstraint(['event_id'], ['social_events.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('ix_event_attendee_created_at', 'social_event_attendees', ['created_at'], unique=False)
+    op.create_index('ix_event_attendee_idempotency_key', 'social_event_attendees', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.create_index('ix_event_attendee_unique', 'social_event_attendees', ['event_id', 'user_id'], unique=True)
+    op.create_index(op.f('ix_social_event_attendees_event_id'), 'social_event_attendees', ['event_id'], unique=False)
+    op.create_index(op.f('ix_social_event_attendees_id'), 'social_event_attendees', ['id'], unique=False)
+    op.create_index(op.f('ix_social_event_attendees_idempotency_key'), 'social_event_attendees', ['idempotency_key'], unique=True)
+    op.create_index(op.f('ix_social_event_attendees_tenant_id'), 'social_event_attendees', ['tenant_id'], unique=False)
+    op.create_index(op.f('ix_social_event_attendees_user_id'), 'social_event_attendees', ['user_id'], unique=False)
+    op.create_table('social_post_comments',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('tenant_id', sa.Integer(), nullable=False),
+    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
+    sa.Column('post_id', sa.Integer(), nullable=False),
+    sa.Column('author_id', sa.Integer(), nullable=False),
+    sa.Column('parent_comment_id', sa.Integer(), nullable=True),
+    sa.Column('content', sa.Text(), nullable=False),
+    sa.Column('likes_count', sa.Integer(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('is_deleted', sa.Boolean(), nullable=True),
+    sa.ForeignKeyConstraint(['author_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['parent_comment_id'], ['social_post_comments.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['post_id'], ['social_posts.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('ix_post_comment_created_at', 'social_post_comments', ['created_at'], unique=False)
+    op.create_index('ix_post_comment_idempotency_key', 'social_post_comments', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.create_index(op.f('ix_social_post_comments_author_id'), 'social_post_comments', ['author_id'], unique=False)
+    op.create_index(op.f('ix_social_post_comments_id'), 'social_post_comments', ['id'], unique=False)
+    op.create_index(op.f('ix_social_post_comments_idempotency_key'), 'social_post_comments', ['idempotency_key'], unique=True)
+    op.create_index(op.f('ix_social_post_comments_post_id'), 'social_post_comments', ['post_id'], unique=False)
+    op.create_index(op.f('ix_social_post_comments_tenant_id'), 'social_post_comments', ['tenant_id'], unique=False)
+    op.create_table('social_post_likes',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('tenant_id', sa.Integer(), nullable=False),
+    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
+    sa.Column('post_id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.ForeignKeyConstraint(['post_id'], ['social_posts.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('ix_social_like_created_at', 'social_post_likes', ['created_at'], unique=False)
+    op.create_index('ix_social_like_idempotency_key', 'social_post_likes', ['idempotency_key'], unique=True, postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.create_index('ix_social_like_unique', 'social_post_likes', ['post_id', 'user_id'], unique=True)
+    op.create_index(op.f('ix_social_post_likes_id'), 'social_post_likes', ['id'], unique=False)
+    op.create_index(op.f('ix_social_post_likes_idempotency_key'), 'social_post_likes', ['idempotency_key'], unique=True)
+    op.create_index(op.f('ix_social_post_likes_post_id'), 'social_post_likes', ['post_id'], unique=False)
+    op.create_index(op.f('ix_social_post_likes_tenant_id'), 'social_post_likes', ['tenant_id'], unique=False)
+    op.create_index(op.f('ix_social_post_likes_user_id'), 'social_post_likes', ['user_id'], unique=False)
     op.create_table('soil_sensor_readings',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
@@ -5018,30 +5078,6 @@ def upgrade() -> None:
     op.create_index(op.f('ix_soil_sensor_readings_tenant_id'), 'soil_sensor_readings', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_soil_sensor_readings_zone_id'), 'soil_sensor_readings', ['zone_id'], unique=False)
     op.create_index('ix_soil_tenant_zone_time', 'soil_sensor_readings', ['tenant_id', 'zone_id', 'recorded_at'], unique=False)
-    op.create_table('trip_bookings',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('tenant_id', sa.Integer(), nullable=False),
-    sa.Column('trip_id', sa.Integer(), nullable=False),
-    sa.Column('passenger_id', sa.Integer(), nullable=True),
-    sa.Column('company_id', sa.Integer(), nullable=True),
-    sa.Column('booking_type', sa.String(length=20), nullable=False),
-    sa.Column('seats_count', sa.Integer(), nullable=True),
-    sa.Column('weight_kg', sa.Numeric(precision=15, scale=2), nullable=True),
-    sa.Column('fare_paid_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
-    sa.Column('status', sa.String(length=50), nullable=True),
-    sa.Column('idempotency_key', sa.String(length=255), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.CheckConstraint('(passenger_id IS NOT NULL AND company_id IS NULL) OR (passenger_id IS NULL AND company_id IS NOT NULL)', name='check_booking_owner'),
-    sa.ForeignKeyConstraint(['passenger_id'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
-    sa.ForeignKeyConstraint(['trip_id'], ['transport_trips.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_trip_bookings_id'), 'trip_bookings', ['id'], unique=False)
-    op.create_index(op.f('ix_trip_bookings_idempotency_key'), 'trip_bookings', ['idempotency_key'], unique=True)
-    op.create_index(op.f('ix_trip_bookings_tenant_id'), 'trip_bookings', ['tenant_id'], unique=False)
-    op.create_index(op.f('ix_trip_bookings_trip_id'), 'trip_bookings', ['trip_id'], unique=False)
     op.create_table('academy_enrollments',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
@@ -5050,15 +5086,15 @@ def upgrade() -> None:
     sa.Column('payment_method', sa.String(length=50), nullable=True),
     sa.Column('payment_status', sa.String(length=50), nullable=True),
     sa.Column('payment_ref', sa.String(length=100), nullable=True),
-    sa.Column('paid_amount', sa.Numeric(precision=10, scale=2), nullable=True),
+    sa.Column('paid_amount', sa.Numeric(precision=30, scale=8), nullable=True),
     sa.Column('status', sa.String(length=50), nullable=True),
     sa.Column('progress_percentage', sa.Numeric(precision=5, scale=2), nullable=True),
     sa.Column('is_completed', sa.Boolean(), nullable=True),
     sa.Column('last_accessed', sa.DateTime(timezone=True), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['cohort_id'], ['academy_cohorts.id'], ),
-    sa.ForeignKeyConstraint(['course_id'], ['academy_courses.id'], ),
+    sa.ForeignKeyConstraint(['cohort_id'], ['academy_cohorts.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['course_id'], ['academy_courses.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -5069,6 +5105,7 @@ def upgrade() -> None:
     op.create_index('ix_enrollment_cohort', 'academy_enrollments', ['cohort_id'], unique=False)
     op.create_index('ix_enrollment_completed', 'academy_enrollments', ['is_completed'], unique=False)
     op.create_index('ix_enrollment_course_status', 'academy_enrollments', ['course_id', 'status'], unique=False)
+    op.create_index('ix_enrollment_created_status', 'academy_enrollments', ['created_at', 'status'], unique=False)
     op.create_index('ix_enrollment_payment_status', 'academy_enrollments', ['payment_status'], unique=False)
     op.create_index('ix_enrollment_updated', 'academy_enrollments', ['updated_at'], unique=False)
     op.create_index('ix_enrollment_user_course', 'academy_enrollments', ['user_id', 'course_id'], unique=True)
@@ -5240,6 +5277,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_payroll_adjustment_created_at', 'payroll_adjustments', ['created_at'], unique=False)
     op.create_index('ix_payroll_adjustment_payroll', 'payroll_adjustments', ['payroll_id'], unique=False)
     op.create_index('ix_payroll_adjustment_tenant_contract', 'payroll_adjustments', ['tenant_id', 'contract_id'], unique=False)
     op.create_index(op.f('ix_payroll_adjustments_contract_id'), 'payroll_adjustments', ['contract_id'], unique=False)
@@ -5250,7 +5288,7 @@ def upgrade() -> None:
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('consultation_id', sa.Integer(), nullable=False),
     sa.Column('patient_id', sa.Integer(), nullable=False),
-    sa.Column('medications', sa.JSON(), nullable=False),
+    sa.Column('medications', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('doctor_notes', sa.Text(), nullable=True),
     sa.Column('pharmacy_store_id', sa.Integer(), nullable=True),
     sa.Column('commerce_order_id', sa.Integer(), nullable=True),
@@ -5261,6 +5299,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_prescription_created_at', 'prescriptions', ['created_at'], unique=False)
     op.create_index('ix_prescription_tenant_patient', 'prescriptions', ['tenant_id', 'patient_id'], unique=False)
     op.create_index(op.f('ix_prescriptions_consultation_id'), 'prescriptions', ['consultation_id'], unique=False)
     op.create_index(op.f('ix_prescriptions_id'), 'prescriptions', ['id'], unique=False)
@@ -5274,7 +5313,7 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('product_category', sa.Enum('FOOD_AND_BEVERAGE', 'AUTOMOTIVE', 'ELECTRONICS', 'ROBOTICS_AI', 'TEXTILES_APPAREL', 'TOYS_AND_GAMES', 'HOME_APPLIANCES', 'OFFICE_SUPPLIES', 'HEAVY_MACHINERY', 'SMART_BIO_UNITS', name='productcategory'), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
-    sa.Column('bill_of_materials', sa.JSON(), nullable=True),
+    sa.Column('bill_of_materials', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('base_price_mrusdt', sa.Numeric(precision=15, scale=2), nullable=False),
     sa.Column('is_perishable', sa.Boolean(), nullable=True),
     sa.Column('shelf_life_days', sa.Integer(), nullable=True),
@@ -5286,6 +5325,9 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_blueprint_category', 'product_blueprints', ['product_category'], unique=False)
+    op.create_index('ix_blueprint_facility', 'product_blueprints', ['facility_id'], unique=False)
+    op.create_index('ix_blueprint_tenant', 'product_blueprints', ['tenant_id'], unique=False)
     op.create_index(op.f('ix_product_blueprints_facility_id'), 'product_blueprints', ['facility_id'], unique=False)
     op.create_index(op.f('ix_product_blueprints_id'), 'product_blueprints', ['id'], unique=False)
     op.create_index(op.f('ix_product_blueprints_sku'), 'product_blueprints', ['sku'], unique=True)
@@ -5303,6 +5345,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['smart_asset_id'], ['smart_assets.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_production_line_active', 'production_lines', ['is_active'], unique=False)
+    op.create_index('ix_production_line_facility', 'production_lines', ['facility_id'], unique=False)
     op.create_index(op.f('ix_production_lines_facility_id'), 'production_lines', ['facility_id'], unique=False)
     op.create_index(op.f('ix_production_lines_id'), 'production_lines', ['id'], unique=False)
     op.create_table('spiritual_certificates',
@@ -5311,7 +5355,7 @@ def upgrade() -> None:
     sa.Column('course_id', sa.Integer(), nullable=True),
     sa.Column('certificate_hash', sa.String(length=64), nullable=True),
     sa.Column('grade', sa.Integer(), nullable=False),
-    sa.Column('ai_training_metadata', sa.JSON(), nullable=True),
+    sa.Column('ai_training_metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('issued_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['course_id'], ['academy_courses.id'], ),
@@ -5353,15 +5397,15 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('ix_affiliate_commissions_affiliate_id', 'affiliate_commissions', ['affiliate_id'], unique=False)
+    op.create_index(op.f('ix_affiliate_commissions_affiliate_id'), 'affiliate_commissions', ['affiliate_id'], unique=False)
     op.create_index('ix_affiliate_commissions_created_at', 'affiliate_commissions', ['created_at'], unique=False)
     op.create_index(op.f('ix_affiliate_commissions_id'), 'affiliate_commissions', ['id'], unique=False)
-    op.create_index(op.f('ix_affiliate_commissions_order_id'), 'affiliate_commissions', ['order_id'], unique=False)
+    op.create_index('ix_affiliate_commissions_order_id', 'affiliate_commissions', ['order_id'], unique=False)
     op.create_index(op.f('ix_affiliate_commissions_order_item_id'), 'affiliate_commissions', ['order_item_id'], unique=False)
-    op.create_index('ix_affiliate_commissions_product_id', 'affiliate_commissions', ['product_id'], unique=False)
+    op.create_index(op.f('ix_affiliate_commissions_product_id'), 'affiliate_commissions', ['product_id'], unique=False)
     op.create_index('ix_affiliate_commissions_status', 'affiliate_commissions', ['status'], unique=False)
-    op.create_index(op.f('ix_affiliate_commissions_tenant_id'), 'affiliate_commissions', ['tenant_id'], unique=False)
-    op.create_index(op.f('ix_affiliate_commissions_user_id'), 'affiliate_commissions', ['user_id'], unique=False)
+    op.create_index('ix_affiliate_commissions_tenant_id', 'affiliate_commissions', ['tenant_id'], unique=False)
+    op.create_index('ix_affiliate_commissions_user_id', 'affiliate_commissions', ['user_id'], unique=False)
     op.create_table('knowledge_nodes',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('course_id', sa.Integer(), nullable=False),
@@ -5415,8 +5459,8 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tenant_id', sa.Integer(), nullable=False),
     sa.Column('production_line_id', sa.Integer(), nullable=False),
-    sa.Column('sensor_data', sa.JSON(), nullable=False),
-    sa.Column('ai_prediction', sa.JSON(), nullable=False),
+    sa.Column('sensor_data', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('ai_prediction', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('recommended_action', sa.Text(), nullable=True),
     sa.Column('status', sa.String(length=50), nullable=True),
     sa.Column('maintenance_scheduled_at', sa.DateTime(timezone=True), nullable=True),
@@ -5426,6 +5470,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['academy_tenants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_maintenance_status', 'predictive_maintenance_logs', ['status'], unique=False)
+    op.create_index('ix_maintenance_status_created', 'predictive_maintenance_logs', ['status', 'created_at'], unique=False)
     op.create_index('ix_maintenance_tenant_line', 'predictive_maintenance_logs', ['tenant_id', 'production_line_id'], unique=False)
     op.create_index(op.f('ix_predictive_maintenance_logs_id'), 'predictive_maintenance_logs', ['id'], unique=False)
     op.create_index(op.f('ix_predictive_maintenance_logs_production_line_id'), 'predictive_maintenance_logs', ['production_line_id'], unique=False)
@@ -5446,6 +5492,10 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['product_blueprint_id'], ['product_blueprints.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_production_batch_blueprint', 'production_batches', ['product_blueprint_id'], unique=False)
+    op.create_index('ix_production_batch_line', 'production_batches', ['line_id'], unique=False)
+    op.create_index('ix_production_batch_status', 'production_batches', ['status'], unique=False)
+    op.create_index('ix_production_batch_status_created', 'production_batches', ['status', 'created_at'], unique=False)
     op.create_index(op.f('ix_production_batches_batch_number'), 'production_batches', ['batch_number'], unique=True)
     op.create_index(op.f('ix_production_batches_id'), 'production_batches', ['id'], unique=False)
     op.create_index(op.f('ix_production_batches_line_id'), 'production_batches', ['line_id'], unique=False)
@@ -5515,9 +5565,11 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['recorded_by'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index('ix_material_consumption_batch', 'material_consumption_logs', ['batch_id'], unique=False)
     op.create_index(op.f('ix_material_consumption_logs_batch_id'), 'material_consumption_logs', ['batch_id'], unique=False)
     op.create_index(op.f('ix_material_consumption_logs_id'), 'material_consumption_logs', ['id'], unique=False)
     op.create_index(op.f('ix_material_consumption_logs_raw_material_batch_id'), 'material_consumption_logs', ['raw_material_batch_id'], unique=False)
+    op.create_index('ix_material_consumption_raw', 'material_consumption_logs', ['raw_material_batch_id'], unique=False)
     op.create_table('node_materials',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('node_id', sa.Integer(), nullable=False),
@@ -5540,7 +5592,7 @@ def upgrade() -> None:
     sa.Column('passing_score', sa.Numeric(precision=5, scale=2), nullable=True),
     sa.Column('max_attempts', sa.Integer(), nullable=True),
     sa.Column('time_limit_minutes', sa.Integer(), nullable=True),
-    sa.Column('questions', sa.JSON(), nullable=True),
+    sa.Column('questions', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['node_id'], ['knowledge_nodes.id'], ),
@@ -5555,7 +5607,7 @@ def upgrade() -> None:
     sa.Column('serial_number', sa.String(length=100), nullable=False),
     sa.Column('smart_barcode', sa.String(length=255), nullable=False),
     sa.Column('digital_twin_nft_id', sa.String(length=100), nullable=True),
-    sa.Column('item_metadata', sa.JSON(), nullable=True),
+    sa.Column('item_metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('qc_passed', sa.Boolean(), nullable=True),
     sa.Column('expiration_date', sa.DateTime(timezone=True), nullable=True),
     sa.Column('status', sa.Enum('IN_FACTORY', 'IN_TRANSIT', 'DELIVERED', 'RECALLED', name='trackingstatus'), nullable=True),
@@ -5568,10 +5620,13 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('digital_twin_nft_id')
     )
+    op.create_index('ix_smart_product_batch', 'smart_product_items', ['batch_id'], unique=False)
     op.create_index(op.f('ix_smart_product_items_batch_id'), 'smart_product_items', ['batch_id'], unique=False)
     op.create_index(op.f('ix_smart_product_items_id'), 'smart_product_items', ['id'], unique=False)
     op.create_index(op.f('ix_smart_product_items_serial_number'), 'smart_product_items', ['serial_number'], unique=True)
     op.create_index(op.f('ix_smart_product_items_smart_barcode'), 'smart_product_items', ['smart_barcode'], unique=True)
+    op.create_index('ix_smart_product_owner', 'smart_product_items', ['owner_id'], unique=False)
+    op.create_index('ix_smart_product_status', 'smart_product_items', ['status'], unique=False)
     op.create_table('classroom_camera_analyses',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('org_entity_id', sa.Integer(), nullable=False),
@@ -5580,9 +5635,9 @@ def upgrade() -> None:
     sa.Column('timestamp', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('detected_faces_count', sa.Integer(), nullable=True),
     sa.Column('attention_score', sa.Numeric(precision=5, scale=2), nullable=True),
-    sa.Column('emotions_summary', sa.JSON(), nullable=True),
+    sa.Column('emotions_summary', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('active_speaker_id', sa.Integer(), nullable=True),
-    sa.Column('raw_analysis_log', sa.JSON(), nullable=True),
+    sa.Column('raw_analysis_log', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['active_speaker_id'], ['users.id'], ),
     sa.ForeignKeyConstraint(['org_entity_id'], ['organization_entities.id'], ),
@@ -5621,10 +5676,10 @@ def upgrade() -> None:
     sa.Column('manufacturing_date', sa.DateTime(timezone=True), nullable=False),
     sa.Column('batch_number', sa.String(length=100), nullable=False),
     sa.Column('production_line_id', sa.Integer(), nullable=True),
-    sa.Column('actual_bom', sa.JSON(), nullable=True),
-    sa.Column('maintenance_log', sa.JSON(), nullable=True),
+    sa.Column('actual_bom', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('maintenance_log', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('total_maintenance_cost_mrusdt', sa.Numeric(precision=30, scale=8), nullable=True),
-    sa.Column('quality_certificates', sa.JSON(), nullable=True),
+    sa.Column('quality_certificates', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('digital_twin_nft_id', sa.String(length=100), nullable=True),
     sa.Column('ipfs_metadata_hash', sa.String(length=100), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -5636,11 +5691,15 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_product_digital_twins_id'), 'product_digital_twins', ['id'], unique=False)
     op.create_index(op.f('ix_product_digital_twins_product_item_id'), 'product_digital_twins', ['product_item_id'], unique=True)
+    op.create_index('ix_product_twin_batch', 'product_digital_twins', ['batch_number'], unique=False)
+    op.create_index('ix_product_twin_item', 'product_digital_twins', ['product_item_id'], unique=False)
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index('ix_product_twin_item', table_name='product_digital_twins')
+    op.drop_index('ix_product_twin_batch', table_name='product_digital_twins')
     op.drop_index(op.f('ix_product_digital_twins_product_item_id'), table_name='product_digital_twins')
     op.drop_index(op.f('ix_product_digital_twins_id'), table_name='product_digital_twins')
     op.drop_table('product_digital_twins')
@@ -5660,10 +5719,13 @@ def downgrade() -> None:
     op.drop_index('ix_camera_device', table_name='classroom_camera_analyses')
     op.drop_index('ix_camera_attention', table_name='classroom_camera_analyses')
     op.drop_table('classroom_camera_analyses')
+    op.drop_index('ix_smart_product_status', table_name='smart_product_items')
+    op.drop_index('ix_smart_product_owner', table_name='smart_product_items')
     op.drop_index(op.f('ix_smart_product_items_smart_barcode'), table_name='smart_product_items')
     op.drop_index(op.f('ix_smart_product_items_serial_number'), table_name='smart_product_items')
     op.drop_index(op.f('ix_smart_product_items_id'), table_name='smart_product_items')
     op.drop_index(op.f('ix_smart_product_items_batch_id'), table_name='smart_product_items')
+    op.drop_index('ix_smart_product_batch', table_name='smart_product_items')
     op.drop_table('smart_product_items')
     op.drop_index('ix_quiz_node', table_name='node_quizzes')
     op.drop_index(op.f('ix_node_quizzes_node_id'), table_name='node_quizzes')
@@ -5674,9 +5736,11 @@ def downgrade() -> None:
     op.drop_index('ix_material_type', table_name='node_materials')
     op.drop_index('ix_material_node', table_name='node_materials')
     op.drop_table('node_materials')
+    op.drop_index('ix_material_consumption_raw', table_name='material_consumption_logs')
     op.drop_index(op.f('ix_material_consumption_logs_raw_material_batch_id'), table_name='material_consumption_logs')
     op.drop_index(op.f('ix_material_consumption_logs_id'), table_name='material_consumption_logs')
     op.drop_index(op.f('ix_material_consumption_logs_batch_id'), table_name='material_consumption_logs')
+    op.drop_index('ix_material_consumption_batch', table_name='material_consumption_logs')
     op.drop_table('material_consumption_logs')
     op.drop_index(op.f('ix_live_sessions_node_id'), table_name='live_sessions')
     op.drop_index(op.f('ix_live_sessions_instructor_id'), table_name='live_sessions')
@@ -5700,11 +5764,17 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_production_batches_line_id'), table_name='production_batches')
     op.drop_index(op.f('ix_production_batches_id'), table_name='production_batches')
     op.drop_index(op.f('ix_production_batches_batch_number'), table_name='production_batches')
+    op.drop_index('ix_production_batch_status_created', table_name='production_batches')
+    op.drop_index('ix_production_batch_status', table_name='production_batches')
+    op.drop_index('ix_production_batch_line', table_name='production_batches')
+    op.drop_index('ix_production_batch_blueprint', table_name='production_batches')
     op.drop_table('production_batches')
     op.drop_index(op.f('ix_predictive_maintenance_logs_tenant_id'), table_name='predictive_maintenance_logs')
     op.drop_index(op.f('ix_predictive_maintenance_logs_production_line_id'), table_name='predictive_maintenance_logs')
     op.drop_index(op.f('ix_predictive_maintenance_logs_id'), table_name='predictive_maintenance_logs')
     op.drop_index('ix_maintenance_tenant_line', table_name='predictive_maintenance_logs')
+    op.drop_index('ix_maintenance_status_created', table_name='predictive_maintenance_logs')
+    op.drop_index('ix_maintenance_status', table_name='predictive_maintenance_logs')
     op.drop_table('predictive_maintenance_logs')
     op.drop_index(op.f('ix_payment_installments_user_id'), table_name='payment_installments')
     op.drop_index(op.f('ix_payment_installments_id'), table_name='payment_installments')
@@ -5723,15 +5793,15 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_knowledge_nodes_id'), table_name='knowledge_nodes')
     op.drop_index(op.f('ix_knowledge_nodes_course_id'), table_name='knowledge_nodes')
     op.drop_table('knowledge_nodes')
-    op.drop_index(op.f('ix_affiliate_commissions_user_id'), table_name='affiliate_commissions')
-    op.drop_index(op.f('ix_affiliate_commissions_tenant_id'), table_name='affiliate_commissions')
+    op.drop_index('ix_affiliate_commissions_user_id', table_name='affiliate_commissions')
+    op.drop_index('ix_affiliate_commissions_tenant_id', table_name='affiliate_commissions')
     op.drop_index('ix_affiliate_commissions_status', table_name='affiliate_commissions')
-    op.drop_index('ix_affiliate_commissions_product_id', table_name='affiliate_commissions')
+    op.drop_index(op.f('ix_affiliate_commissions_product_id'), table_name='affiliate_commissions')
     op.drop_index(op.f('ix_affiliate_commissions_order_item_id'), table_name='affiliate_commissions')
-    op.drop_index(op.f('ix_affiliate_commissions_order_id'), table_name='affiliate_commissions')
+    op.drop_index('ix_affiliate_commissions_order_id', table_name='affiliate_commissions')
     op.drop_index(op.f('ix_affiliate_commissions_id'), table_name='affiliate_commissions')
     op.drop_index('ix_affiliate_commissions_created_at', table_name='affiliate_commissions')
-    op.drop_index('ix_affiliate_commissions_affiliate_id', table_name='affiliate_commissions')
+    op.drop_index(op.f('ix_affiliate_commissions_affiliate_id'), table_name='affiliate_commissions')
     op.drop_table('affiliate_commissions')
     op.drop_index(op.f('ix_spiritual_certificates_user_id'), table_name='spiritual_certificates')
     op.drop_index(op.f('ix_spiritual_certificates_id'), table_name='spiritual_certificates')
@@ -5743,23 +5813,30 @@ def downgrade() -> None:
     op.drop_table('spiritual_certificates')
     op.drop_index(op.f('ix_production_lines_id'), table_name='production_lines')
     op.drop_index(op.f('ix_production_lines_facility_id'), table_name='production_lines')
+    op.drop_index('ix_production_line_facility', table_name='production_lines')
+    op.drop_index('ix_production_line_active', table_name='production_lines')
     op.drop_table('production_lines')
     op.drop_index(op.f('ix_product_blueprints_tenant_id'), table_name='product_blueprints')
     op.drop_index(op.f('ix_product_blueprints_sku'), table_name='product_blueprints')
     op.drop_index(op.f('ix_product_blueprints_id'), table_name='product_blueprints')
     op.drop_index(op.f('ix_product_blueprints_facility_id'), table_name='product_blueprints')
+    op.drop_index('ix_blueprint_tenant', table_name='product_blueprints')
+    op.drop_index('ix_blueprint_facility', table_name='product_blueprints')
+    op.drop_index('ix_blueprint_category', table_name='product_blueprints')
     op.drop_table('product_blueprints')
     op.drop_index(op.f('ix_prescriptions_tenant_id'), table_name='prescriptions')
     op.drop_index(op.f('ix_prescriptions_patient_id'), table_name='prescriptions')
     op.drop_index(op.f('ix_prescriptions_id'), table_name='prescriptions')
     op.drop_index(op.f('ix_prescriptions_consultation_id'), table_name='prescriptions')
     op.drop_index('ix_prescription_tenant_patient', table_name='prescriptions')
+    op.drop_index('ix_prescription_created_at', table_name='prescriptions')
     op.drop_table('prescriptions')
     op.drop_index(op.f('ix_payroll_adjustments_tenant_id'), table_name='payroll_adjustments')
     op.drop_index(op.f('ix_payroll_adjustments_id'), table_name='payroll_adjustments')
     op.drop_index(op.f('ix_payroll_adjustments_contract_id'), table_name='payroll_adjustments')
     op.drop_index('ix_payroll_adjustment_tenant_contract', table_name='payroll_adjustments')
     op.drop_index('ix_payroll_adjustment_payroll', table_name='payroll_adjustments')
+    op.drop_index('ix_payroll_adjustment_created_at', table_name='payroll_adjustments')
     op.drop_table('payroll_adjustments')
     op.drop_index('ix_order_items_product_id', table_name='order_items')
     op.drop_index(op.f('ix_order_items_order_id'), table_name='order_items')
@@ -5814,6 +5891,7 @@ def downgrade() -> None:
     op.drop_index('ix_enrollment_user_course', table_name='academy_enrollments')
     op.drop_index('ix_enrollment_updated', table_name='academy_enrollments')
     op.drop_index('ix_enrollment_payment_status', table_name='academy_enrollments')
+    op.drop_index('ix_enrollment_created_status', table_name='academy_enrollments')
     op.drop_index('ix_enrollment_course_status', table_name='academy_enrollments')
     op.drop_index('ix_enrollment_completed', table_name='academy_enrollments')
     op.drop_index('ix_enrollment_cohort', table_name='academy_enrollments')
@@ -5822,18 +5900,41 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_academy_enrollments_course_id'), table_name='academy_enrollments')
     op.drop_index(op.f('ix_academy_enrollments_cohort_id'), table_name='academy_enrollments')
     op.drop_table('academy_enrollments')
-    op.drop_index(op.f('ix_trip_bookings_trip_id'), table_name='trip_bookings')
-    op.drop_index(op.f('ix_trip_bookings_tenant_id'), table_name='trip_bookings')
-    op.drop_index(op.f('ix_trip_bookings_idempotency_key'), table_name='trip_bookings')
-    op.drop_index(op.f('ix_trip_bookings_id'), table_name='trip_bookings')
-    op.drop_table('trip_bookings')
     op.drop_index('ix_soil_tenant_zone_time', table_name='soil_sensor_readings')
     op.drop_index(op.f('ix_soil_sensor_readings_zone_id'), table_name='soil_sensor_readings')
     op.drop_index(op.f('ix_soil_sensor_readings_tenant_id'), table_name='soil_sensor_readings')
     op.drop_index(op.f('ix_soil_sensor_readings_recorded_at'), table_name='soil_sensor_readings')
     op.drop_index(op.f('ix_soil_sensor_readings_id'), table_name='soil_sensor_readings')
     op.drop_table('soil_sensor_readings')
+    op.drop_index(op.f('ix_social_post_likes_user_id'), table_name='social_post_likes')
+    op.drop_index(op.f('ix_social_post_likes_tenant_id'), table_name='social_post_likes')
+    op.drop_index(op.f('ix_social_post_likes_post_id'), table_name='social_post_likes')
+    op.drop_index(op.f('ix_social_post_likes_idempotency_key'), table_name='social_post_likes')
+    op.drop_index(op.f('ix_social_post_likes_id'), table_name='social_post_likes')
+    op.drop_index('ix_social_like_unique', table_name='social_post_likes')
+    op.drop_index('ix_social_like_idempotency_key', table_name='social_post_likes', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_social_like_created_at', table_name='social_post_likes')
+    op.drop_table('social_post_likes')
+    op.drop_index(op.f('ix_social_post_comments_tenant_id'), table_name='social_post_comments')
+    op.drop_index(op.f('ix_social_post_comments_post_id'), table_name='social_post_comments')
+    op.drop_index(op.f('ix_social_post_comments_idempotency_key'), table_name='social_post_comments')
+    op.drop_index(op.f('ix_social_post_comments_id'), table_name='social_post_comments')
+    op.drop_index(op.f('ix_social_post_comments_author_id'), table_name='social_post_comments')
+    op.drop_index('ix_post_comment_idempotency_key', table_name='social_post_comments', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_post_comment_created_at', table_name='social_post_comments')
+    op.drop_table('social_post_comments')
+    op.drop_index(op.f('ix_social_event_attendees_user_id'), table_name='social_event_attendees')
+    op.drop_index(op.f('ix_social_event_attendees_tenant_id'), table_name='social_event_attendees')
+    op.drop_index(op.f('ix_social_event_attendees_idempotency_key'), table_name='social_event_attendees')
+    op.drop_index(op.f('ix_social_event_attendees_id'), table_name='social_event_attendees')
+    op.drop_index(op.f('ix_social_event_attendees_event_id'), table_name='social_event_attendees')
+    op.drop_index('ix_event_attendee_unique', table_name='social_event_attendees')
+    op.drop_index('ix_event_attendee_idempotency_key', table_name='social_event_attendees', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_event_attendee_created_at', table_name='social_event_attendees')
+    op.drop_table('social_event_attendees')
     op.drop_index('ix_rental_tenant_landlord', table_name='rental_contracts')
+    op.drop_index('ix_rental_idempotency_key', table_name='rental_contracts', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_rental_created_at', table_name='rental_contracts')
     op.drop_index(op.f('ix_rental_contracts_unit_id'), table_name='rental_contracts')
     op.drop_index(op.f('ix_rental_contracts_tenant_user_id'), table_name='rental_contracts')
     op.drop_index(op.f('ix_rental_contracts_tenant_id'), table_name='rental_contracts')
@@ -5847,6 +5948,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_property_ownerships_idempotency_key'), table_name='property_ownerships')
     op.drop_index(op.f('ix_property_ownerships_id'), table_name='property_ownerships')
     op.drop_index('ix_ownership_tenant_unit_owner', table_name='property_ownerships')
+    op.drop_index('ix_ownership_idempotency_key', table_name='property_ownerships', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_ownership_created_at', table_name='property_ownerships')
     op.drop_table('property_ownerships')
     op.drop_index(op.f('ix_product_variants_sku'), table_name='product_variants')
     op.drop_index(op.f('ix_product_variants_product_id'), table_name='product_variants')
@@ -5859,8 +5962,13 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_payroll_records_id'), table_name='payroll_records')
     op.drop_index(op.f('ix_payroll_records_contract_id'), table_name='payroll_records')
     op.drop_index('ix_payroll_month', table_name='payroll_records')
+    op.drop_index('ix_payroll_idempotency_key', table_name='payroll_records', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_payroll_created_at', table_name='payroll_records')
     op.drop_index('ix_payroll_contract_month', table_name='payroll_records')
     op.drop_table('payroll_records')
+    op.drop_index('ix_manufacturing_facility_type', table_name='manufacturing_facilities')
+    op.drop_index('ix_manufacturing_facility_tenant', table_name='manufacturing_facilities')
+    op.drop_index('ix_manufacturing_facility_entity', table_name='manufacturing_facilities')
     op.drop_index(op.f('ix_manufacturing_facilities_tenant_id'), table_name='manufacturing_facilities')
     op.drop_index(op.f('ix_manufacturing_facilities_real_estate_unit_id'), table_name='manufacturing_facilities')
     op.drop_index(op.f('ix_manufacturing_facilities_id'), table_name='manufacturing_facilities')
@@ -5880,10 +5988,22 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_leave_requests_tenant_id'), table_name='leave_requests')
     op.drop_index(op.f('ix_leave_requests_id'), table_name='leave_requests')
     op.drop_index(op.f('ix_leave_requests_contract_id'), table_name='leave_requests')
+    op.drop_index('ix_leave_created_at', table_name='leave_requests')
     op.drop_table('leave_requests')
+    op.drop_index(op.f('ix_insurance_claims_tenant_id'), table_name='insurance_claims')
+    op.drop_index(op.f('ix_insurance_claims_subscription_id'), table_name='insurance_claims')
+    op.drop_index(op.f('ix_insurance_claims_status'), table_name='insurance_claims')
+    op.drop_index(op.f('ix_insurance_claims_idempotency_key'), table_name='insurance_claims')
+    op.drop_index(op.f('ix_insurance_claims_id'), table_name='insurance_claims')
+    op.drop_index(op.f('ix_insurance_claims_claimant_user_id'), table_name='insurance_claims')
+    op.drop_index('ix_claim_tenant', table_name='insurance_claims')
+    op.drop_index('ix_claim_idempotency_key', table_name='insurance_claims', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_claim_created_at', table_name='insurance_claims')
+    op.drop_table('insurance_claims')
     op.drop_index(op.f('ix_health_consultations_tenant_id'), table_name='health_consultations')
     op.drop_index(op.f('ix_health_consultations_id'), table_name='health_consultations')
     op.drop_index('ix_consultation_tenant', table_name='health_consultations')
+    op.drop_index('ix_consultation_created_at', table_name='health_consultations')
     op.drop_table('health_consultations')
     op.drop_index(op.f('ix_election_votes_voter_user_id'), table_name='election_votes')
     op.drop_index(op.f('ix_election_votes_tenant_id'), table_name='election_votes')
@@ -5893,11 +6013,6 @@ def downgrade() -> None:
     op.drop_index('ix_election_vote_unique_voter', table_name='election_votes')
     op.drop_index('ix_election_vote_tenant', table_name='election_votes')
     op.drop_table('election_votes')
-    op.drop_index(op.f('ix_delivery_tasks_trip_id'), table_name='delivery_tasks')
-    op.drop_index(op.f('ix_delivery_tasks_tenant_id'), table_name='delivery_tasks')
-    op.drop_index(op.f('ix_delivery_tasks_idempotency_key'), table_name='delivery_tasks')
-    op.drop_index(op.f('ix_delivery_tasks_id'), table_name='delivery_tasks')
-    op.drop_table('delivery_tasks')
     op.drop_index('ix_cropcycle_tenant_zone', table_name='crop_cycles')
     op.drop_index(op.f('ix_crop_cycles_zone_id'), table_name='crop_cycles')
     op.drop_index(op.f('ix_crop_cycles_tenant_id'), table_name='crop_cycles')
@@ -5915,21 +6030,24 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_attendance_records_idempotency_key'), table_name='attendance_records')
     op.drop_index(op.f('ix_attendance_records_id'), table_name='attendance_records')
     op.drop_index(op.f('ix_attendance_records_contract_id'), table_name='attendance_records')
+    op.drop_index('ix_attendance_idempotency_key', table_name='attendance_records', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.drop_index('ix_attendance_contract_date', table_name='attendance_records')
     op.drop_table('attendance_records')
     op.drop_index('ix_tokenization_tenant_unit', table_name='asset_tokenizations')
+    op.drop_index('ix_tokenization_created_at', table_name='asset_tokenizations')
     op.drop_index(op.f('ix_asset_tokenizations_unit_id'), table_name='asset_tokenizations')
     op.drop_index(op.f('ix_asset_tokenizations_tenant_id'), table_name='asset_tokenizations')
     op.drop_index(op.f('ix_asset_tokenizations_id'), table_name='asset_tokenizations')
     op.drop_table('asset_tokenizations')
     op.drop_index('ix_affiliate_links_utm_campaign', table_name='affiliate_links')
     op.drop_index('ix_affiliate_links_target', table_name='affiliate_links')
+    op.drop_index('ix_affiliate_links_status', table_name='affiliate_links')
     op.drop_index('ix_affiliate_links_product_id', table_name='affiliate_links')
     op.drop_index(op.f('ix_affiliate_links_id'), table_name='affiliate_links')
     op.drop_index('ix_affiliate_links_affiliate_id', table_name='affiliate_links')
     op.drop_table('affiliate_links')
     op.drop_index('ix_affiliate_commission_tiers_unique', table_name='affiliate_commission_tiers')
-    op.drop_index('ix_affiliate_commission_tiers_tenant_id', table_name='affiliate_commission_tiers')
+    op.drop_index(op.f('ix_affiliate_commission_tiers_tenant_id'), table_name='affiliate_commission_tiers')
     op.drop_index('ix_affiliate_commission_tiers_target_product', table_name='affiliate_commission_tiers')
     op.drop_index(op.f('ix_affiliate_commission_tiers_id'), table_name='affiliate_commission_tiers')
     op.drop_table('affiliate_commission_tiers')
@@ -5947,41 +6065,54 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_academy_courses_id'), table_name='academy_courses')
     op.drop_index(op.f('ix_academy_courses_bootcamp_id'), table_name='academy_courses')
     op.drop_table('academy_courses')
-    op.drop_index('ix_trips_schedule', table_name='transport_trips')
-    op.drop_index('ix_trips_driver_status', table_name='transport_trips')
-    op.drop_index(op.f('ix_transport_trips_vehicle_id'), table_name='transport_trips')
-    op.drop_index(op.f('ix_transport_trips_tenant_id'), table_name='transport_trips')
-    op.drop_index(op.f('ix_transport_trips_route_id'), table_name='transport_trips')
-    op.drop_index(op.f('ix_transport_trips_id'), table_name='transport_trips')
-    op.drop_index(op.f('ix_transport_trips_driver_id'), table_name='transport_trips')
-    op.drop_table('transport_trips')
     op.drop_index(op.f('ix_sports_matches_tournament_id'), table_name='sports_matches')
     op.drop_index(op.f('ix_sports_matches_tenant_id'), table_name='sports_matches')
     op.drop_index(op.f('ix_sports_matches_idempotency_key'), table_name='sports_matches')
     op.drop_index(op.f('ix_sports_matches_id'), table_name='sports_matches')
     op.drop_index('ix_match_tenant_tournament', table_name='sports_matches')
+    op.drop_index('ix_match_idempotency_key', table_name='sports_matches', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_match_created_at', table_name='sports_matches')
     op.drop_table('sports_matches')
-    op.drop_index(op.f('ix_social_event_attendees_user_id'), table_name='social_event_attendees')
-    op.drop_index(op.f('ix_social_event_attendees_tenant_id'), table_name='social_event_attendees')
-    op.drop_index(op.f('ix_social_event_attendees_idempotency_key'), table_name='social_event_attendees')
-    op.drop_index(op.f('ix_social_event_attendees_id'), table_name='social_event_attendees')
-    op.drop_index(op.f('ix_social_event_attendees_event_id'), table_name='social_event_attendees')
-    op.drop_index('ix_event_attendee_unique', table_name='social_event_attendees')
-    op.drop_table('social_event_attendees')
+    op.drop_index(op.f('ix_social_posts_tenant_id'), table_name='social_posts')
+    op.drop_index(op.f('ix_social_posts_idempotency_key'), table_name='social_posts')
+    op.drop_index(op.f('ix_social_posts_id'), table_name='social_posts')
+    op.drop_index('ix_social_posts_created_at', table_name='social_posts')
+    op.drop_index(op.f('ix_social_posts_author_id'), table_name='social_posts')
+    op.drop_index('ix_social_posts_author', table_name='social_posts')
+    op.drop_table('social_posts')
+    op.drop_index(op.f('ix_social_group_members_user_id'), table_name='social_group_members')
+    op.drop_index(op.f('ix_social_group_members_tenant_id'), table_name='social_group_members')
+    op.drop_index(op.f('ix_social_group_members_idempotency_key'), table_name='social_group_members')
+    op.drop_index(op.f('ix_social_group_members_id'), table_name='social_group_members')
+    op.drop_index(op.f('ix_social_group_members_group_id'), table_name='social_group_members')
+    op.drop_index('ix_group_member_unique', table_name='social_group_members')
+    op.drop_index('ix_group_member_idempotency_key', table_name='social_group_members', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_group_member_created_at', table_name='social_group_members')
+    op.drop_table('social_group_members')
+    op.drop_index(op.f('ix_social_events_tenant_id'), table_name='social_events')
+    op.drop_index(op.f('ix_social_events_id'), table_name='social_events')
+    op.drop_index(op.f('ix_social_events_group_id'), table_name='social_events')
+    op.drop_index(op.f('ix_social_events_event_type'), table_name='social_events')
+    op.drop_index(op.f('ix_social_events_creator_id'), table_name='social_events')
+    op.drop_index('ix_social_event_created_at', table_name='social_events')
+    op.drop_table('social_events')
     op.drop_index(op.f('ix_service_addon_purchases_license_id'), table_name='service_addon_purchases')
     op.drop_index(op.f('ix_service_addon_purchases_idempotency_key'), table_name='service_addon_purchases')
     op.drop_index(op.f('ix_service_addon_purchases_id'), table_name='service_addon_purchases')
     op.drop_index(op.f('ix_service_addon_purchases_addon_id'), table_name='service_addon_purchases')
-    op.drop_index('ix_addon_purchase_license_addon', table_name='service_addon_purchases', postgresql_where='idempotency_key IS NULL')
+    op.drop_index('ix_addon_purchase_license_addon', table_name='service_addon_purchases', postgresql_where=sa.text('idempotency_key IS NULL'))
     op.drop_index('ix_addon_purchase_license', table_name='service_addon_purchases')
+    op.drop_index('ix_addon_purchase_idempotency_key', table_name='service_addon_purchases', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_addon_purchase_created_at', table_name='service_addon_purchases')
     op.drop_index('ix_addon_purchase_addon', table_name='service_addon_purchases')
     op.drop_table('service_addon_purchases')
     op.drop_index('ix_units_tenant_development', table_name='property_units')
+    op.drop_index('ix_units_created_at', table_name='property_units')
     op.drop_index(op.f('ix_property_units_tenant_id'), table_name='property_units')
     op.drop_index(op.f('ix_property_units_id'), table_name='property_units')
     op.drop_index(op.f('ix_property_units_development_id'), table_name='property_units')
     op.drop_table('property_units')
-    op.drop_index(op.f('ix_products_title'), table_name='products')
+    op.drop_index('ix_products_title', table_name='products')
     op.drop_index('ix_products_store_published', table_name='products')
     op.drop_index(op.f('ix_products_store_id'), table_name='products')
     op.drop_index('ix_products_is_active', table_name='products')
@@ -5989,6 +6120,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_products_category_id'), table_name='products')
     op.drop_table('products')
     op.drop_index('ix_transfer_tenant', table_name='player_transfers')
+    op.drop_index('ix_transfer_idempotency_key', table_name='player_transfers', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_transfer_created_at', table_name='player_transfers')
     op.drop_index(op.f('ix_player_transfers_tenant_id'), table_name='player_transfers')
     op.drop_index(op.f('ix_player_transfers_player_id'), table_name='player_transfers')
     op.drop_index(op.f('ix_player_transfers_idempotency_key'), table_name='player_transfers')
@@ -5997,17 +6130,14 @@ def downgrade() -> None:
     op.drop_index('ix_payment_requests_status', table_name='payment_requests')
     op.drop_index('ix_payment_requests_payment_method', table_name='payment_requests')
     op.drop_index('ix_payment_requests_order_id', table_name='payment_requests')
-    op.drop_index('ix_payment_requests_idempotency_key', table_name='payment_requests', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index(op.f('ix_payment_requests_idempotency_key'), table_name='payment_requests')
     op.drop_index(op.f('ix_payment_requests_id'), table_name='payment_requests')
     op.drop_index(op.f('ix_payment_requests_gateway_transaction_id'), table_name='payment_requests')
     op.drop_index('ix_payment_requests_agent_code', table_name='payment_requests')
     op.drop_table('payment_requests')
     op.drop_index('ix_ticket_tenant_event', table_name='nft_tickets')
-    op.drop_index(op.f('ix_nft_tickets_tenant_id'), table_name='nft_tickets')
-    op.drop_index(op.f('ix_nft_tickets_owner_id'), table_name='nft_tickets')
-    op.drop_index(op.f('ix_nft_tickets_idempotency_key'), table_name='nft_tickets')
-    op.drop_index(op.f('ix_nft_tickets_id'), table_name='nft_tickets')
-    op.drop_index(op.f('ix_nft_tickets_event_id'), table_name='nft_tickets')
+    op.drop_index('ix_ticket_idempotency_key', table_name='nft_tickets', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_ticket_created_at', table_name='nft_tickets')
     op.drop_table('nft_tickets')
     op.drop_index(op.f('ix_medical_appointments_tenant_id'), table_name='medical_appointments')
     op.drop_index(op.f('ix_medical_appointments_patient_user_id'), table_name='medical_appointments')
@@ -6015,13 +6145,19 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_medical_appointments_id'), table_name='medical_appointments')
     op.drop_index(op.f('ix_medical_appointments_doctor_id'), table_name='medical_appointments')
     op.drop_index('ix_appointment_tenant_patient', table_name='medical_appointments')
+    op.drop_index('ix_appointment_idempotency_key', table_name='medical_appointments', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_appointment_created_at', table_name='medical_appointments')
     op.drop_table('medical_appointments')
+    op.drop_index('ix_mailbox_owner_unread', table_name='mailbox_items', postgresql_where=sa.text('is_read = false'))
+    op.drop_index('ix_mailbox_owner_folder', table_name='mailbox_items')
+    op.drop_index('ix_mailbox_message_owner', table_name='mailbox_items')
     op.drop_index(op.f('ix_mailbox_items_owner_id'), table_name='mailbox_items')
     op.drop_index(op.f('ix_mailbox_items_message_id'), table_name='mailbox_items')
     op.drop_index(op.f('ix_mailbox_items_id'), table_name='mailbox_items')
     op.drop_table('mailbox_items')
     op.drop_index(op.f('ix_mail_attachments_message_id'), table_name='mail_attachments')
     op.drop_index(op.f('ix_mail_attachments_id'), table_name='mail_attachments')
+    op.drop_index('ix_mail_attachment_message', table_name='mail_attachments')
     op.drop_table('mail_attachments')
     op.drop_index('ix_order_item_tenant', table_name='logistics_supply_chain_order_items')
     op.drop_index('ix_order_item_order', table_name='logistics_supply_chain_order_items')
@@ -6047,6 +6183,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_logistics_equipment_maintenance_equipment_id'), table_name='logistics_equipment_maintenance')
     op.drop_table('logistics_equipment_maintenance')
     op.drop_index('ix_tracking_tenant_invitation', table_name='invitation_tracking')
+    op.drop_index('ix_tracking_idempotency_key', table_name='invitation_tracking', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_tracking_created_at', table_name='invitation_tracking')
     op.drop_index(op.f('ix_invitation_tracking_tenant_id'), table_name='invitation_tracking')
     op.drop_index(op.f('ix_invitation_tracking_invitation_id'), table_name='invitation_tracking')
     op.drop_index(op.f('ix_invitation_tracking_idempotency_key'), table_name='invitation_tracking')
@@ -6057,15 +6195,36 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_invitation_conversations_idempotency_key'), table_name='invitation_conversations')
     op.drop_index(op.f('ix_invitation_conversations_id'), table_name='invitation_conversations')
     op.drop_index('ix_conversation_tenant', table_name='invitation_conversations')
+    op.drop_index('ix_conversation_idempotency_key', table_name='invitation_conversations', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_conversation_created_at', table_name='invitation_conversations')
     op.drop_table('invitation_conversations')
-    op.drop_index(op.f('ix_insurance_claims_tenant_id'), table_name='insurance_claims')
-    op.drop_index(op.f('ix_insurance_claims_subscription_id'), table_name='insurance_claims')
-    op.drop_index(op.f('ix_insurance_claims_status'), table_name='insurance_claims')
-    op.drop_index(op.f('ix_insurance_claims_idempotency_key'), table_name='insurance_claims')
-    op.drop_index(op.f('ix_insurance_claims_id'), table_name='insurance_claims')
-    op.drop_index(op.f('ix_insurance_claims_claimant_user_id'), table_name='insurance_claims')
-    op.drop_index('ix_claim_tenant', table_name='insurance_claims')
-    op.drop_table('insurance_claims')
+    op.drop_index('ix_subscription_tenant', table_name='insurance_subscriptions')
+    op.drop_index('ix_subscription_status_dates', table_name='insurance_subscriptions')
+    op.drop_index('ix_subscription_idempotency_key', table_name='insurance_subscriptions', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_subscription_created_at', table_name='insurance_subscriptions')
+    op.drop_index(op.f('ix_insurance_subscriptions_tenant_id'), table_name='insurance_subscriptions')
+    op.drop_index(op.f('ix_insurance_subscriptions_subscriber_user_id'), table_name='insurance_subscriptions')
+    op.drop_index(op.f('ix_insurance_subscriptions_status'), table_name='insurance_subscriptions')
+    op.drop_index(op.f('ix_insurance_subscriptions_shipment_id'), table_name='insurance_subscriptions')
+    op.drop_index(op.f('ix_insurance_subscriptions_project_id'), table_name='insurance_subscriptions')
+    op.drop_index(op.f('ix_insurance_subscriptions_policy_id'), table_name='insurance_subscriptions')
+    op.drop_index(op.f('ix_insurance_subscriptions_land_asset_id'), table_name='insurance_subscriptions')
+    op.drop_index(op.f('ix_insurance_subscriptions_idempotency_key'), table_name='insurance_subscriptions')
+    op.drop_index(op.f('ix_insurance_subscriptions_id'), table_name='insurance_subscriptions')
+    op.drop_index(op.f('ix_insurance_subscriptions_fleet_id'), table_name='insurance_subscriptions')
+    op.drop_index(op.f('ix_insurance_subscriptions_employment_contract_id'), table_name='insurance_subscriptions')
+    op.drop_index(op.f('ix_insurance_subscriptions_bio_asset_id'), table_name='insurance_subscriptions')
+    op.drop_table('insurance_subscriptions')
+    op.drop_index(op.f('ix_group_subscriptions_tenant_id'), table_name='group_subscriptions')
+    op.drop_index(op.f('ix_group_subscriptions_plan_id'), table_name='group_subscriptions')
+    op.drop_index(op.f('ix_group_subscriptions_idempotency_key'), table_name='group_subscriptions')
+    op.drop_index(op.f('ix_group_subscriptions_id'), table_name='group_subscriptions')
+    op.drop_index(op.f('ix_group_subscriptions_group_id'), table_name='group_subscriptions')
+    op.drop_index('ix_group_subscription_tenant', table_name='group_subscriptions')
+    op.drop_index('ix_group_subscription_idempotency_key', table_name='group_subscriptions', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_group_subscription_group', table_name='group_subscriptions')
+    op.drop_index('ix_group_subscription_created_at', table_name='group_subscriptions')
+    op.drop_table('group_subscriptions')
     op.drop_index('ix_farmzone_tenant_farm', table_name='farm_zones')
     op.drop_index(op.f('ix_farm_zones_tenant_id'), table_name='farm_zones')
     op.drop_index(op.f('ix_farm_zones_id'), table_name='farm_zones')
@@ -6078,6 +6237,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_employment_contracts_employee_id'), table_name='employment_contracts')
     op.drop_index('ix_contract_tenant_status', table_name='employment_contracts')
     op.drop_index('ix_contract_tenant_employee', table_name='employment_contracts')
+    op.drop_index('ix_contract_idempotency_key', table_name='employment_contracts', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.drop_index('ix_contract_employee_status', table_name='employment_contracts')
     op.drop_table('employment_contracts')
     op.drop_index(op.f('ix_election_candidates_user_id'), table_name='election_candidates')
@@ -6092,32 +6252,39 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_customization_requests_idempotency_key'), table_name='customization_requests')
     op.drop_index(op.f('ix_customization_requests_id'), table_name='customization_requests')
     op.drop_index('ix_customization_license', table_name='customization_requests')
+    op.drop_index('ix_customization_idempotency_key', table_name='customization_requests', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_customization_created_at', table_name='customization_requests')
     op.drop_table('customization_requests')
     op.drop_index(op.f('ix_crm_ticket_comments_ticket_id'), table_name='crm_ticket_comments')
     op.drop_index(op.f('ix_crm_ticket_comments_tenant_id'), table_name='crm_ticket_comments')
     op.drop_index(op.f('ix_crm_ticket_comments_id'), table_name='crm_ticket_comments')
     op.drop_index('ix_comment_tenant_ticket', table_name='crm_ticket_comments')
+    op.drop_index('ix_comment_created_at', table_name='crm_ticket_comments')
     op.drop_table('crm_ticket_comments')
     op.drop_index('ix_commission_records_status', table_name='commission_records')
     op.drop_index('ix_commission_records_order_id', table_name='commission_records')
     op.drop_index('ix_commission_records_level_earned', table_name='commission_records')
     op.drop_index(op.f('ix_commission_records_id'), table_name='commission_records')
-    op.drop_index('ix_commission_records_beneficiary_id', table_name='commission_records')
+    op.drop_index(op.f('ix_commission_records_beneficiary_id'), table_name='commission_records')
     op.drop_table('commission_records')
     op.drop_index('ix_commerce_audit_logs_user_id', table_name='commerce_audit_logs')
+    op.drop_index('ix_commerce_audit_logs_user_created', table_name='commerce_audit_logs')
     op.drop_index(op.f('ix_commerce_audit_logs_order_id'), table_name='commerce_audit_logs')
     op.drop_index(op.f('ix_commerce_audit_logs_id'), table_name='commerce_audit_logs')
     op.drop_index('ix_commerce_audit_logs_created_at', table_name='commerce_audit_logs')
     op.drop_index('ix_commerce_audit_logs_action', table_name='commerce_audit_logs')
     op.drop_table('commerce_audit_logs')
     op.drop_index('ix_insight_tenant', table_name='client_insights')
+    op.drop_index('ix_insight_created_at', table_name='client_insights')
     op.drop_index(op.f('ix_client_insights_tenant_id'), table_name='client_insights')
     op.drop_index(op.f('ix_client_insights_id'), table_name='client_insights')
     op.drop_table('client_insights')
+    op.drop_index('ix_nodelog_execution_status', table_name='automation_node_logs')
     op.drop_index(op.f('ix_automation_node_logs_id'), table_name='automation_node_logs')
     op.drop_index(op.f('ix_automation_node_logs_execution_id'), table_name='automation_node_logs')
     op.drop_table('automation_node_logs')
     op.drop_index('ix_room_tenant_facility', table_name='accommodation_rooms')
+    op.drop_index('ix_room_created_at', table_name='accommodation_rooms')
     op.drop_index(op.f('ix_accommodation_rooms_tenant_id'), table_name='accommodation_rooms')
     op.drop_index(op.f('ix_accommodation_rooms_id'), table_name='accommodation_rooms')
     op.drop_index(op.f('ix_accommodation_rooms_facility_id'), table_name='accommodation_rooms')
@@ -6135,12 +6302,9 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_zamakana_edges_id'), table_name='zamakana_edges')
     op.drop_index('ix_zamakana_edge_tenant', table_name='zamakana_edges')
     op.drop_index('ix_zamakana_edge_pair', table_name='zamakana_edges')
+    op.drop_index('ix_zamakana_edge_idempotency_key', table_name='zamakana_edges', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_zamakana_edge_created_at', table_name='zamakana_edges')
     op.drop_table('zamakana_edges')
-    op.drop_index(op.f('ix_vehicles_tenant_id'), table_name='vehicles')
-    op.drop_index(op.f('ix_vehicles_license_plate'), table_name='vehicles')
-    op.drop_index(op.f('ix_vehicles_id'), table_name='vehicles')
-    op.drop_index(op.f('ix_vehicles_fleet_id'), table_name='vehicles')
-    op.drop_table('vehicles')
     op.drop_index(op.f('ix_twin_permissions_twin_config_id'), table_name='twin_permissions')
     op.drop_index(op.f('ix_twin_permissions_tenant_id'), table_name='twin_permissions')
     op.drop_index(op.f('ix_twin_permissions_id'), table_name='twin_permissions')
@@ -6148,6 +6312,7 @@ def downgrade() -> None:
     op.drop_index('ix_twin_permission_tenant_twin', table_name='twin_permissions')
     op.drop_index('ix_twin_permission_grantee', table_name='twin_permissions')
     op.drop_table('twin_permissions')
+    op.drop_index('ix_twin_interaction_visitor_created', table_name='twin_interaction_logs')
     op.drop_index('ix_twin_interaction_visitor', table_name='twin_interaction_logs')
     op.drop_index('ix_twin_interaction_tenant_twin', table_name='twin_interaction_logs')
     op.drop_index(op.f('ix_twin_interaction_logs_visitor_id'), table_name='twin_interaction_logs')
@@ -6158,20 +6323,23 @@ def downgrade() -> None:
     op.drop_index('ix_twin_interaction_idempotency', table_name='twin_interaction_logs', postgresql_where='idempotency_key IS NOT NULL')
     op.drop_index('ix_twin_interaction_created', table_name='twin_interaction_logs')
     op.drop_table('twin_interaction_logs')
-    op.drop_index(op.f('ix_transport_routes_tenant_id'), table_name='transport_routes')
-    op.drop_index(op.f('ix_transport_routes_id'), table_name='transport_routes')
-    op.drop_table('transport_routes')
     op.drop_index(op.f('ix_tournaments_tenant_id'), table_name='tournaments')
     op.drop_index(op.f('ix_tournaments_idempotency_key'), table_name='tournaments')
     op.drop_index(op.f('ix_tournaments_id'), table_name='tournaments')
     op.drop_index('ix_tournament_tenant', table_name='tournaments')
+    op.drop_index('ix_tournament_idempotency_key', table_name='tournaments', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_tournament_created_at', table_name='tournaments')
     op.drop_table('tournaments')
     op.drop_index(op.f('ix_time_pledges_user_id'), table_name='time_pledges')
     op.drop_index(op.f('ix_time_pledges_tenant_id'), table_name='time_pledges')
     op.drop_index(op.f('ix_time_pledges_idempotency_key'), table_name='time_pledges')
     op.drop_index(op.f('ix_time_pledges_id'), table_name='time_pledges')
     op.drop_index(op.f('ix_time_pledges_campaign_id'), table_name='time_pledges')
+    op.drop_index('ix_time_pledge_user', table_name='time_pledges')
     op.drop_index('ix_time_pledge_tenant', table_name='time_pledges')
+    op.drop_index('ix_time_pledge_idempotency_key', table_name='time_pledges', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_time_pledge_created_at', table_name='time_pledges')
+    op.drop_index('ix_time_pledge_campaign', table_name='time_pledges')
     op.drop_table('time_pledges')
     op.drop_index(op.f('ix_tender_bids_tender_id'), table_name='tender_bids')
     op.drop_index(op.f('ix_tender_bids_tenant_id'), table_name='tender_bids')
@@ -6180,6 +6348,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_tender_bids_bidder_id'), table_name='tender_bids')
     op.drop_index('ix_tender_bid_unique', table_name='tender_bids')
     op.drop_index('ix_tender_bid_tenant', table_name='tender_bids')
+    op.drop_index('ix_tender_bid_idempotency_key', table_name='tender_bids', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_tender_bid_created_at', table_name='tender_bids')
     op.drop_table('tender_bids')
     op.drop_index(op.f('ix_syndicate_memberships_tenant_id'), table_name='syndicate_memberships')
     op.drop_index(op.f('ix_syndicate_memberships_syndicate_id'), table_name='syndicate_memberships')
@@ -6197,6 +6367,9 @@ def downgrade() -> None:
     op.drop_table('syndicate_elections')
     op.drop_index(op.f('ix_spare_parts_tenant_id'), table_name='spare_parts')
     op.drop_index(op.f('ix_spare_parts_id'), table_name='spare_parts')
+    op.drop_index('ix_spare_part_tenant', table_name='spare_parts')
+    op.drop_index('ix_spare_part_supplier', table_name='spare_parts')
+    op.drop_index('ix_spare_part_stock', table_name='spare_parts')
     op.drop_table('spare_parts')
     op.drop_index(op.f('ix_sovereign_invitations_v2_tenant_id'), table_name='sovereign_invitations_v2')
     op.drop_index(op.f('ix_sovereign_invitations_v2_idempotency_key'), table_name='sovereign_invitations_v2')
@@ -6205,39 +6378,23 @@ def downgrade() -> None:
     op.drop_index('ix_invitation_target', table_name='sovereign_invitations_v2')
     op.drop_index('ix_invitation_status_expiry', table_name='sovereign_invitations_v2')
     op.drop_index('ix_invitation_sender', table_name='sovereign_invitations_v2')
+    op.drop_index('ix_invitation_idempotency_key', table_name='sovereign_invitations_v2', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_invitation_created_at', table_name='sovereign_invitations_v2')
     op.drop_table('sovereign_invitations_v2')
-    op.drop_index(op.f('ix_social_post_likes_user_id'), table_name='social_post_likes')
-    op.drop_index(op.f('ix_social_post_likes_tenant_id'), table_name='social_post_likes')
-    op.drop_index(op.f('ix_social_post_likes_post_id'), table_name='social_post_likes')
-    op.drop_index(op.f('ix_social_post_likes_idempotency_key'), table_name='social_post_likes')
-    op.drop_index(op.f('ix_social_post_likes_id'), table_name='social_post_likes')
-    op.drop_index('ix_social_like_unique', table_name='social_post_likes')
-    op.drop_table('social_post_likes')
-    op.drop_index(op.f('ix_social_post_comments_tenant_id'), table_name='social_post_comments')
-    op.drop_index(op.f('ix_social_post_comments_post_id'), table_name='social_post_comments')
-    op.drop_index(op.f('ix_social_post_comments_idempotency_key'), table_name='social_post_comments')
-    op.drop_index(op.f('ix_social_post_comments_id'), table_name='social_post_comments')
-    op.drop_index(op.f('ix_social_post_comments_author_id'), table_name='social_post_comments')
-    op.drop_table('social_post_comments')
-    op.drop_index(op.f('ix_social_group_members_user_id'), table_name='social_group_members')
-    op.drop_index(op.f('ix_social_group_members_tenant_id'), table_name='social_group_members')
-    op.drop_index(op.f('ix_social_group_members_idempotency_key'), table_name='social_group_members')
-    op.drop_index(op.f('ix_social_group_members_id'), table_name='social_group_members')
-    op.drop_index(op.f('ix_social_group_members_group_id'), table_name='social_group_members')
-    op.drop_index('ix_group_member_unique', table_name='social_group_members')
-    op.drop_table('social_group_members')
-    op.drop_index(op.f('ix_social_events_tenant_id'), table_name='social_events')
-    op.drop_index(op.f('ix_social_events_id'), table_name='social_events')
-    op.drop_index(op.f('ix_social_events_group_id'), table_name='social_events')
-    op.drop_index(op.f('ix_social_events_event_type'), table_name='social_events')
-    op.drop_index(op.f('ix_social_events_creator_id'), table_name='social_events')
-    op.drop_table('social_events')
+    op.drop_index(op.f('ix_social_groups_tenant_id'), table_name='social_groups')
+    op.drop_index(op.f('ix_social_groups_name'), table_name='social_groups')
+    op.drop_index(op.f('ix_social_groups_id'), table_name='social_groups')
+    op.drop_index(op.f('ix_social_groups_creator_id'), table_name='social_groups')
+    op.drop_index('ix_social_group_created_at', table_name='social_groups')
+    op.drop_table('social_groups')
     op.drop_index(op.f('ix_social_contract_signatures_tenant_id'), table_name='social_contract_signatures')
     op.drop_index(op.f('ix_social_contract_signatures_signer_id'), table_name='social_contract_signatures')
     op.drop_index(op.f('ix_social_contract_signatures_idempotency_key'), table_name='social_contract_signatures')
     op.drop_index(op.f('ix_social_contract_signatures_id'), table_name='social_contract_signatures')
     op.drop_index(op.f('ix_social_contract_signatures_contract_id'), table_name='social_contract_signatures')
     op.drop_index('ix_contract_signature_unique', table_name='social_contract_signatures')
+    op.drop_index('ix_contract_signature_idempotency_key', table_name='social_contract_signatures', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_contract_signature_created_at', table_name='social_contract_signatures')
     op.drop_table('social_contract_signatures')
     op.drop_index(op.f('ix_smart_farms_tenant_id'), table_name='smart_farms')
     op.drop_index(op.f('ix_smart_farms_manager_id'), table_name='smart_farms')
@@ -6247,6 +6404,8 @@ def downgrade() -> None:
     op.drop_table('smart_farms')
     op.drop_index(op.f('ix_service_versions_service_id'), table_name='service_versions')
     op.drop_index(op.f('ix_service_versions_id'), table_name='service_versions')
+    op.drop_index('ix_service_version_service', table_name='service_versions')
+    op.drop_index('ix_service_version_created_at', table_name='service_versions')
     op.drop_table('service_versions')
     op.drop_index(op.f('ix_service_licenses_tenant_id'), table_name='service_licenses')
     op.drop_index(op.f('ix_service_licenses_service_id'), table_name='service_licenses')
@@ -6254,6 +6413,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_service_licenses_id'), table_name='service_licenses')
     op.drop_index('ix_license_tenant_service', table_name='service_licenses')
     op.drop_index('ix_license_status', table_name='service_licenses')
+    op.drop_index('ix_license_idempotency_key', table_name='service_licenses', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_license_created_at', table_name='service_licenses')
     op.drop_table('service_licenses')
     op.drop_index(op.f('ix_saas_invoices_tenant_id'), table_name='saas_invoices')
     op.drop_index('ix_saas_invoices_subscription_id', table_name='saas_invoices')
@@ -6267,7 +6428,11 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_real_estate_developments_id'), table_name='real_estate_developments')
     op.drop_index(op.f('ix_real_estate_developments_entity_id'), table_name='real_estate_developments')
     op.drop_index('ix_developments_tenant_land', table_name='real_estate_developments')
+    op.drop_index('ix_developments_created_at', table_name='real_estate_developments')
     op.drop_table('real_estate_developments')
+    op.drop_index('ix_raw_material_tenant', table_name='raw_material_batches')
+    op.drop_index('ix_raw_material_supplier', table_name='raw_material_batches')
+    op.drop_index('ix_raw_material_quality', table_name='raw_material_batches')
     op.drop_index(op.f('ix_raw_material_batches_tenant_id'), table_name='raw_material_batches')
     op.drop_index(op.f('ix_raw_material_batches_id'), table_name='raw_material_batches')
     op.drop_table('raw_material_batches')
@@ -6294,6 +6459,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_program_participants_idempotency_key'), table_name='program_participants')
     op.drop_index(op.f('ix_program_participants_id'), table_name='program_participants')
     op.drop_index('ix_participant_tenant_program', table_name='program_participants')
+    op.drop_index('ix_participant_idempotency_key', table_name='program_participants', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_participant_created_at', table_name='program_participants')
     op.drop_table('program_participants')
     op.drop_index(op.f('ix_professional_licenses_user_id'), table_name='professional_licenses')
     op.drop_index(op.f('ix_professional_licenses_tenant_id'), table_name='professional_licenses')
@@ -6303,7 +6470,7 @@ def downgrade() -> None:
     op.drop_index('ix_license_tenant', table_name='professional_licenses')
     op.drop_table('professional_licenses')
     op.drop_index(op.f('ix_product_categories_store_id'), table_name='product_categories')
-    op.drop_index('ix_product_categories_parent_id', table_name='product_categories')
+    op.drop_index(op.f('ix_product_categories_parent_id'), table_name='product_categories')
     op.drop_index(op.f('ix_product_categories_name'), table_name='product_categories')
     op.drop_index(op.f('ix_product_categories_id'), table_name='product_categories')
     op.drop_table('product_categories')
@@ -6313,6 +6480,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_player_profiles_id'), table_name='player_profiles')
     op.drop_index(op.f('ix_player_profiles_club_id'), table_name='player_profiles')
     op.drop_index(op.f('ix_player_profiles_agency_id'), table_name='player_profiles')
+    op.drop_index('ix_player_created_at', table_name='player_profiles')
     op.drop_table('player_profiles')
     op.drop_index('ix_physical_gift_tenant', table_name='physical_gift_requests')
     op.drop_index('ix_physical_gift_sender', table_name='physical_gift_requests')
@@ -6322,12 +6490,25 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_physical_gift_requests_idempotency_key'), table_name='physical_gift_requests')
     op.drop_index(op.f('ix_physical_gift_requests_id'), table_name='physical_gift_requests')
     op.drop_index('ix_physical_gift_receiver', table_name='physical_gift_requests')
+    op.drop_index('ix_physical_gift_idempotency_key', table_name='physical_gift_requests', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_physical_gift_created_at', table_name='physical_gift_requests')
     op.drop_table('physical_gift_requests')
+    op.drop_index('ix_pension_tenant', table_name='pension_records')
+    op.drop_index(op.f('ix_pension_records_tenant_id'), table_name='pension_records')
+    op.drop_index(op.f('ix_pension_records_status'), table_name='pension_records')
+    op.drop_index(op.f('ix_pension_records_pension_type'), table_name='pension_records')
+    op.drop_index(op.f('ix_pension_records_idempotency_key'), table_name='pension_records')
+    op.drop_index(op.f('ix_pension_records_id'), table_name='pension_records')
+    op.drop_index(op.f('ix_pension_records_beneficiary_id'), table_name='pension_records')
+    op.drop_index('ix_pension_idempotency_key', table_name='pension_records', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_pension_created_at', table_name='pension_records')
+    op.drop_table('pension_records')
     op.drop_index(op.f('ix_orders_store_id'), table_name='orders')
     op.drop_index('ix_orders_idempotency_key', table_name='orders', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
     op.drop_index(op.f('ix_orders_id'), table_name='orders')
     op.drop_index('ix_orders_customer_status', table_name='orders')
     op.drop_index(op.f('ix_orders_customer_id'), table_name='orders')
+    op.drop_index('ix_orders_created_status', table_name='orders')
     op.drop_index('ix_orders_created_at', table_name='orders')
     op.drop_index('ix_orders_affiliate_code', table_name='orders')
     op.drop_table('orders')
@@ -6336,17 +6517,23 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_occasion_reminders_tenant_id'), table_name='occasion_reminders')
     op.drop_index(op.f('ix_occasion_reminders_occasion_id'), table_name='occasion_reminders')
     op.drop_index(op.f('ix_occasion_reminders_id'), table_name='occasion_reminders')
+    op.drop_index('ix_occasion_reminder_created_at', table_name='occasion_reminders')
     op.drop_table('occasion_reminders')
     op.drop_index(op.f('ix_master_plans_tenant_id'), table_name='master_plans')
     op.drop_index(op.f('ix_master_plans_land_asset_id'), table_name='master_plans')
     op.drop_index(op.f('ix_master_plans_id'), table_name='master_plans')
     op.drop_index('ix_master_plan_tenant_land', table_name='master_plans')
+    op.drop_index('ix_master_plan_created_at', table_name='master_plans')
     op.drop_table('master_plans')
     op.drop_index(op.f('ix_mail_messages_thread_id'), table_name='mail_messages')
     op.drop_index(op.f('ix_mail_messages_sender_id'), table_name='mail_messages')
     op.drop_index(op.f('ix_mail_messages_recipient_id'), table_name='mail_messages')
     op.drop_index(op.f('ix_mail_messages_idempotency_key'), table_name='mail_messages')
     op.drop_index(op.f('ix_mail_messages_id'), table_name='mail_messages')
+    op.drop_index('ix_mail_message_thread', table_name='mail_messages')
+    op.drop_index('ix_mail_message_sender', table_name='mail_messages')
+    op.drop_index('ix_mail_message_recipient', table_name='mail_messages')
+    op.drop_index('ix_mail_message_created', table_name='mail_messages')
     op.drop_table('mail_messages')
     op.drop_index('ix_warehouse_zone_warehouse', table_name='logistics_warehouse_zones')
     op.drop_index('ix_warehouse_zone_tenant', table_name='logistics_warehouse_zones')
@@ -6374,6 +6561,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_live_bids_bidder_id'), table_name='live_bids')
     op.drop_index(op.f('ix_live_bids_auction_id'), table_name='live_bids')
     op.drop_index('ix_live_bid_tenant_auction', table_name='live_bids')
+    op.drop_index('ix_live_bid_idempotency_key', table_name='live_bids', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_live_bid_created_at', table_name='live_bids')
     op.drop_index('ix_live_bid_auction_amount', table_name='live_bids')
     op.drop_table('live_bids')
     op.drop_index('ix_legacy_beneficiary_user', table_name='legacy_beneficiaries')
@@ -6389,45 +6578,34 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_job_applications_id'), table_name='job_applications')
     op.drop_index(op.f('ix_job_applications_applicant_id'), table_name='job_applications')
     op.drop_table('job_applications')
-    op.drop_index('ix_subscription_tenant', table_name='insurance_subscriptions')
-    op.drop_index('ix_subscription_status_dates', table_name='insurance_subscriptions')
-    op.drop_index(op.f('ix_insurance_subscriptions_tenant_id'), table_name='insurance_subscriptions')
-    op.drop_index(op.f('ix_insurance_subscriptions_subscriber_user_id'), table_name='insurance_subscriptions')
-    op.drop_index(op.f('ix_insurance_subscriptions_status'), table_name='insurance_subscriptions')
-    op.drop_index(op.f('ix_insurance_subscriptions_shipment_id'), table_name='insurance_subscriptions')
-    op.drop_index(op.f('ix_insurance_subscriptions_project_id'), table_name='insurance_subscriptions')
-    op.drop_index(op.f('ix_insurance_subscriptions_policy_id'), table_name='insurance_subscriptions')
-    op.drop_index(op.f('ix_insurance_subscriptions_land_asset_id'), table_name='insurance_subscriptions')
-    op.drop_index(op.f('ix_insurance_subscriptions_idempotency_key'), table_name='insurance_subscriptions')
-    op.drop_index(op.f('ix_insurance_subscriptions_id'), table_name='insurance_subscriptions')
-    op.drop_index(op.f('ix_insurance_subscriptions_fleet_id'), table_name='insurance_subscriptions')
-    op.drop_index(op.f('ix_insurance_subscriptions_employment_contract_id'), table_name='insurance_subscriptions')
-    op.drop_index(op.f('ix_insurance_subscriptions_bio_asset_id'), table_name='insurance_subscriptions')
-    op.drop_table('insurance_subscriptions')
+    op.drop_index('ix_policy_type_active', table_name='insurance_policies')
+    op.drop_index('ix_policy_created_at', table_name='insurance_policies')
+    op.drop_index(op.f('ix_insurance_policies_tenant_id'), table_name='insurance_policies')
+    op.drop_index(op.f('ix_insurance_policies_policy_type'), table_name='insurance_policies')
+    op.drop_index(op.f('ix_insurance_policies_issuer_entity_id'), table_name='insurance_policies')
+    op.drop_index(op.f('ix_insurance_policies_id'), table_name='insurance_policies')
+    op.drop_table('insurance_policies')
     op.drop_index(op.f('ix_human_feedbacks_tenant_id'), table_name='human_feedbacks')
     op.drop_index(op.f('ix_human_feedbacks_scenario_id'), table_name='human_feedbacks')
     op.drop_index(op.f('ix_human_feedbacks_idempotency_key'), table_name='human_feedbacks')
     op.drop_index(op.f('ix_human_feedbacks_id'), table_name='human_feedbacks')
     op.drop_index('ix_human_feedback_tenant', table_name='human_feedbacks')
+    op.drop_index('ix_human_feedback_scenario', table_name='human_feedbacks')
+    op.drop_index('ix_human_feedback_idempotency_key', table_name='human_feedbacks', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_human_feedback_created_at', table_name='human_feedbacks')
     op.drop_table('human_feedbacks')
-    op.drop_index(op.f('ix_group_subscriptions_tenant_id'), table_name='group_subscriptions')
-    op.drop_index(op.f('ix_group_subscriptions_plan_id'), table_name='group_subscriptions')
-    op.drop_index(op.f('ix_group_subscriptions_idempotency_key'), table_name='group_subscriptions')
-    op.drop_index(op.f('ix_group_subscriptions_id'), table_name='group_subscriptions')
-    op.drop_index(op.f('ix_group_subscriptions_group_id'), table_name='group_subscriptions')
-    op.drop_index('ix_group_subscription_tenant', table_name='group_subscriptions')
-    op.drop_index('ix_group_subscription_group', table_name='group_subscriptions')
-    op.drop_table('group_subscriptions')
     op.drop_index(op.f('ix_gift_reminders_tenant_id'), table_name='gift_reminders')
     op.drop_index(op.f('ix_gift_reminders_occasion_id'), table_name='gift_reminders')
     op.drop_index(op.f('ix_gift_reminders_id'), table_name='gift_reminders')
     op.drop_index(op.f('ix_gift_reminders_friend_id'), table_name='gift_reminders')
     op.drop_index('ix_gift_reminder_tenant', table_name='gift_reminders')
     op.drop_index('ix_gift_reminder_occasion', table_name='gift_reminders')
+    op.drop_index('ix_gift_reminder_created_at', table_name='gift_reminders')
     op.drop_table('gift_reminders')
     op.drop_index(op.f('ix_facility_departments_tenant_id'), table_name='facility_departments')
     op.drop_index(op.f('ix_facility_departments_id'), table_name='facility_departments')
     op.drop_index(op.f('ix_facility_departments_facility_id'), table_name='facility_departments')
+    op.drop_index('ix_facility_department_created_at', table_name='facility_departments')
     op.drop_table('facility_departments')
     op.drop_index(op.f('ix_entity_representatives_user_id'), table_name='entity_representatives')
     op.drop_index(op.f('ix_entity_representatives_id'), table_name='entity_representatives')
@@ -6442,6 +6620,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_entity_documents_entity_id'), table_name='entity_documents')
     op.drop_table('entity_documents')
     op.drop_index('ix_event_tenant_venue', table_name='entertainment_events')
+    op.drop_index('ix_event_idempotency_key', table_name='entertainment_events', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_event_created_at', table_name='entertainment_events')
     op.drop_index(op.f('ix_entertainment_events_venue_id'), table_name='entertainment_events')
     op.drop_index(op.f('ix_entertainment_events_tenant_id'), table_name='entertainment_events')
     op.drop_index(op.f('ix_entertainment_events_idempotency_key'), table_name='entertainment_events')
@@ -6452,6 +6632,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_emergency_dispatches_idempotency_key'), table_name='emergency_dispatches')
     op.drop_index(op.f('ix_emergency_dispatches_id'), table_name='emergency_dispatches')
     op.drop_index('ix_dispatch_tenant_status', table_name='emergency_dispatches')
+    op.drop_index('ix_dispatch_idempotency_key', table_name='emergency_dispatches', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_dispatch_created_at', table_name='emergency_dispatches')
     op.drop_table('emergency_dispatches')
     op.drop_index(op.f('ix_digital_gifts_tenant_id'), table_name='digital_gifts')
     op.drop_index(op.f('ix_digital_gifts_sender_id'), table_name='digital_gifts')
@@ -6461,6 +6643,8 @@ def downgrade() -> None:
     op.drop_index('ix_digital_gift_tenant', table_name='digital_gifts')
     op.drop_index('ix_digital_gift_sender', table_name='digital_gifts')
     op.drop_index('ix_digital_gift_receiver', table_name='digital_gifts')
+    op.drop_index('ix_digital_gift_idempotency_key', table_name='digital_gifts', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_digital_gift_created_at', table_name='digital_gifts')
     op.drop_table('digital_gifts')
     op.drop_index('ix_crowd_jury_tenant', table_name='crowd_juries')
     op.drop_index('ix_crowd_jury_case_unique', table_name='crowd_juries')
@@ -6471,12 +6655,16 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_crowd_juries_case_id'), table_name='crowd_juries')
     op.drop_table('crowd_juries')
     op.drop_index('ix_ticket_tenant', table_name='crm_tickets')
+    op.drop_index('ix_ticket_idempotency_key', table_name='crm_tickets', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_ticket_created_at', table_name='crm_tickets')
     op.drop_index(op.f('ix_crm_tickets_tenant_id'), table_name='crm_tickets')
     op.drop_index(op.f('ix_crm_tickets_status'), table_name='crm_tickets')
     op.drop_index(op.f('ix_crm_tickets_idempotency_key'), table_name='crm_tickets')
     op.drop_index(op.f('ix_crm_tickets_id'), table_name='crm_tickets')
     op.drop_table('crm_tickets')
     op.drop_index('ix_interaction_tenant_lead', table_name='crm_interactions')
+    op.drop_index('ix_interaction_idempotency_key', table_name='crm_interactions', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_interaction_created_at', table_name='crm_interactions')
     op.drop_index(op.f('ix_crm_interactions_tenant_id'), table_name='crm_interactions')
     op.drop_index(op.f('ix_crm_interactions_lead_id'), table_name='crm_interactions')
     op.drop_index(op.f('ix_crm_interactions_idempotency_key'), table_name='crm_interactions')
@@ -6499,12 +6687,14 @@ def downgrade() -> None:
     op.drop_table('biometric_logs')
     op.drop_index('ix_execution_workflow_status', table_name='automation_executions')
     op.drop_index('ix_execution_trigger_ip', table_name='automation_executions')
+    op.drop_index('ix_execution_status_created', table_name='automation_executions')
     op.drop_index('ix_execution_created', table_name='automation_executions')
     op.drop_index(op.f('ix_automation_executions_workflow_id'), table_name='automation_executions')
     op.drop_index(op.f('ix_automation_executions_id'), table_name='automation_executions')
     op.drop_table('automation_executions')
     op.drop_index('ix_tasklog_used_model', table_name='ai_task_logs')
     op.drop_index('ix_tasklog_tenant_task', table_name='ai_task_logs')
+    op.drop_index('ix_tasklog_created_type', table_name='ai_task_logs')
     op.drop_index('ix_tasklog_agent_created', table_name='ai_task_logs')
     op.drop_index(op.f('ix_ai_task_logs_user_id'), table_name='ai_task_logs')
     op.drop_index(op.f('ix_ai_task_logs_tenant_id'), table_name='ai_task_logs')
@@ -6514,10 +6704,13 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_ai_task_logs_agent_id'), table_name='ai_task_logs')
     op.drop_table('ai_task_logs')
     op.drop_index('ix_ai_prognosis_tenant', table_name='ai_health_prognosis')
+    op.drop_index('ix_ai_prognosis_created_at', table_name='ai_health_prognosis')
     op.drop_index(op.f('ix_ai_health_prognosis_tenant_id'), table_name='ai_health_prognosis')
     op.drop_index(op.f('ix_ai_health_prognosis_medical_profile_id'), table_name='ai_health_prognosis')
     op.drop_index(op.f('ix_ai_health_prognosis_id'), table_name='ai_health_prognosis')
     op.drop_table('ai_health_prognosis')
+    op.drop_index('ix_usage_log_tenant_agent', table_name='agent_usage_logs')
+    op.drop_index('ix_usage_log_created_action', table_name='agent_usage_logs')
     op.drop_index(op.f('ix_agent_usage_logs_tenant_id'), table_name='agent_usage_logs')
     op.drop_index(op.f('ix_agent_usage_logs_idempotency_key'), table_name='agent_usage_logs')
     op.drop_index(op.f('ix_agent_usage_logs_id'), table_name='agent_usage_logs')
@@ -6535,6 +6728,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_agent_quotas_agent_id'), table_name='agent_quotas')
     op.drop_table('agent_quotas')
     op.drop_index('ix_audit_tenant_agent', table_name='agent_audit_logs')
+    op.drop_index('ix_audit_created_action', table_name='agent_audit_logs')
     op.drop_index(op.f('ix_agent_audit_logs_tenant_id'), table_name='agent_audit_logs')
     op.drop_index(op.f('ix_agent_audit_logs_id'), table_name='agent_audit_logs')
     op.drop_table('agent_audit_logs')
@@ -6546,9 +6740,11 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_agent_approval_queue_human_approver_id'), table_name='agent_approval_queue')
     op.drop_index(op.f('ix_agent_approval_queue_agent_id'), table_name='agent_approval_queue')
     op.drop_table('agent_approval_queue')
+    op.drop_index('ix_accommodation_tenant', table_name='accommodation_facilities')
     op.drop_index(op.f('ix_accommodation_facilities_tenant_id'), table_name='accommodation_facilities')
     op.drop_index(op.f('ix_accommodation_facilities_id'), table_name='accommodation_facilities')
     op.drop_index(op.f('ix_accommodation_facilities_destination_id'), table_name='accommodation_facilities')
+    op.drop_index('ix_accommodation_created_at', table_name='accommodation_facilities')
     op.drop_table('accommodation_facilities')
     op.drop_index('ix_instructor_user_org', table_name='academy_instructors')
     op.drop_index('ix_instructor_org_entity', table_name='academy_instructors')
@@ -6571,6 +6767,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_zamakana_nodes_id'), table_name='zamakana_nodes')
     op.drop_index('ix_zamakana_node_type_year', table_name='zamakana_nodes')
     op.drop_index('ix_zamakana_node_title', table_name='zamakana_nodes')
+    op.drop_index('ix_zamakana_node_created_at', table_name='zamakana_nodes')
     op.drop_table('zamakana_nodes')
     op.drop_index(op.f('ix_weather_alerts_tenant_id'), table_name='weather_alerts')
     op.drop_index(op.f('ix_weather_alerts_id'), table_name='weather_alerts')
@@ -6580,10 +6777,14 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_utility_readings_id'), table_name='utility_readings')
     op.drop_index(op.f('ix_utility_readings_grid_id'), table_name='utility_readings')
     op.drop_index(op.f('ix_utility_readings_asset_id'), table_name='utility_readings')
+    op.drop_index('ix_utility_reading_type_time', table_name='utility_readings')
+    op.drop_index('ix_utility_reading_grid', table_name='utility_readings')
+    op.drop_index('ix_utility_reading_asset', table_name='utility_readings')
     op.drop_table('utility_readings')
     op.drop_index(op.f('ix_user_occasions_user_id'), table_name='user_occasions')
     op.drop_index(op.f('ix_user_occasions_tenant_id'), table_name='user_occasions')
     op.drop_index(op.f('ix_user_occasions_id'), table_name='user_occasions')
+    op.drop_index('ix_user_occasion_created_at', table_name='user_occasions')
     op.drop_index('ix_occasion_user_date', table_name='user_occasions')
     op.drop_index('ix_occasion_tenant', table_name='user_occasions')
     op.drop_table('user_occasions')
@@ -6593,22 +6794,25 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_user_connections_idempotency_key'), table_name='user_connections')
     op.drop_index(op.f('ix_user_connections_id'), table_name='user_connections')
     op.drop_index('ix_user_connection_pair', table_name='user_connections')
+    op.drop_index('ix_user_connection_idempotency_key', table_name='user_connections', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_user_connection_created_at', table_name='user_connections')
     op.drop_table('user_connections')
-    op.drop_index(op.f('ix_transport_hubs_tenant_id'), table_name='transport_hubs')
-    op.drop_index(op.f('ix_transport_hubs_name'), table_name='transport_hubs')
-    op.drop_index(op.f('ix_transport_hubs_id'), table_name='transport_hubs')
-    op.drop_index(op.f('ix_transport_hubs_entity_id'), table_name='transport_hubs')
-    op.drop_table('transport_hubs')
     op.drop_index(op.f('ix_translation_request_logs_user_id'), table_name='translation_request_logs')
     op.drop_index(op.f('ix_translation_request_logs_tenant_id'), table_name='translation_request_logs')
     op.drop_index(op.f('ix_translation_request_logs_idempotency_key'), table_name='translation_request_logs')
     op.drop_index(op.f('ix_translation_request_logs_id'), table_name='translation_request_logs')
+    op.drop_index('ix_translation_log_tenant', table_name='translation_request_logs')
+    op.drop_index('ix_translation_log_idempotency_key', table_name='translation_request_logs', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_translation_log_created_at', table_name='translation_request_logs')
     op.drop_table('translation_request_logs')
     op.drop_index(op.f('ix_translation_cache_text_hash'), table_name='translation_cache')
     op.drop_index(op.f('ix_translation_cache_tenant_id'), table_name='translation_cache')
+    op.drop_index('ix_translation_cache_tenant', table_name='translation_cache')
     op.drop_index(op.f('ix_translation_cache_source_lang'), table_name='translation_cache')
     op.drop_index(op.f('ix_translation_cache_id'), table_name='translation_cache')
+    op.drop_index('ix_translation_cache_created_at', table_name='translation_cache')
     op.drop_table('translation_cache')
+    op.drop_index('ix_transactions_tx_type_created', table_name='transactions')
     op.drop_index(op.f('ix_transactions_tx_type'), table_name='transactions')
     op.drop_index(op.f('ix_transactions_tx_hash'), table_name='transactions')
     op.drop_index(op.f('ix_transactions_to_wallet_id'), table_name='transactions')
@@ -6617,11 +6821,12 @@ def downgrade() -> None:
     op.drop_index('ix_transactions_sender_created', table_name='transactions')
     op.drop_index(op.f('ix_transactions_receiver_id'), table_name='transactions')
     op.drop_index('ix_transactions_receiver_created', table_name='transactions')
-    op.drop_index('ix_transactions_idempotency_key', table_name='transactions', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index(op.f('ix_transactions_idempotency_key'), table_name='transactions')
     op.drop_index(op.f('ix_transactions_id'), table_name='transactions')
     op.drop_index(op.f('ix_transactions_from_wallet_id'), table_name='transactions')
     op.drop_index('ix_transactions_currency_status', table_name='transactions')
     op.drop_index(op.f('ix_transactions_currency'), table_name='transactions')
+    op.drop_index('ix_transactions_created_status', table_name='transactions')
     op.drop_table('transactions')
     op.drop_index(op.f('ix_traceability_qrs_traceable_id'), table_name='traceability_qrs')
     op.drop_index(op.f('ix_traceability_qrs_tenant_id'), table_name='traceability_qrs')
@@ -6632,16 +6837,19 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_tourism_programs_idempotency_key'), table_name='tourism_programs')
     op.drop_index(op.f('ix_tourism_programs_id'), table_name='tourism_programs')
     op.drop_index('ix_program_tenant', table_name='tourism_programs')
+    op.drop_index('ix_program_idempotency_key', table_name='tourism_programs', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_program_created_at', table_name='tourism_programs')
     op.drop_table('tourism_programs')
     op.drop_index(op.f('ix_tourism_destinations_tenant_id'), table_name='tourism_destinations')
     op.drop_index(op.f('ix_tourism_destinations_name'), table_name='tourism_destinations')
     op.drop_index(op.f('ix_tourism_destinations_id'), table_name='tourism_destinations')
+    op.drop_index('ix_tourism_destination_tenant', table_name='tourism_destinations')
+    op.drop_index('ix_tourism_destination_created_at', table_name='tourism_destinations')
     op.drop_table('tourism_destinations')
-    op.drop_index('ix_tombstone_table_record', table_name='tombstone_records')
     op.drop_index(op.f('ix_tombstone_records_table_name'), table_name='tombstone_records')
     op.drop_index(op.f('ix_tombstone_records_record_id'), table_name='tombstone_records')
     op.drop_index(op.f('ix_tombstone_records_id'), table_name='tombstone_records')
-    op.drop_index('ix_tombstone_erasure', table_name='tombstone_records')
+    op.drop_index('ix_tombstone_created', table_name='tombstone_records')
     op.drop_table('tombstone_records')
     op.drop_index(op.f('ix_time_capsules_user_id'), table_name='time_capsules')
     op.drop_index(op.f('ix_time_capsules_tenant_id'), table_name='time_capsules')
@@ -6661,12 +6869,15 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_store_profiles_id'), table_name='store_profiles')
     op.drop_table('store_profiles')
     op.drop_index('ix_sportsorg_tenant_owner', table_name='sports_organizations')
+    op.drop_index('ix_sportsorg_created_at', table_name='sports_organizations')
     op.drop_index(op.f('ix_sports_organizations_tenant_id'), table_name='sports_organizations')
     op.drop_index(op.f('ix_sports_organizations_owner_id'), table_name='sports_organizations')
     op.drop_index(op.f('ix_sports_organizations_id'), table_name='sports_organizations')
     op.drop_index(op.f('ix_sports_organizations_entity_id'), table_name='sports_organizations')
     op.drop_table('sports_organizations')
     op.drop_index('ix_tender_tenant_status', table_name='sovereign_tenders')
+    op.drop_index('ix_tender_idempotency_key', table_name='sovereign_tenders', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_tender_created_at', table_name='sovereign_tenders')
     op.drop_index(op.f('ix_sovereign_tenders_tenant_id'), table_name='sovereign_tenders')
     op.drop_index(op.f('ix_sovereign_tenders_idempotency_key'), table_name='sovereign_tenders')
     op.drop_index(op.f('ix_sovereign_tenders_id'), table_name='sovereign_tenders')
@@ -6690,40 +6901,36 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_sovereign_auctions_id'), table_name='sovereign_auctions')
     op.drop_index('ix_auction_tenant', table_name='sovereign_auctions')
     op.drop_index('ix_auction_status_times', table_name='sovereign_auctions')
+    op.drop_index('ix_auction_idempotency_key', table_name='sovereign_auctions', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_auction_created_at', table_name='sovereign_auctions')
     op.drop_table('sovereign_auctions')
     op.drop_index(op.f('ix_social_smart_contracts_tenant_id'), table_name='social_smart_contracts')
     op.drop_index(op.f('ix_social_smart_contracts_idempotency_key'), table_name='social_smart_contracts')
     op.drop_index(op.f('ix_social_smart_contracts_id'), table_name='social_smart_contracts')
     op.drop_index(op.f('ix_social_smart_contracts_creator_id'), table_name='social_smart_contracts')
     op.drop_index(op.f('ix_social_smart_contracts_contract_type'), table_name='social_smart_contracts')
+    op.drop_index('ix_social_smart_contract_idempotency_key', table_name='social_smart_contracts', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_social_smart_contract_created_at', table_name='social_smart_contracts')
     op.drop_table('social_smart_contracts')
-    op.drop_index(op.f('ix_social_posts_tenant_id'), table_name='social_posts')
-    op.drop_index(op.f('ix_social_posts_idempotency_key'), table_name='social_posts')
-    op.drop_index(op.f('ix_social_posts_id'), table_name='social_posts')
-    op.drop_index(op.f('ix_social_posts_author_id'), table_name='social_posts')
-    op.drop_index('ix_social_posts_author', table_name='social_posts')
-    op.drop_table('social_posts')
     op.drop_index(op.f('ix_social_pages_tenant_id'), table_name='social_pages')
     op.drop_index(op.f('ix_social_pages_slug'), table_name='social_pages')
     op.drop_index(op.f('ix_social_pages_owner_id'), table_name='social_pages')
     op.drop_index(op.f('ix_social_pages_name'), table_name='social_pages')
     op.drop_index(op.f('ix_social_pages_id'), table_name='social_pages')
     op.drop_index(op.f('ix_social_pages_entity_id'), table_name='social_pages')
+    op.drop_index('ix_social_page_created_at', table_name='social_pages')
     op.drop_table('social_pages')
-    op.drop_index(op.f('ix_social_groups_tenant_id'), table_name='social_groups')
-    op.drop_index(op.f('ix_social_groups_name'), table_name='social_groups')
-    op.drop_index(op.f('ix_social_groups_id'), table_name='social_groups')
-    op.drop_index(op.f('ix_social_groups_creator_id'), table_name='social_groups')
-    op.drop_table('social_groups')
     op.drop_index('ix_smart_contract_tenant_type', table_name='smart_contract_engine')
     op.drop_index(op.f('ix_smart_contract_engine_tenant_id'), table_name='smart_contract_engine')
     op.drop_index(op.f('ix_smart_contract_engine_id'), table_name='smart_contract_engine')
+    op.drop_index('ix_smart_contract_created_at', table_name='smart_contract_engine')
     op.drop_table('smart_contract_engine')
     op.drop_index(op.f('ix_service_addons_tenant_id'), table_name='service_addons')
     op.drop_index(op.f('ix_service_addons_id'), table_name='service_addons')
     op.drop_index('ix_addon_tenant_type', table_name='service_addons')
+    op.drop_index('ix_addon_created_at', table_name='service_addons')
     op.drop_table('service_addons')
-    op.drop_index('ix_saas_tenant_subscriptions_tenant_id', table_name='saas_tenant_subscriptions')
+    op.drop_index(op.f('ix_saas_tenant_subscriptions_tenant_id'), table_name='saas_tenant_subscriptions')
     op.drop_index('ix_saas_tenant_subscriptions_status', table_name='saas_tenant_subscriptions')
     op.drop_index('ix_saas_tenant_subscriptions_plan_id', table_name='saas_tenant_subscriptions')
     op.drop_index('ix_saas_tenant_subscriptions_next_billing', table_name='saas_tenant_subscriptions')
@@ -6732,8 +6939,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_saas_tenant_subscriptions_id'), table_name='saas_tenant_subscriptions')
     op.drop_table('saas_tenant_subscriptions')
     op.drop_index('ix_saas_tenant_service_access_unique', table_name='saas_tenant_service_access')
-    op.drop_index('ix_saas_tenant_service_access_tenant_id', table_name='saas_tenant_service_access')
-    op.drop_index('ix_saas_tenant_service_access_service_id', table_name='saas_tenant_service_access')
+    op.drop_index(op.f('ix_saas_tenant_service_access_tenant_id'), table_name='saas_tenant_service_access')
+    op.drop_index(op.f('ix_saas_tenant_service_access_service_id'), table_name='saas_tenant_service_access')
     op.drop_index(op.f('ix_saas_tenant_service_access_id'), table_name='saas_tenant_service_access')
     op.drop_table('saas_tenant_service_access')
     op.drop_index('ix_saas_tenant_feature_flags_unique', table_name='saas_tenant_feature_flags')
@@ -6752,7 +6959,8 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_quality_certificates_tenant_id'), table_name='quality_certificates')
     op.drop_index(op.f('ix_quality_certificates_id'), table_name='quality_certificates')
     op.drop_index(op.f('ix_quality_certificates_certified_entity_id'), table_name='quality_certificates')
-    #op.drop_index('ix_cert_entity', table_name='quality_certificates')
+    op.drop_index('ix_cert_tenant', table_name='quality_certificates')
+    op.drop_index('ix_cert_status', table_name='quality_certificates')
     op.drop_table('quality_certificates')
     op.drop_index(op.f('ix_projects_tenant_id'), table_name='projects')
     op.drop_index(op.f('ix_projects_owner_id'), table_name='projects')
@@ -6768,15 +6976,10 @@ def downgrade() -> None:
     op.drop_table('pre_birth_records')
     op.drop_index(op.f('ix_planetary_campaigns_tenant_id'), table_name='planetary_campaigns')
     op.drop_index(op.f('ix_planetary_campaigns_id'), table_name='planetary_campaigns')
+    op.drop_index('ix_planetary_campaign_tenant', table_name='planetary_campaigns')
+    op.drop_index('ix_planetary_campaign_status', table_name='planetary_campaigns')
+    op.drop_index('ix_planetary_campaign_created_at', table_name='planetary_campaigns')
     op.drop_table('planetary_campaigns')
-    op.drop_index('ix_pension_tenant', table_name='pension_records')
-    op.drop_index(op.f('ix_pension_records_tenant_id'), table_name='pension_records')
-    op.drop_index(op.f('ix_pension_records_status'), table_name='pension_records')
-    op.drop_index(op.f('ix_pension_records_pension_type'), table_name='pension_records')
-    op.drop_index(op.f('ix_pension_records_idempotency_key'), table_name='pension_records')
-    op.drop_index(op.f('ix_pension_records_id'), table_name='pension_records')
-    op.drop_index(op.f('ix_pension_records_beneficiary_id'), table_name='pension_records')
-    op.drop_table('pension_records')
     op.drop_index(op.f('ix_page_components_tenant_id'), table_name='page_components')
     op.drop_index(op.f('ix_page_components_id'), table_name='page_components')
     op.drop_table('page_components')
@@ -6789,6 +6992,7 @@ def downgrade() -> None:
     op.drop_index('ix_org_parent_id', table_name='organization_entities')
     op.drop_index('ix_org_name', table_name='organization_entities')
     op.drop_table('organization_entities')
+    op.drop_index('ix_notifications_user_unread', table_name='notifications', postgresql_where=sa.text('is_read = false'))
     op.drop_index('ix_notifications_user_read', table_name='notifications')
     op.drop_index(op.f('ix_notifications_user_id'), table_name='notifications')
     op.drop_index(op.f('ix_notifications_tenant_id'), table_name='notifications')
@@ -6800,18 +7004,27 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_medical_profiles_tenant_id'), table_name='medical_profiles')
     op.drop_index(op.f('ix_medical_profiles_id'), table_name='medical_profiles')
     op.drop_index('ix_medical_profile_tenant_type', table_name='medical_profiles')
+    op.drop_index('ix_medical_profile_created_at', table_name='medical_profiles')
     op.drop_table('medical_profiles')
     op.drop_index(op.f('ix_marketplace_services_tenant_id'), table_name='marketplace_services')
     op.drop_index(op.f('ix_marketplace_services_service_type'), table_name='marketplace_services')
     op.drop_index(op.f('ix_marketplace_services_id'), table_name='marketplace_services')
+    op.drop_index('ix_marketplace_service_type', table_name='marketplace_services')
+    op.drop_index('ix_marketplace_service_tenant', table_name='marketplace_services')
+    op.drop_index('ix_marketplace_service_created_at', table_name='marketplace_services')
     op.drop_table('marketplace_services')
+    op.drop_index('ix_maintenance_resolved', table_name='maintenance_logs')
     op.drop_index(op.f('ix_maintenance_logs_technician_id'), table_name='maintenance_logs')
     op.drop_index(op.f('ix_maintenance_logs_id'), table_name='maintenance_logs')
     op.drop_index(op.f('ix_maintenance_logs_grid_id'), table_name='maintenance_logs')
     op.drop_index(op.f('ix_maintenance_logs_asset_id'), table_name='maintenance_logs')
+    op.drop_index('ix_maintenance_grid', table_name='maintenance_logs')
+    op.drop_index('ix_maintenance_asset', table_name='maintenance_logs')
     op.drop_table('maintenance_logs')
     op.drop_index(op.f('ix_mail_threads_tenant_id'), table_name='mail_threads')
     op.drop_index(op.f('ix_mail_threads_id'), table_name='mail_threads')
+    op.drop_index('ix_mail_thread_tenant', table_name='mail_threads')
+    op.drop_index('ix_mail_thread_created', table_name='mail_threads')
     op.drop_table('mail_threads')
     op.drop_index('ix_warehouse_type', table_name='logistics_warehouses')
     op.drop_index('ix_warehouse_tenant', table_name='logistics_warehouses')
@@ -6838,6 +7051,7 @@ def downgrade() -> None:
     op.drop_index('ix_land_assets_owner_zoning', table_name='land_assets')
     op.drop_index(op.f('ix_land_assets_owner_id'), table_name='land_assets')
     op.drop_index(op.f('ix_land_assets_id'), table_name='land_assets')
+    op.drop_index('ix_land_assets_created_at', table_name='land_assets')
     op.drop_table('land_assets')
     op.drop_index(op.f('ix_job_listings_tenant_id'), table_name='job_listings')
     op.drop_index('ix_job_listings_tenant_active', table_name='job_listings')
@@ -6845,12 +7059,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_job_listings_employer_id'), table_name='job_listings')
     op.drop_index('ix_job_listings_active', table_name='job_listings')
     op.drop_table('job_listings')
-    op.drop_index('ix_policy_type_active', table_name='insurance_policies')
-    op.drop_index(op.f('ix_insurance_policies_tenant_id'), table_name='insurance_policies')
-    op.drop_index(op.f('ix_insurance_policies_policy_type'), table_name='insurance_policies')
-    op.drop_index(op.f('ix_insurance_policies_issuer_entity_id'), table_name='insurance_policies')
-    op.drop_index(op.f('ix_insurance_policies_id'), table_name='insurance_policies')
-    op.drop_table('insurance_policies')
     op.drop_index('ix_health_facility_tenant', table_name='health_facilities')
     op.drop_index('ix_health_facility_category', table_name='health_facilities')
     op.drop_index(op.f('ix_health_facilities_tenant_id'), table_name='health_facilities')
@@ -6861,27 +7069,30 @@ def downgrade() -> None:
     op.drop_index('ix_subscription_plan_tenant', table_name='group_subscription_plans')
     op.drop_index(op.f('ix_group_subscription_plans_tenant_id'), table_name='group_subscription_plans')
     op.drop_index(op.f('ix_group_subscription_plans_id'), table_name='group_subscription_plans')
+    op.drop_index('ix_group_subscription_plan_created_at', table_name='group_subscription_plans')
     op.drop_table('group_subscription_plans')
     op.drop_index(op.f('ix_group_features_tenant_id'), table_name='group_features')
     op.drop_index(op.f('ix_group_features_id'), table_name='group_features')
     op.drop_index('ix_group_feature_tenant', table_name='group_features')
+    op.drop_index('ix_group_feature_created_at', table_name='group_features')
     op.drop_table('group_features')
     op.drop_index(op.f('ix_future_scenarios_tenant_id'), table_name='future_scenarios')
     op.drop_index(op.f('ix_future_scenarios_id'), table_name='future_scenarios')
+    op.drop_index('ix_future_scenario_tenant', table_name='future_scenarios')
+    op.drop_index('ix_future_scenario_status', table_name='future_scenarios')
+    op.drop_index('ix_future_scenario_created_at', table_name='future_scenarios')
     op.drop_table('future_scenarios')
-    op.drop_index(op.f('ix_fleets_tenant_id'), table_name='fleets')
-    op.drop_index(op.f('ix_fleets_id'), table_name='fleets')
-    op.drop_index(op.f('ix_fleets_entity_id'), table_name='fleets')
-    op.drop_table('fleets')
     op.drop_index(op.f('ix_entity_page_templates_tenant_id'), table_name='entity_page_templates')
     op.drop_index(op.f('ix_entity_page_templates_id'), table_name='entity_page_templates')
     op.drop_table('entity_page_templates')
     op.drop_index('ix_venue_tenant', table_name='entertainment_venues')
+    op.drop_index('ix_venue_created_at', table_name='entertainment_venues')
     op.drop_index(op.f('ix_entertainment_venues_tenant_id'), table_name='entertainment_venues')
     op.drop_index(op.f('ix_entertainment_venues_id'), table_name='entertainment_venues')
     op.drop_index(op.f('ix_entertainment_venues_entity_id'), table_name='entertainment_venues')
     op.drop_table('entertainment_venues')
     op.drop_index('ix_employee_profile_tenant', table_name='employee_insurance_profiles')
+    op.drop_index('ix_employee_profile_created_at', table_name='employee_insurance_profiles')
     op.drop_index(op.f('ix_employee_insurance_profiles_user_id'), table_name='employee_insurance_profiles')
     op.drop_index(op.f('ix_employee_insurance_profiles_tenant_id'), table_name='employee_insurance_profiles')
     op.drop_index(op.f('ix_employee_insurance_profiles_status'), table_name='employee_insurance_profiles')
@@ -6908,6 +7119,8 @@ def downgrade() -> None:
     op.drop_table('death_oracle_checks')
     op.drop_index('ix_lead_tenant_status', table_name='crm_leads')
     op.drop_index('ix_lead_tenant_email', table_name='crm_leads')
+    op.drop_index('ix_lead_idempotency_key', table_name='crm_leads', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_lead_created_at', table_name='crm_leads')
     op.drop_index(op.f('ix_crm_leads_tenant_id'), table_name='crm_leads')
     op.drop_index(op.f('ix_crm_leads_status'), table_name='crm_leads')
     op.drop_index(op.f('ix_crm_leads_idempotency_key'), table_name='crm_leads')
@@ -6920,12 +7133,17 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_crm_campaigns_id'), table_name='crm_campaigns')
     op.drop_index('ix_campaign_tenant_status', table_name='crm_campaigns')
     op.drop_index('ix_campaign_tenant', table_name='crm_campaigns')
+    op.drop_index('ix_campaign_idempotency_key', table_name='crm_campaigns', postgresql_where=sa.text('idempotency_key IS NOT NULL'))
+    op.drop_index('ix_campaign_created_at', table_name='crm_campaigns')
     op.drop_table('crm_campaigns')
+    op.drop_index('ix_template_tenant_event', table_name='communication_templates')
+    op.drop_index('ix_template_active', table_name='communication_templates')
     op.drop_index(op.f('ix_communication_templates_trigger_event'), table_name='communication_templates')
     op.drop_index(op.f('ix_communication_templates_tenant_id'), table_name='communication_templates')
     op.drop_index(op.f('ix_communication_templates_name'), table_name='communication_templates')
     op.drop_index(op.f('ix_communication_templates_id'), table_name='communication_templates')
     op.drop_table('communication_templates')
+    op.drop_index('ix_user_session_user_active', table_name='command_user_sessions')
     op.drop_index('ix_user_session_user', table_name='command_user_sessions')
     op.drop_index('ix_user_session_tenant', table_name='command_user_sessions')
     op.drop_index('ix_user_session_active', table_name='command_user_sessions')
@@ -6934,6 +7152,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_command_user_sessions_id'), table_name='command_user_sessions')
     op.drop_table('command_user_sessions')
     op.drop_index('ix_system_alert_tenant', table_name='command_system_alerts')
+    op.drop_index('ix_system_alert_status_severity', table_name='command_system_alerts')
     op.drop_index('ix_system_alert_status', table_name='command_system_alerts')
     op.drop_index('ix_system_alert_severity', table_name='command_system_alerts')
     op.drop_index(op.f('ix_command_system_alerts_tenant_id'), table_name='command_system_alerts')
@@ -6941,10 +7160,12 @@ def downgrade() -> None:
     op.drop_table('command_system_alerts')
     op.drop_index(op.f('ix_command_reports_tenant_id'), table_name='command_reports')
     op.drop_index(op.f('ix_command_reports_id'), table_name='command_reports')
+    op.drop_index('ix_command_report_type_created', table_name='command_reports')
     op.drop_index('ix_command_report_type', table_name='command_reports')
     op.drop_index('ix_command_report_tenant', table_name='command_reports')
     op.drop_table('command_reports')
     op.drop_index('ix_platform_metric_tenant', table_name='command_platform_metrics')
+    op.drop_index('ix_platform_metric_period', table_name='command_platform_metrics')
     op.drop_index('ix_platform_metric_name_time', table_name='command_platform_metrics')
     op.drop_index(op.f('ix_command_platform_metrics_tenant_id'), table_name='command_platform_metrics')
     op.drop_index(op.f('ix_command_platform_metrics_recorded_at'), table_name='command_platform_metrics')
@@ -6964,9 +7185,11 @@ def downgrade() -> None:
     op.drop_table('command_brand_settings')
     op.drop_index(op.f('ix_command_ai_recommendations_tenant_id'), table_name='command_ai_recommendations')
     op.drop_index(op.f('ix_command_ai_recommendations_id'), table_name='command_ai_recommendations')
+    op.drop_index('ix_ai_recommendation_type_status', table_name='command_ai_recommendations')
     op.drop_index('ix_ai_recommendation_tenant', table_name='command_ai_recommendations')
     op.drop_index('ix_ai_recommendation_status', table_name='command_ai_recommendations')
     op.drop_table('command_ai_recommendations')
+    op.drop_index('ix_workflow_trigger_type', table_name='automation_workflows')
     op.drop_index('ix_workflow_tenant_active', table_name='automation_workflows')
     op.drop_index(op.f('ix_automation_workflows_tenant_id'), table_name='automation_workflows')
     op.drop_index(op.f('ix_automation_workflows_id'), table_name='automation_workflows')
@@ -6986,6 +7209,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_ai_match_profiles_user_id'), table_name='ai_match_profiles')
     op.drop_index(op.f('ix_ai_match_profiles_tenant_id'), table_name='ai_match_profiles')
     op.drop_index(op.f('ix_ai_match_profiles_id'), table_name='ai_match_profiles')
+    op.drop_index('ix_ai_match_profile_created_at', table_name='ai_match_profiles')
     op.drop_table('ai_match_profiles')
     op.drop_index(op.f('ix_ai_agents_tenant_id'), table_name='ai_agents')
     op.drop_index(op.f('ix_ai_agents_owner_id'), table_name='ai_agents')
@@ -6993,15 +7217,14 @@ def downgrade() -> None:
     op.drop_index('ix_agent_tenant_owner', table_name='ai_agents')
     op.drop_index('ix_agent_status_role', table_name='ai_agents')
     op.drop_table('ai_agents')
-    #op.drop_index('ix_cert_entity', table_name='agricultural_certificates')
     op.drop_index(op.f('ix_agricultural_certificates_tenant_id'), table_name='agricultural_certificates')
     op.drop_index(op.f('ix_agricultural_certificates_status'), table_name='agricultural_certificates')
     op.drop_index(op.f('ix_agricultural_certificates_id'), table_name='agricultural_certificates')
     op.drop_index(op.f('ix_agricultural_certificates_certified_entity_id'), table_name='agricultural_certificates')
     op.drop_table('agricultural_certificates')
     op.drop_index('ix_affiliate_profiles_user_id', table_name='affiliate_profiles')
-    op.drop_index('ix_affiliate_profiles_tenant_id', table_name='affiliate_profiles')
-    op.drop_index(op.f('ix_affiliate_profiles_referral_code'), table_name='affiliate_profiles')
+    op.drop_index(op.f('ix_affiliate_profiles_tenant_id'), table_name='affiliate_profiles')
+    op.drop_index('ix_affiliate_profiles_referral_code', table_name='affiliate_profiles')
     op.drop_index('ix_affiliate_profiles_is_active', table_name='affiliate_profiles')
     op.drop_index(op.f('ix_affiliate_profiles_id'), table_name='affiliate_profiles')
     op.drop_table('affiliate_profiles')
@@ -7031,6 +7254,9 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_smart_assets_entity_id'), table_name='smart_assets')
     op.drop_index(op.f('ix_smart_assets_asset_code'), table_name='smart_assets')
     op.drop_index(op.f('ix_smart_assets_asset_class'), table_name='smart_assets')
+    op.drop_index('ix_smart_asset_owner', table_name='smart_assets')
+    op.drop_index('ix_smart_asset_entity', table_name='smart_assets')
+    op.drop_index('ix_smart_asset_class', table_name='smart_assets')
     op.drop_table('smart_assets')
     op.drop_index('ix_saas_service_plans_service_id', table_name='saas_service_plans')
     op.drop_index('ix_saas_service_plans_is_active', table_name='saas_service_plans')
@@ -7038,8 +7264,8 @@ def downgrade() -> None:
     op.drop_index('ix_saas_service_plans_code', table_name='saas_service_plans')
     op.drop_table('saas_service_plans')
     op.drop_index('ix_referral_trees_unique_referred_scope', table_name='referral_trees')
-    op.drop_index(op.f('ix_referral_trees_referrer_id'), table_name='referral_trees')
-    op.drop_index('ix_referral_trees_referred_id', table_name='referral_trees')
+    op.drop_index('ix_referral_trees_referrer_id', table_name='referral_trees')
+    op.drop_index(op.f('ix_referral_trees_referred_id'), table_name='referral_trees')
     op.drop_index(op.f('ix_referral_trees_id'), table_name='referral_trees')
     op.drop_index('ix_referral_trees_entity_type', table_name='referral_trees')
     op.drop_index('ix_referral_trees_entity_id', table_name='referral_trees')
@@ -7051,19 +7277,19 @@ def downgrade() -> None:
     op.drop_table('privacy_settings')
     op.drop_index(op.f('ix_notification_devices_user_id'), table_name='notification_devices')
     op.drop_index(op.f('ix_notification_devices_id'), table_name='notification_devices')
+    op.drop_index('ix_device_user_active', table_name='notification_devices')
     op.drop_index('ix_device_token_unique', table_name='notification_devices')
     op.drop_table('notification_devices')
+    op.drop_index('ix_iot_request_user', table_name='iot_request_logs')
     op.drop_index(op.f('ix_iot_request_logs_user_id'), table_name='iot_request_logs')
     op.drop_index(op.f('ix_iot_request_logs_idempotency_key'), table_name='iot_request_logs')
     op.drop_index(op.f('ix_iot_request_logs_id'), table_name='iot_request_logs')
+    op.drop_index('ix_iot_request_idempotency', table_name='iot_request_logs')
+    op.drop_index('ix_iot_request_endpoint', table_name='iot_request_logs')
+    op.drop_index('ix_iot_request_created', table_name='iot_request_logs')
     op.drop_table('iot_request_logs')
-    op.drop_index(op.f('ix_identity_wallets_wallet_address'), table_name='identity_wallets')
-    op.drop_index(op.f('ix_identity_wallets_user_id'), table_name='identity_wallets')
-    op.drop_index('ix_identity_wallets_is_frozen', table_name='identity_wallets')
-    op.drop_index(op.f('ix_identity_wallets_id'), table_name='identity_wallets')
-    op.drop_index('ix_identity_wallets_address', table_name='identity_wallets')
-    op.drop_table('identity_wallets')
     op.drop_index('ix_erasure_user_status', table_name='data_erasure_requests')
+    op.drop_index('ix_erasure_status_created', table_name='data_erasure_requests')
     op.drop_index('ix_erasure_processed', table_name='data_erasure_requests')
     op.drop_index('ix_erasure_pending', table_name='data_erasure_requests', postgresql_where=sa.text("status = 'PENDING'"))
     op.drop_index(op.f('ix_data_erasure_requests_user_id'), table_name='data_erasure_requests')
@@ -7075,13 +7301,15 @@ def downgrade() -> None:
     op.drop_index('ix_consent_created', table_name='data_consent_logs')
     op.drop_table('data_consent_logs')
     op.drop_index('ix_refresh_token_user_id', table_name='auth_refresh_tokens')
+    op.drop_index('ix_refresh_token_user_expires', table_name='auth_refresh_tokens')
     op.drop_index('ix_refresh_token_revoked', table_name='auth_refresh_tokens')
     op.drop_index('ix_refresh_token_expires_at', table_name='auth_refresh_tokens')
     op.drop_index(op.f('ix_auth_refresh_tokens_user_id'), table_name='auth_refresh_tokens')
     op.drop_index(op.f('ix_auth_refresh_tokens_token_hash'), table_name='auth_refresh_tokens')
     op.drop_index(op.f('ix_auth_refresh_tokens_id'), table_name='auth_refresh_tokens')
     op.drop_table('auth_refresh_tokens')
-    op.drop_index(op.f('ix_audit_logs_user_id'), table_name='audit_logs')
+    op.drop_index('ix_audit_logs_user_id', table_name='audit_logs')
+    op.drop_index('ix_audit_logs_user_created', table_name='audit_logs')
     op.drop_index(op.f('ix_audit_logs_id'), table_name='audit_logs')
     op.drop_index('ix_audit_logs_created_at', table_name='audit_logs')
     op.drop_index('ix_audit_logs_action', table_name='audit_logs')
@@ -7091,7 +7319,7 @@ def downgrade() -> None:
     op.drop_index('ix_affiliate_trees_network_depth', table_name='affiliate_trees')
     op.drop_index(op.f('ix_affiliate_trees_id'), table_name='affiliate_trees')
     op.drop_table('affiliate_trees')
-    op.drop_index(op.f('ix_addresses_user_id'), table_name='addresses')
+    op.drop_index('ix_addresses_user_id', table_name='addresses')
     op.drop_index(op.f('ix_addresses_id'), table_name='addresses')
     op.drop_index('ix_addresses_country_city', table_name='addresses')
     op.drop_table('addresses')
@@ -7105,18 +7333,23 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_utility_grids_grid_type'), table_name='utility_grids')
     op.drop_index(op.f('ix_utility_grids_entity_id'), table_name='utility_grids')
     op.drop_index(op.f('ix_utility_grids_development_id'), table_name='utility_grids')
+    op.drop_index('ix_utility_grid_type', table_name='utility_grids')
+    op.drop_index('ix_utility_grid_entity', table_name='utility_grids')
     op.drop_table('utility_grids')
     op.drop_index('ix_users_username_lower', table_name='users')
     op.drop_index(op.f('ix_users_username'), table_name='users')
     op.drop_index(op.f('ix_users_uid'), table_name='users')
     op.drop_index(op.f('ix_users_public_id'), table_name='users')
+    op.drop_index(op.f('ix_users_idempotency_key'), table_name='users')
     op.drop_index(op.f('ix_users_id'), table_name='users')
     op.drop_index('ix_users_email_lower', table_name='users')
     op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
     op.drop_index(op.f('ix_supported_languages_id'), table_name='supported_languages')
+    op.drop_index('ix_supported_language_created_at', table_name='supported_languages')
     op.drop_table('supported_languages')
     op.drop_index(op.f('ix_social_contract_templates_id'), table_name='social_contract_templates')
+    op.drop_index('ix_social_contract_template_created_at', table_name='social_contract_templates')
     op.drop_table('social_contract_templates')
     op.drop_index('ix_saas_service_catalog_is_active', table_name='saas_service_catalog')
     op.drop_index(op.f('ix_saas_service_catalog_id'), table_name='saas_service_catalog')
@@ -7129,5 +7362,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_idempotency_records_key'), table_name='idempotency_records')
     op.drop_index(op.f('ix_idempotency_records_id'), table_name='idempotency_records')
     op.drop_index(op.f('ix_idempotency_records_expires_at'), table_name='idempotency_records')
+    op.drop_index('ix_idempotency_key', table_name='idempotency_records')
+    op.drop_index('ix_idempotency_expires', table_name='idempotency_records')
     op.drop_table('idempotency_records')
     # ### end Alembic commands ###

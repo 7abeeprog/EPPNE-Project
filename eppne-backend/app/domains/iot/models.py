@@ -1,20 +1,21 @@
-# app/domains/iot/models.py (الإصدار النهائي المتكامل)
+# app/domains/iot/models.py (الإصدار النهائي المتكامل مع ترقية JSONB)
 from sqlalchemy import (
     Column, Integer, BigInteger, String, ForeignKey, DateTime,
-    Text, Boolean, Numeric, JSON, Enum as SQLEnum, Index
+    Text, Boolean, Numeric, Enum as SQLEnum, Index
 )
+from sqlalchemy.dialects.postgresql import JSONB  # ✅ تم إضافة الاستيراد الصحيح
 from sqlalchemy.sql import func
 from app.core.database import Base
 import enum
 
 # ========== الأنواع المساعدة ==========
 class AssetClass(str, enum.Enum):
-    SURVEILLANCE = "SURVEILLANCE"           # كاميرات مراقبة
-    SMART_BIO_UNIT = "SMART_BIO_UNIT"       # وحدات تحويل المخلفات لطاقة
-    ACCESS_GATE = "ACCESS_GATE"             # بوابات دخول
-    HVAC = "HVAC"                           # تكييف وتهوية
-    UTILITY_METER = "UTILITY_METER"         # عدادات كهرباء/مياه
-    INDUSTRIAL_ROBOT = "INDUSTRIAL_ROBOT"   # روبوتات مصانع
+    SURVEILLANCE = "SURVEILLANCE"
+    SMART_BIO_UNIT = "SMART_BIO_UNIT"
+    ACCESS_GATE = "ACCESS_GATE"
+    HVAC = "HVAC"
+    UTILITY_METER = "UTILITY_METER"
+    INDUSTRIAL_ROBOT = "INDUSTRIAL_ROBOT"
 
 class UtilityType(str, enum.Enum):
     ELECTRICITY = "ELECTRICITY"
@@ -46,8 +47,8 @@ class SmartAsset(Base):
 
     asset_code = Column(String(100), unique=True, index=True, nullable=False)
     asset_class = Column(SQLEnum(AssetClass), nullable=False, index=True)
-    location_gps = Column(JSON, nullable=True)
-    specs = Column(JSON, default=dict)
+    location_gps = Column(JSONB, nullable=True)
+    specs = Column(JSONB, default=dict)
 
     is_online = Column(Boolean, default=False)
     health_status = Column(SQLEnum(DeviceHealthStatus), default=DeviceHealthStatus.EXCELLENT)
@@ -59,6 +60,12 @@ class SmartAsset(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     is_deleted = Column(Boolean, default=False)
+
+    __table_args__ = (
+        Index("ix_smart_asset_entity", "entity_id"),
+        Index("ix_smart_asset_owner", "owner_id"),
+        Index("ix_smart_asset_class", "asset_class"),
+    )
 
 
 # ========== 2. المحطات المركزية (شبكات كهرباء، مياه، غاز حيوي) ==========
@@ -77,6 +84,11 @@ class UtilityGrid(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_utility_grid_entity", "entity_id"),
+        Index("ix_utility_grid_type", "grid_type"),
+    )
 
 
 # ========== 3. القراءات الحالية (Telemetry) ==========
@@ -100,6 +112,12 @@ class UtilityReading(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    __table_args__ = (
+        Index("ix_utility_reading_grid", "grid_id"),
+        Index("ix_utility_reading_asset", "asset_id"),
+        Index("ix_utility_reading_type_time", "reading_type", "reading_timestamp"),
+    )
+
 
 # ========== 4. سجلات الصيانة ==========
 class MaintenanceLog(Base):
@@ -122,19 +140,30 @@ class MaintenanceLog(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    __table_args__ = (
+        Index("ix_maintenance_asset", "asset_id"),
+        Index("ix_maintenance_grid", "grid_id"),
+        Index("ix_maintenance_resolved", "is_resolved"),
+    )
 
-# ========== 5. جدول Idempotency (جديد) ==========
+
+# ========== 5. جدول Idempotency (مع ترقية JSONB) ==========
 class IdempotencyRecord(Base):
     __tablename__ = "idempotency_records"
 
     id = Column(Integer, primary_key=True, index=True)
     key = Column(String(64), unique=True, nullable=False, index=True)
-    response_data = Column(JSON, nullable=False)          # تخزين النتيجة كـ JSON
+    response_data = Column(JSONB, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)  # صلاحية 24 ساعة
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+
+    __table_args__ = (
+        Index("ix_idempotency_key", "key"),
+        Index("ix_idempotency_expires", "expires_at"),
+    )
 
 
-# ========== 6. جدول سجلات التدقيق (جديد) ==========
+# ========== 6. جدول سجلات التدقيق (مع ترقية JSONB) ==========
 class IoTRequestLog(Base):
     __tablename__ = "iot_request_logs"
 
@@ -145,6 +174,13 @@ class IoTRequestLog(Base):
     ip_address = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
     idempotency_key = Column(String(64), nullable=True, index=True)
-    request_body = Column(JSON, nullable=True)           # اختياري لتتبع
+    request_body = Column(JSONB, nullable=True)
     status_code = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_iot_request_user", "user_id"),
+        Index("ix_iot_request_endpoint", "endpoint"),
+        Index("ix_iot_request_created", "created_at"),
+        Index("ix_iot_request_idempotency", "idempotency_key"),
+    )

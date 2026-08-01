@@ -1,8 +1,9 @@
 # app/domains/employment/models.py
 from sqlalchemy import (
     Column, Integer, BigInteger, String, ForeignKey, DateTime, Text,
-    Boolean, Numeric, JSON, Enum as SQLEnum, Index, CheckConstraint
+    Boolean, Numeric, Enum as SQLEnum, Index, CheckConstraint, text
 )
+from sqlalchemy.dialects.postgresql import JSONB  # ✅ تم إضافة الاستيراد الصحيح
 from sqlalchemy.sql import func
 from app.core.database import Base
 import enum
@@ -50,8 +51,8 @@ class JobListing(Base):
 
     title = Column(String(255), nullable=False)
     description = Column(Text)
-    required_skills = Column(JSON, default=list)
-    required_certificate_ids = Column(JSON, default=list)      # من الأكاديمية
+    required_skills = Column(JSONB, default=list)
+    required_certificate_ids = Column(JSONB, default=list)
     required_rank = Column(String(50), nullable=True)
 
     salary_min = Column(Numeric(30, 8), nullable=True)
@@ -59,7 +60,7 @@ class JobListing(Base):
     currency = Column(String(20), default="MR_USDT")
 
     location = Column(String(255), nullable=True)
-    employment_type = Column(String(50), default="FULL_TIME")   # FULL_TIME, PART_TIME, CONTRACT
+    employment_type = Column(String(50), default="FULL_TIME")
     is_active = Column(Boolean, default=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -83,8 +84,8 @@ class JobApplication(Base):
     cover_letter = Column(Text, nullable=True)
     resume_url = Column(String(1024), nullable=True)
 
-    ai_match_score = Column(Numeric(5, 2), nullable=True)      # نسبة التوافق (0-100)
-    status = Column(String(50), default="PENDING")             # PENDING, REVIEWING, APPROVED, REJECTED
+    ai_match_score = Column(Numeric(5, 2), nullable=True)
+    status = Column(String(50), default="PENDING")
 
     reviewed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
@@ -107,29 +108,27 @@ class EmploymentContract(Base):
     __tablename__ = "employment_contracts"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     application_id = Column(Integer, ForeignKey("job_applications.id"), nullable=False, unique=True)
     employee_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     employer_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     job_title = Column(String(255), nullable=False)
     base_salary = Column(Numeric(30, 8), nullable=False)
-    allowances = Column(JSON, default=dict)                    # بدلات إضافية
+    allowances = Column(JSONB, default=dict)
     currency = Column(String(20), default="MR_USDT")
 
     start_date = Column(DateTime(timezone=True), nullable=False)
-    end_date = Column(DateTime(timezone=True), nullable=True)   # إذا كان عقد محدد المدة
+    end_date = Column(DateTime(timezone=True), nullable=True)
     probation_days = Column(Integer, default=90)
     annual_leave_days = Column(Integer, default=21)
 
     status = Column(SQLEnum(EmploymentStatus), default=EmploymentStatus.WAITING_SIGNATURE)
 
-    # العقود الذكية على السلسلة
     smart_contract_address = Column(String(42), nullable=True)
-    signature_tx_hash = Column(String(100), nullable=True)       # توقيع الموظف
-    employer_signature_tx = Column(String(100), nullable=True)   # توقيع صاحب العمل
+    signature_tx_hash = Column(String(100), nullable=True)
+    employer_signature_tx = Column(String(100), nullable=True)
 
-    # 🔥 Idempotency Key (لمنع تكرار إنشاء العقود)
     idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -141,6 +140,7 @@ class EmploymentContract(Base):
         Index("ix_contract_tenant_status", "tenant_id", "status"),
         Index("ix_contract_employee_status", "employee_id", "status"),
         Index("ix_contract_tenant_employee", "tenant_id", "employee_id"),
+        Index("ix_contract_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
     )
 
 
@@ -152,20 +152,19 @@ class AttendanceRecord(Base):
     __tablename__ = "attendance_records"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     contract_id = Column(Integer, ForeignKey("employment_contracts.id"), nullable=False, index=True)
 
     date = Column(DateTime(timezone=True), nullable=False)
     check_in = Column(DateTime(timezone=True), nullable=True)
     check_out = Column(DateTime(timezone=True), nullable=True)
-    check_in_location = Column(JSON, nullable=True)            # GPS location عند البصمة
-    check_out_location = Column(JSON, nullable=True)
+    check_in_location = Column(JSONB, nullable=True)
+    check_out_location = Column(JSONB, nullable=True)
 
     hours_worked = Column(Numeric(5, 2), default=0)
     overtime_hours = Column(Numeric(5, 2), default=0)
     status = Column(SQLEnum(AttendanceStatus), default=AttendanceStatus.ABSENT)
 
-    # 🔥 Idempotency Key (لمنع تكرار تسجيل الحضور)
     idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -175,6 +174,7 @@ class AttendanceRecord(Base):
         Index("ix_attendance_contract_date", "contract_id", "date", unique=True),
         Index("ix_attendance_tenant_contract", "tenant_id", "contract_id"),
         Index("ix_attendance_tenant_date", "tenant_id", "date"),
+        Index("ix_attendance_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
     )
 
 
@@ -182,7 +182,7 @@ class LeaveRequest(Base):
     __tablename__ = "leave_requests"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     contract_id = Column(Integer, ForeignKey("employment_contracts.id"), nullable=False, index=True)
 
     leave_type = Column(SQLEnum(LeaveType), nullable=False)
@@ -190,7 +190,7 @@ class LeaveRequest(Base):
     end_date = Column(DateTime(timezone=True), nullable=False)
     reason = Column(Text, nullable=True)
 
-    status = Column(String(50), default="PENDING")             # PENDING, APPROVED, REJECTED, CANCELLED
+    status = Column(String(50), default="PENDING")
     approved_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     approved_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -201,6 +201,7 @@ class LeaveRequest(Base):
         CheckConstraint("end_date >= start_date", name="check_leave_dates"),
         Index("ix_leave_tenant_contract", "tenant_id", "contract_id"),
         Index("ix_leave_tenant_status", "tenant_id", "status"),
+        Index("ix_leave_created_at", "created_at"),
     )
 
 
@@ -212,21 +213,20 @@ class PayrollRecord(Base):
     __tablename__ = "payroll_records"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     contract_id = Column(Integer, ForeignKey("employment_contracts.id"), nullable=False, index=True)
 
-    month = Column(String(20), nullable=False)                 # YYYY-MM
+    month = Column(String(20), nullable=False)
     base_salary = Column(Numeric(30, 8), nullable=False)
     bonuses = Column(Numeric(30, 8), default=0)
     overtime_pay = Column(Numeric(30, 8), default=0)
-    deductions = Column(JSON, default=dict)                    # تفاصيل الخصومات (تأمينات، ضرائب، غياب)
+    deductions = Column(JSONB, default=dict)
     net_salary = Column(Numeric(30, 8), nullable=False)
 
     status = Column(SQLEnum(PayrollStatus), default=PayrollStatus.DRAFT)
-    payment_tx_hash = Column(String(100), nullable=True)       # هاش تحويل الراتب
+    payment_tx_hash = Column(String(100), nullable=True)
     notes = Column(Text, nullable=True)
 
-    # 🔥 Idempotency Key (لمنع تكرار إنشاء كشوف المرتبات)
     idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -237,6 +237,8 @@ class PayrollRecord(Base):
         Index("ix_payroll_tenant_contract", "tenant_id", "contract_id"),
         Index("ix_payroll_tenant_status", "tenant_id", "status"),
         Index("ix_payroll_month", "month"),
+        Index("ix_payroll_created_at", "created_at"),
+        Index("ix_payroll_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
     )
 
 
@@ -244,11 +246,11 @@ class PayrollAdjustment(Base):
     __tablename__ = "payroll_adjustments"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     contract_id = Column(Integer, ForeignKey("employment_contracts.id"), nullable=False, index=True)
     payroll_id = Column(Integer, ForeignKey("payroll_records.id"), nullable=True)
 
-    adjustment_type = Column(String(50), nullable=False)       # BONUS, DEDUCTION, OVERTIME
+    adjustment_type = Column(String(50), nullable=False)
     amount = Column(Numeric(30, 8), nullable=False)
     reason = Column(Text, nullable=False)
     approved_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -258,4 +260,5 @@ class PayrollAdjustment(Base):
     __table_args__ = (
         Index("ix_payroll_adjustment_tenant_contract", "tenant_id", "contract_id"),
         Index("ix_payroll_adjustment_payroll", "payroll_id"),
+        Index("ix_payroll_adjustment_created_at", "created_at"),
     )

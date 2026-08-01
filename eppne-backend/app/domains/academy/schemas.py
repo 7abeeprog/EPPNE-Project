@@ -219,18 +219,19 @@ class QuizResult(BaseModel):
     certificate_issued: bool
 
 # ==========================================
-# Enrollment & Progress
+# Enrollment & Progress (مع tenant_id)
 # ==========================================
 class EnrollmentCreate(BaseModel):
     cohort_id: Optional[int] = None
     payment_method: str = "WALLET"
     payment_ref: Optional[str] = None
-    affiliate_code: Optional[str] = None  # ✅ إضافة حقل كود الإحالة
+    affiliate_code: Optional[str] = None
 
 class EnrollmentResponse(BaseModel):
     id: int
     user_id: int
     course_id: int
+    tenant_id: int
     cohort_id: Optional[int]
     payment_method: str
     payment_status: str
@@ -321,6 +322,7 @@ class AIRecommendationResponse(BaseModel):
 
 class CourseAnalyticsResponse(BaseModel):
     course_id: int
+    tenant_id: int
     total_enrollments: int
     total_completions: int
     average_grade: float
@@ -367,16 +369,16 @@ class TaskGradeUpdate(BaseModel):
     status: str = "GRADED"
 
 # ==========================================
-# 🆕 التعديلات الجديدة المضافة:
+# Financial Summary
 # ==========================================
-
-# 1. مخطط التقرير المالي (يستخدمه الـ Router حاليًا)
 class FinancialSummaryResponse(BaseModel):
     total_paid: float = Field(description="إجمالي المدفوعات المحصلة")
     total_overdue: float = Field(description="إجمالي الأقساط المتأخرة غير المسددة")
     model_config = ConfigDict(from_attributes=True)
 
-# 2. مخططات الأقساط المالية (لتكامل نظام الدفع والتقسيط)
+# ==========================================
+# Payment Installments (مع tenant_id)
+# ==========================================
 class PaymentInstallmentCreate(BaseModel):
     user_id: int
     enrollment_id: int
@@ -387,6 +389,7 @@ class PaymentInstallmentCreate(BaseModel):
 
 class PaymentInstallmentResponse(PaymentInstallmentCreate):
     id: int
+    tenant_id: int
     is_paid: bool
     paid_at: Optional[datetime]
     created_at: datetime

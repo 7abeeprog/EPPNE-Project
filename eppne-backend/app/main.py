@@ -1,6 +1,6 @@
 # app/main.py
 from fastapi import FastAPI, Request, status, Depends, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from contextlib import asynccontextmanager
@@ -9,6 +9,7 @@ import time
 import json
 import uuid
 from typing import Dict, Optional, Any
+from sqlalchemy import text
 
 from app.core.database import engine
 from app.core.logging_conf import setup_logging, logger, set_trace_id
@@ -16,14 +17,14 @@ from app.core.errors import SovereignError, IdempotencyError, RateLimitError
 from app.core.redis_client import redis_client
 from app.core.config import settings
 
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+
 # ==========================================
 # استيرادات الإضافات الأساسية
 # ==========================================
 from app.core.database_indexes import create_indexes
-# from app.core.metrics import metrics
 
-# 🔥 استيراد dependencies الخاصة بالمصادقة والصلاحيات
-from app.api.deps import get_current_user, get_current_user_optional, require_sector
+from app.core.security import get_current_user, get_current_user_optional, require_sector
 from app.domains.identity.models import User
 
 # ==========================================
@@ -46,6 +47,7 @@ from app.domains.health.router import router as health_router
 from app.domains.identity.router import router as identity_router
 from app.domains.insurance.router import router as insurance_router
 from app.domains.invitations.router import router as invitations_router
+from app.domains.invoicing.router import router as invoicing_router  # ✅ تم إلغاء التعليق
 from app.domains.iot.router import router as iot_router
 from app.domains.logistics.router import router as logistics_router
 from app.domains.manufacturing.router import router as manufacturing_router
@@ -63,8 +65,6 @@ from app.domains.transport.router import router as transport_router
 from app.domains.digital_twin.router import router as digital_twin_router
 from app.domains.zamakana.router import router as zamakana_router
 
-import sqlalchemy.orm.clsregistry as clsregistry
-
 print("--- فحص سجل كلاسات SQLAlchemy ---")
 
 # ==========================================
@@ -78,16 +78,12 @@ async def lifespan(app: FastAPI):
     """إدارة دورة حياة التطبيق (بدء التشغيل والإيقاف)."""
     logger.info("🚀 إطلاق المنصة السيادية EPPNE...")
     
-    # تهيئة Redis
     await redis_client.initialize()
-    
-    # إنشاء الفهارس في قاعدة البيانات
     await create_indexes()
     
     logger.info("✅ تم تهيئة جميع المكونات الأساسية.")
     yield
     
-    # تنظيف الموارد عند الإيقاف
     await engine.dispose()
     await redis_client.close()
     logger.info("🛑 تم إيقاف المنصة السيادية EPPNE.")
@@ -132,17 +128,10 @@ async def rate_limit_error_handler(request: Request, exc: RateLimitError):
 
 
 # ============================================================
-#  🔥 MIDDLEWARE 1: Trace-ID & Request-ID (يُضاف أولاً)
+#  🔥 MIDDLEWARE 1: Trace-ID & Request-ID
 # ============================================================
 @fastapi_app.middleware("http")
 async def trace_id_middleware(request: Request, call_next):
-    """
-    إضافة Trace-ID لكل طلب للربط مع السجلات في بيئة موزعة.
-    - يقرأ X-Trace-ID من الهيدر إن وُجد، أو يُنشئ واحداً جديداً.
-    - يُخزّنه في request.state.trace_id لاستخدامه في السجلات.
-    - يُخزّنه في ContextVar للـ Logging باستخدام set_trace_id().
-    - يُعيده في Response Headers لتتبعه من العميل.
-    """
     trace_id = request.headers.get("X-Trace-ID")
     if not trace_id:
         trace_id = str(uuid.uuid4())
@@ -164,15 +153,10 @@ async def trace_id_middleware(request: Request, call_next):
 
 
 # ============================================================
-#  MIDDLEWARE 2: Idempotency (مع دعم المسار وحفظ الهيدرز)
+#  MIDDLEWARE 2: Idempotency
 # ============================================================
 @fastapi_app.middleware("http")
 async def idempotency_middleware(request: Request, call_next):
-    """
-    تنفيذ Idempotency للطلبات غير الآمنة (POST, PUT, PATCH, DELETE).
-    - يخزن استجابة الطلب الناجح (2xx) مع الهيدرز في Redis لمدة 24 ساعة.
-    - يعيد الاستجابة المخزّنة (مع الهيدرز الأصلية) إذا تكرر نفس المفتاح لنفس المسار.
-    """
     if request.method in ["GET", "HEAD", "OPTIONS"]:
         return await call_next(request)
 
@@ -186,10 +170,13 @@ async def idempotency_middleware(request: Request, call_next):
     cached_response = await redis_client.get_json(cache_key)
     if cached_response:
         logger.info(f"🔄 Idempotency cache hit: {cache_key}")
+        headers = cached_response.get("headers", {})
+        headers["X-Trace-ID"] = getattr(request.state, "trace_id", "unknown")
+        headers["X-Request-ID"] = getattr(request.state, "request_id", "unknown")
         return JSONResponse(
             status_code=cached_response.get("status_code", 200),
             content=cached_response.get("body", {}),
-            headers=cached_response.get("headers", {})
+            headers=headers
         )
 
     response = await call_next(request)
@@ -222,7 +209,21 @@ async def idempotency_middleware(request: Request, call_next):
 
 
 # ============================================================
-#  MIDDLEWARE 3: CORS (السماح بالنطاقات)
+#  MIDDLEWARE 3: Security Headers
+# ============================================================
+@fastapi_app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    return response
+
+
+# ============================================================
+#  MIDDLEWARE 4: CORS
 # ============================================================
 fastapi_app.add_middleware(
     CORSMiddleware,
@@ -236,7 +237,7 @@ fastapi_app.add_middleware(
 
 
 # ============================================================
-#  MIDDLEWARE 4: Trusted Hosts
+#  MIDDLEWARE 5: Trusted Hosts
 # ============================================================
 fastapi_app.add_middleware(
     TrustedHostMiddleware,
@@ -245,7 +246,7 @@ fastapi_app.add_middleware(
 
 
 # ============================================================
-#  MIDDLEWARE 5: أداء (Performance)
+#  MIDDLEWARE 6: أداء (Performance)
 # ============================================================
 @fastapi_app.middleware("http")
 async def performance_middleware(request: Request, call_next):
@@ -262,11 +263,9 @@ async def performance_middleware(request: Request, call_next):
 
 
 # ==========================================
-# 🔥 تضمين جميع الموجهات مع صلاحيات القطاعات (Sector Permissions)
+# 🔥 تضمين جميع الموجهات مع صلاحيات القطاعات
 # ==========================================
-# تعريف كل Router مع القطاع المطلوب (يُستثنى auth_router لأنه عام)
 routers_config = [
-    # (router_obj, prefix_path, tags_list, sector)
     (academy_router, "/academy", ["Academy"], "academy"),
     (affiliate_router, "/affiliate", ["Affiliate"], "affiliate"),
     (agritech_router, "/agritech", ["Agritech"], "agritech"),
@@ -284,6 +283,7 @@ routers_config = [
     (identity_router, "/identity", ["Identity"], "identity"),
     (insurance_router, "/insurance", ["Insurance"], "insurance"),
     (invitations_router, "/invitations", ["Invitations"], "invitations"),
+    (invoicing_router, "/invoicing", ["Invoicing"], "invoicing"),  # ✅ تم إلغاء التعليق
     (iot_router, "/iot", ["IoT"], "iot"),
     (logistics_router, "/logistics", ["Logistics"], "logistics"),
     (manufacturing_router, "/manufacturing", ["Manufacturing"], "manufacturing"),
@@ -301,39 +301,30 @@ routers_config = [
     (zamakana_router, "/zamakana", ["Zamakana"], "zamakana"),
 ]
 
-# تضمين Routers القطاعات مع تطبيق require_sector
 for router_obj, prefix_path, tags_list, sector in routers_config:
     fastapi_app.include_router(
         router_obj,
         prefix="/api",
         tags=tags_list,
-        dependencies=[Depends(require_sector(sector))]  # 🔥 تطبيق صلاحية القطاع
+        dependencies=[Depends(require_sector(sector))]
     )
 
-# 🔥 استثناء Router المصادقة (يُسمح للجميع)
 fastapi_app.include_router(auth_router, prefix="/api", tags=["Authentication"])
 
 
 # ==========================================
-# نقاط النهاية العامة (الصحة والجاهزية) – بدون حماية
+# نقاط النهاية العامة (الصحة والجاهزية)
 # ==========================================
 @fastapi_app.get("/health")
 async def health():
-    """
-    نقطة فحص الصحة (Liveness Probe) – تُستخدم في K8s للتحقق من أن الحاوية تعمل.
-    """
     return {"status": "Sovereign System Operational", "version": "2.0.0"}
 
 
 @fastapi_app.get("/ready")
 async def readiness():
-    """
-    نقطة فحص الجاهزية (Readiness Probe) – تُستخدم في K8s للتحقق من جاهزية الخدمة.
-    تتحقق من: اتصال قاعدة البيانات، اتصال Redis.
-    """
     try:
         async with engine.connect() as conn:
-            await conn.execute("SELECT 1")
+            await conn.execute(text("SELECT 1"))
         await redis_client.ping()
         return {"status": "ready", "components": {"database": "ok", "redis": "ok"}}
     except Exception as e:
@@ -345,14 +336,22 @@ async def readiness():
 
 
 # ==========================================
-# نقاط النهاية للذكاء الاصطناعي (تستخدم optional user)
+# ✅ METRICS ENDPOINT
 # ==========================================
-@fastapi_app.post("/api/ai/chat")
+@fastapi_app.get("/metrics")
+async def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+# ==========================================
+# نقاط النهاية للذكاء الاصطناعي
+# ==========================================
+@fastapi_app.post("/api/ai/chat", response_model=None)
 async def ai_chat(
     request: Request,
     body: Dict[str, Any],
     current_user: Optional[User] = Depends(get_current_user_optional),
-):
+) -> Any:
     from app.services.ai import ai_engine, TaskType
     result = await ai_engine.generate(
         prompt=body.get("prompt", ""),
@@ -367,12 +366,12 @@ async def ai_chat(
     return result
 
 
-@fastapi_app.get("/api/ai/cost")
+@fastapi_app.get("/api/ai/cost", response_model=None)
 async def get_ai_cost(
     model_id: Optional[str] = None,
     period: str = "total",
     current_user: Optional[User] = Depends(get_current_user_optional),
-):
+) -> Any:
     from app.services.ai import CostTracker
     if period == "daily":
         data = await CostTracker.get_daily_cost(model_id) if model_id else {"error": "الرجاء تحديد النموذج"}
@@ -383,11 +382,11 @@ async def get_ai_cost(
     return data
 
 
-@fastapi_app.put("/api/ai/routing")
+@fastapi_app.put("/api/ai/routing", response_model=None)
 async def update_ai_routing(
     percentages: Dict[str, int],
-    current_user: User = Depends(get_current_user),  # يتطلب توكن صالح
-):
+    current_user: User = Depends(get_current_user),
+) -> Any:
     from app.services.ai import AIRouter, AIModelId
     new_percentages = {}
     for key, value in percentages.items():
@@ -423,5 +422,4 @@ async def disconnect(sid):
 async def echo(sid, data):
     await sio.emit('echo_response', {'received': data}, room=sid)
 
-# إنشاء التطبيق النهائي (ASGI)
 app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app, socketio_path='/ws')

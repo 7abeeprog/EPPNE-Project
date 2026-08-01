@@ -1,19 +1,20 @@
-# app/domains/invitations/models.py (الإصدار النهائي المتكامل)
+# app/domains/invitations/models.py (الإصدار النهائي المتكامل - مع ترقية JSONB)
 """
 نماذج قطاع الدعوات والهدايا السيادية – مدعوم بالذكاء الاصطناعي
 """
 from sqlalchemy import (
     Column, Integer, BigInteger, String, ForeignKey, DateTime, Text,
-    Boolean, Numeric, JSON, Enum as SQLEnum, Index, CheckConstraint
+    Boolean, Numeric, Enum as SQLEnum, Index, CheckConstraint, text
 )
+from sqlalchemy.dialects.postgresql import JSONB  # ✅ تم إضافة الاستيراد الصحيح
 from sqlalchemy.sql import func
 from app.core.database import Base
 import enum
 
 
 class InvitationType(str, enum.Enum):
-    GENERAL = "GENERAL"           # رابط عام مفتوح للجميع
-    PRIVATE = "PRIVATE"           # مرسلة لشخص/جهة محددة
+    GENERAL = "GENERAL"
+    PRIVATE = "PRIVATE"
 
 
 class InvitationTargetType(str, enum.Enum):
@@ -89,7 +90,7 @@ class SovereignInvitation(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 جديد
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     sender_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     sender_entity_id = Column(Integer, nullable=True)
@@ -132,6 +133,8 @@ class SovereignInvitation(Base):
         Index("ix_invitation_sender", "sender_user_id", "sender_entity_id"),
         Index("ix_invitation_target", "target_type", "target_user_id"),
         Index("ix_invitation_status_expiry", "status", "expires_at"),
+        Index("ix_invitation_created_at", "created_at"),
+        Index("ix_invitation_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
     )
 
 
@@ -140,8 +143,8 @@ class InvitationTracking(Base):
     __tablename__ = "invitation_tracking"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
     invitation_id = Column(Integer, ForeignKey("sovereign_invitations_v2.id"), nullable=False, index=True)
 
     ip_address = Column(String(45), nullable=True)
@@ -152,12 +155,14 @@ class InvitationTracking(Base):
 
     page_visited = Column(String(255), nullable=True)
     time_spent_seconds = Column(Integer, default=0)
-    actions = Column(JSON, default=list)
+    actions = Column(JSONB, default=list)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         Index("ix_tracking_tenant_invitation", "tenant_id", "invitation_id"),
+        Index("ix_tracking_created_at", "created_at"),
+        Index("ix_tracking_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
     )
 
 
@@ -166,8 +171,8 @@ class InvitationConversation(Base):
     __tablename__ = "invitation_conversations"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
     invitation_id = Column(Integer, ForeignKey("sovereign_invitations_v2.id"), nullable=False, index=True)
 
     visitor_session_id = Column(String(255), nullable=True)
@@ -181,6 +186,8 @@ class InvitationConversation(Base):
 
     __table_args__ = (
         Index("ix_conversation_tenant", "tenant_id"),
+        Index("ix_conversation_created_at", "created_at"),
+        Index("ix_conversation_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
     )
 
 
@@ -189,10 +196,10 @@ class ClientInsight(Base):
     __tablename__ = "client_insights"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)  # 🔥 جديد
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     invitation_id = Column(Integer, ForeignKey("sovereign_invitations_v2.id"), nullable=False, unique=True)
 
-    ai_analysis = Column(JSON, nullable=False)
+    ai_analysis = Column(JSONB, nullable=False)
     recommended_discount = Column(Numeric(5, 2), nullable=True)
     recommended_message_template = Column(Text, nullable=True)
 
@@ -201,6 +208,7 @@ class ClientInsight(Base):
 
     __table_args__ = (
         Index("ix_insight_tenant", "tenant_id"),
+        Index("ix_insight_created_at", "created_at"),
     )
 
 
@@ -210,7 +218,7 @@ class Lead(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 جديد
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     first_name = Column(String(100), nullable=True)
     last_name = Column(String(100), nullable=True)
@@ -225,7 +233,7 @@ class Lead(Base):
     status = Column(SQLEnum(LeadStatus), default=LeadStatus.NEW, index=True)
     score = Column(Integer, default=0)
 
-    social_profiles = Column(JSON, default=dict)
+    social_profiles = Column(JSONB, default=dict)
     notes = Column(Text, nullable=True)
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
 
@@ -240,6 +248,8 @@ class Lead(Base):
     __table_args__ = (
         Index("ix_lead_tenant_email", "tenant_id", "email"),
         Index("ix_lead_tenant_status", "tenant_id", "status"),
+        Index("ix_lead_created_at", "created_at"),
+        Index("ix_lead_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
     )
 
 
@@ -249,7 +259,7 @@ class CustomerInteraction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 جديد
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     lead_id = Column(Integer, ForeignKey("crm_leads.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -257,12 +267,14 @@ class CustomerInteraction(Base):
     interaction_type = Column(SQLEnum(InteractionType), nullable=False)
     title = Column(String(255), nullable=True)
     content = Column(Text, nullable=False)
-    meta_data = Column(JSON, default=dict)
+    meta_data = Column(JSONB, default=dict)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         Index("ix_interaction_tenant_lead", "tenant_id", "lead_id"),
+        Index("ix_interaction_created_at", "created_at"),
+        Index("ix_interaction_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
     )
 
 
@@ -272,12 +284,12 @@ class MarketingCampaign(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 جديد
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     campaign_type = Column(SQLEnum(CampaignType), nullable=False)
-    target_audience = Column(JSON, default=dict)
+    target_audience = Column(JSONB, default=dict)
 
     budget_mrusdt = Column(Numeric(30, 8), default=0)
     spent_mrusdt = Column(Numeric(30, 8), default=0)
@@ -287,7 +299,7 @@ class MarketingCampaign(Base):
 
     status = Column(SQLEnum(CampaignStatus), default=CampaignStatus.DRAFT, index=True)
 
-    channels = Column(JSON, default=list)
+    channels = Column(JSONB, default=list)
 
     total_leads = Column(Integer, default=0)
     converted_leads = Column(Integer, default=0)
@@ -301,6 +313,8 @@ class MarketingCampaign(Base):
     __table_args__ = (
         Index("ix_campaign_tenant", "tenant_id"),
         Index("ix_campaign_tenant_status", "tenant_id", "status"),
+        Index("ix_campaign_created_at", "created_at"),
+        Index("ix_campaign_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
         CheckConstraint("end_date > start_date", name="check_campaign_dates"),
     )
 
@@ -311,7 +325,7 @@ class SupportTicket(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
-    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)  # 🔥 جديد
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     lead_id = Column(Integer, ForeignKey("crm_leads.id"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -328,6 +342,8 @@ class SupportTicket(Base):
 
     __table_args__ = (
         Index("ix_ticket_tenant", "tenant_id"),
+        Index("ix_ticket_created_at", "created_at"),
+        Index("ix_ticket_idempotency_key", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
     )
 
 
@@ -346,4 +362,5 @@ class TicketComment(Base):
 
     __table_args__ = (
         Index("ix_comment_tenant_ticket", "tenant_id", "ticket_id"),
+        Index("ix_comment_created_at", "created_at"),
     )

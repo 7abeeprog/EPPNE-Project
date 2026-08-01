@@ -8,11 +8,14 @@ data:
   ENVIRONMENT: "production"
   LOG_LEVEL: "INFO"
   AWS_REGION: "us-east-1"
-  DATABASE_POOL_SIZE: "20"
-  DATABASE_MAX_OVERFLOW: "40"
+  # ✅ تم رفع قيم تجمع الاتصالات لدعم 5-10 Pods (وحتى 20 في الذروة)
+  DATABASE_POOL_SIZE: "100"        # ✅ كان 20
+  DATABASE_MAX_OVERFLOW: "200"     # ✅ كان 40
   REDIS_MAX_CONNECTIONS: "20"
   RATE_LIMIT_PER_MINUTE: "60"
   WS_HEARTBEAT_INTERVAL: "30"
   # 🔥 إضافة متغيرات إضافية مفيدة
   ACCESS_TOKEN_EXPIRE_MINUTES: "10080"
   REFRESH_TOKEN_EXPIRE_DAYS: "30"
+  # ✅ تمت إضافة UVICORN_WORKERS (قيمة مناسبة لعدد أنوية CPU في العقدة)
+  UVICORN_WORKERS: "8"             # ✅ تمت الإضافة
