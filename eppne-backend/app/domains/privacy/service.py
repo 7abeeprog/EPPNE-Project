@@ -26,17 +26,17 @@ class PrivacyService:
     # ==========================================
     # 1. إعدادات الخصوصية (Privacy Settings)
     # ==========================================
-    async def get_privacy_settings(self, user_id: int) -> PrivacySetting:
+    async def get_privacy_settings(self, user_id: int, tenant_id: int) -> PrivacySetting:
         """جلب إعدادات الخصوصية للمستخدم."""
-        return await self.repo.get_privacy_settings(user_id)
+        return await self.repo.get_privacy_settings(user_id, tenant_id)
 
-    async def update_privacy_settings(self, user_id: int, data: Dict[str, Any]) -> PrivacySetting:
+    async def update_privacy_settings(self, user_id: int, tenant_id: int, data: Dict[str, Any]) -> PrivacySetting:
         """تحديث إعدادات الخصوصية للمستخدم."""
         if "profile_visibility" in data:
             valid_values = ["PUBLIC", "FRIENDS_ONLY", "PRIVATE"]
             if data["profile_visibility"] not in valid_values:
                 raise ValidationError(f"profile_visibility must be one of {valid_values}")
-        return await self.repo.update_privacy_settings(user_id, data)
+        return await self.repo.update_privacy_settings(user_id, tenant_id, data)
 
     # ==========================================
     # 2. تسجيل الموافقات (Consent Logs)
@@ -44,6 +44,7 @@ class PrivacyService:
     async def record_consent(
         self,
         user_id: int,
+        tenant_id: int,
         consent_type: str,
         granted: bool,
         ip: Optional[str],
@@ -57,6 +58,7 @@ class PrivacyService:
 
         return await self.repo.create_consent_log(
             user_id=user_id,
+            tenant_id=tenant_id,
             consent_type=consent_type,
             is_granted=granted,
             ip_address=encrypted_ip,
@@ -70,16 +72,18 @@ class PrivacyService:
     async def request_data_erasure(
         self,
         user_id: int,
+        tenant_id: int,
         target_module: str,
         reason: Optional[str] = None
     ) -> DataErasureRequest:
         """إنشاء طلب محو بيانات جديد."""
-        existing = await self.repo.get_pending_erasure_request(user_id, target_module)
+        existing = await self.repo.get_pending_erasure_request(user_id, tenant_id, target_module)
         if existing:
             raise ValidationError("You already have a pending erasure request for this module.")
 
         return await self.repo.create_erasure_request(
             user_id=user_id,
+            tenant_id=tenant_id,
             target_module=target_module,
             reason=reason,
             status=ErasureStatus.PENDING
@@ -88,20 +92,22 @@ class PrivacyService:
     async def list_erasure_requests(
         self,
         user_id: int,
+        tenant_id: int,
         skip: int = 0,
         limit: int = 20,
         status: Optional[ErasureStatus] = None
     ) -> PaginatedResponse:
         """جلب طلبات محو البيانات للمستخدم مع Pagination."""
-        return await self.repo.list_erasure_requests(user_id, skip, limit, status)
+        return await self.repo.list_erasure_requests(user_id, tenant_id, skip, limit, status)
 
     async def get_pending_erasure_requests_for_admin(
         self,
+        tenant_id: int,
         skip: int = 0,
         limit: int = 20
     ) -> PaginatedResponse:
         """جلب طلبات محو البيانات المعلقة (للمشرفين)."""
-        return await self.repo.get_pending_erasure_requests_for_admin(skip, limit)
+        return await self.repo.get_pending_erasure_requests_for_admin(tenant_id, skip, limit)
 
     # ==========================================
     # 4. معالجة طلبات المحو (Admin Only)
@@ -109,6 +115,7 @@ class PrivacyService:
     async def process_erasure_request(
         self,
         request_id: int,
+        tenant_id: int,
         admin_id: int,
         approve: bool,
         notes: Optional[str] = None
@@ -117,7 +124,7 @@ class PrivacyService:
         if not await is_privacy_officer(admin_id):
             raise PermissionDeniedError("Only Privacy Officers can process erasure requests.")
 
-        request_obj = await self.repo.get_erasure_request(request_id)
+        request_obj = await self.repo.get_erasure_request(request_id, tenant_id)
         if not request_obj:
             raise NotFoundError("Erasure request not found")
 
@@ -131,7 +138,7 @@ class PrivacyService:
 
         async with self.db.begin_nested():
             if approve:
-                await self._erase_module_data(req_user_id, req_module)
+                await self._erase_module_data(req_user_id, req_module, tenant_id)
                 status = ErasureStatus.COMPLETED
                 receipt_tx = f"ERASE-{uuid.uuid4().hex[:16].upper()}"
             else:
@@ -140,6 +147,7 @@ class PrivacyService:
 
             updated_request = await self.repo.update_erasure_request(
                 request_id,
+                tenant_id,
                 status=status,
                 processed_at=datetime.utcnow(),
                 admin_notes=notes,
@@ -154,7 +162,7 @@ class PrivacyService:
                 )
                 task_queue.enqueue(
                     "privacy.tasks.burn_tokens",
-                    args=[req_user_id, receipt_tx],
+                    args=[req_user_id, receipt_tx, tenant_id],
                     queue="blockchain"
                 )
 
@@ -163,23 +171,23 @@ class PrivacyService:
     # ==========================================
     # 5. مسح البيانات الفعلي (Core Logic)
     # ==========================================
-    async def _erase_module_data(self, user_id: int, module: str) -> None:
+    async def _erase_module_data(self, user_id: int, module: str, tenant_id: int) -> None:
         """توجيه الحذف للقطاعات المختارة."""
         try:
             if module in ["identity", "all"]:
-                await self._erase_identity_data(user_id)
+                await self._erase_identity_data(user_id, tenant_id)
             if module in ["academy", "all"]:
-                await self._erase_academy_data(user_id)
+                await self._erase_academy_data(user_id, tenant_id)
             if module in ["finance", "all"]:
-                await self._erase_finance_data(user_id)
+                await self._erase_finance_data(user_id, tenant_id)
             if module in ["commerce", "all"]:
-                await self._erase_commerce_data(user_id)
+                await self._erase_commerce_data(user_id, tenant_id)
             if module in ["health", "all"]:
-                await self._erase_health_data(user_id)
+                await self._erase_health_data(user_id, tenant_id)
             if module in ["iot", "all"]:
-                await self._erase_iot_data(user_id)
+                await self._erase_iot_data(user_id, tenant_id)
             if module in ["realestate", "all"]:
-                await self._erase_realestate_data(user_id)
+                await self._erase_realestate_data(user_id, tenant_id)
         except Exception as e:
             logger.error(f"Failed to erase data for user {user_id} in module {module}: {str(e)}")
             raise
@@ -187,7 +195,7 @@ class PrivacyService:
     # ==========================================
     # 6. المعالج الذري (Atomic Erasure Engine)
     # ==========================================
-    async def _delete_and_tombstone(self, table_name: str, user_id: int, user_column: str = "user_id") -> None:
+    async def _delete_and_tombstone(self, table_name: str, user_id: int, tenant_id: int, user_column: str = "user_id") -> None:
         """تنفيذ الحذف الذري وإنشاء الشواهد."""
         query = text(f"DELETE FROM {table_name} WHERE {user_column} = :uid RETURNING id")
         result = await self.db.execute(query, {"uid": user_id})
@@ -195,6 +203,7 @@ class PrivacyService:
 
         for rec_id in deleted_ids:
             tombstone = TombstoneRecord(
+                tenant_id=tenant_id,
                 table_name=table_name,
                 record_id=rec_id,
                 deleted_by_id=user_id,
@@ -205,40 +214,40 @@ class PrivacyService:
     # ==========================================
     # 7. دوال الحذف المخصصة بالقطاعات
     # ==========================================
-    async def _erase_identity_data(self, user_id: int) -> None:
-        await self._delete_and_tombstone("privacy_settings", user_id)
-        await self._delete_and_tombstone("data_consent_logs", user_id)
+    async def _erase_identity_data(self, user_id: int, tenant_id: int) -> None:
+        await self._delete_and_tombstone("privacy_settings", user_id, tenant_id)
+        await self._delete_and_tombstone("data_consent_logs", user_id, tenant_id)
         # 🔥 لا نحذف سجلات طلبات المحو للحفاظ على أثر التدقيق
-        # await self._delete_and_tombstone("data_erasure_requests", user_id)
+        # await self._delete_and_tombstone("data_erasure_requests", user_id, tenant_id)
 
-    async def _erase_academy_data(self, user_id: int) -> None:
-        await self._delete_and_tombstone("academy_enrollments", user_id)
-        await self._delete_and_tombstone("task_submissions", user_id)
-        await self._delete_and_tombstone("live_attendance", user_id)
-        await self._delete_and_tombstone("student_digital_twins", user_id)
-        await self._delete_and_tombstone("spiritual_certificates", user_id)
-        await self._delete_and_tombstone("sovereign_badges", user_id)
+    async def _erase_academy_data(self, user_id: int, tenant_id: int) -> None:
+        await self._delete_and_tombstone("academy_enrollments", user_id, tenant_id)
+        await self._delete_and_tombstone("task_submissions", user_id, tenant_id)
+        await self._delete_and_tombstone("live_attendance", user_id, tenant_id)
+        await self._delete_and_tombstone("student_digital_twins", user_id, tenant_id)
+        await self._delete_and_tombstone("spiritual_certificates", user_id, tenant_id)
+        await self._delete_and_tombstone("sovereign_badges", user_id, tenant_id)
 
-    async def _erase_finance_data(self, user_id: int) -> None:
-        await self._delete_and_tombstone("transactions", user_id)
-        await self._delete_and_tombstone("payment_installments", user_id)
-        await self._delete_and_tombstone("wallets", user_id)
+    async def _erase_finance_data(self, user_id: int, tenant_id: int) -> None:
+        await self._delete_and_tombstone("transactions", user_id, tenant_id)
+        await self._delete_and_tombstone("payment_installments", user_id, tenant_id)
+        await self._delete_and_tombstone("wallets", user_id, tenant_id)
 
-    async def _erase_commerce_data(self, user_id: int) -> None:
-        await self._delete_and_tombstone("orders", user_id)
-        await self._delete_and_tombstone("carts", user_id)
+    async def _erase_commerce_data(self, user_id: int, tenant_id: int) -> None:
+        await self._delete_and_tombstone("orders", user_id, tenant_id)
+        await self._delete_and_tombstone("carts", user_id, tenant_id)
 
-    async def _erase_health_data(self, user_id: int) -> None:
-        await self._delete_and_tombstone("health_records", user_id)
-        await self._delete_and_tombstone("biometrics", user_id)
+    async def _erase_health_data(self, user_id: int, tenant_id: int) -> None:
+        await self._delete_and_tombstone("health_records", user_id, tenant_id)
+        await self._delete_and_tombstone("biometrics", user_id, tenant_id)
 
-    async def _erase_iot_data(self, user_id: int) -> None:
-        await self._delete_and_tombstone("sensor_data", user_id)
-        await self._delete_and_tombstone("devices", user_id)
+    async def _erase_iot_data(self, user_id: int, tenant_id: int) -> None:
+        await self._delete_and_tombstone("sensor_data", user_id, tenant_id)
+        await self._delete_and_tombstone("devices", user_id, tenant_id)
 
-    async def _erase_realestate_data(self, user_id: int) -> None:
-        await self._delete_and_tombstone("properties", user_id, user_column="owner_id")
-        await self._delete_and_tombstone("leases", user_id, user_column="tenant_id")
+    async def _erase_realestate_data(self, user_id: int, tenant_id: int) -> None:
+        await self._delete_and_tombstone("properties", user_id, tenant_id, user_column="owner_id")
+        await self._delete_and_tombstone("leases", user_id, tenant_id, user_column="tenant_id")
 
     # ==========================================
     # 8. دوال المهام الخلفية (Background Tasks)
@@ -257,11 +266,11 @@ class PrivacyService:
             await self.db.rollback()
             raise
 
-    async def _async_burn_tokens(self, user_id: int, receipt_tx: str) -> None:
+    async def _async_burn_tokens(self, user_id: int, receipt_tx: str, tenant_id: int) -> None:
         try:
             logger.info(f"Burning tokens for user {user_id} with receipt {receipt_tx}")
-            await self.repo.update_tombstone_by_tx(receipt_tx, 'blockchain_burn_status', ErasureStatus.COMPLETED)
+            await self.repo.update_tombstone_by_tx(receipt_tx, 'blockchain_burn_status', ErasureStatus.COMPLETED, tenant_id)
         except Exception as e:
             logger.error(f"Failed to burn tokens for user {user_id}: {str(e)}")
-            await self.repo.update_tombstone_by_tx(receipt_tx, 'blockchain_burn_status', ErasureStatus.REJECTED)
+            await self.repo.update_tombstone_by_tx(receipt_tx, 'blockchain_burn_status', ErasureStatus.REJECTED, tenant_id)
             raise

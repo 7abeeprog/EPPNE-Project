@@ -38,15 +38,16 @@ async def get_current_user(
     try:
         payload = decode_token(access_token)
         user_id: str = payload.get("sub")  # type: ignore
+        token_tenant_id = payload.get("tenant_id")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token (missing subject)")
     except ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
-    
+
     repo = UserRepository(db)
-    user = await repo.get_by_id(int(user_id))
+    user = await repo.get_by_id(int(user_id), token_tenant_id)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     if not user.is_active:  # type: ignore
@@ -223,10 +224,11 @@ async def get_current_user_optional(
     try:
         payload = decode_token(token)
         user_id = payload.get("sub")
+        token_tenant_id = payload.get("tenant_id")
         if not user_id:
             return None
         repo = UserRepository(db)
-        user = await repo.get_by_id(int(user_id))
+        user = await repo.get_by_id(int(user_id), token_tenant_id)
         return user if user and user.is_active else None  # type: ignore
     except (JWTError, ExpiredSignatureError, ValueError):
         return None

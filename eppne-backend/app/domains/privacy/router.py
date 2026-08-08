@@ -32,7 +32,7 @@ async def get_privacy_settings(
     """جلب إعدادات الخصوصية للمستخدم الحالي."""
     service = PrivacyService(db)
     user_id = cast(int, current_user.id)
-    settings = await service.get_privacy_settings(user_id)
+    settings = await service.get_privacy_settings(user_id, cast(int, current_user.tenant_id))
     return settings
 
 
@@ -53,6 +53,7 @@ async def update_privacy_settings(
     try:
         settings = await service.update_privacy_settings(
             user_id,
+            cast(int, current_user.tenant_id),
             data.model_dump(exclude_unset=True)
         )
         return settings
@@ -90,6 +91,7 @@ async def log_consent(
 
         await service.record_consent(
             user_id,
+            cast(int, current_user.tenant_id),
             consent_type,
             granted,
             ip,
@@ -126,6 +128,7 @@ async def request_data_erasure(
     try:
         request_obj = await service.request_data_erasure(
             user_id,
+            cast(int, current_user.tenant_id),
             data.target_module,
             data.reason
         )
@@ -167,6 +170,7 @@ async def list_my_erasure_requests(
 
     result = await service.list_erasure_requests(
         user_id,
+        cast(int, current_user.tenant_id),
         skip=skip,
         limit=limit,
         status=status_enum
@@ -197,6 +201,7 @@ async def process_erasure_request(
     try:
         processed = await service.process_erasure_request(
             request_id,
+            cast(int, current_user.tenant_id),
             admin_id,
             approve,
             notes
@@ -234,6 +239,7 @@ async def get_pending_erasure_requests(
 
     service = PrivacyService(db)
     result = await service.get_pending_erasure_requests_for_admin(
+        tenant_id=cast(int, current_user.tenant_id),
         skip=skip,
         limit=limit
     )

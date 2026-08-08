@@ -58,50 +58,50 @@ class IoTService:
     # 1. عمليات الأصول (Assets)
     # ============================================================
 
-    async def create_asset(self, owner_id: int, data: Dict[str, Any]) -> SmartAsset:
+    async def create_asset(self, owner_id: int, tenant_id: int, data: Dict[str, Any]) -> SmartAsset:
         async with self.db.begin_nested():
-            asset = await self.repo.create_asset(owner_id=owner_id, **data)
+            asset = await self.repo.create_asset(tenant_id=tenant_id, owner_id=owner_id, **data)
             return asset
 
-    async def get_asset(self, asset_id: int, user_id: int) -> Optional[SmartAsset]:
-        asset = await self.repo.get_asset(asset_id)
+    async def get_asset(self, asset_id: int, user_id: int, tenant_id: int) -> Optional[SmartAsset]:
+        asset = await self.repo.get_asset(asset_id, tenant_id)
         if not asset or asset.owner_id != user_id:  # type: ignore
             raise NotFoundError("Asset not found or not owned")
         return asset
 
-    async def list_assets(self, user_id: int, asset_class: Optional[str] = None, skip: int = 0, limit: int = 100):
-        cache_key = f"user_assets:{user_id}:{asset_class or 'all'}:{skip}:{limit}"
+    async def list_assets(self, user_id: int, tenant_id: int, asset_class: Optional[str] = None, skip: int = 0, limit: int = 100):
+        cache_key = f"user_assets:{tenant_id}:{user_id}:{asset_class or 'all'}:{skip}:{limit}"
         cached = await self.redis.get(cache_key)
         if cached:
             return json.loads(cached)
-        assets = await self.repo.list_assets(owner_id=user_id, asset_class=asset_class, skip=skip, limit=limit)
+        assets = await self.repo.list_assets(tenant_id, owner_id=user_id, asset_class=asset_class, skip=skip, limit=limit)
         await self.redis.setex(cache_key, 300, json.dumps([a.__dict__ for a in assets], default=str))
         return assets
 
-    async def update_asset(self, asset_id: int, user_id: int, data: Dict[str, Any]) -> SmartAsset:
+    async def update_asset(self, asset_id: int, user_id: int, tenant_id: int, data: Dict[str, Any]) -> SmartAsset:
         async with self.db.begin_nested():
-            asset = await self.repo.get_asset(asset_id)
+            asset = await self.repo.get_asset(asset_id, tenant_id)
             if not asset or asset.owner_id != user_id:  # type: ignore
                 raise NotFoundError("Asset not found or not owned")
-            updated = await self.repo.update_asset(asset_id, **data)
-            await self.redis.delete(f"user_assets:{user_id}:*")
+            updated = await self.repo.update_asset(asset_id, tenant_id, **data)
+            await self.redis.delete(f"user_assets:{tenant_id}:{user_id}:*")
             return updated
 
     # ============================================================
     # 2. عمليات المحطات (Grids) – للمشرف فقط
     # ============================================================
 
-    async def create_grid(self, data: Dict[str, Any]) -> UtilityGrid:
+    async def create_grid(self, tenant_id: int, data: Dict[str, Any]) -> UtilityGrid:
         async with self.db.begin_nested():
-            grid = await self.repo.create_grid(**data)
+            grid = await self.repo.create_grid(tenant_id, **data)
             return grid
 
-    async def list_grids(self, grid_type: Optional[str] = None, skip: int = 0, limit: int = 50):
-        cache_key = f"grids:{grid_type or 'all'}:{skip}:{limit}"
+    async def list_grids(self, tenant_id: int, grid_type: Optional[str] = None, skip: int = 0, limit: int = 50):
+        cache_key = f"grids:{tenant_id}:{grid_type or 'all'}:{skip}:{limit}"
         cached = await self.redis.get(cache_key)
         if cached:
             return json.loads(cached)
-        grids = await self.repo.list_grids(grid_type, skip, limit)
+        grids = await self.repo.list_grids(tenant_id, grid_type, skip, limit)
         await self.redis.setex(cache_key, 600, json.dumps([g.__dict__ for g in grids], default=str))
         return grids
 
@@ -111,6 +111,7 @@ class IoTService:
 
     async def record_reading(
         self,
+        tenant_id: int,
         data: Dict[str, Any],
         idempotency_key: Optional[str] = None,
         ip: Optional[str] = None,
@@ -134,15 +135,16 @@ class IoTService:
             data['carbon_emissions_mt'] = carbon_mt
             data['carbon_credits_generated'] = carbon_credits
 
-            reading = await self.repo.create_reading(**data)
+            reading = await self.repo.create_reading(tenant_id, **data)
 
             if reading.grid_id and reading.consumed_value > 0:  # type: ignore
-                grid = await self.repo.get_grid(reading.grid_id)  # type: ignore
+                grid = await self.repo.get_grid(reading.grid_id, tenant_id)  # type: ignore
                 if grid:
                     new_load = Decimal(grid.current_load) + Decimal(reading.consumed_value)  # type: ignore
-                    await self.repo.update_grid_load(grid.id, new_load)  # type: ignore
+                    await self.repo.update_grid_load(grid.id, tenant_id, new_load)  # type: ignore
 
             await self.repo.log_request(
+                tenant_id=tenant_id,
                 user_id=None,
                 endpoint="/iot/readings",
                 method="POST",
@@ -164,11 +166,12 @@ class IoTService:
     async def get_readings(
         self,
         user_id: int,
+        tenant_id: int,
         asset_id: Optional[int] = None,
         grid_id: Optional[int] = None,
         limit: int = 100
     ):
-        return await self.repo.list_readings(asset_id, grid_id, owner_id=user_id, limit=limit)
+        return await self.repo.list_readings(tenant_id, asset_id, grid_id, owner_id=user_id, limit=limit)
 
     # ============================================================
     # 4. تسييل الكربون (Carbon Settlement) – مع Idempotency
@@ -177,6 +180,7 @@ class IoTService:
     async def settle_carbon_credits(
         self,
         owner_id: int,
+        tenant_id: int,
         asset_ids: Optional[List[int]] = None,
         idempotency_key: Optional[str] = None,
         ip: Optional[str] = None,
@@ -189,7 +193,7 @@ class IoTService:
                 return cached
 
         async with self.db.begin_nested():
-            unsettled = await self.repo.get_unsettled_carbon_credits(owner_id)
+            unsettled = await self.repo.get_unsettled_carbon_credits(owner_id, tenant_id)
             if asset_ids:
                 unsettled = [r for r in unsettled if r.asset_id in asset_ids]  # type: ignore
 
@@ -216,9 +220,10 @@ class IoTService:
             except Exception as e:
                 raise BusinessError(f"فشل الإيداع المالي: {str(e)}")
 
-            await self.repo.mark_carbon_settled(cast(Any, reading_ids))
+            await self.repo.mark_carbon_settled(cast(Any, reading_ids), tenant_id)
 
             await self.repo.log_request(
+                tenant_id=tenant_id,
                 user_id=owner_id,
                 endpoint="/iot/carbon/settle",
                 method="POST",
@@ -246,12 +251,12 @@ class IoTService:
     # 5. الصيانة (Maintenance)
     # ============================================================
 
-    async def create_maintenance(self, data: Dict[str, Any]) -> MaintenanceLog:
+    async def create_maintenance(self, tenant_id: int, data: Dict[str, Any]) -> MaintenanceLog:
         async with self.db.begin_nested():
-            log = await self.repo.create_maintenance(**data)
+            log = await self.repo.create_maintenance(tenant_id, **data)
             return log
 
-    async def resolve_maintenance(self, log_id: int, technician_id: int) -> MaintenanceLog:
+    async def resolve_maintenance(self, log_id: int, technician_id: int, tenant_id: int) -> MaintenanceLog:
         async with self.db.begin_nested():
-            log = await self.repo.resolve_maintenance(log_id, technician_id)
+            log = await self.repo.resolve_maintenance(log_id, technician_id, tenant_id)
             return log

@@ -24,7 +24,7 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 # ==========================================
 from app.core.database_indexes import create_indexes
 
-from app.core.security import get_current_user, get_current_user_optional, require_sector
+from app.core.security import get_current_user, get_current_user_optional, require_sector, get_current_active_user, get_current_superuser
 from app.domains.identity.models import User
 
 # ==========================================
@@ -36,7 +36,7 @@ from app.domains.agritech.router import router as agritech_router
 from app.domains.ai_agents.router import router as ai_agents_router
 from app.domains.ai_governance.router import router as ai_governance_router
 from app.domains.arbitration_syndicates.router import router as arbitration_syndicates_router
-from app.domains.auth.router import router as auth_router
+from app.domains.auth.router import router as auth_router, protected_router as auth_protected_router
 from app.domains.automation.router import router as automation_router
 from app.domains.command.router import router as command_router
 from app.domains.commerce.router import router as commerce_router
@@ -44,7 +44,7 @@ from app.domains.communications.router import router as communications_router
 from app.domains.employment.router import router as employment_router
 from app.domains.finance.router import router as finance_router
 from app.domains.health.router import router as health_router
-from app.domains.identity.router import router as identity_router
+from app.domains.identity.router import router as identity_router, protected_router as identity_protected_router
 from app.domains.insurance.router import router as insurance_router
 from app.domains.invitations.router import router as invitations_router
 from app.domains.invoicing.router import router as invoicing_router  # ✅ تم إلغاء التعليق
@@ -280,7 +280,6 @@ routers_config = [
     (employment_router, "/employment", ["Employment"], "employment"),
     (finance_router, "/finance", ["Finance"], "finance"),
     (health_router, "/health", ["Health"], "health"),
-    (identity_router, "/identity", ["Identity"], "identity"),
     (insurance_router, "/insurance", ["Insurance"], "insurance"),
     (invitations_router, "/invitations", ["Invitations"], "invitations"),
     (invoicing_router, "/invoicing", ["Invoicing"], "invoicing"),  # ✅ تم إلغاء التعليق
@@ -310,6 +309,16 @@ for router_obj, prefix_path, tags_list, sector in routers_config:
     )
 
 fastapi_app.include_router(auth_router, prefix="/api", tags=["Authentication"])
+fastapi_app.include_router(
+    auth_protected_router, prefix="/api", tags=["Authentication"],
+    dependencies=[Depends(get_current_active_user)]
+)
+
+fastapi_app.include_router(identity_router, prefix="/api", tags=["Identity"])
+fastapi_app.include_router(
+    identity_protected_router, prefix="/api", tags=["Identity"],
+    dependencies=[Depends(get_current_active_user)]
+)
 
 
 # ==========================================
@@ -385,7 +394,7 @@ async def get_ai_cost(
 @fastapi_app.put("/api/ai/routing", response_model=None)
 async def update_ai_routing(
     percentages: Dict[str, int],
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_superuser),
 ) -> Any:
     from app.services.ai import AIRouter, AIModelId
     new_percentages = {}

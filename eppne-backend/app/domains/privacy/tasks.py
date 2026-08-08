@@ -88,7 +88,7 @@ def unpin_from_ipfs(self, user_id: int, module: str):
     time_limit=300,                    # 5 دقائق (البلوكشين أسرع من IPFS)
     soft_time_limit=240,
 )
-def burn_tokens(self, user_id: int, receipt_tx: str):
+def burn_tokens(self, user_id: int, receipt_tx: str, tenant_id: int):
     """
     مهمة خلفية لحرق التوكنات على البلوكشين.
     - تُستدعى عند طلب حذف الحساب أو تحويل الأصول.
@@ -99,7 +99,7 @@ def burn_tokens(self, user_id: int, receipt_tx: str):
         async def _run():
             async with SessionLocal() as db:
                 service = PrivacyService(db)
-                await service._async_burn_tokens(user_id, receipt_tx)
+                await service._async_burn_tokens(user_id, receipt_tx, tenant_id)
                 logger.info(f"✅ Tokens burned for user {user_id}, tx: {receipt_tx}")
                 return {
                     "status": "success",

@@ -30,6 +30,7 @@ class PrivacySetting(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
 
     profile_visibility = Column(String(50), default="PUBLIC")
@@ -50,6 +51,7 @@ class DataConsentLog(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     consent_type = Column(SQLEnum(ConsentType), nullable=False)
     is_granted = Column(Boolean, nullable=False)
@@ -71,6 +73,7 @@ class DataErasureRequest(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     target_module = Column(String(100), nullable=False)
@@ -101,6 +104,7 @@ class TombstoneRecord(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     table_name = Column(String(100), nullable=False, index=True)
     record_id = Column(Integer, nullable=False, index=True)
     erasure_request_id = Column(Integer, ForeignKey("data_erasure_requests.id"), nullable=True)
