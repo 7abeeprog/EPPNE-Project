@@ -17,7 +17,7 @@ class JWTService:
 
     def __init__(self):
         self.algorithm = getattr(settings, 'ALGORITHM', 'HS256')
-        self.secret_key = getattr(settings, 'SECRET_KEY', 'default_secret')
+        self.secret_key = settings.SECRET_KEY.get_secret_value()
         self.access_token_expire_minutes = getattr(settings, 'ACCESS_TOKEN_EXPIRE_MINUTES', 30)
         self.refresh_token_expire_days = getattr(settings, 'REFRESH_TOKEN_EXPIRE_DAYS', 7)
 

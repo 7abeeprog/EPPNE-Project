@@ -23,7 +23,6 @@ from app.core.config import settings
 
 # المستوى 1: القطاعات السيادية الأساسية
 from app.domains.identity.models import *
-from app.domains.auth.models import *
 from app.domains.saas.models import *
 from app.domains.sovereign_entities.models import *
 

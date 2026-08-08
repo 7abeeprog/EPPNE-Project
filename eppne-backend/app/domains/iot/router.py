@@ -28,6 +28,7 @@ async def create_asset(
     service = IoTService(db)
     asset = await service.create_asset(
         owner_id=cast(int, current_user.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump()
     )
     return asset
@@ -45,6 +46,7 @@ async def list_my_assets(
     service = IoTService(db)
     assets = await service.list_assets(
         user_id=cast(int, current_user.id),
+        tenant_id=cast(int, current_user.tenant_id),
         asset_class=asset_class,
         skip=skip,
         limit=limit
@@ -62,7 +64,8 @@ async def get_asset(
     service = IoTService(db)
     asset = await service.get_asset(
         asset_id=asset_id,
-        user_id=cast(int, current_user.id)
+        user_id=cast(int, current_user.id),
+        tenant_id=cast(int, current_user.tenant_id)
     )
     return asset
 
@@ -79,6 +82,7 @@ async def update_asset(
     updated = await service.update_asset(
         asset_id=asset_id,
         user_id=cast(int, current_user.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump(exclude_unset=True)
     )
     return updated
@@ -96,7 +100,7 @@ async def create_grid(
     db: AsyncSession = Depends(get_db)
 ):
     service = IoTService(db)
-    grid = await service.create_grid(data=data.model_dump())
+    grid = await service.create_grid(tenant_id=cast(int, current_user.tenant_id), data=data.model_dump())
     return grid
 
 
@@ -111,6 +115,7 @@ async def list_grids(
 ):
     service = IoTService(db)
     grids = await service.list_grids(
+        tenant_id=cast(int, current_user.tenant_id),
         grid_type=grid_type,
         skip=skip,
         limit=limit
@@ -136,6 +141,7 @@ async def ingest_reading(
     user_agent = request.headers.get("user-agent")
     idem_key = idempotency_key or f"READ-{uuid.uuid4().hex[:12]}"
     result = await service.record_reading(
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump(),
         idempotency_key=idem_key,
         ip=client_ip,
@@ -156,6 +162,7 @@ async def get_readings(
     service = IoTService(db)
     readings = await service.get_readings(
         user_id=cast(int, current_user.id),
+        tenant_id=cast(int, current_user.tenant_id),
         asset_id=asset_id,
         grid_id=grid_id,
         limit=limit
@@ -182,6 +189,7 @@ async def settle_carbon(
     idem_key = idempotency_key or f"SETTLE-{uuid.uuid4().hex[:12]}"
     result = await service.settle_carbon_credits(
         owner_id=cast(int, current_user.id),
+        tenant_id=cast(int, current_user.tenant_id),
         asset_ids=payload.asset_ids,
         idempotency_key=idem_key,
         ip=client_ip,
@@ -202,7 +210,7 @@ async def report_maintenance(
     db: AsyncSession = Depends(get_db)
 ):
     service = IoTService(db)
-    log = await service.create_maintenance(data=data.model_dump())
+    log = await service.create_maintenance(tenant_id=cast(int, current_user.tenant_id), data=data.model_dump())
     return log
 
 
@@ -216,6 +224,7 @@ async def resolve_maintenance(
     service = IoTService(db)
     log = await service.resolve_maintenance(
         log_id=log_id,
-        technician_id=cast(int, current_user.id)
+        technician_id=cast(int, current_user.id),
+        tenant_id=cast(int, current_user.tenant_id)
     )
     return log

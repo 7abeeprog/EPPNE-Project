@@ -57,3 +57,14 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = Field(default="bearer")
+
+class SessionInfoResponse(BaseModel):
+    id: int = Field(description="معرف جلسة Refresh Token")
+    device_name: Optional[str] = Field(default=None, description="اسم الجهاز")
+    ip_address: Optional[str] = Field(default=None, description="عنوان IP")
+    user_agent: Optional[str] = Field(default=None, description="متصفح المستخدم")
+    created_at: datetime = Field(description="تاريخ الإنشاء")
+    expires_at: datetime = Field(description="تاريخ الانتهاء")
+    is_active: bool = Field(description="هل الجلسة نشطة (غير ملغاة)")
+
+    model_config = ConfigDict(from_attributes=True)

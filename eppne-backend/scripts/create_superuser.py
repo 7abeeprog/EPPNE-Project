@@ -7,8 +7,6 @@ load_dotenv()
 # باقي استدعاءات الملف الطبيعية
 import asyncio
 from app.core.database import AsyncSessionLocal
-import app.domains.auth.models  # 👈 السطر الجديد
-
 from app.core.config import settings
 # ... (باقي الكود كما هو)
 from sqlalchemy.ext.asyncio import AsyncSession

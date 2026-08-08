@@ -42,6 +42,7 @@ class SmartAsset(Base):
     __tablename__ = "smart_assets"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     entity_id = Column(Integer, nullable=True, index=True)
     owner_id = Column(BigInteger, ForeignKey("users.id"), nullable=True, index=True)
 
@@ -73,6 +74,7 @@ class UtilityGrid(Base):
     __tablename__ = "utility_grids"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     development_id = Column(Integer, nullable=True, index=True)
     entity_id = Column(Integer, nullable=True, index=True)
     name = Column(String(255), nullable=False)
@@ -96,6 +98,7 @@ class UtilityReading(Base):
     __tablename__ = "utility_readings"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     grid_id = Column(Integer, ForeignKey("utility_grids.id"), nullable=True, index=True)
     asset_id = Column(Integer, ForeignKey("smart_assets.id"), nullable=True, index=True)
 
@@ -124,6 +127,7 @@ class MaintenanceLog(Base):
     __tablename__ = "maintenance_logs"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     asset_id = Column(Integer, ForeignKey("smart_assets.id"), nullable=True, index=True)
     grid_id = Column(Integer, ForeignKey("utility_grids.id"), nullable=True, index=True)
 
@@ -152,6 +156,7 @@ class IdempotencyRecord(Base):
     __tablename__ = "idempotency_records"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     key = Column(String(64), unique=True, nullable=False, index=True)
     response_data = Column(JSONB, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -168,6 +173,7 @@ class IoTRequestLog(Base):
     __tablename__ = "iot_request_logs"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(BigInteger, ForeignKey("users.id"), nullable=True, index=True)
     endpoint = Column(String(255), nullable=False)
     method = Column(String(10), nullable=False)

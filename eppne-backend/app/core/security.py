@@ -3,7 +3,7 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Cookie
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from jose import jwt, JWTError, ExpiredSignatureError
@@ -98,17 +98,18 @@ def encrypt_ip(ip: str) -> str:
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: AsyncSession = Depends(get_db),
+    cookie_token: Optional[str] = Cookie(None, alias="access_token"),
 ) -> User:
     """
-    الحصول على المستخدم الحالي من التوكن.
+    الحصول على المستخدم الحالي من التوكن (Header Bearer أو HttpOnly Cookie).
     """
-    if not credentials:
+    token = credentials.credentials if credentials else cookie_token
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    token = credentials.credentials
     try:
         payload = decode_token(token)
     except ExpiredSignatureError:
@@ -128,7 +129,7 @@ async def get_current_user(
         raise AuthenticationError("Invalid token payload: missing subject")
 
     user_repo = UserRepository(db)
-    user = await user_repo.get_by_id(int(user_id))
+    user = await user_repo.get_by_id(int(user_id), token_tenant_id)
 
     if not user:
         raise AuthenticationError("User not found")

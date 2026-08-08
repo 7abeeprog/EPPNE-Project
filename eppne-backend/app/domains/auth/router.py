@@ -5,7 +5,8 @@ from typing import Optional, List, cast
 import json
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user, get_current_tenant
+from app.api.deps import get_current_tenant
+from app.core.security import get_current_active_user
 from app.domains.identity.models import User
 from app.domains.auth.service import AuthService
 from app.domains.auth.schemas import *
@@ -16,6 +17,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Sovereign Authentication"])
+protected_router = APIRouter(prefix="/auth", tags=["Sovereign Authentication"])
 
 
 @router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)
@@ -61,7 +63,7 @@ async def refresh_access_token(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@protected_router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 @rate_limit(max_requests=20, window_seconds=60)
 async def logout(
     data: LogoutRequest,
@@ -81,7 +83,7 @@ async def logout(
     return None
 
 
-@router.post("/revoke-all", status_code=status.HTTP_200_OK, response_model=RevokeAllSessionsResponse)
+@protected_router.post("/revoke-all", status_code=status.HTTP_200_OK, response_model=RevokeAllSessionsResponse)
 @rate_limit(max_requests=5, window_seconds=300)
 async def revoke_all_sessions(
     current_user: User = Depends(get_current_active_user),
@@ -95,7 +97,7 @@ async def revoke_all_sessions(
     return {"message": "تم إبطال جميع الجلسات بنجاح", "revoked_count": revoked_count}
 
 
-@router.get("/sessions", response_model=List[SessionInfoResponse])
+@protected_router.get("/sessions", response_model=List[SessionInfoResponse])
 @rate_limit(max_requests=10, window_seconds=60)
 async def get_active_sessions(
     current_user: User = Depends(get_current_active_user),

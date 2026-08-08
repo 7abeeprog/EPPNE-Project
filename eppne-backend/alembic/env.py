@@ -32,7 +32,6 @@ from app.domains.agritech.models import *
 from app.domains.ai_agents.models import *
 from app.domains.ai_governance.models import *
 from app.domains.arbitration_syndicates.models import *
-from app.domains.auth.models import *
 from app.domains.automation.models import *
 from app.domains.command.models import *
 from app.domains.commerce.models import *
