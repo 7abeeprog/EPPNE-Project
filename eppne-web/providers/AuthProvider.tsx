@@ -4,55 +4,35 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth-store";
+import { useMe } from "@/hooks/auth/useAuth";
+
+const PUBLIC_PATHS = ["/login", "/register"];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { setAuth, setLoading, setInitialized, isInitialized, isLoading, isAuthenticated } = useAuthStore();
+  const { isAuthenticated, isLoading, isInitialized, setLoading, setInitialized } = useAuthStore();
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  // ✅ تهيئة المصادقة
+  // ✅ التحقق الفعلي من الجلسة عبر GET /identity/me (الكوكي HttpOnly)
+  // بدل الوثوق بـ localStorage — هذا يُصلح الثغرة الأمنية المسجَّلة في PROGRESS_LOG.md
+  const { isFetched } = useMe();
+
   useEffect(() => {
     if (!isMounted) return;
-
-    const initAuth = async () => {
-      try {
-        setLoading(true);
-        const storedToken = localStorage.getItem("access_token");
-        const storedUser = localStorage.getItem("user");
-
-        if (storedToken && storedUser) {
-          try {
-            const user = JSON.parse(storedUser);
-            setAuth(user, storedToken, localStorage.getItem("refresh_token") || "");
-          } catch {
-            setAuth(null as any, "", "");
-          }
-        } else {
-          setAuth(null as any, "", "");
-        }
-      } catch (error) {
-        console.error("Auth initialization error:", error);
-        setAuth(null as any, "", "");
-      } finally {
-        setLoading(false);
-        setInitialized(true);
-      }
-    };
-
-    initAuth();
-  }, [isMounted, setAuth, setLoading, setInitialized]);
+    setLoading(!isFetched);
+    if (isFetched) setInitialized(true);
+  }, [isMounted, isFetched, setLoading, setInitialized]);
 
   // ✅ التوجيه: يتم تنفيذه في useEffect وليس أثناء الرسم
   useEffect(() => {
-    // انتظر حتى يكتمل التهيئة
     if (!isInitialized || isLoading) return;
 
-    const isAuthPage = pathname === "/login" || pathname === "/register";
+    const isAuthPage = PUBLIC_PATHS.includes(pathname || "");
 
     if (!isAuthenticated && !isAuthPage) {
       router.push("/login");
@@ -76,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   // ✅ منع رسم المحتوى في حالة عدم المصادقة (سيتم التوجيه عبر useEffect)
-  const isAuthPage = pathname === "/login" || pathname === "/register";
+  const isAuthPage = PUBLIC_PATHS.includes(pathname || "");
   if (!isAuthenticated && !isAuthPage) {
     return null;
   }

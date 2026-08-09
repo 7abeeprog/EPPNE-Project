@@ -8,7 +8,11 @@ import { AxiosError } from "axios";
  * - Network Errors → رسالة مفهومة للمستخدم
  * - 422 Validation → عرض تفاصيل الأخطاء
  */
-export const handleError = (error: unknown, context: string): Error => {
+export const handleError = (
+  error: unknown,
+  context: string,
+  options?: { silent401?: boolean }
+): Error => {
   // 1. خطأ الشبكة (انقطاع الإنترنت)
   if (error instanceof TypeError && error.message === "Failed to fetch") {
     console.error(`[${context}] Network Error:`, error);
@@ -30,6 +34,15 @@ export const handleError = (error: unknown, context: string): Error => {
 
     // حالة 401: انتهت صلاحية التوكن
     if (axiosError.response?.status === 401) {
+      // بعض النداءات (تسجيل الدخول، التحقق من الجلسة عند الإقلاع) تتوقع 401
+      // كحالة طبيعية (بيانات خاطئة / زائر غير مسجَّل دخول) وليس "جلسة منتهية"
+      // — silent401 يمنع التوجيه القسري لـ /login الذي كان يسبب حلقة توجيه
+      // على صفحة /login نفسها لأي زائر غير مسجَّل دخول.
+      if (options?.silent401) {
+        const detail = (axiosError.response?.data as any)?.detail;
+        return new Error(typeof detail === "string" ? detail : "غير مصرَّح بالوصول.");
+      }
+
       // محاولة تسجيل الخروج وتنظيف التخزين
       try {
         localStorage.removeItem("auth-storage");

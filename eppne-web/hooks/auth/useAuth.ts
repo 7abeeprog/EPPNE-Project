@@ -4,33 +4,29 @@ import { AuthService } from "@/services/auth.service";
 import { useAuthStore } from "@/store/auth-store";
 import { toast } from "sonner";
 import type {
-  LoginRequest,
-  LoginResponse,
-  RefreshTokenResponse,
   RevokeAllSessionsResponse,
   SessionInfo,
   RegisterRequest,
   RegisterResponse,
+  User,
 } from "@/types/auth";
 
+const ME_QUERY_KEY = ["identity", "me"] as const;
+
 // ==========================================
-// 1. تسجيل الدخول ✅ (السطر 32)
+// 1. تسجيل الدخول (كوكيز HttpOnly فقط — لا localStorage)
 // ==========================================
 export const useLogin = () => {
   const queryClient = useQueryClient();
-  const { setAuth, setAccessToken } = useAuthStore();
+  const { setUser, setAccessToken } = useAuthStore();
 
-  return useMutation<LoginResponse, Error, LoginRequest>({
-    mutationFn: (payload: LoginRequest) => AuthService.login(payload),
-    onSuccess: (data: LoginResponse) => {
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("refresh_token", data.refresh_token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-
-      // ✅ السطر 32: تمرير data.user مباشرة مع as any
-      setAuth(data.user as any, data.access_token, data.refresh_token);
-      setAccessToken(data.access_token);
-      queryClient.setQueryData(["auth", "user"], data.user);
+  return useMutation<any, Error, { username?: string; username_or_email?: string; email?: string; password: string }>({
+    mutationFn: (payload) => AuthService.login(payload),
+    onSuccess: (data) => {
+      setUser(data.user ?? null);
+      // في الذاكرة فقط، لاستثناء WebSocket الوحيد (انظر ملاحظة store/auth-store.ts)
+      if (data.access_token) setAccessToken(data.access_token);
+      queryClient.setQueryData(ME_QUERY_KEY, data.user ?? null);
 
       const username = data.user?.username || "مستخدم";
       toast.success(`مرحباً ${username}! 🚀`);
@@ -58,63 +54,32 @@ export const useRegister = () => {
 };
 
 // ==========================================
-// 3. تجديد Access Token
-// ==========================================
-export const useRefreshToken = () => {
-  const { refreshToken, setAccessToken, clearAuth } = useAuthStore();
-
-  return useMutation<RefreshTokenResponse, Error>({
-    mutationFn: async () => {
-      if (!refreshToken) throw new Error("لا يوجد Refresh Token");
-      return AuthService.refreshToken(refreshToken);
-    },
-    onSuccess: (data: RefreshTokenResponse) => {
-      localStorage.setItem("access_token", data.access_token);
-      setAccessToken(data.access_token);
-    },
-    onError: () => {
-      clearAuth();
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
-      localStorage.removeItem("user");
-      window.location.href = "/login";
-    },
-  });
-};
-
-// ==========================================
-// 4. تسجيل الخروج
+// 3. تسجيل الخروج
 // ==========================================
 export const useLogout = () => {
   const queryClient = useQueryClient();
-  const { refreshToken, clearAuth } = useAuthStore();
+  const { clearAuth } = useAuthStore();
 
   return useMutation({
-    mutationFn: async () => {
-      if (!refreshToken) return;
-      await AuthService.logout(refreshToken);
-    },
+    mutationFn: () => AuthService.logout(),
     onSuccess: () => {
       clearAuth();
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
-      localStorage.removeItem("user");
       queryClient.clear();
       toast.success("تم تسجيل الخروج بنجاح");
       window.location.href = "/login";
     },
     onError: (error: any) => {
+      // حتى لو فشل الاتصال بالخادم، نطرد المستخدم محليًا لحماية البيانات
       clearAuth();
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
-      localStorage.removeItem("user");
+      queryClient.clear();
       toast.error(error.message || "حدث خطأ أثناء تسجيل الخروج");
+      window.location.href = "/login";
     },
   });
 };
 
 // ==========================================
-// 5. إبطال جميع الجلسات
+// 4. إبطال جميع الجلسات
 // ==========================================
 export const useRevokeAllSessions = () => {
   const queryClient = useQueryClient();
@@ -123,7 +88,7 @@ export const useRevokeAllSessions = () => {
     mutationFn: () => AuthService.revokeAllSessions(),
     onSuccess: (data: RevokeAllSessionsResponse) => {
       toast.success(data.message || `تم إبطال ${data.revoked_count} جلسة`);
-      queryClient.invalidateQueries({ queryKey: ["auth", "sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["identity", "sessions"] });
     },
     onError: (error: any) => {
       toast.error(error.message || "فشل إبطال الجلسات");
@@ -132,21 +97,82 @@ export const useRevokeAllSessions = () => {
 };
 
 // ==========================================
-// 6. جلب الجلسات النشطة
+// 5. جلب الجلسات النشطة
 // ==========================================
 export const useActiveSessions = (skip: number = 0, limit: number = 20) => {
   return useQuery<SessionInfo[], Error>({
-    queryKey: ["auth", "sessions", skip, limit],
+    queryKey: ["identity", "sessions", skip, limit],
     queryFn: () => AuthService.getActiveSessions(skip, limit),
     staleTime: 2 * 60 * 1000,
-    enabled: true,
   });
 };
 
 // ==========================================
-// 7. جلب بيانات المستخدم الحالي
+// 6. تغيير كلمة المرور
+// ==========================================
+export const useChangePassword = () => {
+  return useMutation<{ message: string }, Error, { old_password: string; new_password: string }>({
+    mutationFn: (payload) => AuthService.changePassword(payload),
+    onSuccess: (data) => {
+      toast.success(data.message || "تم تغيير كلمة المرور بنجاح");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "فشل تغيير كلمة المرور");
+    },
+  });
+};
+
+// ==========================================
+// 7. التحقق الحقيقي من الجلسة عبر GET /identity/me
+// (المصدر الوحيد للحقيقة — لا وثوق بأي حالة محلية قديمة)
+// ==========================================
+export const useMe = () => {
+  const setUser = useAuthStore((state) => state.setUser);
+  const clearAuth = useAuthStore((state) => state.clearAuth);
+
+  return useQuery<User, Error>({
+    queryKey: ME_QUERY_KEY,
+    queryFn: async () => {
+      try {
+        const user = await AuthService.getMe();
+        setUser(user);
+        return user;
+      } catch (error) {
+        clearAuth();
+        throw error;
+      }
+    },
+    retry: false,
+    staleTime: 60 * 1000,
+  });
+};
+
+// ==========================================
+// 8. جلب بيانات المستخدم الحالي (قيمة مباشرة وليس كائن الاستعلام)
 // ==========================================
 export const useCurrentUser = () => {
-  const { user } = useAuthStore();
-  return user;
+  const { data } = useMe();
+  return data ?? null;
+};
+
+// ==========================================
+// 9. تصدير مركّب يحل محل الاستيرادات المكسورة القديمة
+// ==========================================
+export const useAuth = () => {
+  const loginMutation = useLogin();
+  const logoutMutation = useLogout();
+  const { data: user, isLoading: isFetchingMe } = useMe();
+  const accessToken = useAuthStore((state) => state.accessToken);
+
+  return {
+    user: user ?? null,
+    isFetchingMe,
+    isLoading: isFetchingMe,
+    login: loginMutation.mutateAsync,
+    isLoggingIn: loginMutation.isPending,
+    logout: logoutMutation.mutate,
+    isLoggingOut: logoutMutation.isPending,
+    // للاستخدام الحصري في مصافحة WebSocket (hooks/communications/useWebSocket.ts)
+    token: accessToken,
+  };
 };

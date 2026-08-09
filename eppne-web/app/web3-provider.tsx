@@ -3,7 +3,6 @@ import { mainnet, polygon, bsc } from 'wagmi/chains';
 import { RainbowKitProvider, getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
-import { useAuth } from '@/hooks/use-auth';
 // إعداد Wagmi + RainbowKit
 const config = getDefaultConfig({
   appName: "EPPNE Sovereign Platform",

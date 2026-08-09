@@ -4,11 +4,10 @@
 import { motion } from "framer-motion";
 import { User, Settings, Shield, Wallet } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ProfileForm } from "@/components/identity/ProfileForm";
-import { ChangePasswordForm } from "@/components/identity/ChangePasswordForm";
-import { SessionsList } from "@/components/identity/SessionsList";
-import { WalletCard } from "@/components/identity/WalletCard";
-import { useUserProfile } from "@/hooks/identity/useUserProfile";
+import { ProfileForm } from "@/components/auth/ProfileForm";
+import { ChangePasswordForm } from "@/components/auth/ChangePasswordForm";
+import { SessionsList } from "@/components/auth/SessionsList";
+import { useUserProfile } from "@/hooks/auth/useUserProfile";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const containerVariants = {
@@ -115,7 +114,13 @@ export default function ProfilePage() {
           </TabsContent>
 
           <TabsContent value="wallet" className="mt-6">
-            <WalletCard />
+            <div className="text-center py-20 bg-card/20 backdrop-blur-sm rounded-[2rem] border border-dashed border-primary/20">
+              <Wallet className="mx-auto h-16 w-16 text-primary/30 mb-4" />
+              <h3 className="text-2xl font-black text-foreground">قريبًا</h3>
+              <p className="text-muted-foreground mt-2 text-lg">
+                إدارة المحفظة قيد إعادة البناء ضمن دومين المالية (finance).
+              </p>
+            </div>
           </TabsContent>
         </Tabs>
       </motion.div>
