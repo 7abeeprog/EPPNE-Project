@@ -7,15 +7,16 @@ type User = components['schemas']['UserResponse'];
 
 interface AuthState {
   user: User | null;
+  // في الذاكرة فقط (لا localStorage) — يُستخدم حصريًا لمصافحة WebSocket في
+  // دومين communications (لا يدعم كوكيز HttpOnly عبر نطاق wss:// الفرعي بسهولة).
+  // لا يُستخدم إطلاقًا كـ Authorization header لأي طلب REST؛ الكوكي يكفي هناك.
   accessToken: string | null;
-  refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   isInitialized: boolean;
 
-  setAuth: (user: User | null, accessToken: string, refreshToken: string) => void;
-  setAccessToken: (token: string) => void;
-  setRefreshToken: (token: string) => void;
+  setUser: (user: User | null) => void;
+  setAccessToken: (token: string | null) => void;
   setLoading: (loading: boolean) => void;
   setInitialized: (initialized: boolean) => void;
   clearAuth: () => void;
@@ -27,27 +28,16 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       accessToken: null,
-      refreshToken: null,
       isAuthenticated: false,
       isLoading: true,
       isInitialized: false,
 
-      setAuth: (user, accessToken, refreshToken) => {
-        set({
-          user,
-          accessToken,
-          refreshToken,
-          isAuthenticated: !!user && !!accessToken,
-          isLoading: false,
-        });
+      setUser: (user) => {
+        set({ user, isAuthenticated: !!user, isLoading: false });
       },
 
       setAccessToken: (token) => {
         set({ accessToken: token });
-      },
-
-      setRefreshToken: (token) => {
-        set({ refreshToken: token });
       },
 
       setLoading: (isLoading) => {
@@ -62,7 +52,6 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: null,
           accessToken: null,
-          refreshToken: null,
           isAuthenticated: false,
           isLoading: false,
         });
@@ -72,7 +61,6 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: null,
           accessToken: null,
-          refreshToken: null,
           isAuthenticated: false,
           isLoading: false,
         });

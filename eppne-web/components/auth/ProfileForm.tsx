@@ -1,10 +1,10 @@
-// components/identity/ProfileForm.tsx
+// components/auth/ProfileForm.tsx
 "use client";
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useUpdateProfile } from "@/hooks/identity/useUserProfile";
-import { UserProfile } from "@/types/identity";
+import { useUpdateProfile } from "@/hooks/auth/useUserProfile";
+import type { User as UserData } from "@/types/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,15 +20,15 @@ import {
 } from "@/components/ui/select";
 
 interface ProfileFormProps {
-  user?: UserProfile;
+  user?: UserData;
 }
 
 export function ProfileForm({ user }: ProfileFormProps) {
   const [nameAr, setNameAr] = useState(user?.name_ar || "");
   const [nameEn, setNameEn] = useState(user?.name_en || "");
   const [email, setEmail] = useState(user?.email || "");
-  const [birthDate, setBirthDate] = useState(user?.birth_date?.split("T")[0] || "");
-  const [marriageStatus, setMarriageStatus] = useState(user?.marriage_status || "SINGLE");
+  const birthDate = user?.birth_date?.split("T")[0] || "";
+  const [marriageStatus, setMarriageStatus] = useState<string>(user?.marriage_status || "SINGLE");
   const [languagePreference, setLanguagePreference] = useState(user?.language_preference || "ar");
 
   const updateMutation = useUpdateProfile();
@@ -39,8 +39,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
       name_ar: nameAr.trim(),
       name_en: nameEn.trim(),
       email: email.trim(),
-      birth_date: birthDate || undefined,
-      marriage_status: marriageStatus,
+      marriage_status: marriageStatus as UserData["marriage_status"],
       language_preference: languagePreference,
     });
   };
@@ -102,10 +101,13 @@ export function ProfileForm({ user }: ProfileFormProps) {
               <Input
                 type="date"
                 value={birthDate}
-                onChange={(e) => setBirthDate(e.target.value)}
-                className="h-14 bg-background/50 border-white/10 rounded-xl focus:border-primary shadow-inner text-lg"
-                disabled={updateMutation.isPending}
+                readOnly
+                disabled
+                className="h-14 bg-background/30 border-white/10 rounded-xl shadow-inner text-lg opacity-70 cursor-not-allowed"
               />
+              <p className="text-xs text-muted-foreground">
+                غير قابل للتعديل من هنا حاليًا (لا يدعمه الباك إند بعد).
+              </p>
             </div>
             <div className="space-y-2">
               <Label className="font-bold text-lg text-foreground">الحالة الاجتماعية</Label>

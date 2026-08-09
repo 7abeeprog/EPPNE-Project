@@ -230,3 +230,83 @@ type). التحقق الوظيفي الفعلي (الضغط على الزرّي�
 `eppne-web/components/layout/navbar.tsx`.
 
 ---
+
+## [2026-08-09] — Phase 2 (Frontend) من خطة دمج auth→identity: مكتملة
+ومُتحقَّق من تناسقها بالكامل
+
+**الحالة:** ✅ مكتمل ومُتحقَّق منه (فحص تناسق شامل لكل ملف + `tsc --noEmit`
+نظيف على كامل المشروع + تأكيد وظيفي يدوي في المتصفح للزرّين — انظر الإدخال
+السابق)
+
+**ما تم:** إعادة بناء الفرونت إند بالكامل ليصبح cookie-only، وحذف الكود
+الميت المكرر (`components/identity/*`):
+- `store/auth-store.ts`: أُعيد تصميمه — حذف `accessToken`/`refreshToken`
+  كتخزين دائم؛ الحقل الوحيد المتبقي (`accessToken`) يبقى في الذاكرة فقط
+  ولا يُستخدم كـ Authorization header لأي طلب REST، بل حصريًا لاستثناء
+  مصافحة WebSocket في `hooks/communications/useWebSocket.ts`.
+- `hooks/auth/useAuth.ts`: أُعيد كتابته بالكامل — `useLogin`, `useRegister`,
+  `useLogout`, `useRevokeAllSessions`, `useActiveSessions`,
+  `useChangePassword` (جديد)، `useMe` (استعلام حقيقي `GET /identity/me`
+  بدل قراءة store محلي)، `useCurrentUser`، وتصدير مركّب `useAuth()` ليحل
+  محل كل الاستيرادات المكسورة القديمة.
+- `services/auth.service.ts`: كل الدوال تستهدف مسارات `/identity/*`
+  الصحيحة (بما فيها `GET /identity/sessions` الحقيقي من Phase 1).
+- `lib/api-client.ts`: cookie-based بالكامل، حذف إلحاق `Authorization:
+  Bearer` من الـ Zustand store، تدفق تجديد 401 يعتمد على الكوكي فقط.
+- `providers/AuthProvider.tsx`: يعتمد الآن على `useMe()` الحقيقي بدل الوثوق
+  بـ `localStorage` — هذا الإصلاح الفعلي للثغرة الأمنية المُسجَّلة في
+  الإدخال الثاني أعلاه (2026-08-08).
+- **حذف:** `components/identity/*` بالكامل (7 ملفات كانت معطَّلة أصلًا)،
+  `services/identity.service.ts` (مسارات مضاعفة خاطئة `/identity/identity/*`)،
+  `hooks/use-auth.ts` (تطبيق رابع معطوب لـ`useAuth`).
+- **جديد:** `components/auth/ChangePasswordForm.tsx`,
+  `hooks/auth/useUserProfile.ts`، `components/auth/ProfileForm.tsx` (منقول
+  من identity وأُصلِح — انظر ملاحظة `birth_date` أعلاه)،
+  `components/finance/WalletCard.tsx` (منقول من identity، مُعطَّل عمدًا
+  بوضوح لحين ربطه بدومين finance الحقيقي — خارج نطاق auth/identity).
+- إصلاح استيرادات مكسورة في 8 ملفات كانت تستورد `useAuth`/`useAuth`-shaped
+  hooks من مسارات خاطئة أو غير موجودة (`health/emergency`, `finance/admin`,
+  `digital-twin`, `ai/approvals`, `dashboard/page.tsx`, `web3-provider.tsx`,
+  `useWebSocket.ts`, `profile/page.tsx`).
+
+**التحقق (بناءً على طلب صريح قبل الـcommit):** قراءة كاملة لكل ملف في
+السلسلة (store → hooks → services → provider → api-client → الصفحات
+المستهلِكة)، `grep` شامل للتأكد من صفر استيرادات معلّقة لأي من الملفات
+المحذوفة، وتشغيل `tsc --noEmit` على كامل المشروع — صفر أخطاء type في كل
+سطح auth/identity.
+
+**3 ملاحظات هامشية مكتشفة أثناء التحقق (موثَّقة بوضوح، لا تمنع الإنجاز):**
+1. تكرار بسيط غير ضار: كل من `api-client.ts` (عند فشل تجديد الجلسة)
+   و`error-handler.ts` يُعيدان التوجيه لـ`/login` بشكل مستقل عن بعضهما —
+   ازدواجية كود غير ضارة وظيفيًا، تستحق تبسيطًا لاحقًا.
+2. `src/lib/api-types.ts` (مولَّد آليًا من OpenAPI) قديم — أُنشئ قبل
+   تعديلات Phase 1 بالباك إند، فلا يعرف `GET /identity/sessions` كمسار
+   مستقل (لا يزال يحمل فقط عملية `/api/auth/sessions` القديمة). لا يكسر
+   شيئًا حاليًا لأن الكود يستخدم generics صريحة على `apiClient.get<T>()`
+   وليس بحثًا بالمسار، لكن يستحق إعادة توليد لاحقًا لدقة التوثيق.
+3. **`hooks/communications/useWebSocket.ts`** يستدعي `setWsConnected`
+   و`incrementUnread` من `useNotificationStore()`، لكن هذا الـstore لا
+   يعرّف أيًا منهما إطلاقًا (يعرّف `addNotification` بدلاً منهما، بشكل
+   مختلف) — **bug سابق تمامًا لهذه المهمة** (موجود من قبل أي لمسة لـ
+   Phase 2، مؤكَّد من ملاحظات التحليل الأصلية)، وخارج نطاق auth/identity
+   (دومين `communications`). لم يُلمَس منه عمدًا سوى تصحيح مسار استيراد
+   `useAuth` فيه (ضمن نطاق Phase 2 المتفق عليه). إشعارات WebSocket غير
+   فعّالة حاليًا نتيجة لهذا الـbug، لكنه **ليس ناتجًا عن هذه المهمة** —
+   موثَّق هنا كمرشَّح لمهمة منفصلة لاحقة في دومين communications.
+
+**الملفات المتأثرة:** `eppne-web/store/auth-store.ts`,
+`eppne-web/hooks/auth/useAuth.ts`, `eppne-web/services/auth.service.ts`,
+`eppne-web/lib/api-client.ts`, `eppne-web/lib/error-handler.ts`,
+`eppne-web/providers/AuthProvider.tsx`,
+`eppne-web/components/auth/LoginForm.tsx`,
+`eppne-web/components/auth/ChangePasswordForm.tsx`,
+`eppne-web/components/auth/ProfileForm.tsx`,
+`eppne-web/hooks/auth/useUserProfile.ts`,
+`eppne-web/components/finance/WalletCard.tsx`,
+`eppne-web/app/(dashboard)/profile/page.tsx`,
+`eppne-web/app/(dashboard)/dashboard/page.tsx`, `eppne-web/app/web3-provider.tsx`,
+`eppne-web/hooks/communications/useWebSocket.ts` (سطر الاستيراد فقط)،
+حذف `eppne-web/components/identity/*` (7 ملفات)،
+`eppne-web/services/identity.service.ts`, `eppne-web/hooks/use-auth.ts`.
+
+---

@@ -1,12 +1,28 @@
-// components/identity/WalletCard.tsx
+// components/finance/WalletCard.tsx
+// ملاحظة: نُقل من components/identity/ عند دمج auth→identity (Phase 2). معطَّل
+// حاليًا (غير مستورد من أي صفحة — تبويب "المحفظة" في app/(dashboard)/profile/page.tsx
+// يعرض placeholder بدلًا منه) لأن الأصل كان يستدعي useWallet من
+// hooks/identity/useWallet غير الموجود — هذا الملف يخص دومين finance وإصلاحه
+// خارج نطاق مهمة auth/identity. الـ hook أدناه stub مؤقت فقط لإبقاء الملف
+// قابلًا للـ type-check دون تفعيله فعليًا؛ يحتاج ربطًا حقيقيًا بـ
+// hooks/finance/useWallet.ts قبل إعادة تفعيل هذا المكوّن.
 "use client";
 
-import { motion } from "framer-motion";
-import { useWallet } from "@/hooks/identity/useWallet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Wallet, Shield, ShieldAlert, Loader2 } from "lucide-react";
+import { Wallet, Shield, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+
+interface WalletData {
+  is_frozen: boolean;
+  balances: Record<string, number>;
+}
+
+const useWallet = (): { data: WalletData | undefined; isLoading: boolean; error: Error | null } => ({
+  data: undefined,
+  isLoading: false,
+  error: null,
+});
 
 const CURRENCY_LABELS: Record<string, string> = {
   MR_POUND: "الجنيه السيادي",

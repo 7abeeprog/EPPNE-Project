@@ -26,20 +26,12 @@ export function LoginForm() {
     loginMutation.mutate({ username: username.trim(), password });
   };
 
-  // ✅ زرع الكوكيز والتوجيه الإجباري
+  // ✅ الكوكي الحقيقي HttpOnly مضبوط من الباك إند بالفعل عند نجاح useLogin
   useEffect(() => {
     if (loginMutation.isSuccess) {
-      const responseData: any = loginMutation.data;
-      const token = responseData?.access_token || responseData?.data?.access_token;
-
-      if (token) {
-        document.cookie = `access_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-      }
-
-      toast.success("مرحباً بعودتك! 🚀", { duration: 3000 });
       window.location.href = "/dashboard";
     }
-  }, [loginMutation.isSuccess, loginMutation.data]);
+  }, [loginMutation.isSuccess]);
 
   return (
     <Card className="border-white/10 bg-card/40 backdrop-blur-xl shadow-[0_0_50px_-15px_rgba(var(--primary-rgb),0.2)] rounded-[2rem] overflow-hidden">

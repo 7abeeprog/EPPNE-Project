@@ -16,14 +16,11 @@ let failedQueue: Array<{
   config: InternalAxiosRequestConfig;
 }> = [];
 
-const processQueue = (error: Error | null, token: string | null = null) => {
+const processQueue = (error: Error | null) => {
   failedQueue.forEach((prom) => {
     if (error) {
       prom.reject(error);
     } else {
-      if (prom.config.headers) {
-        prom.config.headers.Authorization = `Bearer ${token}`;
-      }
       prom.resolve(apiClient(prom.config));
     }
   });
@@ -45,11 +42,6 @@ export const apiClient: AxiosInstance = axios.create({
 // ==========================================
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const { accessToken } = useAuthStore.getState();
-    if (accessToken && config.headers) {
-      config.headers.Authorization = `Bearer ${accessToken}`;
-    }
-
     const csrfToken = document.cookie
       .split("; ")
       .find((row) => row.startsWith("csrf_token="))
@@ -83,7 +75,20 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
     const status = error.response.status;
 
-    if (status === 401 && !originalRequest._retry) {
+    // نقاط تحقق/تأسيس الجلسة: 401 هنا حالة طبيعية متوقعة (زائر غير مسجَّل
+    // دخول، أو بيانات دخول خاطئة) وليس "جلسة منتهية" — لا يجب محاولة تجديد
+    // التوكن ولا التوجيه القسري لـ /login (كان سيسبب حلقة توجيه على صفحة
+    // /login نفسها لأي زائر غير مسجَّل، لأن AuthProvider يستدعي GET
+    // /identity/me عند تحميل كل صفحة).
+    const requestUrl = originalRequest.url || "";
+    const requestMethod = (originalRequest.method || "get").toLowerCase();
+    const isAuthBootstrapCall =
+      (requestMethod === "get" && requestUrl.includes("/identity/me")) ||
+      requestUrl.includes("/identity/login") ||
+      requestUrl.includes("/identity/register") ||
+      requestUrl.includes("/identity/refresh");
+
+    if (status === 401 && !isAuthBootstrapCall && !originalRequest._retry) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject, config: originalRequest });
@@ -94,23 +99,13 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const storedRefreshToken = localStorage.getItem("refresh_token") || "";
-        const response = await axios.post(
-          `${BASE_URL}/identity/refresh`, // 🎯 تم تصحيح المسار إلى identity بدلاً من auth
-          { refresh_token: storedRefreshToken },
-          { withCredentials: true }
-        );
-        const newAccessToken = response.data.access_token;
-        useAuthStore.getState().setAccessToken(newAccessToken);
+        // الكوكيز HttpOnly تُرسَل تلقائيًا عبر withCredentials؛ لا حاجة لأي body أو header يدوي
+        await axios.post(`${BASE_URL}/identity/refresh`, undefined, { withCredentials: true });
 
-        processQueue(null, newAccessToken);
-
-        if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-        }
+        processQueue(null);
         return apiClient(originalRequest);
       } catch (refreshError) {
-        processQueue(refreshError as Error, null);
+        processQueue(refreshError as Error);
         useAuthStore.getState().clearAuth();
         window.location.href = "/login";
         return Promise.reject(refreshError);
