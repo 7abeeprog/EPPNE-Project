@@ -1,4 +1,4 @@
-// hooks/auth/useUserProfile.ts
+// hooks/identity/useUserProfile.ts
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMe } from "./useAuth";
 import { AuthService } from "@/services/auth.service";

@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth-store";
-import { useMe } from "@/hooks/auth/useAuth";
+import { useMe } from "@/hooks/identity/useAuth";
 
 const PUBLIC_PATHS = ["/login", "/register"];
 

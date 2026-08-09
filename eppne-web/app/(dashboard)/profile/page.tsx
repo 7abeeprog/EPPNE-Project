@@ -4,10 +4,10 @@
 import { motion } from "framer-motion";
 import { User, Settings, Shield, Wallet } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ProfileForm } from "@/components/auth/ProfileForm";
-import { ChangePasswordForm } from "@/components/auth/ChangePasswordForm";
-import { SessionsList } from "@/components/auth/SessionsList";
-import { useUserProfile } from "@/hooks/auth/useUserProfile";
+import { ProfileForm } from "@/components/identity/ProfileForm";
+import { ChangePasswordForm } from "@/components/identity/ChangePasswordForm";
+import { SessionsList } from "@/components/identity/SessionsList";
+import { useUserProfile } from "@/hooks/identity/useUserProfile";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const containerVariants = {

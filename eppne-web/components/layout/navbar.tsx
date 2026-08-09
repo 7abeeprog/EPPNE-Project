@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuthStore } from "@/store/auth-store";
-import { useLogout } from "@/hooks/auth/useAuth";
+import { useLogout } from "@/hooks/identity/useAuth";
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
 import { NotificationBell } from "@/components/communications/NotificationBell";

@@ -1,7 +1,7 @@
 // hooks/communications/useWebSocket.ts
 import { useEffect, useRef } from 'react';
 import { useNotificationStore } from '@/store/notificationStore';
-import { useAuth } from '@/hooks/auth/useAuth';
+import { useAuth } from '@/hooks/identity/useAuth';
 
 const WS_BASE = process.env.NEXT_PUBLIC_WS_URL || 'wss://api.eppne.com';
 

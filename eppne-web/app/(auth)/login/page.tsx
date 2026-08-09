@@ -3,7 +3,7 @@
 
 import { motion } from "framer-motion";
 import { Shield, Lock } from "lucide-react";
-import { LoginForm } from "@/components/auth/LoginForm";
+import { LoginForm } from "@/components/identity/LoginForm";
 import Link from "next/link";
 
 const containerVariants = {

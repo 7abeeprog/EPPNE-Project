@@ -1,9 +1,9 @@
-// components/auth/ProfileForm.tsx
+// components/identity/ProfileForm.tsx
 "use client";
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useUpdateProfile } from "@/hooks/auth/useUserProfile";
+import { useUpdateProfile } from "@/hooks/identity/useUserProfile";
 import type { User as UserData } from "@/types/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
