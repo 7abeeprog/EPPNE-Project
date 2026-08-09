@@ -15,13 +15,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuthStore } from "@/store/auth-store";
-import { useNotificationStore } from "@/store/notification-store";
+import { useLogout } from "@/hooks/auth/useAuth";
+import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
 import { NotificationBell } from "@/components/communications/NotificationBell";
 
 export function Navbar() {
   const { user } = useAuthStore();
   const { unreadCount, notifications } = useNotificationStore();
+  const logoutMutation = useLogout();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-background/40 backdrop-blur-2xl shadow-sm transition-all duration-300">
@@ -86,7 +88,11 @@ export function Navbar() {
 
               <DropdownMenuSeparator className="bg-white/5" />
               
-              <DropdownMenuItem className="rounded-xl focus:bg-rose-500/10 focus:text-rose-500 cursor-pointer p-3 mt-1 group">
+              <DropdownMenuItem
+                onClick={() => logoutMutation.mutate()}
+                disabled={logoutMutation.isPending}
+                className="rounded-xl focus:bg-rose-500/10 focus:text-rose-500 cursor-pointer p-3 mt-1 group"
+              >
                 <div className="flex items-center gap-3 font-bold text-rose-500/80 group-hover:text-rose-500 transition-colors">
                   <LogOut className="h-4 w-4" /> إنهاء الجلسة الآمنة
                 </div>
