@@ -157,3 +157,76 @@ cookie-only بالكامل) — **لن يبدأ إلا بموافقة صريحة
 بعد (سيُحذف في Phase 4 من خطة الدمج).
 
 ---
+
+## [2026-08-09] — ملاحظة مكتشفة أثناء تنفيذ Phase 2 (دمج auth→identity،
+الفرونت إند): `birth_date` غير قابل للتحديث فعليًا عبر `PUT /identity/me`
+
+**الحالة:** ⚠️ اكتشاف موثَّق — لم يُعالَج، مؤجَّل كمهمة مستقلة لاحقة (خارج
+نطاق Phase 2)
+
+**الاكتشاف:** أثناء نقل `ProfileForm.tsx` من `components/identity/` (كان
+معطَّلاً بالكامل، يستورد `useUpdateProfile` من `hooks/identity/useUserProfile`
+غير الموجود إطلاقًا) إلى `components/auth/` وربطه بـ hook حقيقي مكتوب حديثًا
+(`hooks/auth/useUserProfile.ts`) مُطابِق لمخطط `UserUpdate` الفعلي في الباك
+إند (`app/domains/identity/schemas.py`)، تبيّن أن حقل `birth_date` **غير
+موجود إطلاقًا** في `UserUpdate` (الحقول المتاحة: `email`, `name_ar`,
+`name_en`, `marriage_status`, `language_preference`, `profile_metadata`,
+`preferences`, `primary_wallet`, `is_active`). الفورم الأصلي كان يرسل
+`birth_date` ضمن جسم التحديث رغم ذلك — لكن بما أن الـ hook الذي يستدعيه كان
+مفقودًا أصلًا، **هذا المسار لم يُنفَّذ أو يُختبَر فعليًا من قبل** (كود ميت)،
+فلم يُكتشَف الخلل حتى الآن.
+
+**القرار المؤقت (بموافقة صريحة):** إبقاء حقل تاريخ الميلاد ظاهرًا في
+`components/auth/ProfileForm.tsx` كحقل للقراءة فقط (`disabled`/`readOnly`)
+مع ملاحظة نصية للمستخدم أنه غير قابل للتعديل من هنا حاليًا، بدل حذفه
+بالكامل أو تركه يبدو قابلاً للتعديل بينما التغيير لا يُحفَظ فعليًا (كان
+سيُنتج تجربة مستخدم مضلِّلة: toast نجاح دون أي تحديث فعلي في القاعدة).
+
+**العمل المستقل المطلوب لاحقًا (خارج نطاق auth/identity الحالي):** إضافة
+`birth_date: date | None` إلى `UserUpdate` في
+`app/domains/identity/schemas.py`، وتحديث `UserService.update_user` في
+`app/domains/identity/service.py` للتعامل معه فعليًا، ثم إعادة تفعيل حقل
+الإدخال (بدل القراءة فقط) في `ProfileForm.tsx`.
+
+**الملفات المتأثرة:** `eppne-web/components/auth/ProfileForm.tsx`,
+`eppne-web/hooks/auth/useUserProfile.ts`.
+
+---
+
+## [2026-08-09] — إصلاح: زرّا تسجيل الخروج في السايدبار والـ navbar غير
+مربوطين بآلية logout الصحيحة
+
+**الحالة:** ✅ مكتمل، تم التأكد يدويًا في المتصفح (بدليل قاطع من المستخدم)
+
+**الاكتشاف:** بعد اكتمال إعادة بناء الفرونت إند (Phase 2 من خطة دمج
+auth→identity) وأصبح `hooks/auth/useAuth.ts::useLogout` هو المصدر الوحيد
+الصحيح لتسجيل الخروج (يستدعي `POST /identity/logout` فعليًا عبر الكوكي
+HttpOnly)، تبيّن أن زرّي تسجيل الخروج الفعليين في الواجهة لم يُحدَّثا
+للاستخدام الجديد:
+- `components/layout/sidebar.tsx`: زر "إنهاء الجلسة" كان يستدعي
+  `useAuthStore().logout()` — وهي فقط تمسح حالة Zustand محليًا، **لا تستدعي
+  أي endpoint بالباك إند إطلاقًا**. النتيجة: الكوكيز HttpOnly تبقى موجودة
+  والـ refresh token يبقى غير مُبطَل في القاعدة رغم أن الواجهة تُظهر
+  المستخدم "خارج الجلسة".
+- `components/layout/navbar.tsx`: عنصر القائمة "إنهاء الجلسة الآمنة" في
+  الـ dropdown **لم يكن له `onClick` إطلاقًا** — زر ميت بالكامل، بلا أي
+  تأثير عند الضغط عليه.
+
+**الإصلاح:** ربط كلا الزرّين بـ `useLogout()` من `hooks/auth/useAuth.ts`
+(`logoutMutation.mutate()`)، مع تعطيل الزر أثناء انتظار الاستجابة
+(`disabled={logoutMutation.isPending}`).
+
+**اكتشاف إضافي غير مرتبط، عولج بنفس الإصلاح:** `navbar.tsx` كان يستورد
+`useNotificationStore` من مسار خاطئ (`@/store/notification-store`، بينما
+الملف الفعلي `store/notificationStore.ts`) — خطأ `tsc` مانع للبناء بالكامل،
+سابق لهذه المهمة وغير متعلق بـ auth/identity، اكتُشف أثناء التحقق من
+النوع (`tsc --noEmit`) بعد إصلاح الـ logout. تم تصحيح مسار الاستيراد فقط.
+
+**الاختبارات:** `tsc --noEmit` نظيف على كلا الملفين بعد الإصلاح (لا أخطاء
+type). التحقق الوظيفي الفعلي (الضغط على الزرّين والتأكد من تسجيل الخروج
+الحقيقي) تم يدويًا في المتصفح من قِبل المستخدم وأُكِّد ناجحًا.
+
+**الملفات المتأثرة:** `eppne-web/components/layout/sidebar.tsx`,
+`eppne-web/components/layout/navbar.tsx`.
+
+---

@@ -111,6 +111,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth-store";
+import { useLogout } from "@/hooks/auth/useAuth";
 import { Button } from "@/components/ui/button";
 
 type Role =
@@ -1272,7 +1273,8 @@ const menuCategories = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { user, logout } = useAuthStore();
+  const { user } = useAuthStore();
+  const logoutMutation = useLogout();
   const userRole = (user?.system_role as Role) || "STUDENT";
 
   // 1. إصلاح حالة الشريط الجانبي (آمن تماماً من انهيار الأزرار)
@@ -1428,7 +1430,8 @@ export function Sidebar() {
       <div className="p-4 border-t border-white/5 relative z-10 bg-background/20 backdrop-blur-md">
         <Button
           variant="ghost"
-          onClick={() => logout()}
+          onClick={() => logoutMutation.mutate()}
+          disabled={logoutMutation.isPending}
           className="w-full flex items-center gap-3 h-12 rounded-xl text-muted-foreground hover:text-rose-500"
         >
           <LogOut className="h-5 w-5" />
