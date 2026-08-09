@@ -1,10 +1,10 @@
-// components/auth/RegisterForm.tsx
+// components/identity/RegisterForm.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useRegister } from "@/hooks/auth/useAuth";
+import { useRegister } from "@/hooks/identity/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

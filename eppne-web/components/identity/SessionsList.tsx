@@ -1,9 +1,9 @@
-// components/auth/SessionsList.tsx
+// components/identity/SessionsList.tsx
 "use client";
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useActiveSessions, useRevokeAllSessions } from "@/hooks/auth/useAuth";
+import { useActiveSessions, useRevokeAllSessions } from "@/hooks/identity/useAuth";
 import { SessionCard } from "./SessionCard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";

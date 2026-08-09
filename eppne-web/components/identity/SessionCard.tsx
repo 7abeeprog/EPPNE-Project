@@ -1,4 +1,4 @@
-// components/auth/SessionCard.tsx
+// components/identity/SessionCard.tsx
 "use client";
 
 import { motion } from "framer-motion";

@@ -4,7 +4,7 @@
 import { motion } from "framer-motion";
 import { Shield, Monitor, AlertCircle } from "lucide-react";
 import { PrivacySettingsForm } from "@/components/privacy/PrivacySettingsForm";
-import { SessionsList } from "@/components/auth/SessionsList";
+import { SessionsList } from "@/components/identity/SessionsList";
 import { usePrivacySettings } from "@/hooks/privacy/usePrivacySettings";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";

@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useDigitalTwinStore } from '@/store/digitalTwinStore';
-import { useAuth } from '@/hooks/auth/useAuth';
+import { useAuth } from '@/hooks/identity/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';

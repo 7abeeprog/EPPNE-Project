@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/auth/useAuth';
+import { useAuth } from '@/hooks/identity/useAuth';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useFinanceStore } from '@/store/finance-store';
 import { useHealthStore } from '@/store/healthStore';

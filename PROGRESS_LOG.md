@@ -310,3 +310,155 @@ type). التحقق الوظيفي الفعلي (الضغط على الزرّي�
 `eppne-web/services/identity.service.ts`, `eppne-web/hooks/use-auth.ts`.
 
 ---
+
+## [2026-08-09] — إعادة فحص فعلي لزرّي logout (navbar.tsx وsidebar.tsx)
+بعد شك في تعارض مع إدخال سابق — لم يُعثر على أي تعارض
+
+**السياق:** قبل بدء Phase 3 (إعادة تسمية `components/auth`/`hooks/auth`
+إلى `identity`)، أُثير شك بأن زر "إنهاء الجلسة الآمنة" في dropdown الـ
+navbar (الموثَّق إصلاحه في الإدخال الخاص بتاريخ [2026-08-09] أعلاه بعنوان
+"إصلاح: زرّا تسجيل الخروج في السايدبار والـ navbar غير مربوطين بآلية
+logout الصحيحة") قد يكون اختفى أو رجع بلا `onClick` في تعديل لاحق.
+
+**الفحص الفعلي المباشر لملفي المصدر الحاليين (وليس اعتمادًا على التوثيق
+القديم):**
+- `eppne-web/components/layout/navbar.tsx` (السطر 91-99): عنصر
+  `DropdownMenuItem` الخاص بـ"إنهاء الجلسة الآمنة" **موجود** وله
+  `onClick={() => logoutMutation.mutate()}` و`disabled={logoutMutation.isPending}`،
+  و`logoutMutation` مأخوذ من `useLogout()` المستورَدة من
+  `@/hooks/auth/useAuth` (السطر 18، 26). مطابق تمامًا لما وثّقه الإدخال
+  السابق.
+- `eppne-web/components/layout/sidebar.tsx` (السطر 1277، 1431-1439): نفس
+  النمط — `logoutMutation = useLogout()` من نفس المسار، وزر "إنهاء
+  الجلسة" مربوط بـ `onClick={() => logoutMutation.mutate()}`.
+- لا يوجد أكثر من ملف `navbar.tsx` واحد في المشروع (تم التأكد عبر بحث
+  شامل بالاسم)، فلا مجال لالتباس "ملف تاني بنفس الاسم".
+
+**الخلاصة:** لم يُعثر على أي discrepancy فعلي بين التوثيق والكود الحالي
+وقت هذا الفحص. الإصلاح الموثَّق سابقًا لا يزال قائمًا سليمًا في كلا
+الملفين. سبب الشك الذي أثير غير مؤكَّد (احتمال: نظرة على نسخة مبنية/
+مخبَّأة قديمة في المتصفح، أو فرع/checkout مختلف، أو التباس في القراءة) —
+لم يتم تحديد السبب الجذري لأن الكود الحالي على القرص مطابق للمتوقع، ولا
+داعٍ لأي إصلاح إضافي بناءً على هذا الفحص وحده.
+
+**الحالة:** ✅ فحص تم، بدون أي تعديل على الكود (توثيق فقط).
+
+**الملفات المفحوصة (بدون تعديل):** `eppne-web/components/layout/navbar.tsx`,
+`eppne-web/components/layout/sidebar.tsx`.
+
+---
+
+## [2026-08-09] — Phase 3 (Frontend) من خطة دمج auth→identity: الكود
+مكتمل ومتحقَّق منه، لكن اكتُشف بلوكر منفصل تمامًا يمنع الاختبار اليدوي
+في المتصفح
+
+**الحالة:** 🔄 **Phase 3 نفسها مكتملة ومتحقَّق منها بالكود** (رينيم +
+imports، صفر لمس منطق، مُثبَت بمقارنة `tsc` قبل/بعد). **لكن** الشرط
+الإجباري لاختبار زرار logout يدويًا في متصفح حقيقي (المطلوب تحديدًا
+لملفي `sidebar.tsx` و`navbar.tsx`) **لسه معلَّق** بسبب باغ منفصل تمامًا
+اكتُشف أثناء محاولة التنفيذ — موثَّق بالتفصيل تحت. **لم يُلمس الباغ ده
+ولا أي حل مؤقت له — بانتظار موافقة صريحة منفصلة.**
+
+### ما تم تنفيذه فعليًا (Phase 3، خطة `.claude/plans/phase3-rename-auth-to-identity.md`)
+
+- `git mv` لـ8 ملفات: `components/auth/*` (6 ملفات) → `components/identity/*`،
+  `hooks/auth/*` (ملفين) → `hooks/identity/*`.
+- تحديث تعليق المسار الذاتي في رأس 7 من الـ8 ملفات.
+- تحديث 22 سطر `import` في 15 ملف خارجي مستهلِك (القائمة الكاملة موثَّقة
+  في ملف الخطة).
+- صفر تغيير في أي اسم export/hook (`useAuth`, `useLogin`, `useLogout`...
+  إلخ)، وصفر لمس لـ`app/(auth)/` (route group) أو أي URL فعلي.
+
+### التحقق المُنفَّذ فعليًا (بديل مؤقت لاختبار المتصفح، ليس بديلًا كاملًا عنه)
+
+- `grep` شامل نهائي: **صفر بقايا** لـ`@/components/auth` أو `@/hooks/auth`
+  (alias أو relative) في كامل المشروع، وصفر تعليقات مسار ذاتي قديمة.
+- `npx tsc --noEmit -p tsconfig.json` على كامل المشروع: **`EXIT_CODE=2`،
+  1253 خطأ** — **لكن** بالمقارنة الدقيقة (عبر `git worktree add` منفصل
+  عند commit `5b1d241`، أي *قبل* أي لمسة من Phase 3، مع تشغيل نفس أمر
+  `tsc` بالظبط): الـbaseline (قبل) طلّع **1253 خطأ** أيضًا، وبعد تطبيع
+  فرق المسار (`auth`→`identity` على الملفات المنقولة) كانت نتيجة الـ`diff`
+  بين قائمتي الأخطاء **فرق واحد فقط، وهو شكلي بحت** (مسار مطلق لمجلد
+  الـworktree المؤقت نفسه في رسالة خطأ واحدة، مش خطأ إضافي حقيقي). يعني
+  Phase 3 **لم يُدخل ولا خطأ واحد جديد، ولم يُصلح أي خطأ قديم** — الـ1253
+  خطأ كلهم ديون تقنية سابقة في دومينات تانية تمامًا (academy, insurance,
+  logistics, tenders-auctions, translation, digital-twin store...)
+  مالهاش أي علاقة بـauth/identity، بدليل إنهم في ملفات لم تُلمس إطلاقًا
+  في هذه المهمة. تم تنظيف الـworktree المؤقت والـjunction الخاص به بالكامل
+  بعد المقارنة (`git worktree remove` + `git worktree prune`)، والتأكد إن
+  `node_modules` الحقيقي في `eppne-web/` سليم 100% (نفس عدد الحزم قبل وبعد).
+
+### البلوكر المكتشف: التطبيق كله (كل صفحة) يرجع 500 في بيئة التطوير — غير مرتبط بـPhase 3 إطلاقًا
+
+**الاكتشاف:** عند محاولة تشغيل السيرفر لاختبار زرار logout يدويًا، لُقي
+سيرفر `next dev` شغّال بالفعل مسبقًا على المشروع (من قبل هذه الجلسة)،
+وطلب أي صفحة منه (`/login` وأي صفحة تانية عمليًا) بيرجّع **500 Internal
+Server Error**. اللوج (`.next/dev/logs/next-development.log`) بيوضّح
+السبب بدقة:
+
+```
+The export unsafeCSS was not found in module node_modules/lit/index.js
+Import trace: app/web3-provider.tsx → app/providers.tsx → app/layout.tsx
+```
+
+**السلسلة الكاملة:** `lit@3.3.0` (النسخة المثبَّتة، تأكَّد إنها نسخة
+وحيدة في `node_modules` بدون أي تعارض نسخ متداخلة) لم يعد يُصدِّر
+`unsafeCSS` من نقطة الدخول الرئيسية بالشكل اللي `@reown/appkit-ui`
+بيتوقعه ← `@reown/appkit` ← `@walletconnect/ethereum-provider` ←
+`wagmi`/`@rainbow-me/rainbowkit` ← **`app/web3-provider.tsx`** ←
+`app/providers.tsx` ← **`app/layout.tsx` (الـroot layout)**. بما إن
+الـroot layout بيتحمّل لأي صفحة في التطبيق، **الأثر مش محصور في
+auth/identity أو صفحات `/login`/`/dashboard` بس — كل صفحة في المنصة
+كلها واقعة بـ500 في بيئة التطوير الحالية.**
+
+**تأكيد صريح: الباغ ده مش ناتج عن Phase 3 ولا عن أي مهمة سابقة في خطة
+دمج auth/identity:**
+- `git log --follow` على `app/web3-provider.tsx`: آخر لمسة ليه كانت في
+  Phase 2 (commit `5b1d241`) لتصحيح سطر استيراد `useAuth` فقط (موثَّق
+  مسبقًا في إدخال Phase 2 أعلاه) — **صفر لمس لمنطق أو تبعيات Web3**.
+  أول ظهور للملف كان في **"Initial commit" بتاريخ 2026-07-01** (commit
+  `1d37167`)، ومنطق الـWeb3 provider نفسه لم يتغيّر منذ ذلك التاريخ.
+- `app/providers.tsx`: آخر لمسة حقيقية للمنطق كانت في commit `83eaabb`
+  (إضافة قطاعات رئيسية، قبل أي عمل على auth/identity)، ثم لمسة سطر
+  استيراد فقط في Phase 2.
+- `package.json` (تبعيات `lit`/`@reown/*`/`wagmi`/`@rainbow-me/rainbowkit`):
+  لم تُلمس منذ "Initial commit" — أي إن التعارض بين النسخ كان موجودًا
+  من أول يوم في المشروع، **قبل بدء خطة دمج auth/identity بالكامل**.
+- Phase 3 نفسها لا تلمس `web3-provider.tsx` ولا `providers.tsx` ولا
+  `layout.tsx` إطلاقًا (مش من ضمن الـ23 ملف المتأثرة).
+
+**لم يُتخذ أي إجراء إصلاحي لهذا الباغ** (لا downgrade، لا patch، لا
+تعطيل مؤقت) — خارج نطاق Phase 3 تمامًا، ومحتاج موافقة صريحة على مهمة
+منفصلة بالكامل قبل أي لمسة له.
+
+### الأثر على معيار نجاح Phase 3
+
+- ✅ الرينيم نفسه: مكتمل، نظيف، مُثبَت بمقارنة `tsc` قبل/بعد (فرق = صفر
+  خطأ فعلي).
+- ⏸️ **الشرط الإجباري (غير القابل للتفاوض) لاختبار logout يدويًا في متصفح
+  حقيقي لـ`sidebar.tsx`/`navbar.tsx`: لم يُنفَّذ بعد** — مش لأن فيه مشكلة
+  في الرينيم، لكن لأن التطبيق كله (كل صفحاته) واقع حاليًا في بيئة التطوير
+  بسبب الباغ المذكور فوق، فمفيش أي صفحة ممكن تتفتح لاختبارها أصلًا.
+- **القرار المتخذ:** التوقف الكامل عن أي تقدم إضافي في Phase 3 أو أي
+  Phase جديدة لحد ما يترجع للمستخدم ويتاخد قرار صريح بخصوص باغ الـWeb3
+  ده (يشمل بدائل زي: توثيقه فقط والرجوع له لاحقًا كمهمة منفصلة، أو عمل
+  patch/downgrade مؤقت لـ`lit` كمهمة مستقلة بموافقة صريحة).
+
+**الملفات المتأثرة (Phase 3 فعليًا):** `eppne-web/components/identity/*`
+(منقولة من `components/auth/*`)، `eppne-web/hooks/identity/*` (منقولة من
+`hooks/auth/*`)، و15 ملف مستهلِك (`providers/AuthProvider.tsx`,
+`hooks/communications/useWebSocket.ts`, `components/layout/sidebar.tsx`,
+`components/layout/navbar.tsx`, `app/(dashboard)/health/emergency/page.tsx`,
+`app/(dashboard)/finance/admin/page.tsx`,
+`app/(dashboard)/settings/sessions/page.tsx`,
+`app/(dashboard)/ai-agents/page.tsx`, `app/(dashboard)/ai/approvals/page.tsx`,
+`app/(dashboard)/digital-twin/page.tsx`, `app/(dashboard)/dashboard/page.tsx`,
+`app/(dashboard)/profile/page.tsx`, `app/(dashboard)/privacy/settings/page.tsx`,
+`app/(auth)/register/page.tsx`, `app/(auth)/login/page.tsx`).
+
+**الملفات المفحوصة فقط لتشخيص البلوكر (بدون أي تعديل):**
+`eppne-web/app/web3-provider.tsx`, `eppne-web/app/providers.tsx`,
+`eppne-web/app/layout.tsx`, `eppne-web/package.json`,
+`eppne-web/node_modules/lit/*`.
+
+---

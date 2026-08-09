@@ -111,7 +111,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth-store";
-import { useLogout } from "@/hooks/auth/useAuth";
+import { useLogout } from "@/hooks/identity/useAuth";
 import { Button } from "@/components/ui/button";
 
 type Role =

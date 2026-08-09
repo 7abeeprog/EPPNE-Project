@@ -3,7 +3,7 @@
 
 import { motion } from "framer-motion";
 import { Shield, UserPlus } from "lucide-react";
-import { RegisterForm } from "@/components/auth/RegisterForm";
+import { RegisterForm } from "@/components/identity/RegisterForm";
 import Link from "next/link";
 
 const containerVariants = {

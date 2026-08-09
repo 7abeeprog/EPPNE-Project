@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useActiveSessions, useRevokeAllSessions } from "@/hooks/auth/useAuth";
+import { useActiveSessions, useRevokeAllSessions } from "@/hooks/identity/useAuth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";

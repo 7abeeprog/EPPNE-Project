@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAgentStore } from '@/store/agentStore';
-import { useAuth } from '@/hooks/auth/useAuth';
+import { useAuth } from '@/hooks/identity/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
