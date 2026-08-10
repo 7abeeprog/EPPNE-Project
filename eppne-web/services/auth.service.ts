@@ -3,7 +3,6 @@ import { apiClient } from "@/lib/api-client";
 import type { components } from "@/src/lib/api-types";
 import { handleError } from "@/lib/error-handler";
 
-type RevokeAllSessionsResponse = components['schemas']['RevokeAllSessionsResponse'];
 type SessionInfoResponse = components['schemas']['SessionInfoResponse'];
 type UserCreate = components['schemas']['UserCreate'];
 type UserResponse = components['schemas']['UserResponse'];
@@ -18,6 +17,16 @@ interface IdentityLoginResponse {
   message: string;
   user_id: number;
   user: UserResponse;
+}
+
+// ملاحظة: نفس سبب IdentityLoginResponse أعلاه — RevokeAllSessionsResponse
+// كانت معرَّفة فقط في auth/schemas.py القديم (response_model على
+// POST /auth/revoke-all). المسار الفعلي المُستخدَم هو /identity/revoke-all
+// وهو بلا response_model، فنوع محلي دقيق بدلاً من الاعتماد على schema
+// مولَّدة هتختفي مع حذف دومين auth بالباك إند (Phase 4).
+interface RevokeAllSessionsResponse {
+  message: string;
+  revoked_count: number;
 }
 
 export const AuthService = {

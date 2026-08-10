@@ -36,7 +36,6 @@ from app.domains.agritech.router import router as agritech_router
 from app.domains.ai_agents.router import router as ai_agents_router
 from app.domains.ai_governance.router import router as ai_governance_router
 from app.domains.arbitration_syndicates.router import router as arbitration_syndicates_router
-from app.domains.auth.router import router as auth_router, protected_router as auth_protected_router
 from app.domains.automation.router import router as automation_router
 from app.domains.command.router import router as command_router
 from app.domains.commerce.router import router as commerce_router
@@ -307,12 +306,6 @@ for router_obj, prefix_path, tags_list, sector in routers_config:
         tags=tags_list,
         dependencies=[Depends(require_sector(sector))]
     )
-
-fastapi_app.include_router(auth_router, prefix="/api", tags=["Authentication"])
-fastapi_app.include_router(
-    auth_protected_router, prefix="/api", tags=["Authentication"],
-    dependencies=[Depends(get_current_active_user)]
-)
 
 fastapi_app.include_router(identity_router, prefix="/api", tags=["Identity"])
 fastapi_app.include_router(
