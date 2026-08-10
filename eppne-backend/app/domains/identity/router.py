@@ -51,7 +51,7 @@ async def login(response: Response, request: Request, login_data: UserLogin, ten
     secure_flag = settings.ENVIRONMENT == "production"
     response.set_cookie("access_token", tokens["access_token"], httponly=True, secure=secure_flag, samesite="strict", max_age=15*60)
     response.set_cookie("refresh_token", tokens["refresh_token"], httponly=True, secure=secure_flag, samesite="strict", max_age=7*24*60*60)
-    return {"access_token": tokens["access_token"], "token_type": "bearer", "message": "تم تسجيل الدخول بنجاح", "user_id": cast(int, user.id), "user": user}
+    return {"access_token": tokens["access_token"], "token_type": "bearer", "message": "تم تسجيل الدخول بنجاح", "user_id": cast(int, user.id), "user": UserResponse.model_validate(user)}
 
 @protected_router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_active_user), tenant: SimpleTenant = Depends(get_current_tenant), db: AsyncSession = Depends(get_db)):
