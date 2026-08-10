@@ -462,3 +462,91 @@ auth/identity أو صفحات `/login`/`/dashboard` بس — كل صفحة في 
 `eppne-web/node_modules/lit/*`.
 
 ---
+
+## [2026-08-10] — ملاحظة صغيرة: انحراف طبيعي في baseline أخطاء tsc
+
+أثناء التحقق من خطوة 1 في Phase 4 (`eppne-web/services/auth.service.ts`)،
+`npx tsc --noEmit` طلّع **1268** خطأ، مقابل الـbaseline الموثَّق سابقًا
+(**1253**) في إدخال Phase 3 أعلاه. المقارنة (تشغيل نفس الأمر مع وبدون
+تعديلنا، عبر `git stash`) أثبتت إن الرقمين **متطابقان 1268=1268 في
+الحالتين** — يعني تعديلنا صفر تأثير على العدد الإجمالي. **مصدر الـ15
+خطأ الإضافية لم يُفحص بالتفصيل** (لا grep ولا diff على محتوى الأخطاء
+نفسها) — خارج نطاق Phase 4، ومش لازم حل عاجل لأنها مش ناتجة عن أي
+تعديل بتاعنا.
+
+---
+
+## [2026-08-10] — Phase 4: حذف دومين auth بالكامل من الباك إند
+
+**الحالة:** ✅ مكتمل (الحذف + التحقق)، مع بند واحد مؤجَّل صراحة (تفصيل تحت)
+
+**السياق:** آخر مرحلة في خطة دمج auth→identity (`.claude/plans/
+phase4-remove-auth-backend.md`). نُفِّذت **رغم** إن باغ الـWeb3 الموثَّق
+في إدخال Phase 3 أعلاه لسه غير محلول واختبار logout اليدوي لسه معلّق —
+قرار صريح من المستخدم بتاريخ اليوم بالمُضي قُدمًا لأن Phase 4
+backend-only ومالهاش تداخل تقني مع الباغ ده (frontend rendering issue).
+
+**المنفَّذ بالترتيب:**
+1. **Frontend (ملف واحد، `eppne-web/services/auth.service.ts`):**
+   استبدال `type RevokeAllSessionsResponse = components['schemas'][...]`
+   (كان معتمدًا على schema مولَّدة من `auth/schemas.py` القديم) بـ
+   `interface` محلي مطابق لشكل رد `/identity/revoke-all` الفعلي. صفر لمس
+   لأي ملف باك إند في الخطوة دي (قرار متعمَّد لتقليل عدد الملفات المتأثرة).
+2. **Backend:** حذف `app/domains/auth/` بالكامل (7 ملفات، 732 سطر) —
+   `__init__.py`, `models.py`, `schemas.py`, `repository.py`, `service.py`,
+   `router.py`, `jwt_service.py`. يشمل إغلاق نهائي لخطر `tenant_id=1`
+   المُثبَّت الموثَّق في `PROJECT_AUDIT.md` §5.2 (كان dead code من ناحية
+   الاستدعاء الخارجي، لكن حذفه بيقفل احتمال استيراد خاطئ مستقبلي نهائيًا).
+3. **Backend (`app/main.py`):** إزالة سطر استيراد `auth_router`/
+   `auth_protected_router` (كان سطر 39) وكتلة تسجيلهم (كانت سطور 311-315).
+   `identity_router`/`identity_protected_router` لم تُلمس إطلاقًا.
+   **توضيح دقيق:** ده إزالة تكرار endpoint (نفس الوظيفة كانت مسجَّلة
+   مرتين بمسارين)، **مش** إغلاق فجوة أمنية جديدة — فجوة `api.deps`
+   الأضعف في auth_router (`PROJECT_AUDIT.md` §5.1) كانت اتصلحت أصلًا في
+   P0 قبل كده، وفجوة "بدون `require_sector`" الهيكلية **لسه موجودة**
+   في `identity_router`/`identity_protected_router` بدون تغيير (خارج
+   نطاق Phase 4، محتاجة قرار/مهمة منفصلة).
+4. **Tests:** `tests/test_auth_router_protection.py` (من P0، كان بيختبر
+   `/api/auth/*` مباشرة عبر `find_route`) اتحذف لأنه بيستهدف مسارات
+   محذوفة، واتعوَّض بـ`tests/test_identity_router_protection.py` —
+   نفس منطق التحقق بالظبط (endpoints عامة بدون `get_current_active_user`،
+   endpoints محمية بتعتمد على النسخة القوية من `core.security` مش
+   `api.deps` الأضعف) لكن على `/api/identity/*`، بنفس التغطية
+   (register/login/logout/refresh عامة؛ me/sessions/revoke-all/password
+   محمية). صفر فقدان تغطية اختبارات أمنية نتيجة الحذف.
+
+**التحقق:**
+- `pytest tests/` كامل: **5 نجحوا، 0 فشل** (شامل الاختبارين الجديدين).
+  تحذير `DeprecationWarning` واحد غير مرتبط (`regex` قديم في
+  `employment/router.py`، دومين تاني تمامًا).
+- فحص OpenAPI schema مباشرة (`fastapi_app.openapi()`، بدون سيرفر حي):
+  **`AUTH_PATHS_COUNT=0`**، **`IDENTITY_PATHS_COUNT=8`** (login, logout,
+  me, me/password, refresh, register, revoke-all, sessions) — مطابق
+  تمامًا للمتوقع.
+- `tsc --noEmit` الكامل (شُغِّل قبل حذف الباك إند، أثناء التحقق من خطوة
+  1 فقط): 1268 خطأ، مطابق تمامًا لنفس العدد مع وبدون تعديل
+  `auth.service.ts` (اتأكد بـ`git stash`) — صفر تأثير من شغلنا. ملاحظة
+  الانحراف عن baseline الـ1253 الموثَّق في Phase 3 مسجَّلة في الإدخال
+  اللي قبل ده مباشرة.
+
+**مؤجَّل صراحة (خارج نطاق Phase 4، مش blocking):** إعادة توليد
+`eppne-web/src/lib/api-types.ts` عبر `openapi-typescript` — الأداة مش
+مثبَّتة حاليًا في `package.json`، و`eppne-backend/openapi.json` (السنابشوت
+الثابت) تاريخه 8 يوليو 2026 (قبل حتى Phase 0). الهدف الفعلي من الخطوة دي
+(`tsc --noEmit` exit نظيف) **محقَّق بالفعل بدون الحاجة للـregeneration**
+(راجع نقطة التحقق فوق) — البقايا الوحيدة (مسارات `/auth/auth/*` شكلية،
+ونوع `RevokeAllSessionsResponse` غير مُستخدَم) كود ميت غير مُستورَد من
+أي حاجة، صفر تأثير وظيفي. تحديث `openapi-typescript`/`api-types.ts`
+يستاهل مهمة منفصلة لاحقًا بموافقة صريحة.
+
+**الملفات المتأثرة:** `eppne-web/services/auth.service.ts` (تعديل)،
+`eppne-backend/app/domains/auth/*` (حذف، 7 ملفات)، `eppne-backend/app/main.py`
+(تعديل)، `eppne-backend/tests/test_auth_router_protection.py` (حذف)،
+`eppne-backend/tests/test_identity_router_protection.py` (إنشاء).
+
+**الحالة الإجمالية لخطة الدمج:** Phase 0-2 و4 مكتملة ومُتحقَّق منها.
+Phase 3 (رينيم الفرونت إند) — الكود مكتمل، لكن اختبار logout اليدوي في
+متصفح حقيقي **لسه معلّق** بسبب باغ الـWeb3 المذكور أعلاه، غير مرتبط
+بـPhase 4.
+
+---
