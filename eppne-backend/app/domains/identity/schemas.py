@@ -3,7 +3,7 @@ from datetime import datetime
 from uuid import UUID
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, SecretStr
-from app.core.enums import SovereignRank, KYCStatus, MarriageStatus, SystemRole
+from app.core.enums import SovereignRank, KYCStatus, MarriageStatus, SystemRole, InvitationStatus
 
 class UserBase(BaseModel):
     username: Optional[str] = Field(default=None, min_length=4, max_length=50, description="اسم المستخدم")
@@ -68,3 +68,38 @@ class SessionInfoResponse(BaseModel):
     is_active: bool = Field(description="هل الجلسة نشطة (غير ملغاة)")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TenantInvitationCreate(BaseModel):
+    email: Optional[EmailStr] = Field(default=None, description="ربط الدعوة بإيميل محدد (اختياري — فارغ = رابط عام)")
+    product_id: Optional[int] = Field(default=None, description="المنتج المرتبط بالإحالة (اختياري)")
+    max_uses: Optional[int] = Field(default=None, ge=1, description="الحد الأقصى للاستخدام؛ فارغ = بلا حد (رابط إحالة متكرر)")
+    expires_at: Optional[datetime] = Field(default=None, description="تاريخ انتهاء الصلاحية (اختياري)")
+
+
+class TenantInvitationResponse(BaseModel):
+    id: int
+    tenant_id: int
+    has_token: bool = Field(description="الدعوة مرتبطة بتوكن صالح للاستخدام — القيمة الخام لا تُعرض هنا إطلاقًا")
+    is_active: bool = Field(description="جاهزة للاستخدام الآن (status=PENDING + غير منتهية + لم تصل max_uses)")
+    email: Optional[str] = None
+    referrer_user_id: int
+    product_id: Optional[int] = None
+    status: InvitationStatus
+    max_uses: Optional[int] = None
+    current_uses: int
+    expires_at: Optional[datetime] = None
+    accepted_at: Optional[datetime] = None
+    revoked_by_user_id: Optional[int] = None
+    revoked_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TenantInvitationCreateResponse(TenantInvitationResponse):
+    token: str = Field(description="القيمة الخام للتوكن — تظهر هنا فقط عند الإنشاء، غير قابلة للاسترجاع لاحقًا (مُخزَّن كـhash فقط)")
+
+
+class InvitationRegisterRequest(UserCreate):
+    token: str = Field(description="توكن الدعوة الخام (من الرابط اللي وصل للمستخدم)")

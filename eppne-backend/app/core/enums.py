@@ -39,3 +39,9 @@ class MarriageStatus(str, enum.Enum):
     MARRIED = "MARRIED"
     DIVORCED = "DIVORCED"
     WIDOWED = "WIDOWED"
+
+class InvitationStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    REVOKED = "REVOKED"
+    EXPIRED = "EXPIRED"

@@ -131,6 +131,19 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER_NAME_EN: str = Field(default="Executive Director")
 
     # ============================================================
+    # 6b. التسجيل العام (Public Self-Registration) — Phase 15
+    # ============================================================
+    PUBLIC_REGISTRATION_TENANT_ID: int = Field(
+        default=1,
+        description=(
+            "التينانت الوحيد المسموح بالتسجيل العام المباشر فيه "
+            "(POST /identity/register، بدون دعوة). قيمة tenant_id ثابتة من "
+            "قاعدة البيانات، بمعزل تام عن أي دومين يُستخدم للوصول للسيرفر. "
+            "إلزامي تعيينها صراحةً في .env في بيئة الإنتاج."
+        )
+    )
+
+    # ============================================================
     # 7. العملات والتخزين
     # ============================================================
     CRYPTO_MODE: str = Field(default="FULL_CRYPTO")
@@ -228,6 +241,14 @@ class Settings(BaseSettings):
             if self.FIRST_SUPERUSER_PASSWORD.get_secret_value() == "ChangeMe@123":
                 raise ValueError("❌ FIRST_SUPERUSER_PASSWORD must be changed in production! (Default is not allowed)")
 
+            # التأكد من أن PUBLIC_REGISTRATION_TENANT_ID اتعيّن صراحةً (مش الافتراضي الضمني)
+            if os.getenv("PUBLIC_REGISTRATION_TENANT_ID") is None:
+                raise ValueError(
+                    "❌ PUBLIC_REGISTRATION_TENANT_ID must be set explicitly in .env for production! "
+                    "(Implicit default is not allowed — this value determines which tenant public "
+                    "self-registration writes into.)"
+                )
+
             # التحقق من صحة مفتاح التشفير (تم عبر validator أعلاه، لكن نضعه هنا كتأكيد)
             try:
                 base64.urlsafe_b64decode(self.SECRET_ENCRYPTION_KEY)
@@ -245,6 +266,12 @@ class Settings(BaseSettings):
                 logger.warning(
                     "⚠️  [DEV] Using default FIRST_SUPERUSER_PASSWORD. "
                     "It is recommended to set a unique password in .env file."
+                )
+            if os.getenv("PUBLIC_REGISTRATION_TENANT_ID") is None:
+                logger.warning(
+                    "⚠️  [DEV] Using default PUBLIC_REGISTRATION_TENANT_ID=%s. "
+                    "Must be set explicitly in .env before production.",
+                    self.PUBLIC_REGISTRATION_TENANT_ID,
                 )
             # لا نتحقق من SECRET_ENCRYPTION_KEY في التطوير لأنه قد يكون مولّداً تلقائياً
 

@@ -1,19 +1,25 @@
 # app/domains/identity/router.py
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import cast, List
+from typing import cast, List, Optional
 import uuid
 from pydantic import BaseModel, SecretStr
 
 from app.core.database import get_db
-from app.domains.identity.schemas import UserCreate, UserResponse, UserLogin, UserUpdate, SessionInfoResponse
+from app.domains.identity.schemas import (
+    UserCreate, UserResponse, UserLogin, UserUpdate, SessionInfoResponse,
+    TenantInvitationCreate, TenantInvitationResponse, TenantInvitationCreateResponse,
+    InvitationRegisterRequest,
+)
 from app.domains.identity.service import UserService
+from app.domains.identity.invitation_service import InvitationService
+from app.domains.identity.models import User, TenantInvitation
 from app.api.deps import get_current_tenant, SimpleTenant
-from app.core.security import get_current_active_user
+from app.core.security import get_current_active_user, is_admin_or_above
 from app.core.rate_limiter import rate_limit
 from app.core.config import settings
 from app.core.logging_conf import logger
-from app.domains.identity.models import User
+from app.core.errors import PermissionDeniedError
 
 router = APIRouter(prefix="/identity", tags=["Sovereign Identity"])
 protected_router = APIRouter(prefix="/identity", tags=["Sovereign Identity"])
@@ -27,8 +33,8 @@ class DeleteAccountRequest(BaseModel):
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 @rate_limit(max_requests=10, window_seconds=60)
-async def register(user_in: UserCreate, request: Request, tenant: SimpleTenant = Depends(get_current_tenant), db: AsyncSession = Depends(get_db)):
-    service = UserService(db, tenant.id)
+async def register(user_in: UserCreate, request: Request, db: AsyncSession = Depends(get_db)):
+    service = UserService(db, settings.PUBLIC_REGISTRATION_TENANT_ID)
     idempotency_key = request.headers.get("X-Idempotency-Key") or f"REG-{uuid.uuid4().hex[:12].upper()}"
     try:
         user = await service.register(user_in, idempotency_key)
@@ -144,3 +150,109 @@ async def soft_delete_account(request_data: DeleteAccountRequest, current_user: 
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="فشل حذف الحساب")
     return {"message": "تم تعطيل الحساب وإبطال جميع الجلسات بنجاح.", "account_status": "disabled"}
+
+
+def _invitation_to_dict(inv: TenantInvitation, include_token: Optional[str] = None) -> dict:
+    data = {
+        "id": inv.id,
+        "tenant_id": inv.tenant_id,
+        "has_token": True,
+        "is_active": inv.is_active_now(),
+        "email": inv.email,
+        "referrer_user_id": inv.referrer_user_id,
+        "product_id": inv.product_id,
+        "status": inv.status,
+        "max_uses": inv.max_uses,
+        "current_uses": inv.current_uses,
+        "expires_at": inv.expires_at,
+        "accepted_at": inv.accepted_at,
+        "revoked_by_user_id": inv.revoked_by_user_id,
+        "revoked_at": inv.revoked_at,
+        "created_at": inv.created_at,
+        "updated_at": inv.updated_at,
+    }
+    if include_token is not None:
+        data["token"] = include_token
+    return data
+
+
+@protected_router.post("/invitations", response_model=TenantInvitationCreateResponse, status_code=status.HTTP_201_CREATED)
+@rate_limit(max_requests=20, window_seconds=60)
+async def create_invitation(
+    data: TenantInvitationCreate,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = InvitationService(db)
+    invitation, token = await service.create_invitation(
+        referrer_user_id=cast(int, current_user.id),
+        tenant_id=cast(int, current_user.tenant_id),
+        data=data,
+    )
+    return _invitation_to_dict(invitation, include_token=token)
+
+
+@protected_router.get("/invitations", response_model=List[TenantInvitationResponse])
+@rate_limit(max_requests=30, window_seconds=60)
+async def list_invitations(
+    scope: Optional[str] = Query(None, pattern="^tenant$"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = InvitationService(db)
+    if scope == "tenant":
+        if not is_admin_or_above(current_user):
+            raise PermissionDeniedError("صلاحية إدارية مطلوبة لعرض كل دعوات المستأجر")
+        invitations = await service.list_tenant(cast(int, current_user.tenant_id), skip, limit)
+    else:
+        invitations = await service.list_mine(cast(int, current_user.id), cast(int, current_user.tenant_id), skip, limit)
+    return [_invitation_to_dict(inv) for inv in invitations]
+
+
+@protected_router.get("/invitations/{invitation_id}", response_model=TenantInvitationResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_invitation(
+    invitation_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = InvitationService(db)
+    invitation = await service.get_one(
+        invitation_id=invitation_id,
+        tenant_id=cast(int, current_user.tenant_id),
+        current_user_id=cast(int, current_user.id),
+        is_admin=is_admin_or_above(current_user),
+    )
+    return _invitation_to_dict(invitation)
+
+
+@protected_router.post("/invitations/{invitation_id}/revoke", response_model=TenantInvitationResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def revoke_invitation(
+    invitation_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = InvitationService(db)
+    invitation = await service.revoke(
+        invitation_id=invitation_id,
+        tenant_id=cast(int, current_user.tenant_id),
+        current_user_id=cast(int, current_user.id),
+        is_admin=is_admin_or_above(current_user),
+    )
+    return _invitation_to_dict(invitation)
+
+
+@router.post("/register-with-invitation", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@rate_limit(max_requests=5, window_seconds=60)
+async def register_with_invitation(
+    data: InvitationRegisterRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    service = InvitationService(db)
+    idempotency_key = request.headers.get("X-Idempotency-Key") or f"INV-{uuid.uuid4().hex[:12].upper()}"
+    user = await service.register_with_invitation(data, idempotency_key)
+    return user

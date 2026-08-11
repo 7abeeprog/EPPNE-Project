@@ -3,9 +3,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, func, or_, and_
 from sqlalchemy.orm import selectinload
 from typing import Optional, List, cast
-from app.domains.identity.models import User, RefreshToken
+from app.domains.identity.models import User, RefreshToken, TenantInvitation
 from app.domains.finance.models import Wallet
 from app.core.errors import NotFoundError
+from app.core.enums import InvitationStatus
 from datetime import datetime, timezone
 
 class UserRepository:
@@ -256,3 +257,111 @@ class WalletRepository:
         await self.db.commit()
         result = await self.db.execute(select(Wallet).where(Wallet.id == wallet_id))
         return result.scalar_one_or_none()
+
+
+class InvitationRepository:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create(
+        self,
+        tenant_id: int,
+        referrer_user_id: int,
+        token: str,
+        email: Optional[str] = None,
+        product_id: Optional[int] = None,
+        max_uses: Optional[int] = None,
+        expires_at: Optional[datetime] = None,
+    ) -> TenantInvitation:
+        invitation = TenantInvitation(
+            tenant_id=tenant_id,
+            referrer_user_id=referrer_user_id,
+            token_hash=TenantInvitation.hash_token(token),
+            email=email,
+            product_id=product_id,
+            max_uses=max_uses,
+            expires_at=expires_at,
+        )
+        self.db.add(invitation)
+        await self.db.commit()
+        await self.db.refresh(invitation)
+        return invitation
+
+    async def get_by_token(self, token: str) -> Optional[TenantInvitation]:
+        token_hash = TenantInvitation.hash_token(token)
+        result = await self.db.execute(
+            select(TenantInvitation).where(TenantInvitation.token_hash == token_hash)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_id(self, invitation_id: int, tenant_id: int) -> Optional[TenantInvitation]:
+        result = await self.db.execute(
+            select(TenantInvitation).where(
+                and_(TenantInvitation.id == invitation_id, TenantInvitation.tenant_id == tenant_id)
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_by_referrer(self, referrer_user_id: int, tenant_id: int, skip: int = 0, limit: int = 20) -> List[TenantInvitation]:
+        query = select(TenantInvitation).where(
+            and_(TenantInvitation.referrer_user_id == referrer_user_id, TenantInvitation.tenant_id == tenant_id)
+        ).order_by(TenantInvitation.created_at.desc()).offset(skip).limit(limit)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
+    async def list_by_tenant(self, tenant_id: int, skip: int = 0, limit: int = 20) -> List[TenantInvitation]:
+        query = select(TenantInvitation).where(
+            TenantInvitation.tenant_id == tenant_id
+        ).order_by(TenantInvitation.created_at.desc()).offset(skip).limit(limit)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
+    async def claim_use(self, invitation_id: int) -> bool:
+        result = await self.db.execute(
+            update(TenantInvitation)
+            .where(
+                TenantInvitation.id == invitation_id,
+                TenantInvitation.status == InvitationStatus.PENDING,
+                or_(TenantInvitation.max_uses.is_(None), TenantInvitation.current_uses < TenantInvitation.max_uses),
+                or_(TenantInvitation.expires_at.is_(None), TenantInvitation.expires_at > func.now()),
+            )
+            .values(current_uses=TenantInvitation.current_uses + 1, accepted_at=func.now())
+            .returning(TenantInvitation.id)
+        )
+        await self.db.commit()
+        return result.scalar_one_or_none() is not None
+
+    async def release_use(self, invitation_id: int) -> None:
+        await self.db.execute(
+            update(TenantInvitation).where(TenantInvitation.id == invitation_id)
+            .values(current_uses=TenantInvitation.current_uses - 1)
+        )
+        await self.db.commit()
+
+    async def finalize_if_exhausted(self, invitation_id: int) -> None:
+        await self.db.execute(
+            update(TenantInvitation)
+            .where(
+                TenantInvitation.id == invitation_id,
+                TenantInvitation.max_uses.isnot(None),
+                TenantInvitation.current_uses >= TenantInvitation.max_uses,
+            )
+            .values(status=InvitationStatus.ACCEPTED)
+        )
+        await self.db.commit()
+
+    async def revoke(self, invitation_id: int, tenant_id: int, revoked_by_user_id: int) -> Optional[TenantInvitation]:
+        result = await self.db.execute(
+            select(TenantInvitation).where(
+                and_(TenantInvitation.id == invitation_id, TenantInvitation.tenant_id == tenant_id)
+            )
+        )
+        invitation = result.scalar_one_or_none()
+        if not invitation:
+            return None
+        invitation.status = InvitationStatus.REVOKED
+        invitation.revoked_by_user_id = revoked_by_user_id
+        invitation.revoked_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        await self.db.refresh(invitation)
+        return invitation
