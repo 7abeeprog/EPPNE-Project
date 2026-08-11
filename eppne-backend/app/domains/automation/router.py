@@ -306,14 +306,13 @@ async def get_execution_logs(
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_secret(
     data: SecretCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """تخزين سر (مثل API key) مشفر داخل قاعدة البيانات."""
     service = AutomationService(db)
     secret = await service.create_secret(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         name=data.name,
         value=data.value
     )
@@ -323,13 +322,12 @@ async def create_secret(
 @router.get("/secrets", response_model=List[SecretResponse])
 @rate_limit(max_requests=20, window_seconds=60)
 async def list_secrets(
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """قائمة الأسرار (بدون الكشف عن القيم)."""
     service = AutomationService(db)
-    secrets = await service.list_secrets(tenant_id=cast(int, tenant.id))
+    secrets = await service.list_secrets(tenant_id=cast(int, current_user.tenant_id))
     return secrets
 
 
@@ -337,14 +335,13 @@ async def list_secrets(
 @rate_limit(max_requests=10, window_seconds=60)
 async def delete_secret(
     secret_name: str,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """حذف سر."""
     service = AutomationService(db)
     await service.delete_secret(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         name=secret_name
     )
     return {"message": "Secret deleted"}

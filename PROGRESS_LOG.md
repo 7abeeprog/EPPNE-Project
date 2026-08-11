@@ -1546,3 +1546,381 @@ admin endpoints أصلًا). التفاصيل الكاملة والتصنيف ل
 لفريق المشروع، لم يُفحص أو يُصلَح هنا.
 
 ---
+
+## [2026-08-11] — Phase 11، الجزء 1 (توثيق فقط، صفر تعديل كود):
+تثبيت باج `agritech/router.py` كـ"معلَّق — يحتاج قرار منفصل"
+
+**الحالة:** ⚠️ اكتشاف موثَّق — **لم يُعالَج، ولن يُعالَج في هذه الجلسة**
+(بق وظيفي منفصل تمامًا عن ثغرة X-Tenant-ID، خارج نطاق Phase 10c/11 بالكامل)
+
+**السياق:** كانت ملاحظة جانبية عابرة في ذيل إدخال Phase 10c أعلاه (اتلقت
+أثناء فحص الـ29 دومين لثغرة X-Tenant-ID). هذا الإدخال يثبّتها كبند مستقل
+موثَّق بالتفصيل الكامل (تأكَّد فعليًا بقراءة الكود، مش نقل عن الملاحظة
+القديمة فقط)، تمهيدًا لتبليغه للفريق كمهمة منفصلة.
+
+**التأكيد الفعلي (قراءة كود، بدون أي تعديل):**
+- `app/domains/agritech/router.py` **محتواه بالكامل نسخة طبق الأصل من
+  `ai_governance/router.py`** — تعليق رأس الملف نفسه لسه بيقول
+  `# app/domains/ai_governance/router.py` (سطر 1)، والراوتر معرَّف
+  `APIRouter(prefix="/ai-governance", tags=["AI Agent Governance"])`
+  (سطر 22) — نفس الـendpoints بالظبط (`/agents/{agent_id}/quotas`,
+  `/rate-limit`, `/audit-logs`, `/usage-summary`, `/check-and-consume`,
+  `/quotas/reset`)، نفس الاستيراد لـ`AIGovernanceService`.
+- `app/main.py:270,272`: `agritech_router` و`ai_governance_router`
+  **الاتنين مسجَّلين في نفس `routers_config`**. بما إن حلقة التسجيل
+  (`main.py:302-308`) بتضيف بس `prefix="/api"` من بره (متغير
+  `prefix_path` زي `/agritech` مش مُستخدَم فعليًا فيها — موثَّق سابقًا في
+  إدخال Phase 5 أعلاه)، والـprefix الفعلي بييجي من `APIRouter(prefix=...)`
+  الداخلي لكل راوتر، فالناتج: **مسارات `agritech_router` الفعلية هي
+  `/api/ai-governance/*` بالظبط — نفس مسارات `ai_governance_router`
+  الحقيقي حرفيًا، تصادم كامل**. بما إن `agritech_router` مُسجَّل أولًا
+  (سطر 270، قبل `ai_governance_router` في سطر 272)، طلباته بتوصل لنسخة
+  agritech المكرَّرة أولًا (نفس المنطق حرفيًا، فالسلوك الوظيفي الظاهري
+  للمستخدم مش هيختلف، لكن ده لسه تصادم مسارات حقيقي وكود ميت خطير).
+- **كود agritech الحقيقي غير معروض بأي router إطلاقًا:** `agritech/
+  service.py` فيه فعليًا منطق كامل لـ`SmartFarm`/`FarmZone`/`CropCycle`
+  (المزارع، المناطق، دورات الزراعة — تأكَّد بقراءة `service.py:59-131`
+  وما بعده: `create_farm`, `list_farms`, `get_farm`, `add_farm_zone`...
+  إلخ)، لكن **صفر endpoint في `agritech/router.py` الحالي بيستدعي أي
+  دالة من دي** — كل الملف بيستدعي `AIGovernanceService` بدل خدمة
+  agritech الحقيقية. يعني وظيفة agritech الفعلية (المزارع/المناطق/دورات
+  الزراعة) **غير قابلة للوصول من الـAPI إطلاقًا**، رغم وجود الكود الكامل
+  ليها في `service.py`/`models.py`/`repository.py`.
+
+**القرار:** توثيق فقط، **معلَّق — يحتاج قرار منفصل** (هل يُعاد بناء
+`agritech/router.py` ليعرض `AgritechService` الحقيقية، أم يُحذف الملف
+المكرَّر ويُكتب من الصفر؟). صفر تنفيذ في هذه الجلسة، صفر لمس لأي ملف في
+دومين agritech أو ai_governance.
+
+**الملفات المفحوصة فقط (بدون أي تعديل):** `eppne-backend/app/domains/
+agritech/router.py`, `eppne-backend/app/domains/agritech/service.py`,
+`eppne-backend/app/domains/ai_governance/router.py`,
+`eppne-backend/app/main.py` (سطور 270،272،302-308).
+
+---
+
+## [2026-08-11] — Phase 11، الجزء 2: تحقق حي (read-only على مستوى
+الاستغلال) لثغرة `automation/router.py` (secrets) من التقرير النظامي —
+النتيجة **أدق ممـا افترضه الفحص الأصلي المبني على قراءة الكود فقط**
+
+**الحالة:** ✅ تحقق حي مكتمل، بيانات الاختبار اتنضّفت بالكامل، السيرفر
+التجريبي اتوقف. **صفر إصلاح كود** — تشخيص وتحقق فقط، حسب الطلب الصريح.
+
+**السؤال المطلوب تأكيده/نفيه حيًا:** هل أي **مستخدم عادي (مش سوبريوزر)**
+يقدر يقرأ/يمسح secrets تخص tenant تاني عبر `automation/router.py:305-349`
+(`create_secret`/`list_secrets`/`delete_secret`)، زي ما صنَّفه تقرير
+`.claude/plans/critical-finding-xtenant-systemic.md` (بند 7، وصفه
+"أسوأ من affiliate: مفيش حتى فحص superuser")؟
+
+### الفحص الأول (read-only، تأكيد الفهم من الكود قبل أي تحقق حي)
+تأكَّد فعليًا إن الـ3 endpoints بتاعت الأسرار محمية بـ
+`Depends(get_current_active_user)` بس (`router.py:307-311,325-329,338-343`
+— **صفر `get_current_superuser`**)، وإن `tenant_id` بيُستخرج من
+`tenant: AcademyTenant = Depends(get_current_tenant)` (الهيدر، غير
+موثوق) مش من `current_user.tenant_id`، وإن `repository.py:169-198`
+بيفلتر بـ`tenant_id` ده مباشرة في `WHERE`/`DELETE` بلا أي مقارنة إضافية.
+هذا الجزء **مطابق تمامًا** لما ورد في التقرير النظامي.
+
+**اكتشاف إضافي أثناء الفحص (خارج هذا الملف، لم يظهر في `router.py` نفسه):**
+كل راوتر في `main.py:302-308` بيتسجَّل بـ
+`dependencies=[Depends(require_sector(sector))]` — طبقة حماية **منفصلة
+تمامًا** ومُطبَّقة **على مستوى main.py**، مش ظاهرة لمين بيقرا `router.py`
+لوحده (وده بالظبط السبب اللي خلّى فحص Phase 10 القرائي الأصلي يفوّتها).
+`require_sector` (`api/deps.py:86-115`) بيتحقق من `current_user.sector`؛
+بما إن موديل `User` (`identity/models.py`) **مالوش عمود `sector`
+إطلاقًا**، القيمة دايمًا `None`، فبيقع على fallback: لو الدور
+`EXECUTIVE_DIRECTOR`/`SUPER_ADMIN` → `sector="all"` (تجاوز كامل)، **غير
+كده** (أي `USER` عادي) → `sector="academy"` دايمًا، ثابت، بغض النظر عن
+أي حاجة. يعني بالتصميم الحالي: **مفيش أي مستخدم `USER` عادي (غير
+سوبريوزر) يقدر يوصل لأي endpoint تحت `/api/automation/*` أصلًا** —
+بيتصدّه `require_sector` قبل ما يوصل حتى لمنطق الـtenant في الراوتر
+نفسه.
+
+### التحقق الحي (سيرفر uvicorn محلي، DB/Redis عبر docker الموجودين
+مسبقًا — `eppne_db`:5435، `redis`:6380)
+
+**الإعداد:** Tenant B تجريبي (`academy_tenants` id=8، اسم "Phase11
+Verify Tenant B")، مستخدم عادي حقيقي تحته (`phase11_tenantb_user`،
+id=18، دور `USER`، **تينانته الحقيقي=8** مؤكَّد من الـJWT وقت اللوجن)،
+ومستخدم عادي حقيقي تاني تحت التينانت الحقيقي=1 كـ"مهاجم"
+(`phase11_tenanta_atk`، id=19، دور `USER`، تينانته الحقيقي=1).
+
+**اختبار 1 (المحاولة الأصلية المطلوبة تحديدًا — إنشاء سر كمستخدم عادي
+تحت تينانته الحقيقي، بدون أي تزوير):**
+```
+POST /api/automation/secrets HTTP/1.1
+X-Tenant-ID: 8
+Cookie: <جلسة phase11_tenantb_user، دور USER، تينانت حقيقي=8>
+Body: {"name":"phase11_verify_secret","value":"TENANT-B-SUPER-SECRET-API-KEY-42"}
+```
+```
+HTTP/1.1 403 Forbidden
+{"detail":"User sector not defined. Please contact support.","code":"PermissionDeniedError"}
+```
+حتى **صاحب التينانت الحقيقي نفسه** (مش مهاجم) اتصدّ — تأكيد إن الطبقة
+دي مش خاصة بـtenant، لكن بمنع أي `USER` عادي عن الدومين كله.
+
+**اختبار 2 (القراءة — مهاجم `USER` عادي تينانته الحقيقي=1، بهيدر مزوَّر
+X-Tenant-ID: 8):**
+```
+GET /api/automation/secrets HTTP/1.1
+X-Tenant-ID: 8
+Cookie: <جلسة phase11_tenanta_atk، دور USER، تينانت حقيقي=1>
+```
+```
+HTTP/1.1 403 Forbidden
+{"detail":"User sector not defined. Please contact support.","code":"PermissionDeniedError"}
+```
+
+**اختبار 3 (الحذف — نفس المهاجم، نفس الهيدر المزوَّر):**
+```
+DELETE /api/automation/secrets/phase11_verify_secret HTTP/1.1
+X-Tenant-ID: 8
+Cookie: <نفس جلسة المهاجم>
+```
+```
+HTTP/1.1 403 Forbidden
+{"detail":"User sector not defined. Please contact support.","code":"PermissionDeniedError"}
+```
+تحقُّق DB مباشر بعد الاختبارات 1-3: `SELECT count(*) FROM
+automation_secrets WHERE tenant_id=8` → **0** — مفيش أي سر اتخلق أو
+اتسرَّب أو اتمسح، لأن الطبقة الخارجية صدّت كل المحاولات قبل ما توصل
+للراوتر.
+
+**الخلاصة الجزئية لهذا السؤال بالضبط (كما طُرح): منفيّة حيًا.** مستخدم
+عادي (`USER`، مش سوبريوزر) **مايقدرش** يقرأ ولا يمسح ولا حتى ينشئ أي سر
+عبر `automation/router.py` حاليًا — بيتصدّه `require_sector` قبل ما
+يوصل لمنطق `X-Tenant-ID` في الراوتر أصلًا، بصرف النظر عن أي تزوير هيدر.
+
+### تحقق إضافي (لتوصيف الفاعل الفعلي القادر على الاستغلال، بنفس نطاق
+automation فقط) — الثغرة **حقيقية فعليًا**، لكن للسوبريوزر مش للمستخدم
+العادي
+
+بما إن `require_sector` بيدي تجاوز كامل (`sector="all"`) للأدوار
+`EXECUTIVE_DIRECTOR`/`SUPER_ADMIN` فقط، اتعمل تحقق تكميلي (بنفس أدوات
+الجلسة، صفر خروج عن دومين automation) لمعرفة هل ثغرة X-Tenant-ID
+الموصوفة في التقرير النظامي حقيقية **لهذا الفاعل تحديدًا** (نفس فئة
+فاعل ثغرة affiliate المُصلَحة في Phase 10c):
+
+رُقّي `phase11_tenantb_user` (id=18) و`phase11_tenanta_atk` (id=19)
+لـ`SUPER_ADMIN` عبر `UPDATE users SET system_role='SUPER_ADMIN'`
+(الجلستان الحاليتان فضلتا صالحتين — `get_current_user` بيقرا الدور من
+DB في كل طلب، مش من الـJWT). أُنشئ سر شرعي كسوبريوزر تينانت B الحقيقي:
+
+```
+POST /api/automation/secrets HTTP/1.1
+X-Tenant-ID: 8
+Cookie: <جلسة phase11_tenantb_user، دور SUPER_ADMIN دلوقتي، تينانت حقيقي=8>
+```
+```
+HTTP/1.1 201 Created
+{"id":1,"name":"phase11_verify_secret","created_at":"2026-08-11T14:29:09.686784Z"}
+```
+
+بعدين هجوم فعلي بسوبريوزر تينانته الحقيقي=1 (`phase11_tenanta_atk`)
+بهيدر مزوَّر `X-Tenant-ID: 8`:
+
+```
+GET /api/automation/secrets HTTP/1.1
+X-Tenant-ID: 8
+Cookie: <جلسة phase11_tenanta_atk، دور SUPER_ADMIN دلوقتي، تينانت حقيقي=1>
+```
+```
+HTTP/1.1 200 OK
+[{"id":1,"name":"phase11_verify_secret","created_at":"2026-08-11T14:29:09.686784Z"}]
+```
+تسريب حقيقي (id/name/created_at) لمورد تينانت تاني — **لكن مش القيمة
+الخام للسر**: `SecretResponse` (`schemas.py:274-279`) بيقتصر على
+`id/name/created_at` بس، فمفيش أي endpoint بيرجّع `value` الفعلية في
+أي استجابة API — القيمة بتتفك تشفيرها داخليًا في `repository.py` بس
+بتتفلتر بواسطة `response_model` قبل ما توصل للعميل.
+
+```
+DELETE /api/automation/secrets/phase11_verify_secret HTTP/1.1
+X-Tenant-ID: 8
+Cookie: <نفس جلسة المهاجم السوبريوزر>
+```
+```
+HTTP/1.1 200 OK
+{"message":"Secret deleted"}
+```
+تحقق DB مباشر فور الطلب: `SELECT id, tenant_id, name FROM
+automation_secrets WHERE tenant_id=8` → **0 صفوف**. **الحذف حقيقي
+ومُنفَّذ فعليًا في القاعدة، مش مجرد استجابة.**
+
+**الخلاصة الكاملة:** ثغرة `X-Tenant-ID` الموصوفة في التقرير النظامي
+لـ`automation/router.py` **مؤكَّدة حيًا وحقيقية 100%** (قراءة meta-data
++ حذف فعلي كاملين عبر تينانت غير مصرَّح به) — **لكن الفاعل القادر على
+الوصول لها أصلًا محصور بـ`EXECUTIVE_DIRECTOR`/`SUPER_ADMIN` بسبب طبقة
+`require_sector` المنفصلة، مش أي مستخدم `USER` عادي** كما وصفها التقرير
+النظامي الأصلي (المبني على قراءة `router.py` لوحده بدون رؤية طبقة
+`main.py`). هذا **يصحّح دقة التصنيف** (بند 7 في التقرير النظامي) دون
+تغيير الخلاصة الجوهرية: نفس فئة الفاعل اللي استغلت affiliate (سوبريوزر
+من تينانت مختلف) قادرة على نفس النوع من الاستغلال هنا كمان — أخطر من
+حيث الأثر (حذف secrets/API keys فعلي، لا فقط قراءة بيانات مالية)، لكن
+أضيق نطاق فاعلين مما ذُكر أصلًا (سوبريوزر بس، مش أي مستخدم مسجَّل).
+
+### التنظيف (تم بالكامل، تحقَّق بـSELECT مباشر)
+- `automation_secrets`: 0 صفوف لـtenant_id=8 (اتحذف عبر الهجوم نفسه، تأكَّد).
+- `DELETE FROM users WHERE id=19` (المهاجم) + `DELETE FROM academy_tenants
+  WHERE id=8` (بيكاسكيد يحذف `user id=18` تلقائيًا عبر
+  `fk_users_tenant_id ... ON DELETE CASCADE`). تحقق نهائي: `tenant_8=0`,
+  `user_18=0`, `user_19=0`, `secrets_tenant8=0` — كله صفر.
+- ملفات كوكيز/لوج مؤقتة اتعملت أثناء التحقق (`phase11_tenantb_cookies.txt`,
+  `phase11_tenanta_cookies.txt`, `phase11_server.log`) اتمسحت بالكامل من
+  `eppne-backend/`.
+- سيرفر uvicorn التجريبي (PID اتأكَّد بـ`netstat`/`tasklist` إنه
+  المستمع على المنفذ 8000) اتوقف (`taskkill /F`)، وتأكَّد توقفه فعليًا
+  (`curl` رجّع فشل اتصال بعدها).
+- **لم يُلمس أي ملف كود** (`router.py`/`service.py`/`repository.py`/
+  `api/deps.py`) في أي دومين — تحقق حي وتشخيص فقط، صفر تنفيذ، حسب الطلب
+  الصريح. الإصلاح (لو تقرَّر) مهمة منفصلة لاحقة بموافقة صريحة.
+
+**ملاحظة جانبية غير مفحوصة بعمق (خارج نطاق هذه الجلسة، مرشَّحة لتحقق
+لاحق):** هل نفس فجوة `require_sector` (كل مستخدم `USER` عادي محصور
+تلقائيًا بـ`sector="academy"` لعدم وجود عمود `sector` على الموديل من
+الأساس) بتحصل في **كل الدومينات التانية** المسجَّلة عبر نفس حلقة
+`routers_config` (مش automation بس)؟ لو كده، فده معناه إن جزء كبير من
+الـ20 دومين "SUSPICIOUS" في التقرير النظامي ممكن يكون فعليًا **غير قابل
+للوصول من مستخدمين عاديين أصلًا** (نفس نمط automation)، وإن الفاعل
+الحقيقي في كل الحالات دي محصور بالسوبريوزر بس — **ده يحتاج تحقق حي
+منفصل لكل دومين قبل أي افتراض**، لم يُفحص هنا (خارج نطاق Phase 11
+المحدَّد بـagritech توثيق + automation تحقق فقط).
+
+**الملفات المفحوصة فقط (بدون أي تعديل كود):** `eppne-backend/app/
+domains/automation/router.py`, `eppne-backend/app/domains/automation/
+service.py`, `eppne-backend/app/domains/automation/repository.py`,
+`eppne-backend/app/domains/automation/models.py`, `eppne-backend/app/
+domains/automation/schemas.py`, `eppne-backend/app/api/deps.py`,
+`eppne-backend/app/main.py`.
+
+---
+
+## [2026-08-11] — Phase 12: إصلاح ثغرة X-Tenant-ID في `automation/router.py`
+(secrets) — نفس نمط Phase 10c بالظبط
+
+**الحالة:** 🟢 **الإصلاح تم على الـ3 endpoints، اتحقَّق منه حيًا (قراءة +
+حذف + مقارنة مع سلوك المالك الشرعي)، بيانات الاختبار اتنضّفت، السيرفر
+التجريبي اتوقف.**
+
+### السياق
+الثغرة كانت مؤكَّدة حيًا بالكامل في Phase 11 (راجع الإدخال أعلاه): سوبريوزر
+(`SUPER_ADMIN`/`EXECUTIVE_DIRECTOR` — الوحيدين القادرين على تخطي
+`require_sector`) من تينانت حقيقي مختلف قادر يقرأ metadata أسرار (secrets)
+تينانت تاني ويحذفها فعليًا عبر تزوير هيدر `X-Tenant-ID`، لأن
+`create_secret`/`list_secrets`/`delete_secret` كانت بتاخد الـ`tenant_id`
+من `Depends(get_current_tenant)` (الهيدر) بدل `current_user.tenant_id`
+(التوكن الموقَّع).
+
+### الإصلاح المُنفَّذ
+`app/domains/automation/router.py` — الـ3 endpoints فقط
+(`POST/GET /secrets`, `DELETE /secrets/{secret_name}`): إزالة
+`tenant: AcademyTenant = Depends(get_current_tenant)` من توقيع كل واحدة،
+واستبدال `tenant_id=cast(int, tenant.id)` بـ
+`tenant_id=cast(int, current_user.tenant_id)` في استدعاء
+`AutomationService`. لم يُلمس أي endpoint تاني في `automation` (الملف
+فيه 12 endpoint تاني — workflows/triggers/webhook/executions/logs —
+خارج نطاق الثغرة، لم تُفحص أو تُعدَّل). لم يُلمس أي دومين تاني.
+
+### التحقق الحي (سيرفر uvicorn محلي، DB/Redis عبر docker الموجودين
+مسبقًا — `eppne_db`:5435، `redis`:6380؛ الإصلاح طُبِّق على الكود **قبل**
+تشغيل السيرفر، فالمرجع لحالة "قبل الإصلاح" هو التحقق الحي الموثَّق فعليًا
+في Phase 11 أعلاه — نفس السيناريو بالضبط، بدون إعادة كسر الكود لإعادة
+اختباره)
+
+**بيانات throwaway جديدة (منفصلة عن Phase 11):** Tenant B تجريبي
+(`academy_tenants` id=9، "Phase12 Verify Tenant B")، مستخدم صاحب تينانت
+حقيقي (`phase12_tenantb_user`، id=21، تينانته الحقيقي=9)، مستخدم "مهاجم"
+تحت تينانت حقيقي مختلف (`phase12_tenanta_atk`، id=22، تينانته الحقيقي=1)
+— الاتنين رُقّيا لـ`SUPER_ADMIN` عبر `UPDATE users SET
+system_role='SUPER_ADMIN'` **قبل** تسجيل الدخول (عشان الـJWT يحمل
+`tenant_id` الصحيح من الأساس، بما إن `get_current_user`
+(`api/deps.py:50`) بيقارن `token_tenant_id` مع DB في `get_by_id` — تغيير
+`tenant_id` بعد إصدار التوكن كان هيكسر الجلسة).
+
+**مرجع "قبل" (من Phase 11، حي فعليًا، نفس السيناريو):**
+```
+GET /api/automation/secrets HTTP/1.1
+X-Tenant-ID: 8   ⬅️ مزوَّر، تينانت المهاجم الحقيقي=1
+→ HTTP/1.1 200 OK  [{"id":1,"name":"phase11_verify_secret",...}]   (تسريب حقيقي)
+
+DELETE /api/automation/secrets/phase11_verify_secret HTTP/1.1
+X-Tenant-ID: 8
+→ HTTP/1.1 200 OK  {"message":"Secret deleted"}
+تحقق DB فوري: tenant_id=8 → 0 صفوف (حذف فعلي منفَّذ في القاعدة لتينانت تاني)
+```
+
+**"بعد" (هذه الجلسة، بالكود المُعدَّل):**
+
+اختبار A — إنشاء شرعي كصاحب التينانت الحقيقي (`phase12_tenantb_user`،
+تينانت=9):
+```
+POST /api/automation/secrets HTTP/1.1
+X-Tenant-ID: 9
+→ HTTP/1.1 201 Created  {"id":2,"name":"phase12_verify_secret",...}
+```
+تحقق DB: `automation_secrets` id=2, tenant_id=9.
+
+اختبار B (القراءة — نفس محاولة الاستغلال بالضبط): مهاجم
+`phase12_tenanta_atk` (تينانته الحقيقي=1)، بهيدر مزوَّر `X-Tenant-ID: 9`:
+```
+GET /api/automation/secrets HTTP/1.1
+X-Tenant-ID: 9   ⬅️ مزوَّر
+→ HTTP/1.1 200 OK  []
+```
+رجّعت بيانات تينانت المهاجم الحقيقي (1، فاضي) — **مش** سر تينانت 9، رغم
+الهيدر. الهيدر بقى بلا أي تأثير.
+
+اختبار C (الحذف — نفس المهاجم، نفس الهيدر المزوَّر):
+```
+DELETE /api/automation/secrets/phase12_verify_secret HTTP/1.1
+X-Tenant-ID: 9   ⬅️ مزوَّر
+→ HTTP/1.1 200 OK  {"message":"Secret deleted"}
+```
+الرسالة عامة (سلوك موجود مسبقًا في `repository.delete_secret` — `DELETE
+... WHERE tenant_id=X AND name=Y` بلا rowcount check، لم يتغيَّر بهذا
+الإصلاح). **تحقق DB فوري بعد الطلب مباشرة:**
+```sql
+SELECT id, tenant_id, name FROM automation_secrets;
+-- id=2, tenant_id=9, name='phase12_verify_secret'   ⬅️ لسه موجود، لم يُمس
+```
+الحذف اتنفَّذ فعليًا ضد `tenant_id=1` (تينانت المهاجم الحقيقي، مفيهوش صف
+بهذا الاسم) فمفيش أي تأثير — **سر تينانت 9 فضل سليم 100% رغم الهيدر
+المزوَّر صراحةً.**
+
+اختبار D/E (تأكيد إن المسار الشرعي لسه شغّال، مش بس إن الهجوم اتصدّ):
+صاحب التينانت الحقيقي (`phase12_tenantb_user`) عمل `GET /secrets` بعد
+محاولة الهجوم → `200 OK` شاف سره بشكل طبيعي (`[{"id":2,...}]`)، وبعدين
+`DELETE /secrets/phase12_verify_secret` → `200 OK`، تحقق DB فوري:
+`SELECT count(*) FROM automation_secrets WHERE tenant_id=9` → **0**.
+الحذف الحقيقي لصاحب التينانت اشتغل تمام.
+
+**الخلاصة:** الهيدر بقى بلا أي تأثير فعلي على الـ3 endpoints؛ الـscoping
+بقى كليًا من `current_user.tenant_id` (من التوكن الموقَّع، غير قابل
+للتزوير من العميل)؛ لا كسر لأي وظيفة شرعية. الثغرة الموصوفة في Phase 11
+(مؤكَّدة حيًا وقتها لفاعل `SUPER_ADMIN`/`EXECUTIVE_DIRECTOR` تحديدًا،
+محصورة بـ`require_sector`) **مقفولة فعليًا**.
+
+### التنظيف (تم بالكامل، تحقَّق بـSELECT مباشر)
+- `DELETE FROM users WHERE id IN (21,22)` (تينانت B الحقيقي + المهاجم) →
+  `DELETE FROM academy_tenants WHERE id=9` → `DELETE FROM users WHERE
+  id=20` (المستخدم المؤقت اللي استُخدم كـ`admin_id` عشان إنشاء التينانت
+  عبر SQL مباشر، بما إن العمود `NOT NULL`). تحقق نهائي: `tenant_9=0`,
+  `users_20_21_22=0`, `secrets_tenant9=0` — كله صفر.
+- ملف لوج السيرفر المؤقت (`phase12_uvicorn.log`) وملفات الكوكيز
+  (`phase12_tenantb_cookies.txt`, `phase12_tenanta_cookies.txt`) اتمسحوا
+  بالكامل من `eppne-backend/`.
+- سيرفر uvicorn التجريبي (PID اتأكَّد بـ`netstat`/`tasklist` إنه
+  المستمع على المنفذ 8000) اتوقف (`taskkill /F`)، وتأكَّد توقفه فعليًا
+  (`curl` رجّع فشل اتصال بعدها).
+- **لم يُلمس أي كود غير `automation/router.py`** — نفس نطاق Phase 10c
+  بالضبط (endpoint دومين واحد محدَّد، صفر تغيير في `service.py`/
+  `repository.py`/`api/deps.py`/أي دومين تاني).
+
+### ملاحظة نطاق (بدون تنفيذ)
+الاكتشاف النظامي الأوسع (19 دومين تاني بنفس شكل الثقة بالهيدر، موثَّق في
+`.claude/plans/critical-finding-xtenant-systemic.md`) **لسه بدون قرار
+مركزي** — Phase 12 دي إصلاح تدريجي لدومين واحد بس (زي Phase 10c بالظبط
+لـaffiliate)، مش جزء من أي حل مركزي. الملف المرجعي لم يُعدَّل.
+
+---
