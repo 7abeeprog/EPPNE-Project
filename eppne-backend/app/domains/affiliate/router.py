@@ -240,11 +240,10 @@ async def track_referral_click(
 @router.get("/admin/tiers", response_model=CommissionTierResponse)
 @rate_limit(max_requests=20, window_seconds=60)
 async def get_commission_tiers(
-    tenant: SimpleTenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_superuser),
 ):
-    service = AffiliateService(db, tenant.id)
+    service = AffiliateService(db, current_user.tenant_id)
     tiers = await service.get_commission_tiers()
     if not tiers:
         raise HTTPException(status_code=404, detail="إعدادات العمولات غير موجودة")
@@ -255,11 +254,10 @@ async def get_commission_tiers(
 @rate_limit(max_requests=10, window_seconds=60)
 async def update_commission_tiers(
     data: CommissionTierUpdate,
-    tenant: SimpleTenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_superuser),
 ):
-    service = AffiliateService(db, tenant.id)
+    service = AffiliateService(db, current_user.tenant_id)
     return await service.update_commission_tiers(data)
 
 
@@ -267,11 +265,10 @@ async def update_commission_tiers(
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_product_commission_tier(
     data: CommissionTierCreate,
-    tenant: SimpleTenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_superuser),
 ):
-    service = AffiliateService(db, tenant.id)
+    service = AffiliateService(db, current_user.tenant_id)
     return await service.create_product_tier(data)
 
 
@@ -279,11 +276,10 @@ async def create_product_commission_tier(
 @rate_limit(max_requests=5, window_seconds=300)
 async def bulk_release_commissions(
     data: CommissionBulkReleaseRequest,
-    tenant: SimpleTenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_superuser),
 ):
-    service = AffiliateService(db, tenant.id)
+    service = AffiliateService(db, current_user.tenant_id)
     result = await service.bulk_release_commissions(
         commission_ids=data.commission_ids,
         admin_id=cast(int, current_user.id),

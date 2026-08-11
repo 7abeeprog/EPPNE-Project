@@ -550,3 +550,999 @@ Phase 3 (رينيم الفرونت إند) — الكود مكتمل، لكن ا
 بـPhase 4.
 
 ---
+
+## [2026-08-10] — Phase 5 (Frontend، فحص read-only): لا يوجد تكرار
+components/auth مقابل components/identity فعليًا — اتحل من Phase 3.
+اكتشاف موثَّق منفصل: `api-types.ts` قديم من قبل بداية خطة الدمج بالكامل
+
+**الحالة:** ✅ Phase 5 مقفولة — الفرضية اللي اتبنت عليها الخطة
+(`.claude/plans/phase5-frontend-auth-identity-dedup.md`) مش صحيحة في
+الكود الحالي. صفر تعديل أو حذف تم أثناء هذا الفحص (read-only بالكامل،
+حسب طلب المستخدم صراحة).
+
+### الفحص (خطوة 1 من الخطة): هل تكرار components/auth/identity لسه موجود؟
+
+خطة Phase 5 افترضت وجود 4 مكونات مكررة بنفس الاسم في `components/auth/`
+و`components/identity/` معًا (LoginForm, RegisterForm, SessionCard,
+SessionsList)، زائد `AuthProvider.tsx`/`WalletCard.tsx` في identity،
+وملف `services/identity.service.ts` مضاعف. الفحص الفعلي بالـ`grep`/`Glob`
+أثبت إن الفرضية دي **قديمة ومتجاوزة بالفعل**:
+
+- `components/auth/` **غير موجود إطلاقًا** — صفر نتائج. الموجود فعليًا هو
+  `components/identity/` بس (6 ملفات)، وهو ما تم توثيقه فعليًا كمكتمل في
+  Phase 3 أعلاه (`git mv` من auth إلى identity، commit `4c7695b`).
+- كل الصفحات الحية (`app/(auth)/login`, `app/(auth)/register`,
+  `app/(dashboard)/profile`, `app/(dashboard)/privacy/settings`) بتستورد
+  من `@/components/identity/*` حصريًا — صفر استيراد من `components/auth`
+  في المشروع كله.
+- `AuthProvider.tsx` **مش** في `components/identity` (كانت افتراض الخطة
+  غلط) — موجود فعليًا في `providers/AuthProvider.tsx` (مجلد منفصل)،
+  زي ما موثَّق في Phase 2 أعلاه.
+- `WalletCard.tsx` **مش** جزء من دومين auth/identity أصلًا — موجود في
+  `components/finance/WalletCard.tsx` (منقول ليها عمدًا في Phase 2، خارج
+  نطاق auth/identity تمامًا).
+- `services/identity.service.ts` **غير موجود** — اتحذف فعليًا في Phase 2
+  (موثَّق أعلاه). الموجود بس `services/auth.service.ts`، وهو ده اللي
+  بيستورده `hooks/identity/useAuth.ts` و`hooks/identity/useUserProfile.ts`
+  حاليًا — mismatch تسمية (اسم الملف لسه "auth" بينما مجلد الاستهلاك
+  "identity") مش تكرار كود فعلي. **لم يُلمس — الـrename ده خارج نطاق
+  Phase 5 صراحة بطلب المستخدم.**
+
+**القرار:** التكرار المذكور في الخطة **كان موجود فعلًا وقت كتابتها لكن
+اتحل بالكامل ضمن Phase 3** (رينيم `components/auth`→`identity`). لا يوجد
+كود ميت أو نسخة مزدوجة تحتاج حسم دلوقتي. خطوات 2-3 من الخطة (تحديد
+النسخة الحية وحذف المكرر) **غير مطلوبة** — لا يوجد تكرار يُحذف.
+
+### اكتشاف جانبي موثَّق (خطوة 4 من الخطة، مش تصحيح فعلي — بحث فقط):
+مصدر مسارات `/identity/identity/*`
+
+خطوة 4 من خطة Phase 5 طلبت "تأكيد/تصحيح" مسارات `/identity/identity/*`
+المضاعفة. الفحص أثبت إنها **مش باج في تسجيل الراوتر بالباك إند**:
+
+- `eppne-backend/app/domains/identity/router.py:18-19`: الراوتر معرَّف
+  بـ`prefix="/identity"` **مرة واحدة بس**.
+- `eppne-backend/app/main.py:310-314`: `identity_router`/
+  `identity_protected_router` بيتضافوا بـ`include_router(..., prefix="/api")`
+  بشكل منفصل عن لستة `routers_config` العامة (سطر 267-300) — الناتج
+  الفعلي `/api/identity/register` إلخ، **بدون أي تكرار**. (ملاحظة هامشية:
+  متغير `prefix_path` جوه اللوب العام سطر 302-308 غير مُستخدَم فعليًا في
+  `include_router`، لكن ده مايسببش تكرار مسارات لإن كل راوتر عنده prefix
+  داخلي واحد بس زائد `/api` من بره — يستاهل تنظيف كود لاحق، مش باج وظيفي).
+
+**المصدر الحقيقي: `eppne-web/src/lib/api-types.ts` نفسه ملف قديم (stale)،
+مش انعكاس لأي schema حالية:**
+
+1. آخر تعديل على الملف: commit `0d9c55b`، بتاريخ **2026-07-21** — قبل
+   Phase 0 من خطة الدمج بالكامل (اللي بدأت 2026-08-08)، وقبل الاكتشاف
+   المؤجَّل المُسجَّل بالفعل في إدخالي Phase 2 وPhase 4 أعلاه (اللي أشارا
+   لقِدَم الملف من غير تأكيد تاريخ الـcommit بالظبط).
+2. الملف لسه فيه مسارات `/auth/auth/login`, `/auth/auth/refresh`,
+   `/auth/auth/logout`, `/auth/auth/revoke-all`, `/auth/auth/sessions`
+   (سطور 1413-1512) رغم إن دومين auth بالكامل **اتحذف من الباك إند في
+   Phase 4** (commit `eeaf783`، نفس يوم هذا الفحص) — دليل قاطع إن الملف
+   بيعكس API قديم/محذوف مش الحالي.
+3. نمط `/{domain}/{domain}/...` المكرر **موجود في كل دومين في الملف من
+   غير استثناء** (`academy/academy`, `affiliate/affiliate`, `health/health`,
+   `iot/iot`, `finance/finance`... إلخ) — مش خاص بـidentity وبس، يعني مش
+   نتيجة تعديل حديث في identity تحديدًا، لكن سمة عامة لطريقة/وقت توليد
+   الملف بالكامل.
+4. مفيش سكريبت `openapi-typescript` أو أمر توليد مسجَّل في
+   `eppne-web/package.json` — مفيش آلية تلقائية لإعادة توليد الملف حاليًا.
+
+**لم يتم أي تصحيح أو تعديل على `api-types.ts` أو أي ملف باك إند —
+فحص وبحث فقط، حسب طلب المستخدم صراحة.** الإصلاح الصحيح مش تعديل السطور
+المكررة يدويًا، لكن إعادة توليد الملف بالكامل من الـOpenAPI schema
+الحالية (بعد تركيب/تفعيل `openapi-typescript` كخطوة أولى) — **مهمة منفصلة
+لاحقة، تحتاج موافقة صريحة، خارج نطاق Phase 5**.
+
+**الملفات المفحوصة فقط (بدون أي تعديل):**
+`eppne-web/components/identity/*`, `eppne-web/providers/AuthProvider.tsx`,
+`eppne-web/components/finance/WalletCard.tsx`, `eppne-web/services/auth.service.ts`,
+`eppne-web/hooks/identity/useAuth.ts`, `eppne-web/hooks/identity/useUserProfile.ts`,
+`eppne-web/src/lib/api-types.ts`, `eppne-backend/app/domains/identity/router.py`,
+`eppne-backend/app/main.py`, `eppne-web/package.json`.
+
+---
+
+## [2026-08-10] — Phase 6 (فحص read-only): PUT /api/ai/routing كان
+مُصلَّح بالفعل ضمن P0 — صفر تعديل كود جديد، الاختبار الموجود مسبقًا اتشغّل
+ونجح
+
+**الحالة:** ✅ Phase 6 مقفولة بدون أي تعديل كود. خطة
+`.claude/plans/phase6-ai-routing-authz-fix.md` افترضت إن `PUT /api/ai/routing`
+لسه محمي بـ`get_current_user` فقط (بلا فحص دور) — الفحص الفعلي أثبت إن
+ده مش صحيح في الكود الحالي.
+
+### الفحص (خطوات 1-2 من الخطة)
+الـendpoint موجود في `eppne-backend/app/main.py:387-391` (مش في
+`ai_governance/router.py` زي ما افترضت الخطة)، ومُعتمِد بالفعل على
+`Depends(get_current_superuser)` (مستورد من `app.core.security`، سطر 27).
+النسخة الضعيفة القديمة (`Depends(get_current_user)`) موجودة فقط في
+`app/main.py.bak` — ملف نسخة احتياطية غير مُحمَّل في التطبيق، مش كود حي.
+هذا الإصلاح موثَّق فعليًا من قبل، بتاريخ **2026-08-08**، ضمن إدخال
+`P0: إصلاح الثغرات الأمنية الحرجة` أعلاه (قسم 5.3 من PROJECT_AUDIT.md)
+— أي **قبل بدء Phase 6 بيومين**، ضمن commit `c8c6ad7`.
+نمط `Depends(get_current_superuser)` نفسه مستخدَم بشكل قياسي وواسع في
+عشرات endpoints تانية عبر المشروع (مثال حي: `app/domains/admin/router.py`
+`POST /admin/system/toggle-ai-agents`)، فالإصلاح الأصلي (لو كان لسه
+مطلوبًا) كان هيتبع نفس النمط المعمول به فعلاً.
+
+### التحقق الفعلي (خطوات 4-5 من الخطة): تشغيل الاختبار الموجود مسبقًا
+`tests/test_ai_routing_security.py` كان موجودًا بالفعل من قبل (يتحقق إن
+الـroute بيعتمد على `get_current_superuser` مباشرة وليس `get_current_user`).
+تم تشغيله فعليًا: `pytest tests/test_ai_routing_security.py -v` →
+**1 passed in 74.18s**. لم يُكتب أي اختبار جديد ولم يُعدَّل الموجود —
+كان كافيًا ومطابقًا للمطلوب.
+
+### اكتشاف جانبي غير مرتبط (خارج نطاق Phase 6، توثيق فقط)
+أثناء تشغيل pytest، ظهر `DeprecationWarning` من
+`app/domains/employment/router.py:377` (استخدام `regex` القديم بدل
+`pattern` في Pydantic v2). غير مرتبط بـPUT /api/ai/routing ولا بـ
+auth/identity — يستحق تعديل منفصل لاحقًا بموافقة صريحة، لم يُلمس هنا.
+
+### ملاحظة موثّقة غير معالجة: SKILL.md لسه بيذكر الثغرة كأنها قايمة
+`.claude/skills/eppne-project/SKILL.md` (قسم "نقاط ضعف معروفة في
+المشروع"، سطر 95-96) لسه بيذكر: *"`PUT \api\ai\routing`: محمي بـ
+`get_current_user` بس بلا فحص دور"* — وهذا **غير مطابق للواقع** الحالي
+(الإصلاح تم من 2026-08-08). يحتاج تحديث لاحق ليعكس إن الثغرة دي
+اتصلحت ضمن P0. **لم يُلمس SKILL.md في هذه الجلسة** بطلب صريح من
+المستخدم.
+
+**الملفات المفحوصة فقط (بدون أي تعديل):**
+`eppne-backend/app/main.py`, `eppne-backend/app/main.py.bak`,
+`eppne-backend/tests/test_ai_routing_security.py`,
+`eppne-backend/app/domains/admin/router.py`,
+`eppne-backend/app/core/security.py`, `eppne-backend/app/api/deps.py`,
+`eppne-web/src/lib/api-types.ts`, `.claude/skills/eppne-project/SKILL.md`.
+
+---
+
+## [2026-08-10] — Phase 9b: إصلاح تسريب بيانات حساسة في POST
+/api/identity/login (response body)
+
+**الحالة:** ✅ مُصلَح ومُتحقَّق منه فعليًا (curl حقيقي + pytest). خطة
+`.claude/plans/phase9b-fix-login-response-leak.md`.
+
+### المشكلة (مؤكدة سابقًا في Phase 9 audit)
+`POST /api/identity/login` (`eppne-backend/app/domains/identity/router.py`)
+كانت بترجّع الـ User ORM object الخام تقريبًا جوّه مفتاح `"user"` في
+الـresponse، بما فيه `hashed_password` (bcrypt hash كامل)، `wallet`،
+`tenant` الكامل، `last_login_ip`، `last_login_user_agent`،
+`idempotency_key`، `session_version`، `admin_id`، `domain`. السبب:
+الـendpoint (سطر 40) مكانش عليه `response_model`، فـ`jsonable_encoder`
+سلسل كل attributes الـSQLAlchemy object تلقائيًا. بالمقارنة، `register`
+(سطر 28) كان بالفعل صحيح — `response_model=UserResponse` صريح.
+
+### الفحص (خطوات 1-2 من الخطة)
+- `login` بترجّع dict مركّب (`access_token`, `token_type`, `message`,
+  `user_id`, `user`) مش `user` object لوحده — فحط `response_model=UserResponse`
+  على الـdecorator زي `register` كان هيكسر الـendpoint فورًا (validation
+  error، لأن حقول الـdict العليا مش متطابقة مع schema `UserResponse`).
+  هذا تعارض بين نص الخطة الأصلي والتنفيذ الآمن، اتحل بموافقة صريحة من
+  المستخدم في الجلسة.
+- `UserResponse` (`eppne-backend/app/domains/identity/schemas.py:35-50`)
+  مناسبة كما هي بدون أي تعديل — `model_config = ConfigDict(from_attributes=True)`
+  بيتعامل بأمان مع أي حقل مش موجود كattribute (مثل `balances`) برجوعه
+  للـdefault.
+
+### الإصلاح الفعلي (سطر واحد)
+`eppne-backend/app/domains/identity/router.py:54` —
+`"user": user` → `"user": UserResponse.model_validate(user)`. لم يُلمس
+الـdecorator (سطر 40) ولا أي endpoint تاني، ولم تُعدَّل `schemas.py`.
+
+### التحقق الفعلي (خطوة 4 من الخطة): register + login حقيقيين
+شُغِّل السيرفر محليًا (`uvicorn`، postgres/redis عبر docker containers
+موجودة مسبقًا). `POST /api/identity/register` بمستخدم تجريبي
+(`login_leak_test_user`) → `201`، response نظيف كالمعتاد. `POST
+/api/identity/login` بنفس البيانات → `200`، الـresponse body الكامل
+اتفحص يدويًا وتأكد إن **كل** الحقول الحساسة المذكورة أعلاه غير موجودة
+إطلاقًا — فقط حقول `UserResponse` القياسية (id, username, email,
+tenant_id, sovereign_rank, system_role, kyc_status, balances, ...).
+الكوكيز (`access_token`/`refresh_token` كـHttpOnly) شغالة بلا تغيير.
+بعد التحقق: المستخدم التجريبي اتحذف من قاعدة البيانات مباشرة (`DELETE
+FROM users WHERE username = 'login_leak_test_user'`)، والسيرفر
+التجريبي اتوقف بالكامل (تأكيد بـcurl: not reachable).
+
+### تشغيل pytest (خطوة 5 من الخطة)
+ملف الـpytest الوحيد اللي بيغطي identity/login هو
+`tests/test_identity_router_protection.py` (بيفحص الـdependencies/الصلاحيات
+على الـroutes، مش شكل الـresponse body). شُغِّل فعليًا:
+`pytest tests/test_identity_router_protection.py -v` → **2 passed in
+51.55s**، صفر فشل. التحذير الوحيد الظاهر (`regex` deprecated في
+`employment/router.py:377`) غير مرتبط بالإصلاح ده إطلاقًا.
+
+### ⚠️ فجوة تغطية اختبارات موثّقة (لم تُعالَج في هذه الجلسة — خارج النطاق المطلوب)
+**لا يوجد حاليًا automated regression test يغطي شكل response body لـ
+`/identity/login`.** الاختبار الموجود (`test_identity_router_protection.py`)
+يتحقق فقط من صلاحيات الوصول (dependencies)، مش من محتوى الـresponse.
+هذا يعني إن رجوع نفس مشكلة التسريب مستقبلاً (مثلاً لو حد رجّع
+`"user": user` الخام تاني بالغلط، أو أضاف حقل حساس جديد للـmodel)
+**مش هيتلقط تلقائيًا بأي CI/test موجود حاليًا** — الاكتشاف كان يدوي
+بالكامل (curl فعلي). **يُنصح بشدة** بإضافة اختبار صريح لاحقًا (خارج
+نطاق هذه الجلسة، يحتاج مهمة/موافقة منفصلة) يتحقق إن `hashed_password`
+وباقي الحقول الحساسة (`wallet`, `tenant`, `last_login_ip`,
+`last_login_user_agent`, `idempotency_key`, `session_version`,
+`admin_id`, `domain`) **لا تظهر أبدًا** في أي `/identity/login` response،
+لمنع رجوع نفس المشكلة دون أن يلاحظها أحد.
+
+**الملفات المُعدَّلة:** `eppne-backend/app/domains/identity/router.py`
+(سطر 54 فقط).
+**الملفات المفحوصة فقط (بدون تعديل):**
+`eppne-backend/app/domains/identity/schemas.py`,
+`eppne-backend/tests/test_identity_router_protection.py`.
+
+---
+
+## [2026-08-10] — Phase 9 (مخرج 1 من 3): تقرير أمني كامل لدومين identity
+— تحقق عملي حي على الثغرتين، وربط بـPhase 9b (كانت جارية بالتوازي)
+
+**الحالة:** ✅ مخرج 1 (التقرير الأمني) مكتمل ومُتحقَّق منه بالتنفيذ
+الفعلي. مخرجا 2 (الجرد الوظيفي) و3 (تناغم Backend/Frontend) **لم يبدآ
+بعد** — المستخدم طلب صراحة عرض مخرج 1 والموافقة عليه أولاً.
+
+**الملف الكامل بكل الأدلة الخام (request/response):**
+`.claude/plans/phase9-audit-identity-report.md`.
+
+**منهجية:** بدل الاكتفاء بقراءة الكود، تم تشغيل سيرفر `uvicorn` محلي
+فعلي (3 مرات متتالية) متصل بـPostgres وRedis حقيقيين (docker: `eppne_db`
+بورت 5435، `redis` بورت 6380)، وتنفيذ طلبات `curl` حقيقية ضد مستخدمين
+وtenant تجريبيين throwaway، مع cleanup كامل بعد كل مرحلة (بموافقة صريحة
+قبل كل حذف، ومُتحقَّق منه لاحقًا بـ`SELECT` مباشر على القاعدة، مش ملخص
+نصي فقط).
+
+### ثغرة 1 — تسريب hashed_password عبر POST /identity/login: نفس الاكتشاف، مصدرين مستقلين
+
+هذه الجلسة اكتشفت نفس المشكلة الموثَّقة بالتفصيل في إدخال **Phase 9b**
+أعلاه مباشرة، بشكل مستقل ومتوازٍ (جلسة/agent منفصل كان شغّال على خطة
+`.claude/plans/phase9b-fix-login-response-leak.md` في نفس الوقت تقريبًا).
+التحقق الحي الأول في هذه الجلسة (مستخدم تجريبي id=9، قبل ما يظهر إصلاح
+Phase 9b على القرص) أثبت التسريب فعليًا (`hashed_password` + `wallet` +
+`tenant` كاملين ظاهرين في response حقيقي). أثناء التحقيق، لوحظ تغيّر
+غير متوقَّع في نتائج اختبار لاحق (response نظيف لمستخدم تجريبي تانٍ) —
+افتُرض بدايةً سلوك ORM غير حتمي، واتضح لاحقًا (`git diff`) إن السبب
+البسيط هو إن جلسة Phase 9b كانت عدّلت `router.py:54` (`"user": user` →
+`"user": UserResponse.model_validate(user)`) بالتوازي، كـuncommitted
+change وقتها. **بناءً على طلب صريح من المستخدم في هذه الجلسة، تم عمل
+commit للتعديل:** `0a488ba` —
+`fix(security): filter hashed_password from login response via
+UserResponse.model_validate (Phase 9b)`. تم التحقق الحي بعد الإصلاح
+(محاولتين منفصلتين): صفر حقول حساسة، شكل مطابق تمامًا لـ`UserResponse`.
+
+### ثغرة 2 (🔴 لسه قائمة، لم تُصلَح، لا علاقة لها بـPhase 9b) — X-Tenant-ID كمصدر tenant_id بلا تحقق تفويض
+
+`api/deps.py::get_current_tenant` بتاخد `tenant_id` من هيدر
+`X-Tenant-ID` مباشرة (افتراضي `1`) بدون أي استعلام DB أو تحقق تفويض.
+**تحقق حي:** تم إنشاء tenant ثانٍ حقيقي (id=2) عبر سكربت مستقل خارج
+`app/`، وتسجيل مستخدم جديد تحته عبر `POST /identity/register` بهيدر
+`X-Tenant-ID: 2` **نجح بدون أي دعوة أو تفويض**. **تحقق حي إضافي (نتيجة
+سلبية موثَّقة):** محاولة استغلال نفس الهيدر لتسريب بيانات عبر
+`GET /me`/`GET /sessions` (بجلسة مستخدم tenant 1، هيدر لـtenant 2
+الحقيقي) **فشلت** (`404`/`[]`) — لأن هذي الـendpoints بتستخدم
+`current_user.id` من الـJWT الموقَّع لتحديد الهوية، مش الهيدر. جرد كامل
+(10/10 endpoints في identity) أثبت صفر endpoint بياخد `user_id`/
+`tenant_id` كـpath/query parameter — النتيجة السلبية شاملة للدومين
+كله. **الخطر المتبقي محصور في `register`/`login` (تسجيل تحت tenant غير
+مصرَّح بيه)، ولم يُصلَح في هذه الجلسة.** نفس نمط `get_current_tenant`
+مستخدَم في 30+ راوتر دومين آخر عبر المشروع — خارج نطاق identity، موثَّق
+كملاحظة تصميمية أوسع فقط.
+
+**ملاحظات إضافية موثَّقة في التقرير الكامل:** `WalletRepository.
+update_balances`/`freeze` بلا فلترة tenant_id (غير مستدعاة من أي
+endpoint في identity)؛ rate limiting غايب على `GET/PUT /me`؛
+`identity/router.py.bak` كود ميت غير محمَّل؛ لا يوجد `max_length` على
+الباسورد.
+
+**Cleanup:** كل بيانات الاختبار (4 مستخدمين throwaway، tenant تجريبي
+واحد) اتحذفت وتأكدت بـ`SELECT` مباشر على `users`/`academy_tenants` —
+القاعدة نظيفة 100% من أي أثر لهذه الجلسة. السيرفر التجريبي متوقف
+بالكامل.
+
+**الملفات المتأثرة:** `eppne-backend/app/domains/identity/router.py`
+(تعديل واحد فقط — نفس تعديل Phase 9b، تم اعتماده بـcommit `0a488ba` في
+هذه الجلسة تحديدًا)، `.claude/plans/phase9-audit-identity-report.md`
+(إنشاء). باقي ملفات identity/api/core **فُحصت فقط، بدون تعديل**.
+
+**التالي:** مخرج 2 (الجرد الوظيفي لكل endpoint) ثم مخرج 3 (تناغم
+Backend/Frontend) — بانتظار موافقة المستخدم على البدء.
+
+---
+
+## [2026-08-10] — Phase 9 (مخرجا 2 و3 من 3): الجرد الوظيفي + تناغم
+Backend/Frontend لدومين identity — Phase 9 مكتملة بالكامل
+
+**الحالة:** ✅ مكتمل، read-only بالكامل (صفر تعديل كود). الملف الكامل:
+`.claude/plans/phase9-audit-identity-report.md`.
+
+**مخرج 2 (الجرد الوظيفي):** جدول كامل لكل الـ10 endpoints (register,
+login, logout, refresh, me GET/PUT, sessions GET, revoke-all, me/password
+PUT, me DELETE) مبني على تتبّع فعلي لمسار الكود
+`router.py → service.py → repository.py`. **صفر endpoint مكسور فعليًا.**
+القصور الوحيد: `birth_date` غايب من `UserUpdate` (`PUT /me`) — موثَّق
+سابقًا (`[2026-08-09]` أعلاه)، مش اكتشاف جديد. جزء من الأدلة اعتمد على
+تحقق حي سابق (مخرج 1 وPhase 1 E2E)؛ `PUT /me/password` تحديدًا مؤكَّد من
+الكود فقط (لم يُختبَر حيًا في هذا المخرج، ذُكر ذلك صراحة).
+
+**مخرج 3 (تناغم Backend/Frontend):** فحص `services/auth.service.ts` (كل
+مسارات `/identity/*` في المشروع تمر منه حصريًا) + كل الـhooks/components
+المستهلِكة:
+- **9 من 10 endpoints مُستهلَكة فعليًا** من الفرونت إند بمسارات مطابقة
+  حرفيًا لما هو مسجَّل في الباك إند.
+- 🟡 **endpoint يتيم واحد:** `DELETE /identity/me` (تعطيل الحساب) —
+  الباك إند شغّال بالكامل، لكن **لا توجد أي واجهة أو حتى دالة service**
+  تستدعيه في الفرونت إند. المستخدم حاليًا لا يملك أي طريقة لحذف/تعطيل
+  حسابه من الواجهة. قرار المعالجة (إضافة UI أو تركه) يحتاج مهمة/موافقة
+  منفصلة.
+- **صفر استدعاء فرونت إند لـendpoint غير موجود أو معطوب.**
+- **صفر type-mismatch فعلي** مكتشف بين `api-types.ts` القديم (موثَّق
+  قِدَمه سابقًا في Phase 5) واستجابات الباك إند الحالية، رغم قِدَم الملف
+  عمومًا — فُحص تحديدًا `UserUpdate`/`RevokeAllSessionsResponse` ووُجدا
+  متطابقين حرفيًا بالمصادفة.
+- **ملاحظة تنظيف كود غير عاجلة:** ميزة "الجلسات النشطة" مُنفَّذة 3 مرات
+  مستقلة (`SessionsList.tsx` مُستهلَك من صفحتين + `settings/sessions/page.tsx`
+  تطبيق منفصل بالكامل) — نفس الـendpoints، صفر تعارض بيانات، لكن يستحق
+  توحيدًا لاحقًا.
+
+**الملفات المفحوصة فقط (بدون أي تعديل):**
+`eppne-backend/app/domains/identity/router.py`,
+`eppne-backend/app/domains/identity/service.py`,
+`eppne-backend/app/domains/identity/repository.py`,
+`eppne-backend/app/domains/identity/schemas.py`,
+`eppne-web/services/auth.service.ts`, `eppne-web/hooks/identity/useAuth.ts`,
+`eppne-web/hooks/identity/useUserProfile.ts`,
+`eppne-web/providers/AuthProvider.tsx`, `eppne-web/lib/api-client.ts`,
+`eppne-web/types/auth.ts`, `eppne-web/src/lib/api-types.ts`,
+`eppne-web/components/identity/*` (6 ملفات), `eppne-web/app/(auth)/login/page.tsx`,
+`eppne-web/app/(auth)/register/page.tsx`, `eppne-web/app/(dashboard)/profile/page.tsx`,
+`eppne-web/app/(dashboard)/privacy/settings/page.tsx`,
+`eppne-web/app/(dashboard)/settings/sessions/page.tsx`.
+
+**الحالة الإجمالية لـPhase 9:** ✅ **مكتملة بالكامل** — المخرجات الثلاثة
+(1: تقرير أمني، 2: جرد وظيفي، 3: تناغم Backend/Frontend) منجزة وموثَّقة
+في `.claude/plans/phase9-audit-identity-report.md`.
+
+---
+
+## [2026-08-10] — إقفال Phase 9: مراجعة أمنية + جرد وظيفي + تناغم
+Backend/Frontend لدومين identity — ملخص ختامي شامل للمهام الثلاث
+
+**الحالة:** ✅ **Phase 9 مقفولة بالكامل.** هذا إدخال ختامي واحد يجمّع
+المهام الثلاث الموثَّقة بالتفصيل في الإدخالين أعلاه (`[2026-08-10] —
+Phase 9 (مخرج 1 من 3)` و`[2026-08-10] — Phase 9 (مخرجا 2 و3 من 3)`) —
+لا يُلغي أو يُعدِّل أيًا منهما، فقط يوفّر نظرة ختامية موحَّدة. التقرير
+الكامل بكل الأدلة الخام: `.claude/plans/phase9-audit-identity-report.md`.
+
+### المهمة 1 — التقرير الأمني (تحقق عملي حي، سيرفر uvicorn + Postgres/Redis حقيقيين)
+- 🟢 **ثغرة تسريب `hashed_password` عبر `POST /identity/login`:** مؤكَّدة
+  حيًا قبل الإصلاح (response خام كامل شامل `hashed_password`, `wallet`,
+  `tenant`)، **أُصلحت فعليًا** (`router.py:54` → `UserResponse.model_validate(user)`)
+  ومُثبَّتة في commit `0a488ba`، ومؤكَّد التنظيف الكامل حيًا بعد الإصلاح
+  (مرتين منفصلتين). هذا الإصلاح اكتُشف بالتوازي من جلسة Phase 9b منفصلة
+  وتم اعتماده رسميًا في هذه الجلسة.
+- 🔴 **ثغرة `X-Tenant-ID` كمصدر tenant_id بلا تحقق تفويض (لسه قائمة، لم
+  تُصلَح):** مؤكَّد حيًا أن `register`/`login` يسمحان بالتسجيل تحت أي
+  tenant_id **موجود فعليًا** بلا أي دعوة/تفويض. مؤكَّد حيًا أيضًا (نتيجة
+  سلبية) أن الـ6 endpoints المحمية (`me`, `sessions`, إلخ) **غير قابلة
+  للاستغلال** عبر نفس الهيدر لتسريب بيانات مستخدمين آخرين، لأنها تعتمد
+  حصريًا على `current_user.id` من الـJWT الموقَّع وليس الهيدر. الخطر
+  المتبقي محصور في `register`/`login` فقط، ونمط `get_current_tenant`
+  الأوسع مستخدَم في 30+ راوتر آخر عبر المشروع (خارج نطاق identity).
+- ملاحظات إضافية موثَّقة: rate limiting غايب على `GET/PUT /me`، لا يوجد
+  `max_length` على الباسورد، `WalletRepository.update_balances/freeze`
+  بلا فلترة tenant_id (لكن غير مستدعاة من identity)، `identity/router.py.bak`
+  كود ميت غير محمَّل.
+- كل بيانات الاختبار (4 مستخدمين + tenant تجريبي) اتحذفت ومُتحقَّق منها
+  بـ`SELECT` مباشر — صفر أثر متبقٍ في القاعدة.
+
+### المهمة 2 — الجرد الوظيفي (10 endpoints، قراءة فعلية router→service→repository)
+جدول كامل لكل الـ10 endpoints (register, login, logout, refresh,
+me GET/PUT, sessions GET, revoke-all, me/password PUT, me DELETE).
+**صفر endpoint مكسور فعليًا.** القصور الوحيد المكتشف: `birth_date` غايب
+من `UserUpdate` (`PUT /me`) — قصور معروف وموثَّق مسبقًا (`[2026-08-09]`)،
+والفرونت إند متوافق معه فعلاً (حقل معطَّل بوضوح، مش bug جديد).
+
+### المهمة 3 — تناغم Backend/Frontend (فحص `auth.service.ts` + كل الاستهلاك)
+- **9 من 10 endpoints مُستهلَكة فعليًا** بمسارات مطابقة حرفيًا لما هو
+  مسجَّل بالباك إند.
+- 🟡 **endpoint يتيم واحد:** `DELETE /identity/me` (تعطيل الحساب) —
+  شغّال بالكامل بالباك إند، **بلا أي واجهة أو دالة service تستدعيه** في
+  الفرونت إند. المستخدم حاليًا بلا أي طريقة لحذف/تعطيل حسابه من الواجهة.
+- **صفر استدعاء فرونت إند لـendpoint غير موجود أو معطوب.**
+- **صفر type-mismatch فعلي** بين `api-types.ts` القديم (قِدَمه موثَّق
+  سابقًا في Phase 5) واستجابات الباك إند الحالية، رغم قِدَم الملف عمومًا.
+- ملاحظة تنظيف كود غير عاجلة: ميزة "الجلسات النشطة" مُنفَّذة 3 مرات
+  مستقلة في الواجهة (نفس الـendpoints، صفر تعارض بيانات).
+
+### الحصيلة الإجمالية لدومين identity (بعد Phase 9)
+| البند | العدد |
+|---|---|
+| Endpoints فحوصة | 10/10 |
+| Endpoints مكسورة | 0 |
+| ثغرات مؤكَّدة ومُصلَحة | 1 (`hashed_password` leak) |
+| ثغرات مؤكَّدة لسه قائمة | 1 (`X-Tenant-ID` بلا تفويض على register/login) |
+| Endpoints يتيمة (بلا استهلاك فرونت) | 1 (`DELETE /me`) |
+| استدعاءات فرونت لمسار غير موجود/معطوب | 0 |
+
+### القرارات المؤجَّلة صراحة (تحتاج موافقة/جلسة منفصلة — ليست جزءًا من Phase 9)
+- إصلاح ثغرة `X-Tenant-ID` على `register`/`login` (وربما النمط الأوسع
+  عبر 30+ راوتر آخر في المشروع).
+- قرار منتج بخصوص `DELETE /identity/me` اليتيم (إضافة UI أو تركه).
+- إضافة `birth_date` إلى `UserUpdate` scheme + تفعيل الحقل في `ProfileForm.tsx`.
+- توحيد تكرار "الجلسات النشطة" (3 مسارات UI مستقلة).
+- إضافة regression test لشكل response body لـ`/identity/login` (منع رجوع
+  تسريب مشابه مستقبلاً).
+- إعادة توليد `api-types.ts` من OpenAPI الحالية (تركيب `openapi-typescript`
+  أولاً).
+- تحديث `.claude/skills/eppne-project/SKILL.md` ليعكس إصلاح `PUT /api/ai/routing` (من Phase 6).
+
+**لا تعديل كود جديد تم في أي من المهام الثلاث — Phase 9 بالكامل read-only،
+باستثناء تعديل السطر الواحد (`router.py:54`) الموثَّق أعلاه في المهمة 1
+(اعتماد إصلاح Phase 9b، مؤكَّد بـcommit `0a488ba`).**
+
+**الجلسة مُقفَلة عند هذا الإدخال.** أي عمل على البنود المؤجَّلة أعلاه
+(بما فيها أي "Phase 10") يبدأ في جلسة منفصلة جديدة بموافقة صريحة.
+
+---
+
+## [2026-08-11] — Phase 10: مراجعة أمنية + جرد وظيفي + تناغم
+Backend/Frontend لدومين affiliate (المجموعة 1، ثاني دومين بعد identity)
+
+**الحالة:** ✅ مكتملة بالكامل، read-only بالكامل (صفر تعديل كود). التقرير
+الكامل بكل الأدلة: `.claude/plans/phase10-audit-affiliate-report.md`.
+
+**المنهجية:** قراءة كاملة فعلية لكل ملفات الدومين + الملفات المرتبطة
+فعليًا (`api/deps.py`, `core/rate_limiter.py`, `core/celery_config.py`,
+`tasks/affiliate.py`, `main.py`) + كل ملفات الفرونت إند المستهلِكة.
+**بلا أي تحقق ديناميكي حي في هذه الجلسة** — محاولة وحيدة لقراءة
+`openapi()['paths']` عبر استيراد `app.main` (بدون سيرفر، بدون طلبات
+شبكة) عُلِّقت بطلب المستخدم بعد أن تسببت في hang (اتصال DB/Redis عند
+الاستيراد)، والاعتماد بالكامل على قراءة الكود الثابت بعدها. **قبل
+البدء، أكَّد المستخدم صراحةً عدم وجود جلسة Claude Code تانية شغّالة على
+نفس المشروع.**
+
+**ملاحظة نطاق مهمة أثناء الجلسة:** أثناء تتبّع مسار توزيع العمولات
+الحقيقي (لإثبات هل `AffiliateService.distribute_commissions` كود ميت
+أو لأ)، تم فتح ملفات `domains/commerce/service.py` و`tasks/commerce.py`
+**حصريًا كسياق تكامل** (تتبّع المستدعي الفعلي لمنطق مشابه). المستخدم
+لاحظ ده وسأل هل ده تقييم فعلي لدومين commerce (scope creep) — تم
+التوضيح إنه سياق تكامل بس، بلا أي جرد وظيفي أو مراجعة أمنية لـcommerce
+نفسه. الاستثناء الوحيد: ملاحظة جانبية غير مؤكَّدة لوحظت بالصدفة عن
+`commerce.service.ts` (نفس نمط double-prefix المكتشف في affiliate) —
+بطلب المستخدم صراحة، اتفصلت في قسم مستقل بعنوان "ملاحظة هامشية غير
+مرتبطة" داخل التقرير، بدل دمجها في سرد اكتشافات affiliate، مع توضيح
+إنها تحتاج phase مستقل خاص بـcommerce للتحقق منها.
+
+### المهمة 1 — التقرير الأمني (10 ثغرات/ملاحظات، من قراءة الكود فقط)
+
+أخطر اكتشافين (خطورة حرجة، مؤكَّدان قطعيًا من semantics بايثون الثابتة،
+بلا حاجة لتشغيل):
+- 🔴 **`require_subscription("affiliate")` (`api/deps.py:202-210`)
+  مكسور بالكامل** — بينادي `SaaSControlService(db)` بمعامل واحد بينما
+  الـ`__init__` الحالي بياخد `tenant_id` إجباري كمان (`saas/service.py:34`)،
+  وبعدين `check_and_enforce_access(current_user.tenant_id, service_code)`
+  بمعاملين بينما التوقيع الحقيقي معامل واحد (`saas/service.py:229`).
+  النتيجة: `TypeError` → 500 قياسي (لا يوجد exception handler عام) —
+  **لأي طلب، من أي مستخدم، بغض النظر عن اشتراكه.** يُسقط 5 من 15
+  endpoint في affiliate بالكامل: `POST/PATCH /links`, `GET /commissions`,
+  `POST /commissions/release`, `POST /withdraw`. نفس الدالة مُستخدَمة
+  أيضًا في `academy` و`commerce` (لم يُفحص أثرها هناك، خارج النطاق).
+- 🔴 **`@rate_limit(...)` (`core/rate_limiter.py`) غير فعّال فعليًا على
+  14 من 15 endpoint في affiliate** — الديكوريتور بيدوّر على كائن
+  `Request` في الـkwargs/args، وده مش موجود إلا لو الـendpoint نفسه بيُعلن
+  `request: Request` في توقيعه؛ فحص شامل للـ15 endpoint أثبت إن واحد بس
+  (`GET /track/{code}`) بيُعلنها. الباقي كله (بما فيهم `/withdraw` و
+  `/commissions/release` و`/admin/commissions/bulk-release` — أخطر
+  العمليات المالية) بيرجع مباشرة لتنفيذ الدالة الأصلية بلا أي فحص Redis،
+  بصمت تام بلا أي تسجيل. الحدود المُعلَنة في الكود (`max_requests=5,
+  window_seconds=300`... إلخ) زخرفية بحتة.
+
+باقي الاكتشافات (خطورة عالية/متوسطة): 🟠 `X-Tenant-ID` بلا تحقق تفويض
+على الـ4 endpoints الإدارية (`get_current_superuser` بيفحص الدور بس،
+بلا مقارنة مع الـtenant الحقيقي) — سوبريوزر من tenant A يقدر (من الكود)
+يعدّل نسب عمولات أو يُفرج عمولات مالية تخص tenant B بمجرد تغيير هيدر
+HTTP. 🟠 `withdraw_commissions` بيستخدم `sender_id=1` مُثبَّت حرفيًا
+لكل الـtenants كمصدر تمويل السحب، بلا أي فحص tenant للمُرسِل (بعكس
+المستلم اللي بيتفحص) — اقتران مالي غير مقصود بين tenants. 🟡
+`get_or_create_profile` ممكن يرمي `IntegrityError` غير معالَج (500) لو
+هيدر tenant مخالف لمستخدم عنده ملف بالفعل (قيد `unique=True` على
+`user_id`). ملاحظات إيجابية: صفر خطر mass-assignment (schemas الـUpdate
+ضيقة ومقصودة)، tenant_id فعليًا مفلتَر في كل استعلامات
+`AffiliateRepository` (نفس معيار Phase 9).
+
+### المهمة 2 — الجرد الوظيفي (15 endpoint، قراءة فعلية router→service→repository)
+
+5 من 15 endpoint مكسورة فعليًا (500 دائمًا، بسبب `require_subscription`).
+**اكتشاف جوهري منفصل تمامًا:** محرك توزيع العمولات في دومين affiliate
+نفسه (`AffiliateService.distribute_commissions`/`_distribute_levels`،
+اللي بيكتب في `affiliate_commissions`) **كود ميت بالكامل** — لا يُستدعى
+من أي مسار حي (تتبّع شامل بـ`grep`: المستدعي الوحيد هو Celery task
+معزول تمامًا وغير مُطلَق من أي حدث). الآلية الفعلية المُستخدَمة في
+الإنتاج لتوزيع عمولات الطلبات مختلفة تمامًا ومنفصلة بالكامل، موجودة في
+دومين `commerce` (`CommerceService.distribute_commissions`، بتُستدعى
+synchronously وقت الـcheckout)، وبتكتب في جداول commerce الخاصة بيها
+(`CommissionRecord`, `AffiliateConfig`) — **مش جداول affiliate على
+الإطلاق**، وحتى صيغة "كود الإحالة" مختلفة بين الدومينين (رقم user_id
+خام في commerce، مقابل نص ألفانيوميري مولَّد في affiliate). هذا الفحص
+المحدود لـcommerce كان **سياق تكامل فقط** (تتبّع مستدعي فعلي)، مش
+مراجعة لدومين commerce نفسه — انظر ملاحظة النطاق أعلاه. النتيجة:
+`GET /commissions`, `GET /stats`, `GET /tree`, والـadmin endpoints
+هترجع دايمًا فاضية/صفرية في أي بيئة إنتاج حقيقية، حتى لو كل الثغرات
+الأمنية اتصلحت. بالإضافة: `app/tasks/affiliate.py` بالكامل (3 مهام
+Celery) مكسورة بنيويًا (توقيعات لا تطابق `AffiliateService`/
+`AffiliateRepository` الحاليين) وغير مُستدعاة من أي مكان، وحتى مهمة
+التنظيف الدورية (`clean_expired_links_task`) غير مُسجَّلة في
+`celery_config.py::beat_schedule` أصلاً.
+
+### المهمة 3 — تناغم Backend/Frontend
+
+**اكتشاف جوهري:** كل الدوال الثمانية في `services/affiliate.service.ts`
+بتستهدف مسارات مزدوجة البادئة حرفيًا (`/affiliate/affiliate/profile`
+إلخ) — لا تطابق المسار الحقيقي المسجَّل بالباك إند (`/api/affiliate/profile`،
+بادئة واحدة، مؤكَّد من `router.py` + `main.py` معًا؛ حقل `prefix_path`
+الإضافي في `routers_config` غير مُستخدَم فعليًا، نفس اكتشاف Phase 5
+لـidentity، لكن هنا المسار المزدوج **حرفي داخل الـstring نفسه** مش مجرد
+نوع بيانات قديم). `next.config.ts` فارغ تمامًا (بلا `rewrites()`) فلا
+يوجد أي تصحيح مسار وسيط. **اكتشاف إضافي منفصل:**
+`hooks/affiliate/useAffiliate.ts` بينادي دالتين غير موجودتين إطلاقًا في
+`affiliate.service.ts` (`getDashboardStats`, `getTree` — الموجود
+فعليًا `getStats`/`getReferralTree`)، وبتوقيع معاملات خاطئ لدالتين
+تانيتين (`getLinks`, `getCommissions` — معاملات منفصلة مقابل كائن واحد
+متوقَّع). الصفحة الوحيدة الفعلية للدومين
+(`app/(dashboard)/affiliate/page.tsx`) بتستخدم مباشرة الـhooks المكسورة
+دي. **كل الروابط الخمسة الظاهرة في هذه الصفحة** (`/affiliate/links`,
+`/commissions`, `/tree`, `/guidelines`, `/links/create`) **بتشاور على
+صفحات غير موجودة إطلاقًا** (Glob شامل: صفر ملفات صفحات تحت
+`app/(dashboard)/affiliate/` غير `page.tsx` نفسها) — وبشكل مستقل،
+السايدبار (`components/layout/sidebar.tsx`) بيربط لنفس المجموعة من
+المسارات غير الموجودة، تأكيد مزدوج مستقل. 6 endpoints
+(`PATCH /links/{id}`, `GET /track/{code}`, و4 admin) بلا أي محاولة
+استهلاك فرونت إند إطلاقًا.
+
+**ملاحظة هامشية غير مرتبطة (موثَّقة بقسم مستقل في التقرير، بطلب
+المستخدم):** لوحظ بالصدفة أثناء الفحص إن `services/commerce.service.ts`
+قد يحتوي نفس نمط الـdouble-prefix — **غير مؤكَّد، غير مُتحقَّق منه،
+يحتاج phase مستقل خاص بـcommerce.**
+
+### الحصيلة الإجمالية لدومين affiliate (بعد Phase 10)
+| البند | العدد |
+|---|---|
+| Endpoints فُحصت | 15/15 |
+| Endpoints مكسورة فعليًا (500 دائمًا) | 5 |
+| Endpoints شغّالة تقنيًا لكن بلا بيانات حقيقية عمليًا | 5 إضافية |
+| ثغرات/اكتشافات أمنية-وظيفية حرجة | 6 |
+| ثغرات متوسطة | 1 |
+| استدعاءات فرونت إند بمسار مزدوج غير موجود | 8/8 (100%) |
+| Hooks بدوال غير معرَّفة | 2 |
+| Hooks بتوقيع معاملات خاطئ | 2 |
+| Endpoints بلا أي استهلاك فرونت إند | 6 |
+| صفحات فرونت إند فعلية للدومين | 1 فقط (كل الروابط الفرعية يتيمة) |
+
+### القرارات المؤجَّلة صراحة (تحتاج موافقة/جلسة منفصلة — ليست جزءًا من Phase 10)
+- إصلاح `require_subscription` (يؤثر أيضًا على academy وcommerce).
+- إصلاح/إعادة تصميم `rate_limiter.py` ليعمل فعليًا على كل الـendpoints.
+- **قرار معماري حاسم بخصوص ازدواجية نظام العمولات (affiliate مقابل
+  commerce)** — أهم قرار مطلوب من هذا التقرير بالكامل.
+- حذف أو إصلاح `app/tasks/affiliate.py` (3 مهام ميتة مكسورة).
+- إصلاح مسارات `affiliate.service.ts` (البادئة المزدوجة).
+- مزامنة `hooks/affiliate/useAffiliate.ts` مع `affiliate.service.ts`.
+- إنشاء الصفحات الناقصة أو إزالة الروابط اليتيمة.
+- معالجة ثغرة `X-Tenant-ID` الإدارية و`sender_id=1` المُثبَّت.
+- معالجة `IntegrityError` غير المعالَج في `get_or_create_profile`.
+- تشغيل `tsc --noEmit` للتأكد من type errors الناتجة عن ثغرة hooks.
+- فحص باقي الدومينات المستخدمة لـ`require_subscription` (academy, commerce).
+- **مهمة/phase مستقل خاص بـcommerce** — يشمل التحقق من ملاحظة
+  double-prefix الهامشية أعلاه، وأي مراجعة أمنية/وظيفية كاملة له (لم
+  تبدأ إطلاقًا في Phase 10).
+
+**لا تعديل كود تم في أي من المهام الثلاث — Phase 10 بالكامل read-only.**
+
+**ملاحظة: هذا الإدخال تم تصحيحه/تجاوزه جزئيًا بإدخال تحقق حي لاحق في
+نفس اليوم (انظر الإدخال التالي مباشرة) — لم يُعدَّل أي سطر هنا (سياسة
+append-only)، لكن رقم "5 endpoints مكسورة" في الحصيلة أعلاه أصبح غير
+دقيق بعد التحقق الحي (تبيَّن إن الـ15 كلهم مكسورين).**
+
+---
+
+## [2026-08-11] — Phase 10 (متابعة): تحقق حي فعلي على ثغرة X-Tenant-ID
+الإدارية — اكتشاف باج جوهري أخطر (`SimpleTenant`) يعطّل الدومين بالكامل
+(15/15 endpoint)، ويحجب ثغرة X-Tenant-ID مؤقتًا
+
+**الحالة:** ✅ التحقق الحي مكتمل، بيانات الاختبار اتنظّفت وتأكَّد نظافة
+القاعدة، السيرفر التجريبي متوقف. التقرير الكامل مُحدَّث بالكامل ليعكس
+هذا الاكتشاف: `.claude/plans/phase10-audit-affiliate-report.md`.
+
+**السياق:** بعد إقفال الإدخال السابق مباشرة، طلب المستخدم توضيحًا دقيقًا
+لثغرة X-Tenant-ID الإدارية (أي endpoint بالتحديد، وهل التأكيد من قراءة
+كود فقط أو محتاج تحقق حي زي identity Phase 9). بعد التوضيح، طلب المستخدم
+صراحة تحقق حي فعلي (سيرفر + بيانات اختبار)، بموافقة صريحة قبل كل خطوة
+تنفيذ (تشغيل سيرفر، إنشاء بيانات، حذف بيانات) — نفس منهجية Phase 9
+بالضبط.
+
+### الإعداد (بموافقة صريحة لكل خطوة)
+- تأكيد إن containers Postgres (`eppne_db`, بورت 5435) وRedis (`redis`,
+  بورت 6380) من Phase 9 لسه شغّالين (13 يوم uptime) — لم يُشغَّل شيء
+  جديد.
+- بيانات اختبار throwaway: Tenant B تجريبي (`id=5`)، مستخدم `SUPER_ADMIN`
+  تجريبي (`id=15`، تحت tenant حقيقي `id=1`)، صف `CommissionTier` تجريبي
+  (`id=1`، تحت tenant `id=5`، `level_1_pct=13.37` مميزة لسهولة الرصد).
+- ملاحظة جانبية أثناء الإعداد: أول محاولة لإنشاء `CommissionTier`
+  فشلت بـ`NoReferencedTableError` (جدول `products` غير مُسجَّل في
+  الـmetadata) لأن سكربت الإعداد المعزول استورد `affiliate.models` بس،
+  من غير `commerce.models` (اللي فيه تعريف `products`، المرجع الفعلي
+  لـ`CommissionTier.target_product_id`). **هذا فشل سكربت تجريبي بسيط،
+  مش خلل في سكيما التطبيق الحقيقي** (السيرفر الحقيقي بيستورد كل
+  الدومينات مع بعض وقت الإقلاع عبر `main.py`، فمكانش هيحصل). تم التأكد
+  إن الـtransaction الفاشلة اتلغت بالكامل تلقائيًا (rollback نظيف، صفر
+  صفوف يتيمة) قبل إعادة المحاولة بإضافة `import app.domains.commerce.models`.
+  **لكن الحادثة نفسها وثَّقت دليل إضافي على ترابط schema حقيقي (مش مجرد
+  استدعاء دالة) بين affiliate وcommerce** (`CommissionTier.target_product_id`
+  FK فعلي على جدول `products` المُعرَّف في commerce) — يقوّي ملاحظة
+  ازدواجية/ترابط النظامين المُسجَّلة سابقًا، ويستاهل يتذكر وقت التخطيط
+  لأي phase مستقل خاص بـcommerce لاحقًا.
+- تشغيل `uvicorn` محلي حقيقي (`127.0.0.1:8000`) — لوج الإقلاع طلّع كمية
+  ضخمة (750KB+) من traceback متكرر غير ضار متعلق بـ`merged_lifespan`
+  (encoding warning مكرر، غير مرتبط بـaffiliate، لم يُحقَّق فيه أكتر —
+  السيرفر أقلع بنجاح وقتها: "Application startup complete").
+
+### الاختبار الأول: `PUT /api/affiliate/admin/tiers` بهيدر `X-Tenant-ID`
+مخالف (سوبريوزر tenant=1، هيدر=5) — النتيجة **500**، مش 200 زي المتوقَّع
+من فرضية X-Tenant-ID الأصلية. الـtraceback الحقيقي من لوج السيرفر كشف
+السبب: `asyncpg.exceptions.DataError: 'SimpleTenant' object cannot be
+interpreted as an integer`.
+
+### الاكتشاف الجوهري: باج `SimpleTenant` (كائن بدل `int`)
+`api/deps.py::get_current_tenant` بترجع **كائن** `SimpleTenant` (له
+خاصية `.id`)، مش رقم مباشر — **تصحيح لوصف خاطئ مني في التقرير الأصلي**
+("بيرجع الرقم من الهيدر كما هو"). كل الـ15 endpoint في
+`affiliate/router.py` (فحص شامل، 15/15) بيعلنوا
+`tenant_id: int = Depends(get_current_tenant)` — type hint تزييني،
+FastAPI ما بيفرضش التطابق، فالكائن الخام (مش الرقم) بيتمرر لـ
+`AffiliateService(db, tenant_id)` وبعدها لكل استعلامات DB. **نفس الباج
+بالظبط اتصلح فعليًا في identity Phase 0** (موثَّق `[2026-08-08]` أعلاه:
+"تم تصحيحها لاستخدام `tenant: SimpleTenant = Depends(...)` ثم
+`tenant.id`") — لكن الإصلاح **مبيتعملش في affiliate إطلاقًا**.
+
+**تحقق حي ثانٍ (عزل السبب):** نفس الطلب (`GET /affiliate/profile`،
+endpoint بسيط بلا `require_subscription`) بهيدر **صحيح 100%**
+(`X-Tenant-ID: 1`، مطابق تمامًا لتينانت المستخدم الحقيقي) — **نفس
+النتيجة بالظبط: 500.** يثبت قطعيًا إن الباج **مالوش علاقة بتطابق
+الهيدر** — كل طلب لكل endpoint بيفشل، بغض النظر عن صحة الهيدر.
+
+**تحقق DB (read-only):** `level_1_pct` لصف Tenant B فضل `13.37` (لم
+يتغيّر) — الطلب انهار عند أول `SELECT`، قبل أي `UPDATE`، صفر تأثير
+جزئي.
+
+### فحص إضافي مطلوب صراحة: هل فيه bypass صامت (مقارنة `==` مباشرة بدل
+`.id`) بديل عن الـcrash؟
+فحص شامل بـ`grep` لكل الـ39 موضع (15 في `router.py` + 24 مقارنة
+`== tenant_id` في `service.py`/`repository.py`) — **النتيجة: صفر
+bypass صامت.** كل موضع إما تمرير مباشر لـconstructor (`router.py`)
+أو مقارنة عمود SQLAlchemy (`Model.tenant_id == tenant_id`) اللي
+بترجع تعبير SQL مش `True`/`False` Python — الفشل دايمًا صريح ولاحق
+(وقت تنفيذ الاستعلام)، مش صامت ومبكر.
+
+### العلاقة مع ثغرة X-Tenant-ID الإدارية — توضيح صريح للـblocker
+ثغرة X-Tenant-ID (غياب مقارنة `current_user.tenant_id` بـ`tenant_id`
+الهيدر على 4 endpoints إدارية) **لسه موجودة فعليًا كعيب كود مؤكَّد**،
+لكنها **غير قابلة للفحص أو الاستغلال الحي حاليًا** — كل طلب بيتعطل
+بباج `SimpleTenant` قبل ما يوصل لنقطة القرار دي. **مش باج middleware**
+(فُحصت كل الـ6 middleware في `main.py`، ولا واحد له علاقة بـtenant_id) —
+الإصلاح على مستوى توقيع كل endpoint في `router.py`. **تحذير موثَّق
+صراحة:** إصلاح باج `SimpleTenant` لوحده من غير إضافة فحص مطابقة
+tenant هيفتح ثغرة X-Tenant-ID فورًا للاستغلال.
+
+### التنظيف (بموافقة صريحة، بعد `SELECT` قبل وبعد الحذف)
+حذف الثلاثة كيانات بترتيب يحترم الـFK (`affiliate_commission_tiers`
+id=1 → `users` id=15 → `academy_tenants` id=5). حذف المستخدم رجّع
+cascade تلقائي صحيح لـ3 صفوف `auth_refresh_tokens` (`ondelete="CASCADE"`
+في الموديل، متوقَّع وموثَّق). تحقق `SELECT` مباشر بعد الحذف: الثلاثة
+اختفوا تمامًا، و`academy_tenants` (`id=1`، الحقيقي) و`users` (`ids
+2-8`، القدامى من اختبارات سابقة) سليمين 100% بلا أي تغيير. إيقاف
+السيرفر التجريبي: `Stop-Process` على الـPID الصحيح المؤكَّد نجح
+(“DONE”)، لكن التحقق النهائي من إغلاق البورت واجه مشاكل shell
+integration متكررة (timeouts على أوامر PowerShell بسيطة، حتى
+`Get-Process`/`tasklist` — نفس المشكلة الموثَّقة في
+`phase8-master-roadmap.md` لجلسات Phase 6/7) — **بطلب صريح من
+المستخدم، تم الاكتفاء بدليل نجاح `Stop-Process` + تأكيد الـPID الصحيح
+قبل القتل، والتوقف عن محاولات تحقق إضافية.** لو احتاج تأكيد نهائي إن
+البورت مغلق، أسهل في بداية جلسة جديدة.
+
+### تحديث تقرير Phase 10 الكامل
+`.claude/plans/phase10-audit-affiliate-report.md` اتحدَّث بالكامل:
+بند حرج جديد ("البند 0") مضاف بكل الأدلة الخام، الجرد الوظيفي مُعاد
+كتابته (15/15 مكسورة بدل 5/15)، جدول الملخص التنفيذي والحصيلة الإجمالية
+مُحدَّثين، قائمة الإصلاحات المؤجَّلة مُعاد ترتيبها بالأولوية (إصلاح
+باج `SimpleTenant` بقى البند رقم 1 المطلق).
+
+**الملفات المفحوصة فقط (بدون تعديل):** كل ملفات affiliate + `api/deps.py`
+(تأكيد إضافي لـ`get_current_tenant`/`SimpleTenant`) + middleware
+`main.py`. **بيانات مؤقتة أُنشئت ثم حُذفت بالكامل** (موثَّق أعلاه) —
+صفر أثر متبقٍ في القاعدة من هذه الجلسة.
+
+**الجلسة مُقفَلة عند هذا الإدخال.** أي عمل على البنود المؤجَّلة (وعلى
+رأسها إصلاح باج `SimpleTenant`) يبدأ في جلسة منفصلة جديدة بموافقة
+صريحة.
+
+---
+
+## [2026-08-11] — Phase 10b: إصلاح باج `SimpleTenant` في affiliate + اكتشاف حرج
+جديد مؤكَّد بالتنفيذ الفعلي: ثغرة `X-Tenant-ID` (ثغرة 3) قابلة للاستغلال
+الحي فعليًا (قراءة + **كتابة**) بمجرد إزالة الـblocker — بانتظار خطة
+إصلاح منفصلة (Phase 10c)، **لا commit نهائي تم بعد**
+
+**الحالة:** 🟡 **إصلاح الكود (SimpleTenant) تم في working tree، لسه ملوش
+commit بطلب صريح من المستخدم لحد ما تُتفق خطة Phase 10c.** التحقق الحي
+كشف ثغرة حرجة إضافية مؤكَّدة بالكتابة الفعلية في DB — موثَّقة بالتفصيل
+تحت. بيانات الاختبار اتنضّفت بالكامل (تأكَّد بـSELECT مباشر). السيرفر
+التجريبي لسه شغّال وقت كتابة هذا السطر (بانتظار توجيه المستخدم).
+
+### السياق
+بعد موافقة صريحة من المستخدم على نطاق محدَّد (إصلاح باج `SimpleTenant`
+فقط، بنفس نمط identity Phase 0، بدون إضافة فحص tenant-match)، تم:
+1. قراءة `identity/router.py` للتأكد من النمط المُعتمَد فعليًا
+   (`tenant: SimpleTenant = Depends(get_current_tenant)` ثم `tenant.id`
+   — 9 مواضع، مؤكَّد بـ`grep`).
+2. تطبيق نفس النمط حرفيًا على كل الـ15 endpoint في
+   `app/domains/affiliate/router.py` (تعديل الاستيراد سطر 8 لإضافة
+   `SimpleTenant`، واستبدال ميكانيكي عبر `replace_all` لأن كل الـ15
+   موضع كانت متطابقة نصيًا 100% — تأكَّد بـ`grep` قبل التعديل). تحقق
+   `ast.parse` بعد التعديل: صفر أخطاء syntax.
+
+### التحقق الحي 1: `GET /affiliate/profile` — الباج اختفى فعليًا
+بيانات اختبار throwaway: مستخدم `phase10b_verify_user` (id=16) اتسجَّل
+عبر `POST /identity/register` الحقيقي (tenant=1 الحقيقي)، تم تسجيل
+دخوله (`POST /identity/login` → 200، كوكي جلسة صالحة). أول محاولة
+`GET /affiliate/profile` رجعت **403** (`"User sector not defined"`) —
+مش 500 — بسبب `require_sector("affiliate")` في `main.py` (طبقة منفصلة
+تمامًا عن باج SimpleTenant، مستخدم عادي بيُصنَّف افتراضيًا `sector=academy`).
+بعد ترقية المستخدم لـ`SUPER_ADMIN` مباشرة في DB (عشان `sector="all"`
+يتجاوز الفحص)، نفس الطلب رجّع:
+```
+HTTP/1.1 200 OK
+{"referral_code":"EPPNE-16","custom_slug":null,"default_commission_rate":"5.00","id":1,"user_id":16,"tenant_id":1,"is_active":true,"total_clicks":0,"total_conversions":0,"total_earned":0.0,"total_paid":0.0,...}
+```
+**200 حقيقي، بيانات حقيقية من DB حقيقي — تأكيد قاطع إن باج SimpleTenant
+(البند 0 في Phase 10) اختفى فعليًا لهذا الـendpoint.**
+
+### التحقق الحي 2 (الاكتشاف الحرج): `X-Tenant-ID` على `/admin/tiers` —
+قراءة **وكتابة** فعلية عبر tenant غير مصرَّح به
+
+بعد نجاح التحقق 1، تم إنشاء Tenant B تجريبي منفصل (`academy_tenants`
+id=6، اسم "Phase10b Verify Tenant B") + صف `CommissionTier` تجريبي
+تحته (`id=2`, `tenant_id=6`, `level_1_pct=13.37` — قيمة مميزة لسهولة
+الرصد). المستخدم `phase10b_verify_user` (`SUPER_ADMIN`، **tenant
+الحقيقي = 1**، مؤكَّد من الـJWT claim `tenant_id:1` وقت اللوجن) استُخدم
+لإرسال طلبين حقيقيين بهيدر `X-Tenant-ID: 6` (مخالف عمدًا لتينانته
+الحقيقي):
+
+**الطلب 1 (قراءة):**
+```
+GET /api/affiliate/admin/tiers HTTP/1.1
+X-Tenant-ID: 6
+Cookie: access_token=<جلسة صحيحة، tenant الحقيقي=1>
+```
+```
+HTTP/1.1 200 OK
+{"tenant_id":6,"entity_type":"GLOBAL","target_product_id":null,"level_1_pct":"13.37",...,"id":2,...}
+```
+رجّع بيانات tenant 6 الحقيقية (القيمة المميزة `13.37`) لمستخدم tenant
+الحقيقي بتاعه 1.
+
+**الطلب 2 (كتابة):**
+```
+PUT /api/affiliate/admin/tiers HTTP/1.1
+X-Tenant-ID: 6
+Cookie: <نفس الجلسة>
+Body: {"level_1_pct": 99.99}
+```
+```
+HTTP/1.1 200 OK
+{"tenant_id":6,...,"level_1_pct":"99.99",...,"id":2,"updated_at":"2026-08-11T00:20:55.930332Z"}
+```
+
+**تحقق DB مباشر (read-only) فور الطلبين:**
+```sql
+SELECT id, tenant_id, level_1_pct, updated_at FROM affiliate_commission_tiers WHERE tenant_id=6;
+-- id=2, tenant_id=6, level_1_pct=99.99, updated_at=2026-08-11 00:20:55.930332+00
+```
+**الكتابة حقيقية وpersisted فعليًا في القاعدة، مش مجرد response مُرجَع.**
+هذا يرقّي ثغرة 3 (الموثَّقة في Phase 10 كـ"مؤكَّدة من الكود، غير قابلة
+للاستغلال الحي حاليًا بسبب بند 0") إلى **مؤكَّدة بالتنفيذ الفعلي** —
+قراءة وكتابة كاملتين، بتأثير مالي مباشر (نسب عمولة).
+
+### التشخيص المبدئي: فين بالضبط في الكود المصدر الجذري للثقة العمياء
+بهيدر `X-Tenant-ID`؟
+
+**المصدر الجذري:** `app/api/deps.py:148-153`:
+```python
+async def get_current_tenant(
+    x_tenant_id: int = Header(default=1, alias="X-Tenant-ID")
+) -> SimpleTenant:
+    tenant = SimpleTenant()
+    tenant.id = x_tenant_id
+    return tenant
+```
+الدالة دي بتاخد الـtenant **حصريًا** من الهيدر الخام، بصفر أي رجوع
+لهوية المستخدم المُصادَق عليه أو التوكن. دي dependency chain **منفصلة
+تمامًا** عن `get_current_user`/`get_current_active_user`.
+
+**بالمقابل، `get_current_user` (`api/deps.py:21-55`) بيستخرج
+`tenant_id` الحقيقي والموثوق من التوكن الموقَّع نفسه** (سطر 41:
+`token_tenant_id = payload.get("tenant_id")`، سطر 50:
+`user = await repo.get_by_id(int(user_id), token_tenant_id)`) — يعني
+`current_user.tenant_id` قيمة **موثوقة 100%** (جايه من JWT موقَّع
+وقت اللوجن، مش من أي هيدر قابل للتزوير).
+
+**نقطة الفشل الفعلية:** الـ4 admin endpoints في `affiliate/router.py`
+(`GET/PUT /admin/tiers`, `POST /admin/tiers/product`,
+`POST /admin/commissions/bulk-release`) بتحقن **الاتنين** كـdependencies
+منفصلين بلا أي ربط بينهم:
+```python
+tenant: SimpleTenant = Depends(get_current_tenant),      # من الهيدر (غير موثوق)
+current_user: User = Depends(get_current_superuser),      # من التوكن (موثوق)، بيفحص الدور بس
+```
+`get_current_superuser` (`api/deps.py:67-80`) بيفحص `system_role` فقط
+(`EXECUTIVE_DIRECTOR`/`SUPER_ADMIN`) — **صفر مقارنة مع `tenant.id`**.
+والكود الفعلي بيستخدم `tenant.id` (من الهيدر) مباشرة في
+`AffiliateService(db, tenant.id)`، بصرف النظر تمامًا عن
+`current_user.tenant_id` الحقيقي.
+
+**الأخطر: الحل الجاهز موجود فعلاً في نفس الملف ومش مُستخدَم.**
+`api/deps.py:156-164`:
+```python
+async def require_tenant_access(
+    current_user: User = Depends(get_current_active_user),
+    tenant: SimpleTenant = Depends(get_current_tenant),
+) -> User:
+    if current_user.tenant_id != tenant.id:
+        raise PermissionDeniedError(
+            f"عذراً، أنت لا تنتمي إلى المستأجر {tenant.id}. مستأجرك: {current_user.tenant_id}"
+        )
+    return current_user
+```
+دالة `require_tenant_access` بتعمل بالظبط الفحص الناقص (مقارنة
+`current_user.tenant_id` بـ`tenant.id` من الهيدر) — **لكنها غير
+مُستخدَمة في affiliate/router.py إطلاقًا** (تأكَّد بـ`grep`، صفر
+استيراد لها في الملف). ده مش قرار معماري معقَّد — الأداة جاهزة، بس
+مش موصولة بالـ4 endpoints الإدارية.
+
+### التنظيف (تم بالكامل، تحقَّق بـSELECT مباشر)
+حذف بترتيب يحترم الـFK: `affiliate_commission_tiers` (id=2, tenant=6)
+→ `affiliate_profiles` (id=1, user=16) → `academy_tenants` (id=6) →
+`users` (id=16). **تحقق نهائي بعد الحذف:**
+```sql
+SELECT 'tenant_6', count(*) FROM academy_tenants WHERE id=6;        -- 0
+SELECT 'tier_tenant_6', count(*) FROM affiliate_commission_tiers WHERE tenant_id=6;  -- 0
+```
+**Tenant B وصف الـCommissionTier بتاعه اتحذفوا بالكامل من القاعدة —
+مفيش أي "قيمة متبقية محتاجة ترجع لـ13.37"، لأن الصف نفسه (وtenant B
+كله) اتمسحوا خلاص، مش بس القيمة اتغيَّرت.** `academy_tenants` الحقيقي
+(`id=1`) وباقي الـ7 مستخدمين القدامى (ids 2-8) سليمين 100% بلا أي أثر.
+
+### الحالة الحالية (صريحة)
+- **تعديل الكود** (`affiliate/router.py`، إصلاح SimpleTenant، 15
+  endpoint): **موجود في working tree، لسه من غير commit** — بطلب صريح
+  من المستخدم، لحد ما تُتفق خطة Phase 10c لثغرة X-Tenant-ID.
+- **لا انتقال لأي دومين جديد** حتى تُحسَم Phase 10c.
+- **السيرفر التجريبي المحلي لسه شغّال** وقت كتابة هذا السطر (لم يُوقَف
+  بعد، بانتظار توجيه المستخدم).
+- القرار المطلوب لـPhase 10c: هل نربط `require_tenant_access` (الجاهزة
+  فعلاً) بالـ4 admin endpoints، أم نمط تاني؟ — **قرار معلَّق، لا تنفيذ
+  حتى الاتفاق.**
+
+---
+
+## [2026-08-11] — Phase 10c: إصلاح ثغرة X-Tenant-ID في affiliate/admin/*
+(الاعتماد الكامل على `current_user.tenant_id`) + اكتشاف نظامي أوسع
+بكثير (20 من 29 دومين بنفس الشكل) موثَّق منفصلًا (تقرير تشخيصي، بلا تنفيذ)
+
+**الحالة:** 🟢 **إصلاح الـ4 admin endpoints في affiliate تم، اتحقَّق
+منه حيًا (قراءة + كتابة)، بيانات الاختبار اتنضّفت، السيرفر التجريبي
+اتوقف.** الاكتشاف الأوسع (20 دومين آخرين بنفس نمط الثقة بالهيدر) موثَّق
+في تقرير منفصل تمامًا `.claude/plans/critical-finding-xtenant-systemic.md`
+— **تشخيص فقط، صفر تنفيذ، قرار الإصلاح المركزي مؤجَّل لجلسة/جلسات
+منفصلة كاملة.**
+
+### القرار المعماري (بموافقة صريحة من المستخدم بعد نقاش)
+فحصنا: هل فيه استخدام شرعي لهيدر `X-Tenant-ID` في تحديد الـtenant
+لعمليات admin/affiliate؟ **النتيجة: لأ.** لا يوجد أي دليل في الـschema
+(`users.tenant_id` عمود مفرد، مفيش جدول ربط multi-tenant-admin)، ولا
+في الأدوار (`SystemRole`: 4 قيم كلها tenant-scoped)، ولا في أي دومين
+تاني (`admin/router.py` — endpoint وحيد عالمي بلا مفهوم tenant). الاستخدام
+الشرعي الوحيد للهيدر في المشروع كله محصور بالحالات اللي **مفيش فيها
+current_user موثوق أصلًا وقت الطلب** (`identity/register`, `identity/login`,
+`affiliate/track/{code}` العام). **القرار: الاعتماد الكامل على
+`current_user.tenant_id` (من التوكن الموقَّع) بدل الهيدر في الـ4 admin
+endpoints، وإلغاء الثقة في الهيدر نهائيًا لهذا المسار.**
+
+### الإصلاح المُنفَّذ
+`app/domains/affiliate/router.py` — الـ4 admin endpoints
+(`GET/PUT /admin/tiers`, `POST /admin/tiers/product`,
+`POST /admin/commissions/bulk-release`): إزالة
+`tenant: SimpleTenant = Depends(get_current_tenant)` بالكامل من
+توقيع كل واحدة، واستبدال `AffiliateService(db, tenant.id)` بـ
+`AffiliateService(db, current_user.tenant_id)`. باقي الـ11 endpoint
+(غير الإدارية) لم تُلمس — خارج نطاق Phase 10c (queries بتاعتها بتعمل
+AND مع `current_user.id` الحقيقي أصلًا، شكل خطر مختلف تمامًا، انظر
+النقاش قبل التنفيذ في المحادثة).
+
+### التحقق الحي (سيرفر uvicorn محلي، أعيد تشغيله بعد التعديل لأنه
+بلا `--reload`)
+بيانات اختبار throwaway جديدة (منفصلة عن Phase 10b): مستخدم
+`phase10c_verify_user` (id=17، تحت tenant حقيقي=1)، رُقّي لـ
+`SUPER_ADMIN`، Tenant B تجريبي (`academy_tenants` id=7)، وصفين
+`CommissionTier`: واحد تحت tenant=7 (`id=3`, `level_1_pct=42.42`،
+قيمة مميزة لتينانت غريب)، وواحد تحت tenant الحقيقي=1 (`id=4`,
+`level_1_pct=7.77`، عشان نتأكد إن الـendpoint لسه شغّال صح للمسار
+الشرعي، مش بس بيرفض كل حاجة).
+
+**اختبار 1 (قبل ما يتعمل تير لـtenant 1):**
+```
+GET /api/affiliate/admin/tiers HTTP/1.1
+X-Tenant-ID: 7        ⬅️ مزوَّر عمدًا، تينانت الحقيقي=1
+Cookie: <جلسة صحيحة>
+```
+```
+HTTP/1.1 404 Not Found
+{"detail":"إعدادات العمولات غير موجودة"}
+```
+مش 200 ببيانات tenant 7 (زي قبل الإصلاح) — رجّع 404 لأن tenant 1
+(الحقيقي) مكانش عنده تير وقتها. **الهيدر بقى بلا أي تأثير.**
+
+**اختبار 2 (بعد إنشاء تير لـtenant 1، نفس الهيدر المزوَّر لسه):**
+```
+GET /api/affiliate/admin/tiers HTTP/1.1
+X-Tenant-ID: 7        ⬅️ لسه مزوَّر
+```
+```
+HTTP/1.1 200 OK
+{"tenant_id":1,...,"level_1_pct":"7.77",...}
+```
+رجّع بيانات **tenant 1** (الحقيقي، `7.77`) — **مش** بيانات tenant 7
+(`42.42`) رغم إن الهيدر بيقول 7. تأكيد قاطع إن الهيدر بقى بلا تأثير
+نهائيًا، والـscoping بقى فعليًا من `current_user.tenant_id`.
+
+**اختبار 3 (كتابة، PUT بنفس الهيدر المزوَّر):**
+```
+PUT /api/affiliate/admin/tiers HTTP/1.1
+X-Tenant-ID: 7
+Body: {"level_1_pct": 8.88}
+```
+```
+HTTP/1.1 200 OK
+{"tenant_id":1,...,"level_1_pct":"8.88",...}
+```
+**تحقق DB مباشر فور الطلب:**
+```sql
+SELECT id, tenant_id, level_1_pct FROM affiliate_commission_tiers WHERE tenant_id IN (1,7);
+-- id=4, tenant_id=1, level_1_pct=8.88   ⬅️ اتغيّر (الحقيقي)
+-- id=3, tenant_id=7, level_1_pct=42.42  ⬅️ زي ما هو، لم يُمس
+```
+**الكتابة أثّرت على tenant الحقيقي بس (1)، وtenant 7 فضل سليم 100%
+بلا أي تغيير رغم إرسال هيدره صراحة.** الثغرة مقفولة فعليًا، مؤكَّد
+بتحقق حي كامل (قراءة قبل وبعد + كتابة + تحقق DB مباشر)، مش بس قراءة
+كود.
+
+### التنظيف (تم بالكامل، تحقَّق بـSELECT مباشر)
+حذف `affiliate_commission_tiers` (id=3, id=4) → `academy_tenants`
+(id=7) → `users` (id=17). تحقق نهائي: صفر صفوف متبقية من أي منهم.
+السيرفر التجريبي اتوقف وتأكَّد توقفه (`curl` رجّع فشل اتصال).
+
+### الاكتشاف النظامي الأوسع (خارج نطاق تنفيذ Phase 10c، موثَّق منفصلًا)
+أثناء نقاش القرار المعماري، اتسأل: هل نفس النمط موجود في دومينات
+تانية؟ فحص read-only (3 agents متوازية، grep + قراءة كود، بلا أي
+اختبار حي) عبر كل الـ29 دومين التاني اللي بيستخدموا `get_current_tenant`
+لقى: **20 دومين (منهم affiliate نفسه) عندهم نفس شكل الثغرة أو أسوأ**
+(بعضهم بلا حماية admin أصلًا، بعضهم بصفر فحص tenant حتى بالهيدر). 9
+دومين طلعوا SAFE (مربوطين بـcurrent_user.id في كل مسار حساس، أو مفيش
+admin endpoints أصلًا). التفاصيل الكاملة والتصنيف لكل دومين موثَّقة في
+`.claude/plans/critical-finding-xtenant-systemic.md` — **تقرير تشخيصي
+بحت، صفر تنفيذ، القرار (إصلاح مركزي محتمل في `get_current_tenant` نفسها
+مقابل إصلاح دومين ورا التاني) مؤجَّل بالكامل لجلسة/جلسات منفصلة بخطة
+اختبار شاملة.**
+
+**ملاحظة جانبية اتلقت أثناء الفحص (خارج نطاقنا تمامًا):** `agritech/router.py`
+طلع نسخة قديمة زايدة من `ai_governance` (تصادم مسارات فعلي في
+`main.py`) — بق بنيوي منفصل تمامًا عن ثغرة X-Tenant-ID، يستاهل تبليغ
+لفريق المشروع، لم يُفحص أو يُصلَح هنا.
+
+---
