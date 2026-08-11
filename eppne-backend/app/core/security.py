@@ -167,6 +167,19 @@ async def get_current_superuser(
     return current_user
 
 
+def is_admin_or_above(user: User) -> bool:
+    role_value = user.system_role.value if hasattr(user.system_role, "value") else user.system_role
+    return role_value in ["ADMIN", "SUPER_ADMIN", "EXECUTIVE_DIRECTOR"]
+
+
+async def require_admin_or_above(
+    current_user: User = Depends(get_current_active_user)
+) -> User:
+    if not is_admin_or_above(current_user):
+        raise PermissionDeniedError("Admin privileges required")
+    return current_user
+
+
 # ============================================================
 # 6. صلاحيات ضابط الخصوصية
 # ============================================================

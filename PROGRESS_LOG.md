@@ -1924,3 +1924,284 @@ SELECT id, tenant_id, name FROM automation_secrets;
 لـaffiliate)، مش جزء من أي حل مركزي. الملف المرجعي لم يُعدَّل.
 
 ---
+
+## [2026-08-11] — Phase 13: إصلاح تصادم المسارات `agritech` ↔ `ai_governance`
+(حذف فوري للملف المكرَّر — بق هيكلي منفصل تمامًا عن ثغرة X-Tenant-ID)
+
+**الحالة:** 🟢 **الإصلاح تم، اتحقَّق منه حيًا (uvicorn فعلي + فحص
+OpenAPI + طلبات HTTP حقيقية)، صفر تأثير جانبي، السيرفر التجريبي اتوقف
+والملفات المؤقتة اتنضّفت.**
+
+### التأكيد الحي (قبل التنفيذ)
+أُعيدت قراءة `agritech/router.py` و`ai_governance/router.py` و
+`agritech/service.py`/`models.py`/`schemas.py`/`repository.py` بالكامل و
+`main.py` (الاستيرادات + `routers_config` + حلقة التسجيل)، فأكَّدت
+اكتشاف Phase 11 بتفصيل أدق: `agritech/router.py` كان نسخة **قديمة** من
+`ai_governance/router.py` (ناقص endpoint `GET /quotas/remaining` ومنطق
+تفويض أحدث `_check_agent_ownership`)، ومسجَّل **قبل** `ai_governance_router`
+في `routers_config` (سطر 270 قبل 272) — يعني كل طلبات `/api/ai-governance/*`
+كانت فعليًا بتتخدم من النسخة القديمة المدفونة جوه `agritech/router.py`،
+مش من `ai_governance/router.py` الصحيح: `endpoint` المفقود غير قابل
+للوصول إطلاقًا، ومنطق التفويض الأحدث متجاوَز فعليًا في الإنتاج. كمان
+تأكَّد إن `agritech/models.py`+`schemas.py`+`repository.py`+`service.py`
+كاملين ومعماريًا جاهزين (11 جدول، عزل tenant صحيح) لكن **بدون أي router
+يعرضهم** — نفس اكتشاف Phase 11 بالظبط.
+
+### القرار (بموافقة صريحة من المستخدم)
+اتعرض للمستخدم 3 خيارات (إصلاح فوري فقط / إصلاح فوري + بناء router
+كامل الآن / بناء router فقط بدون لمس main.py) — **اختار الخيار 1: إصلاح
+فوري فقط**. بناء `router.py` حقيقي لـagritech (feature جديد كامل يعرض
+farms/zones/crop-cycles/harvest/bio-assets/supply-chain/certificates/
+soil-sensors/weather-alerts) **مؤجَّل بالكامل لمراجعة/جلسة منفصلة لاحقًا،
+لم يُنفَّذ هنا**.
+
+### التنفيذ (تم)
+- `eppne-backend/app/main.py`: حذف سطر `from app.domains.agritech.router
+  import router as agritech_router` (كان سطر 35)، وحذف عنصر
+  `(agritech_router, "/agritech", ["Agritech"], "agritech")` من
+  `routers_config`. صفر تغيير في `ai_governance/router.py` أو أي دومين
+  تاني.
+- `eppne-backend/app/domains/agritech/router.py`: **حُذف بالكامل** (كود
+  ميت مكرَّر، صفر قيمة وظيفية حقيقية).
+- فحصت مراجع تانية لـ`agritech_router`/`agritech.router` في المشروع
+  كله: `alembic/env.py` و`migrations/env.py` بيستوردوا `agritech.models`
+  فقط (للـmigrations، مش الراوتر)، و`app/tasks/agritech.py` بيستخدم
+  `AgriTechRepository`/`AgriTechService` مباشرة (Celery tasks، مش
+  الراوتر) — **صفر ملف تاني بيعتمد على `agritech/router.py` المحذوف**.
+
+### التحقق الحي (uvicorn فعلي، مش import بس)
+- شغَّلت `uvicorn app.main:app` فعليًا على `127.0.0.1:8000` (عبر
+  `venv/Scripts/python.exe`) في الخلفية، اللوج سجَّل `INFO: Application
+  startup complete.` و`INFO: Uvicorn running on http://127.0.0.1:8000`
+  **بدون أي استثناء أو تحذير تصادم/تسجيل مسارات** (اللوج الضخم اللي
+  ظهر كان تكرار تحذير encoding يونيكود قديم في الكونسول العربي
+  (`UnicodeEncodeError` على emoji ✅ في `logging_conf.py`) بسبب
+  lifespan contexts متداخلة لكل الراوترز — **غير مرتبط بتاتًا بتعديلنا**،
+  نفس التحذير ظهر مسبقًا عند اختبار `import app.main` وحده.
+- جلبت `GET /openapi.json` حي وفحصته: **صفر مسار فيه `/agritech`**،
+  و`/ai-governance` فيه 7 مسارات تتضمن `GET /quotas/remaining` (كان
+  غير قابل للوصول قبل الإصلاح).
+- طلبات HTTP حقيقية: `GET /api/agritech/farms` → **404** (بدل تصادم
+  صامت)، `GET /api/ai-governance/agents/1/quotas/remaining` → **401**
+  (المسار موجود وبيتفعّل فحص الهوية بشكل طبيعي، مش 404).
+- أوقفت السيرفر التجريبي (`taskkill /F` على الـPID اللي كان مستمع على
+  المنفذ 8000، تأكَّد بـ`netstat` إن مفيش listener تاني)، ومسحت ملف
+  اللوج المؤقت (`phase13_uvicorn.log`) وملف الـOpenAPI المؤقت من مجلد
+  scratchpad الجلسة (خارج شجرة المشروع أصلًا).
+
+### الأثر الوظيفي
+`/api/ai-governance/*` بقى بيتخدم فقط من `ai_governance/router.py`
+الصحيح والمُحدَّث (endpoint `/quotas/remaining` رجع يشتغل فعليًا،
+منطق `_check_agent_ownership` رجع يتطبَّق). `/api/agritech/*` بقى
+`404` صريح (بدل وهم إنه شغال وهو فعليًا بيخدم `ai-governance`) — نفس
+الوضع الوظيفي الفعلي اللي كان موجود قبل الإصلاح (agritech مكنش متاح
+فعليًا أصلًا)، لكن دلوقتي بوضوح بدل تصادم صامت.
+
+### النطاق المتبقي (مؤجَّل، لم يُنفَّذ)
+بناء `agritech/router.py` حقيقي يعرض `AgriTechService` — **مهمة منفصلة
+تحتاج نطاق واختبار خاص بيها**، خارج Phase 13 بالكامل.
+
+**الملفات المعدَّلة:** `eppne-backend/app/main.py` (تعديل).
+**الملفات المحذوفة:** `eppne-backend/app/domains/agritech/router.py`.
+**الملفات المفحوصة فقط (بدون تعديل):** `eppne-backend/app/domains/
+ai_governance/router.py`, `eppne-backend/app/domains/agritech/
+{service,models,schemas,repository}.py`, `eppne-backend/alembic/env.py`,
+`eppne-backend/migrations/env.py`, `eppne-backend/app/tasks/agritech.py`.
+
+---
+
+## [2026-08-11] — Phase 14: إكمال الفحص الشامل لثغرة X-Tenant-ID —
+سدّ فجوة في تغطية التقرير الأصلي (6 دومينات كانت ناقصة)
+
+**الحالة:** ✅ مكتمل، read-only بالكامل (صفر تعديل كود). الملف الكامل
+المُحدَّث: `.claude/plans/critical-finding-xtenant-systemic.md`.
+
+**السياق:** التقرير الأصلي (Phase 10c، `critical-finding-xtenant-
+systemic.md`) غطّى 29 دومين بس، رغم إن `app/domains/` فيه 35 مجلد
+فعلي. الفحص كان ناقص لـ6 مجلدات: `admin`, `auth`, `identity`,
+`invoicing`, `iot`, `privacy`.
+
+**المنهجية:** نفس معيار التقرير الأصلي بالحرف (endpoint محمي بصلاحية
+مرتفعة بيقرأ/يكتب مورد غير مرتبط بملكية المستخدم، معتمدًا على
+`tenant_id` من `get_current_tenant`/الهيدر بدون مقارنة مع
+`current_user.tenant_id`) — قراءة كود فقط، صفر تحقق حي جديد في هذه
+الجلسة.
+
+**النتيجة:**
+- **`admin`, `invoicing`, `iot`, `privacy` → 🟢 SAFE.** الأربعة صفر
+  استخدام لـ`get_current_tenant`/الهيدر إطلاقًا (grep شامل، صفر
+  نتائج) — كل تحديد tenant عبر `current_user.tenant_id` الحقيقي من
+  الـJWT. `admin` كمان راوترها أصلًا **غير مسجَّل في `main.py`**
+  (endpoint وحيد `toggle-ai-agents` غير قابل للوصول حاليًا).
+- **`auth` → ⚪ N/A، مستبعد من العدّ.** المجلد فيه `__pycache__` بس،
+  صفر ملف `.py` — Phase 4 (commit `eeaf783`) حذفت كوده بالكامل. مفيش
+  endpoints تُفحص، فتصنيف SUSPICIOUS/SAFE غير منطبق، مُوثَّق رسميًا
+  بدل الاستبعاد الصامت.
+- **`identity` → 🟡 فئة مختلفة تمامًا، مش رقم 21 في جدول SUSPICIOUS
+  العادي.** بعد نقاش مع المستخدم أثناء المراجعة، تبيَّن إن دمج
+  identity في نفس جدول الـ20 دومين (IDOR على مورد موجود) كان سيضلِّل:
+  ثغرة identity (`register`, `router.py:30` → `service.py:90`)
+  **pre-auth بالكامل** — مفيش `current_user.tenant_id` أصلًا للمقارنة
+  معه، والفعل المُستغَل **إنشاء** حساب جديد تحت أي tenant بلا دعوة،
+  مش قراءة/تعديل مورد موجود. **هذه نفس الثغرة المؤكَّدة حيًا بالفعل في
+  Phase 9** (`phase9-audit-identity-report.md`) — مُدمَجة رسميًا هنا
+  في قسمها الخاص بدل ما تفضل ملاحظة منفصلة. **مهم:** الإصلاح المركزي
+  المقترح في نفس الملف (تعديل `get_current_tenant` ليتجاهل الهيدر
+  للمستخدمين المُصادَق عليهم) **يستثني pre-auth عمدًا، فلا يغطي ولا
+  يصلح ثغرة identity دي إطلاقًا** — أُضيفت ملاحظة تحذيرية صريحة في قسم
+  "الاقتراح المعماري" نفسه لمنع سوء الفهم ده لاحقًا. باقي endpoints
+  identity المحمية (`me`, `sessions`, `revoke-all`...) مؤكَّدة SAFE
+  حيًا (نفس Phase 9) — الهيدر المزوَّر بيرجّع 404 fail-safe مش تسريب.
+- **ملاحظة منفصلة موثَّقة (خارج نطاق X-Tenant-ID تمامًا):**
+  `invoicing/create_invoice` (`router.py:42-70`, تحديدًا سطر 54)
+  بياخد `tenant_id` مباشرة من جسم الطلب (`InvoiceCreate.tenant_id`)
+  بلا أي admin-gate أو مقارنة مع `current_user.tenant_id` — احتمال
+  mass-assignment عبر الـbody (شكل مختلف تمامًا عن ثقة الهيدر، نفس
+  سابقة ملاحظة `commerce.create_store` في التقرير الأصلي). **غير
+  مؤكَّد حيًا، يحتاج phase منفصل بالكامل.**
+
+**الحصيلة الإجمالية المُحدَّثة:** 20 SUSPICIOUS (زي ما كانت) + 1
+مصنَّف في فئة منفصلة (`identity`) + 13 SAFE (9 الأصليين + 4 جدد) = 34
+دومين حقيقي مُصنَّف بالكامل (`auth` مستبعد، دومين محذوف).
+
+**لم يُتخذ أي إجراء إصلاحي في هذه الجلسة** — فحص وتوثيق بس، حسب طلب
+المستخدم صراحة. القرار بخصوص أي إصلاح (identity، الـ20 دومين،
+`invoicing/create_invoice`) لسه مؤجَّل بالكامل لجلسة/جلسات منفصلة.
+
+**الملفات المعدَّلة:** `.claude/plans/critical-finding-xtenant-
+systemic.md` (تحديث شامل — جداول التصنيف + قسم identity الجديد +
+ملاحظة invoicing + الحصيلة الإجمالية).
+**الملفات المفحوصة فقط (بدون تعديل):**
+`eppne-backend/app/domains/{admin,auth,identity,invoicing,iot,privacy}/
+router.py`، `eppne-backend/app/domains/identity/service.py`،
+`eppne-backend/app/main.py` (grep فقط، تأكيد تسجيل/عدم تسجيل الراوترات).
+
+---
+
+## [2026-08-11] — ملاحظة تصميم (Phase 15، أثناء تصميم جدول
+`identity_tenant_invitations`): تكرار مفهومي محتمل مع `invitations/models.py`
+
+أثناء تصميم جدول دعوات/إحالة جديد داخل دومين `identity`
+(`identity_tenant_invitations` — راجع
+`.claude/plans/phase15-identity-registration-invitation-design.md`)،
+لوحظ إن دومين `invitations` الموجود بالفعل (نظام CRM/تسويقي منفصل
+تمامًا، جدول `sovereign_invitations_v2` عبر
+`app/domains/invitations/models.py`) عنده مفهوم "دعوة" بحقول متشابهة
+جزئيًا (`target_type`, `target_entity_identifier`, `status`
+enum اسمه `invitationstatus` في قاعدة البيانات فعليًا — تأكَّد بفحص حي
+لـ`pg_enum`). **لا يوجد أي تداخل وظيفي فعلي حاليًا** — دومين
+`invitations` غرضه دعوات عملاء محتملين/حملات تسويقية بمساعدة AI، بينما
+الجدول الجديد غرضه دعوات/روابط إحالة انضمام فعلي لتينانت (مرتبط بإصلاح
+ثغرة أمنية في `identity/register`). **القرار الصريح لهذه الجلسة:** جدول
+منفصل تمامًا (`identity_tenant_invitations`)، صفر توحيد أو ربط مع
+`sovereign_invitations_v2`، وصفر لمس لدومين `sovereign_entities` أو
+`invitations`. **تُذكَر هنا فقط كملاحظة تستاهل تقييم معماري لاحق منفصل**
+(هل الاثنين لازم يفضلوا منفصلين على المدى الطويل، ولا فيه فرصة توحيد
+مفيدة؟) — **بدون أي قرار أو تنفيذ في هذا الشأن الآن**.
+
+---
+
+## [2026-08-12] — Phase 15: إصلاح ثغرة self-enrollment في
+`identity/register` + بناء مسار دعوة/إحالة جديد
+
+**الحالة:** ✅ **مكتمل بالكامل، مصمَّم ونُفِّذ ونُوثِّق حيًا خطوة خطوة
+بموافقة صريحة على كل ملف قبل كتابته**، وتحقَّق منه حيًا (uvicorn فعلي +
+11 اختبار HTTP حقيقي + استعلامات DB مباشرة قبل/بعد)، والسيرفر التجريبي
+اتوقف والبيانات التجريبية اتنضّفت بالكامل (تحقُّق مستقل بعد التنظيف).
+
+### المشكلة الأصلية (مكتشفة ومؤكَّدة حيًا في Phase 9، مُصنَّفة بدقة في
+Phase 14 — `critical-finding-xtenant-systemic.md`)
+`POST /identity/register` كانت بتكتب `tenant_id` للمستخدم الجديد من
+قيمة هيدر `X-Tenant-ID` مباشرة (عبر `get_current_tenant`،
+`api/deps.py:148-153`)، **بلا أي مصادقة أو تفويض** — أي زائر غير
+مُصادَق عليه كان يقدر يسجّل حساب تحت أي `tenant_id` موجود بمجرد تغيير
+الهيدر (تسجيل فعلي تحت `tenant_id=2` بهيدر مزوَّر، مؤكَّد حيًا في
+Phase 9). هذه القيمة كانت بعدين بتتحط كـclaim `tenant_id` في الـJWT
+الموقَّع، فتبقى "الهوية" الموثوقة للمستخدم في باقي حياة الجلسة عبر كل
+دومين تاني بالمشروع. `login` وباقي الـ8 endpoints المحمية في identity
+(`me`, `sessions`, `revoke-all`, `me/password`, `me` DELETE) **كانوا
+مؤكَّدين آمنين بالفعل** (Phase 9) ولم يُلمسوا في Phase 15 إطلاقًا.
+
+### الحل المُنفَّذ
+1. **`PUBLIC_REGISTRATION_TENANT_ID`** (`app/core/config.py`) — قيمة
+   ثابتة (`=1`، مؤكَّدة بفحص حي لقاعدة البيانات المحلية إنه التينانت
+   الحقيقي الوحيد الموجود) بمعزل تام عن أي دومين، مع تحقق إلزامي
+   (`os.getenv` صريح) في بيئة الإنتاج (fail loud، نفس نمط `SECRET_KEY`).
+2. **`POST /identity/register`** — إزالة `Depends(get_current_tenant)`
+   نهائيًا، استخدام `settings.PUBLIC_REGISTRATION_TENANT_ID` ثابتًا.
+   **هذا هو التعديل الوحيد على مسار حي فعليًا في كل Phase 15.**
+3. **جدول جديد `identity_tenant_invitations`** (migration
+   `027_create_identity_tenant_invitations`، مُعدَّلة مرة واحدة أثناء
+   المراجعة لتحويل `token` من نص صريح لـ`token_hash` مُشفَّر — الجدول
+   كان فاضيًا وقتها فصفر فقدان بيانات) — يدعم دعوة انضمام إدارية
+   تقليدية (`max_uses=1`) **وكمان** رابط إحالة/عمولة قابل لإعادة
+   الاستخدام يُنشئه أي مستخدم مسجّل (`referrer_user_id` + `product_id`
+   اختياري لربط عمولة مستقبلي بدومين `affiliate` — **منطق حساب/صرف
+   العمولة نفسه خارج نطاق Phase 15 تمامًا، مؤجَّل لجلسة منفصلة**).
+4. **`POST /identity/register-with-invitation`** (عام، pre-auth) —
+   التينانت بيتحدد من `invitation.tenant_id` نفسها (مُجمَّدة وقت إنشاء
+   الدعوة من `current_user.tenant_id` الحقيقي)، **أبدًا من هيدر أو
+   جسم الطلب**. حماية من race condition على الدعوات محدودة الاستخدام
+   عبر `UPDATE` ذرّي شرطي (`claim_use`/`release_use`) بدل
+   `SELECT`-ثم-فحص-ثم-`UPDATE`.
+5. **`POST/GET /identity/invitations`, `GET /identity/invitations/{id}`,
+   `POST /identity/invitations/{id}/revoke`** — إنشاء متاح لأي مستخدم
+   مسجّل (بدون فحص دور)؛ عرض/إبطال دعوة الشخص نفسه دايمًا مسموح، وعرض/
+   إبطال دعوة مستخدم تاني محصور بـ`{ADMIN, SUPER_ADMIN,
+   EXECUTIVE_DIRECTOR}` (`is_admin_or_above`، دالة جديدة في
+   `core/security.py`). التوكن الخام بيظهر مرة واحدة بس وقت الإنشاء
+   (`TenantInvitationCreateResponse`)؛ أي استدعاء تاني بيرجّع
+   `has_token: bool` بس (صفر تسريب توكنات مستخدمين تانيين).
+
+### التحقق الحي (uvicorn فعلي، 11 اختبار HTTP حقيقي + استعلامات DB مباشرة)
+1. تسجيل عام بدون هيدر → `201`, `tenant_id=1` ✅
+2. **تسجيل عام مع `X-Tenant-ID` مزوَّر لتينانت اختباري حقيقي منفصل
+   (رقم عشوائي مُنشَأ للاختبار) → `201`, لكن `tenant_id=1` مش قيمة
+   الهيدر — إثبات مباشر إن الإصلاح شغّال فعليًا، مش بس نظريًا** ✅
+3. تسجيل دخول عادي (`login`، بدون أي تعديل) → `200` ✅
+4. إنشاء دعوة `max_uses=1` → `201`، توكن خام 43 حرف ✅
+5. إنشاء دعوة بلا حد (`max_uses=null`) → `201` ✅
+6. تسجيل بدعوة (استخدام أول) → `201`، `tenant_id` المستخدم الجديد =
+   تينانت المُحيل بالضبط، `current_uses=1`, `status=ACCEPTED` تلقائيًا ✅
+7. **إعادة استخدام نفس التوكن (`max_uses=1` مستنفدة) → `422` رفض،
+   صفر مستخدم تاني اتسجل — `claim_use()` الذرّي منع تجاوز الحد** ✅
+8. `GET /invitations` (بتاعتي) → `200`, `count=2` ✅
+9. **`GET /invitations/{id}` من مستخدم تاني (مش صاحبها، مش إداري) →
+   `403` — صفر تسريب بيانات دعوة بين مستخدمين بنفس التينانت** ✅
+10. إبطال دعوة بواسطة صاحبها → `200`, `status=REVOKED` ✅
+11. تسجيل دخول ارتدادي (تأكيد `login` لسه شغالة زي ما هي) → `200` ✅
+
+### التنظيف (تم بالكامل، تحقُّق مستقل بعد إيقاف السيرفر)
+`users WHERE username LIKE 'p15%'` → 0، تينانت الاختبار المؤقت → 0
+(اتمسح)، `identity_tenant_invitations` بالكامل → 0 صف متبقي،
+`academy_tenants=1`/`users=7` — **نفس القيم بالضبط قبل بدء أي اختبار
+في الجلسة كلها**. سيرفر uvicorn التجريبي اتوقف (`taskkill`)، ملفات
+اللوج والسكربت المؤقتة اتمسحت.
+
+### ملاحظات نطاق صريحة
+- منطق حساب/استحقاق/صرف عمولة الإحالة، وربطه بدومين `affiliate`
+  الفعلي — **خارج نطاق Phase 15 تمامًا**، مؤجَّل لجلسة منفصلة. الجدول
+  الجديد بيخزّن بيانات الإسناد فقط (`referrer_user_id` + `product_id`).
+- الشات بوت / AI-assisted invitation writing / self-service tenant
+  creation — **مؤجَّلة**، لم تُناقَش تفصيليًا.
+- ربط الدومينات الحقيقية بالتينانتات (بعد الرفع) — **خارج النطاق**،
+  `PUBLIC_REGISTRATION_TENANT_ID` قيمة `tenant_id` ثابتة بمعزل تام عن
+  أي دومين.
+- تبسيط `login` لإزالة اعتماده على `X-Tenant-ID` بالكامل (ممكن نظريًا
+  بما إن `username`/`email` unique عالميًا) — **مطروح كملاحظة اختيارية
+  فقط، لم يُنفَّذ، `login` لم يُلمس إطلاقًا في Phase 15**.
+- تكرار مفهومي مع دومين `invitations` (CRM) — موثَّق في الملاحظة
+  السابقة مباشرة أعلاه، صفر توحيد أو لمس.
+
+**الملفات المعدَّلة:** `eppne-backend/app/core/config.py`,
+`eppne-backend/app/core/enums.py`, `eppne-backend/app/core/security.py`,
+`eppne-backend/app/domains/identity/{models,repository,router,schemas}.py`.
+**الملفات الجديدة:** `eppne-backend/app/domains/identity/invitation_service.py`,
+`eppne-backend/migrations/versions/027_create_identity_tenant_invitations.py`,
+`.claude/plans/phase15-identity-registration-invitation-design.md`.
+**لم يُلمس:** `identity/service.py` (`UserService`/`login`/`authenticate`
+كما هي بالحرف)، `api/deps.py` (`get_current_tenant` كما هي)، أي دومين
+تاني غير `identity` (شامل `affiliate`, `commerce`, `invitations`,
+`sovereign_entities`).
+
+---

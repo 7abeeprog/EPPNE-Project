@@ -9,7 +9,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import hashlib
 from app.core.database import Base
-from app.core.enums import SystemRole, SovereignRank, KYCStatus, MarriageStatus
+from app.core.enums import SystemRole, SovereignRank, KYCStatus, MarriageStatus, InvitationStatus
 
 class User(Base):
     __tablename__ = "users"
@@ -137,3 +137,50 @@ class RefreshToken(Base):
 
     def __repr__(self) -> str:
         return f"<RefreshToken(user_id={self.user_id}, tenant_id={self.tenant_id}, revoked={self.revoked})>"
+
+
+class TenantInvitation(Base):
+    __tablename__ = "identity_tenant_invitations"
+    __table_args__ = (
+        Index("ix_identity_tenant_invitations_tenant_status", "tenant_id", "status"),
+        Index("ix_identity_tenant_invitations_referrer", "referrer_user_id"),
+        Index("ix_identity_tenant_invitations_product", "product_id"),
+        Index("ix_identity_tenant_invitations_status_expiry", "status", "expires_at"),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False)
+
+    token_hash = Column(String(64), unique=True, index=True, nullable=False)
+    email = Column(String, nullable=True, index=True)
+
+    referrer_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True)
+
+    status = Column(SQLEnum(InvitationStatus, name="tenant_invitation_status"), default=InvitationStatus.PENDING, nullable=False)
+    max_uses = Column(Integer, nullable=True)
+    current_uses = Column(Integer, default=0, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+
+    accepted_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_by_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    @staticmethod
+    def hash_token(token: str) -> str:
+        return hashlib.sha256(token.encode()).hexdigest()
+
+    def is_active_now(self) -> bool:
+        if self.status != InvitationStatus.PENDING:
+            return False
+        if self.expires_at is not None and self.expires_at <= datetime.now(timezone.utc):
+            return False
+        if self.max_uses is not None and self.current_uses >= self.max_uses:
+            return False
+        return True
+
+    def __repr__(self) -> str:
+        return f"<TenantInvitation(id={self.id}, tenant_id={self.tenant_id}, status={self.status})>"
