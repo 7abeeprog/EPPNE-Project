@@ -59,7 +59,7 @@ class AIGovernanceRepository:
     async def create_usage_log(self, **kwargs) -> AgentUsageLog:
         log = AgentUsageLog(**kwargs)
         self.db.add(log)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(log)
         return log
 
