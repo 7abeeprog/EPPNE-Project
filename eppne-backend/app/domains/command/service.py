@@ -31,8 +31,6 @@ class CommandService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = CommandRepository(db)
-        self.ai_service = AIAgentsService(db)
-        self.saas_service = SaaSControlService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
 
@@ -333,9 +331,8 @@ class CommandService:
         sector_stats = await self._get_sector_stats(tenant_id)
 
         from app.domains.ai_governance.service import AIGovernanceService
-        governance = AIGovernanceService(self.db)
+        governance = AIGovernanceService(self.db, tenant_id)
         await governance.check_and_consume(
-            tenant_id=tenant_id,
             agent_id=14,
             user_id=user_id,
             action_type="STRATEGIC_ANALYSIS",
@@ -347,9 +344,9 @@ class CommandService:
         idempotency_key = f"ai_recommend_{tenant_id}_{user_id}_{uuid.uuid4().hex[:8]}"
 
         try:
-            ai_result = await self.ai_service.execute_agent_action(
+            ai_service = AIAgentsService(self.db, tenant_id)
+            ai_result = await ai_service.execute_agent_action(
                 agent_id=14,
-                tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
                 payload={
                     "core_stats": core_stats,

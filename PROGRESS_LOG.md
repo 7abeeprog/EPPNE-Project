@@ -2205,3 +2205,381 @@ Phase 9). هذه القيمة كانت بعدين بتتحط كـclaim `tenant_i
 `sovereign_entities`).
 
 ---
+
+## [2026-08-12] — Phase 16 (قيد التنفيذ): اكتشافات جانبية في `command`
+أثناء التحقق الحي المسبق (Phase 2)، خارج نطاق ثغرة X-Tenant-ID تمامًا
+
+**السياق:** أثناء محاولة التحقق الحي المسبق (قبل تطبيق إصلاح X-Tenant-ID
+نفسه) لدومين `command`، ظهرت أخطاء `500` على endpoints أساسية بسبب أباجات
+**منفصلة تمامًا عن ثغرة الهيدر**، منعت حتى بدء التحقق الحي. اتلقطت
+بالترتيب التالي:
+
+### 1. باجات constructor في `CommandService` — 🟢 اتصلحت (بموافقة صريحة
+   كاستثناء مبرَّر، لأنها منعت أي اختبار على الإطلاق)
+- `command/service.py` (`__init__`) كان بينشئ `AIAgentsService(db)` و
+  `SaaSControlService(db)` بلا `tenant_id` المطلوب في الـconstructor
+  الحقيقي لكل منهم → `TypeError` فوري على **كل** endpoint في الدومين
+  (18 من 18). `saas_service` تأكَّد إنه dead code (صفر استخدام في
+  الملف كله عبر grep). **الحل:** إزالة الاتنين من `__init__`.
+- نفس النمط بالظبط في `generate_ai_recommendations`: `AIGovernanceService(self.db)`
+  بلا `tenant_id`. **الحل:** `AIGovernanceService(self.db, tenant_id)`
+  محليًا (بعد التأكد من التوقيع الحقيقي في `ai_governance/service.py:17`
+  و`check_and_consume` سطور 136-146 — لا يقبلوا `tenant_id` كـparameter
+  منفصل).
+- **باج ثالث من نفس الفئة اتلقط لاحقًا** (`command/service.py:347`):
+  الإصلاح الأول شال `self.ai_service` من `__init__` لكن الاستدعاء
+  الوحيد ليها (`generate_ai_recommendations`) فضل بيشير لمتغيّر مش
+  موجود. **الحل:** `ai_service = AIAgentsService(self.db, tenant_id)`
+  محليًا داخل نفس الدالة، بدل `self.ai_service`.
+
+### 2. `GET /command/dashboard` → `ResponseValidationError` — 🔴 موثَّق
+   فقط، **لم يُصلَح**، خارج نطاق Phase 16 تمامًا
+```
+fastapi.exceptions.ResponseValidationError: 1 validation errors:
+{'loc': ('response', 'dashboard'), 'msg': 'Input should be a valid dictionary',
+ 'input': <app.domains.command.models.CommandDashboard object at 0x...>}
+```
+`command/schemas.py:16` (`DashboardResponse.dashboard: Dict[str, Any]`)
+متوقع dict، لكن `command/service.py:126-133` (`get_dashboard`) بيرجّع
+كائن ORM خام (`CommandDashboard`) تحت مفتاح `"dashboard"` بلا أي
+تحويل. **مؤكَّد إنه باج سابق لأي تعديل في Phase 16**: مسار الكود ده
+(`repository.py:19` → `service.py:110-133` → `router.py:22-35`) لم
+يُلمس إطلاقًا في هذه الجلسة (التعديلات الوحيدة كانت في `__init__` وفي
+`generate_ai_recommendations`، دالتين مختلفتين تمامًا). **الأثر
+العملي:** `GET /dashboard` فاشل بـ`500` لأي مستخدم، بغض النظر عن مصدر
+`tenant_id` (هيدر أو JWT) — endpoint غير صالح للاستخدام كـ"شاهد وصول
+شرعي" في التحقق الحي، اتستبدل بـ`GET /command/brands/me` (endpoint
+تينانت-scoped أبسط، `response_model` سليم `BrandSettingsResponse`).
+
+### 3. `agent_id=14` (hardcoded) غير موجود في جدول `ai_agents` —
+   🟡 موثَّق، **قيد المناقشة** (قرار seed بيانات اختبار مقابل قرار
+   توثيق-بدون-إصلاح، لم يُحسَم بعد وقت كتابة هذا السطر)
+```
+asyncpg.exceptions.ForeignKeyViolationError: insert or update on table
+"agent_usage_logs" violates foreign key constraint
+"agent_usage_logs_agent_id_fkey"
+DETAIL: Key (agent_id)=(14) is not present in table "ai_agents".
+```
+`command/service.py:336,348,372` (`generate_ai_recommendations`) بيفترض
+وجود AI agent ثابت بـ`id=14` في 3 مواضع مختلفة (`check_and_consume`,
+`execute_agent_action`, `create_recommendation`)، بلا أي seed/إنشاء
+تلقائي له. في قاعدة البيانات المحلية الحالية (فاضية من بيانات agents
+حقيقية) الـid ده مش موجود، فأي استدعاء لـ`generate_ai_recommendations`
+بيفشل بـ`ForeignKeyViolationError` — **صفر علاقة بـtenant_id/الهيدر**.
+
+**القرار (لم يُنفَّذ بعد):** لو إنشاء صف اختباري minimal (`INSERT` واحد
+بحقول أساسية فقط: `tenant_id`, `owner_id`, `name`, `role`,
+`system_prompt` — باقي أعمدة `ai_agents` عندها `default`) هيكفي
+لإرضاء الـFK بلا لمس أي منطق KYB/إنشاء agent حقيقي، هيُعمَل كبيانات
+اختبار مؤقتة (بادئة `phase16_`، نفس نمط بيانات الاختبار التانية،
+تُنضَّف في Phase 5). لو محتاج يلمس workflow حقيقي، هيُوثَّق فقط
+كملاحظة "بيانات seed ناقصة لـ`ai_agents` تمنع اختبار حي لـ
+`generate_ai_recommendations`" بلا إصلاح.
+
+**الملفات المعدَّلة:** `eppne-backend/app/domains/command/service.py`
+(`__init__` + `generate_ai_recommendations`، 3 مواضع).
+**الملفات المفحوصة فقط (بدون تعديل):** `eppne-backend/app/domains/
+command/{router,repository,schemas}.py`, `eppne-backend/app/domains/
+ai_governance/service.py`, `eppne-backend/app/domains/ai_agents/models.py`.
+
+---
+
+## [2026-08-12] — Phase 16 (استثناء نطاق مبرر): إصلاح باج ترانزاكشن في
+`ai_governance` — دومين خارج الأربعة الأصليين
+
+**الحالة:** 🟢 **اتصلح، بموافقة صريحة كاستثناء نطاق مبرر — وليس توسيع
+اختياري.**
+
+**السبب الصريح للاستثناء:** الباج ده **كان حاجز فعلي قدام التحقق الحي
+الإلزامي** لـ`generate_ai_recommendations` (endpoint من ضمن الـ18 في
+`command`، أحد الأربعة دومينات الأصلية لـPhase 16) — بدون إصلاحه، كان
+مستحيل نثبت حيًا نجاح/فشل الوصول الشرعي مقابل المزوَّر على الـendpoint
+ده، رغم إن دومين `ai_governance` نفسه **مش من ضمن نطاق Phase 16
+المتفق عليه أصلًا** (الأربعة: `ai_agents`, `sovereign_entities`,
+`command`, `saas`).
+
+**الاكتشاف:** أثناء التحقق الحي لـ`generate_ai_recommendations`،
+`500` بتراكة:
+```
+sqlalchemy.exc.InvalidRequestError: Can't operate on closed transaction
+inside context manager.
+  ai_governance/service.py:180 → check_and_consume
+  ai_governance/repository.py:63 → create_usage_log → self.db.refresh(log)
+```
+السبب الجذري: `ai_governance/repository.py:59-64` (`create_usage_log`)
+كانت بتعمل `await self.db.commit()` مباشرة على الـsession الأساسية
+**من جوه** بلوك `async with self.db.begin_nested()` بتاع
+`check_and_consume` (`ai_governance/service.py:155-193`). `commit()`
+مباشر جوه `begin_nested()` بيقفل الترانزاكشن الخارجي اللي الـSAVEPOINT
+معتمد عليه، فبيكسر أي عملية بعده (`refresh(log)` هنا بالظبط). مؤكَّد
+إنه مش مرتبط بـ`agent_id=14`/بيانات الـseed: `active_quotas` كانت فاضية
+في اختبارنا، فالحلقة اللي بتستدعي `create_or_update_quota`
+(سطور 156-178) اتخطّت بالكامل، والباج ظهر مباشرة عند `create_usage_log`
+— هيحصل حتى مع quotas كاملة، لأنها مشكلة بنيوية في إدارة الترانزاكشن.
+
+**الإصلاح المطبَّق (سطر واحد فقط):**
+```diff
+     async def create_usage_log(self, **kwargs) -> AgentUsageLog:
+         log = AgentUsageLog(**kwargs)
+         self.db.add(log)
+-        await self.db.commit()
++        await self.db.flush()
+         await self.db.refresh(log)
+         return log
+```
+`flush()` بيكتب الصف جوه نفس الترانزاكشن (قابل للـ`refresh` فورًا) بلا
+ما يقفل حاجة؛ الـSAVEPOINT بيتقفل طبيعي لما بلوك `async with` يخلص.
+الالتزام النهائي (commit) بيحصل فعليًا بعدين عبر
+`command/repository.py:188` (`create_recommendation`، بتتنفذ بعد
+`check_and_consume` في نفس الطلب، وعندها `commit()` خاص بيها) — الصف
+مش بيضيع.
+
+**نطاق الإصلاح (محدود صراحة، بموافقة المستخدم):** الاستدعاء الوحيد
+لـ`create_usage_log` في المشروع كله هو `service.py:180`. **لم تُلمس**
+`create_or_update_quota` (`repository.py:20-37`) رغم وجود نفس النمط
+بالظبط فيها (`commit()` جوه `begin_nested()` في `service.py:33` و`174`،
+دالتين `set_quota` و`check_and_consume`) — غير مفعّلة في مسارنا الحالي
+(الحلقة اللي بتستدعيها اتخطّت بالكامل لخلو `active_quotas`)، وسايبينها
+كما هي — **قرار صريح بعدم التوسع، حتى لو ظهرت مشاكل جديدة مشابهة.**
+
+**ملاحظة منفصلة موثَّقة (خارج نطاق تمامًا، لم تُفعَّل، لم تُصلَح):**
+`ai_governance/service.py:148` بيستدعي
+`self.repo.get_usage_log_by_idempotency(idempotency_key)` بـparameter
+واحد بس، لكن التوقيع الحقيقي (`repository.py:66`) محتاج `tenant_id`
+كـparameter إجباري تاني. ماتفعّلتش في اختبارنا لأن نداء
+`command/service.py` لـ`check_and_consume` مبيبعتش `idempotency_key`
+(`if idempotency_key:` بترجع `False`)، لكنها كمين `TypeError` جاهز لأي
+استدعاء تاني (من أي دومين) بيبعت idempotency key فعلي. **لم تُصلَح —
+خارج نطاق الاستثناء المبرَّر أعلاه (مش حاجز قدام مسارنا الحالي).**
+
+**الملفات المعدَّلة:** `eppne-backend/app/domains/ai_governance/repository.py`
+(سطر واحد، `create_usage_log`).
+**الملفات المفحوصة فقط (بدون تعديل):** `eppne-backend/app/domains/
+ai_governance/service.py`، `eppne-backend/app/domains/command/repository.py`.
+
+---
+
+## [2026-08-12] — Phase 16، Phase 2 (تحقق حي قبل الإصلاح): تأكيد حي إضافي
+إن ثغرة X-Tenant-ID في `command` **لسه حية بالكامل** (مش دليل على أي حماية)
+
+**السياق:** أثناء محاولة التحقق الحي لـ`generate_ai_recommendations`
+(بعد إصلاح باجات constructor/transaction/seed غير المرتبطة بالثغرة)،
+ظهر إن الطلب بهيدر `X-Tenant-ID` مزوَّر (`12`) فشل عند
+`AIAgentsRepository.get_agent(14, tenant_id=12)` برسالة "الوكيل 14 غير
+موجود". **كان لازم تتبُّع دقيق لإثبات مصدر الـ`12` ده قبل اعتباره أي
+دليل**، تحديدًا: هل هو `current_user.tenant_id` (المصدر الآمن) ولا لسه
+الهيدر الخام؟
+
+**التتبُّع (فك تشفير التوكن المستخدم فعليًا + قراءة كود حي، بدون
+افتراض):**
+- التوكن المستخدم: `phase16_tenantA_user` (تينانت 1 الحقيقي)، مع هيدر
+  مزوَّر `X-Tenant-ID: 12`. فك تشفير الـJWT مباشرة أكَّد:
+  `{"sub":"26","tenant_id":1,...}` — `current_user.tenant_id` الحقيقي
+  = **1**.
+- `command/router.py:272-285` (`generate_recommendations`):
+  `tenant_id=cast(int, tenant.id)` بيتبعت للـservice — و`tenant` جايه
+  من `Depends(get_current_tenant)`، **مش من `current_user`** (رغم إن
+  `current_user` متاح في نفس الـendpoint، `tenant_id` بتاعه غير
+  مُستخدَم إطلاقًا في تحديد نطاق العملية).
+- `api/deps.py:148-153` (`get_current_tenant`): بترجّع قيمة هيدر
+  `X-Tenant-ID` مباشرة (`default=1`)، **صفر تحقق أو ربط بـ`current_user`**.
+- تأكَّد (`grep` حي): `command/router.py` **لسه فيها 18 استخدام لـ
+  `Depends(get_current_tenant)` بلا أي تعديل** — الملف ده لم يُلمس
+  إطلاقًا طول الجلسة (كل الإصلاحات كانت في `service.py`/
+  `ai_governance/repository.py`، مش `router.py`).
+
+**الاستنتاج الصحيح (مصحَّح — الاستنتاج الأول كان غير دقيق):**
+`tenant_id=12` اللي وصل لـ`get_agent` **مش تسريب في مسار جديد أو منفصل
+— دي نفس الثغرة الأصلية الموثَّقة، لسه حية بالكامل**، لأن إصلاح Phase 3
+(استبدال `Depends(get_current_tenant)` بـ`current_user.tenant_id` في
+الـ18 endpoint) **لم يُطبَّق على `command/router.py` لحد الآن**. رفض
+`get_agent` للطلب المزوَّر (٪"الوكيل غير موجود") **كان صدفة بيانات
+اختبار** (الوكيل `id=14` مزروع لتينانت 1 بس، مش موجود لتينانت 12)،
+**وليس حماية حقيقية على مستوى التطبيق**. لو المهاجم زوَّر الهيدر
+لتينانت عنده بيانات AI حقيقية مزروعة، كان الكود هيكمل وينفّذ فعليًا
+تحت هوية التينانت الضحية — **الثغرة لسه قابلة للاستغلال الكامل في
+`command` حتى وقت كتابة هذا السطر**.
+
+**الخلاصة الصريحة لحالة التحقق الحي لـ`generate_ai_recommendations`:**
+1. **آلية عزل التينانت عبر `current_user.tenant_id` — لم تُختبَر بعد،
+   لأنها لم تُطبَّق بعد** (فرق مهم عن "مؤكَّدة تعمل"). الفحص الحي الوحيد
+   اللي اتنفَّذ لحد الآن أثبت العكس: الثغرة الأصلية (الهيدر) لسه المصدر
+   الفعلي الوحيد لـ`tenant_id` في هذا المسار بالكامل.
+2. **الـbaseline الناجح كاملًا (end-to-end لغاية نتيجة AI حقيقية) محجوب
+   حاليًا بباج غير مرتبط تمامًا** (`RedisClientWrapper.hincrbyfloat` —
+   موثَّق منفصل تحت هذا القسم).
+3. **لا يمكن اعتبار التحقق الحي لهذا الـendpoint "مكتمل" بأي درجة قبل
+   تطبيق إصلاح Phase 3 على `command/router.py` وإعادة الاختبار من
+   الصفر.**
+
+### باج منفصل تمامًا (موثَّق فقط، لم يُحقَّق فيه أعمق، خارج نطاق X-Tenant-ID)
+أثناء نفس الاختبار (بعد إصلاح مشاكل الـagent seed)، الطلب الشرعي (تينانت
+1 الحقيقي) عدّى فحص وجود الوكيل بنجاح، ودخل فعليًا لمنطق
+`ai_engine.generate(...)` (`ai_agents/service.py:193-202`) — لكن فشل
+بخطأ في subsystem مختلف تمامًا:
+```
+AI execution failed for agent 14: فشل جميع النماذج:
+'RedisClientWrapper' object has no attribute 'hincrbyfloat'
+```
+على الأرجح مرتبط بتكامل AI engine مع Redis (تتبُّع تكلفة/استهلاك عبر
+`hincrbyfloat`)، ومحتمل مرتبط بكون `GEMINI_API_KEY` غير مضبوط في بيئة
+التطوير هذه ("AI features will be disabled" — تحذير من أول تشغيل
+`uvicorn`). **لم يُحقَّق فيه أعمق بقرار صريح من المستخدم** — خارج نطاق
+Phase 16 بالكامل (subsystem مختلف: `app/services/ai/`/
+`core/redis_client.py`، صفر علاقة بـX-Tenant-ID أو بالأربعة دومينات).
+
+**الملفات المفحوصة فقط (بدون تعديل):** `eppne-backend/app/domains/
+command/router.py`, `eppne-backend/app/api/deps.py`,
+`eppne-backend/app/domains/ai_agents/service.py`.
+
+---
+
+## [2026-08-12] — Phase 16 (جزئي، متوقَّف مؤقتًا عند نقطة نظيفة): إصلاح
+X-Tenant-ID في `command` فقط، والباقي مؤجَّل
+
+**الحالة:** 🟡 **جزئي — دومين واحد من الأربعة مكتمل ومؤكَّد حيًا
+بالكامل، والثلاثة الباقيين لم يُلمَسوا إطلاقًا.** تم إيقاف الجلسة عند
+نقطة توقف نظيفة بقرار صريح من المستخدم، بعد اكتشاف مشكلة بنيوية أعمق
+تحتاج جلسة مخصصة منفصلة (تفصيل في القسم الحرج تحت).
+
+### 1. `command` — ✅ مكتمل ومؤكَّد حيًا
+إصلاح ثغرة X-Tenant-ID الفعلي (استبدال `Depends(get_current_tenant)`
+بـ`current_user.tenant_id`) اتطبَّق على كل الـ18 endpoint في
+`eppne-backend/app/domains/command/router.py` (+ حذف استيراد
+`get_current_tenant`/`AcademyTenant`). تأكيد مزدوج: (أ) `grep` مستقل
+بعد التطبيق أثبت صفر استخدام متبقٍّ للهيدر أو `AcademyTenant` في
+الملف، (ب) تحقق حي حاسم بعد إعادة تشغيل `uvicorn` من الصفر — 6 طلبات
+حقيقية (توكنين مختلفين × هيدر حقيقي/مزوَّر/عشوائي) أثبتت إن نتيجة
+`GET /command/brands/me` **متطابقة بالحرف بغض النظر عن قيمة الهيدر**،
+في الاتجاهين (تينانت A وB)، مع طلب تحكم بلا توكن أثبت الفرق بين `401`
+(مصادقة) و`404` (منطق تطبيق طبيعي). تفاصيل الطلبات والنتائج كاملة في
+`.claude/reports/phase16-session-log.md`.
+
+### 2. باجات جانبية اتصلحت في `command` (خارج نطاق X-Tenant-ID، ضرورية
+لفتح الطريق أمام التحقق الحي)
+- `command/service.py.__init__`: إزالة `AIAgentsService(db)` و
+  `SaaSControlService(db)` (كانا بينشئوا بلا `tenant_id` إجباري →
+  `TypeError` على كل الـ18 endpoint).
+- `generate_ai_recommendations`: `AIGovernanceService(self.db)` →
+  `AIGovernanceService(self.db, tenant_id)`.
+- نفس الدالة: `self.ai_service.execute_agent_action` (متغيّر مش
+  موجود) → `ai_service = AIAgentsService(self.db, tenant_id)` محليًا.
+- نفس الدالة: حذف `tenant_id=tenant_id` (kwarg زيادة مرفوضة من توقيع
+  `execute_agent_action` الحقيقي).
+- بيانات seed اختبارية (`ai_agents id=14`): استكمال `is_deleted=false`،
+  `status='ACTIVE'` (كانوا `NULL` بسبب `INSERT` خام تخطّى الـORM
+  defaults) — بيانات اختبار مؤقتة، اتشالت بالكامل في التنظيف.
+
+### 3. باج ترانزاكشن في `ai_governance` — ✅ اتصلح، **استثناء نطاق
+مبرَّر صراحة** (مش جزء من خطة Phase 16 الأصلية)
+`ai_governance/repository.py:62` (`create_usage_log`): `commit()` →
+`flush()`. **السبب المُبرِّر:** كان حاجز فعلي قدام التحقق الحي
+الإلزامي لـ`generate_ai_recommendations` (endpoint من ضمن الـ18 في
+`command`) — مش توسيع نطاق اختياري، بل إزالة عائق كان بيمنع تنفيذ
+الالتزام الأصلي لـPhase 16 بالكامل. تفاصيل السبب الجذري والديف كاملة
+في القسم أعلاه بتاريخ [2026-08-12] "Phase 16 (استثناء نطاق مبرر)".
+
+### 4. باجات موثَّقة فقط، **بدون إصلاح**، خارج نطاق Phase 16 تمامًا
+- **`GET /command/dashboard`** → `ResponseValidationError` (`schemas.py`
+  يتوقع dict، `service.py` بيرجّع كائن ORM خام). سابق لأي تعديل في
+  الجلسة دي.
+- **`ai_governance/service.py:148`** → `get_usage_log_by_idempotency`
+  بيتنادى بـparameter ناقص (`tenant_id`). غير مفعّل في أي مسار
+  اختبرناه، لم يُصلَح.
+- **`RedisClientWrapper.hincrbyfloat`** (مفقودة) → بتمنع
+  `ai_agents/service.py::execute_agent_action` من الاكتمال حتى لتينانت
+  شرعي 100%، محتمل مرتبط بـ`GEMINI_API_KEY` غير مضبوط في بيئة
+  التطوير. لم يُحقَّق فيه أعمق.
+
+---
+
+## 🔴 [2026-08-12] — اكتشاف حرج: نمط منهجي لباج ترانزاكشن (`commit()`
+داخل `begin_nested()`) عبر repositories متعددة — **يحتاج جلسة مخصصة
+منفصلة وعاجلة قبل استكمال Phase 16**
+
+**هذا القسم منفصل عمدًا عن ملاحظات Phase 16 أعلاه — الأثر يتجاوز
+الأربعة دومينات المستهدفة ويمس كود مالي حقيقي.**
+
+### الاكتشاف
+أثناء فحص استباقي (`ai_agents`, `sovereign_entities`, `saas` قبل بدء
+أي تعديل فيهم)، اتأكَّد إن نفس نمط باج `ai_governance` (قسم 3 أعلاه)
+**مش معزول — ده نمط منهجي في طبقة الـrepository بمعظم المشروع تقريبًا**:
+كل `repo` method بتعمل `self.db.commit()` فوري بعد أي كتابة، وده بينكسر
+فورًا أي وقت بيتنادى من جوه `async with self.db.begin_nested()` (تظهر
+كـ`sqlalchemy.exc.InvalidRequestError: Can't operate on closed
+transaction inside context manager`).
+
+**مواضع مؤكَّدة بقراءة كود حية (read-only، صفر تعديل):**
+- `ai_agents/service.py:289` (`resolve_approval`) →
+  `ai_agents/repository.py:181-198` (`resolve_approval`، `commit()`
+  سطر 197).
+- `sovereign_entities/service.py:364` (`deposit_to_entity_wallet`) و
+  `:429` (`transfer_from_entity`) →
+  `sovereign_entities/repository.py:97-107` (`update_entity`،
+  `commit()` سطر 103).
+- `saas/service.py:109` (`create_subscription`) →
+  `saas/repository.py:180-185` (`commit()` سطر 183).
+- `saas/service.py:159` (`process_auto_renewals`) →
+  `saas/repository.py:187-202` (`update_subscription`) و`336-341`
+  (`create_invoice`) — باجين منفصلين.
+- `saas/service.py:296` (`pay_invoice`) →
+  `saas/repository.py:343-356` (`update_invoice`، `commit()` سطر 349)
+  — **الأخطر ماليًا، معاملة دفع فعلية**.
+- **الأعمق: `finance/service.py:92` (`FinanceService.transfer` —
+  دالة تحريك الأموال الفعلية المستخدَمة من `pay_invoice` وعدة دومينات
+  أخرى) عندها نفس الباج جوه نفسها، مستقلة تمامًا**: `finance/
+  repository.py:48-57` (`WalletRepository.update_balances`، `commit()`
+  سطر 52) و`74-79` (`TransactionRepository.create`، `commit()` سطر 77)
+  — يعني `finance.transfer()` بتنهار من جوه نفسها بمعزل عن أي
+  `begin_nested()` خارجي.
+
+### لماذا `command` نجا من نفس المصير
+`command` عنده نفس النمط في `ai_governance` بس (قسم 3 أعلاه، سطر واحد،
+مكان واحد) — بالصدفة كان أصغر مدى بكتير من باقي الدومينات، فأمكن حله
+باستثناء نطاق مصغَّر. الثلاثة الباقيين (`ai_agents`, `sovereign_entities`,
+`saas`) + `finance` المشتركة بينهم **فيهم 6-8 مواضع منفصلة على الأقل**
+— نطاق مختلف تمامًا في الحجم، يمس دومينات خارج الأربعة الأصليين
+(`finance` مستخدَمة في `invoicing`, `commerce`, وغيرهم).
+
+### القرار
+**لم يُصلَح أي من المواضع دي في هذه الجلسة.** Phase 16 اتوقَّف مؤقتًا
+عند نقطة نظيفة (`command` مكتمل ومؤكَّد) لحد ما يُتخَذ قرار صريح في
+جلسة منفصلة مخصصة لهذا الاكتشاف — تحديدًا بخصوص: (أ) نطاق الإصلاح
+(المواضع الستة بس، أم `finance/repository.py` كمان؟)، (ب) الأولوية
+(`saas.pay_invoice`/`finance.transfer` أولًا، بما إنهم الأخطر ماليًا؟)،
+(ج) هل ده يستأهل مراجعة معمارية أشمل لطبقة الـrepository بالكامل
+(نمط `commit()` الفوري) بدل تصحيحات نقطية متفرقة.
+
+**الملفات المفحوصة فقط (بدون أي تعديل):**
+`eppne-backend/app/domains/{ai_agents,sovereign_entities,saas,finance}/
+{service,repository}.py`.
+
+---
+
+## [2026-08-12] — تنظيف نهائي لبيانات Phase 16 التجريبية + تحقُّق مستقل
+
+**التنظيف المنفَّذ (بالترتيب الآمن حسب الـFK):**
+1. `DELETE FROM agent_usage_logs WHERE agent_id = 14` → 2 صف.
+2. `DELETE FROM ai_task_logs WHERE agent_id = 14` → 2 صف.
+3. `DELETE FROM ai_agents WHERE id = 14` → 1 صف.
+4. **اكتشاف جانبي أثناء التنظيف:** `DELETE FROM users WHERE id IN
+   (26,27,28)` فشل أول مرة بـ`FK violation` — صف يتيم في
+   `command_dashboards` (id=1, **tenant_id=1 الحقيقي**, `created_by=27`)
+   اتخلق كأثر جانبي لاختبار `get_dashboard` في وقت سابق من الجلسة (قبل
+   ما نكتشف باج `ResponseValidationError` بتاعه — الكود بينشئ dashboard
+   تلقائي لو مش موجود، قبل ما يفشل في الـserialization). اتحذف تحديدًا
+   (`DELETE FROM command_dashboards WHERE id=1 AND created_by=27`) —
+   حذف دقيق لصف واحد ملوَّث بس، صفر لمس لباقي بيانات تينانت 1 الحقيقية.
+5. `DELETE FROM users WHERE id IN (26,27,28)` (أعيد التنفيذ بنجاح) →
+   3 صف.
+6. `DELETE FROM academy_tenants WHERE id = 12` → 1 صف.
+
+**التحقق المستقل بعد التنظيف (7 استعلامات SELECT منفصلة):** `users`
+(26/27/28)، `academy_tenants` (12)، `ai_agents` (14)، `agent_usage_logs`
+(agent_id=14)، `ai_task_logs` (agent_id=14)،
+`command_dashboards` (created_by IN 26/27/28)،
+`command_ai_recommendations` (ai_agent_id=14) — **كل السبعة رجّعوا صفر
+صف**. فحص أساسي إضافي: `academy_tenants=1, users=7, ai_agents=0` —
+**مطابق تمامًا لقيم بداية الجلسة**. سيرفر `uvicorn` التجريبي اتوقف.
+
+---
