@@ -15,6 +15,7 @@ from app.core.idempotency import get_idempotency_result, store_idempotency_resul
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
+from app.core.logging_conf import logger
 from app.domains.digital_twin.models import (
     DigitalTwinConfig, TwinInteractionLog, TimeCapsule, DeathOracleCheck,
     LifeMilestone, PreBirthRecord, DigitalWill
@@ -65,39 +66,42 @@ class DigitalTwinService:
         affiliate_code: Optional[str] = None
     ):
         """تسجيل عمولة إحالة عند إنشاء توأم أو تفاعل مدفوع."""
-        user = await self._get_user(user_id)
-        if not user:
-            return
+        try:
+            user = await self._get_user(user_id)
+            if not user:
+                return
 
-        referrer_id = user.referred_by
-        if not referrer_id and not affiliate_code:
-            return
+            referrer_id = user.referred_by
+            if not referrer_id and not affiliate_code:
+                return
 
-        if affiliate_code and not referrer_id:
-            referrer = await self.affiliate_service.get_user_by_code(affiliate_code)  # type: ignore
-            if referrer:
-                referrer_id = referrer.id
+            if affiliate_code and not referrer_id:
+                referrer = await self.affiliate_service.get_user_by_code(affiliate_code)  # type: ignore
+                if referrer:
+                    referrer_id = referrer.id
 
-        if not referrer_id:
-            return
+            if not referrer_id:
+                return
 
-        if action_type == "TWIN_CREATION":
-            commission_amount = Decimal("5.00")
-            description = f"Affiliate commission for creating Digital Twin (User: {user_id})"
-        elif action_type == "TWIN_INTERACTION":
-            commission_amount = amount * Decimal("0.10")
-            description = f"Affiliate commission for paid interaction (User: {user_id})"
-        else:
-            return
+            if action_type == "TWIN_CREATION":
+                commission_amount = Decimal("5.00")
+                description = f"Affiliate commission for creating Digital Twin (User: {user_id})"
+            elif action_type == "TWIN_INTERACTION":
+                commission_amount = amount * Decimal("0.10")
+                description = f"Affiliate commission for paid interaction (User: {user_id})"
+            else:
+                return
 
-        if commission_amount > 0:
-            await self.affiliate_service.register_commission(  # type: ignore
-                affiliate_id=referrer_id,
-                user_id=user_id,
-                amount=commission_amount,
-                description=description,
-                status="PENDING"
-            )
+            if commission_amount > 0:
+                await self.affiliate_service.register_commission(  # type: ignore
+                    affiliate_id=referrer_id,
+                    user_id=user_id,
+                    amount=commission_amount,
+                    description=description,
+                    status="PENDING"
+                )
+        except Exception as e:
+            logger.error(f"Affiliate registration failed: {e}")
 
     # ============================================================
     # 1. التوأم الرقمي (Digital Twin)
@@ -114,6 +118,7 @@ class DigitalTwinService:
                     user_id=user_id,
                     tenant_id=tenant_id
                 )
+            await self.db.commit()
             await self._register_affiliate_commission(user_id, tenant_id, "TWIN_CREATION")
         return twin
 
@@ -244,6 +249,8 @@ class DigitalTwinService:
                     capsule_id=capsule.id,
                     **ben
                 )
+
+        await self.db.commit()
 
         await self.event_bus.publish("time_capsule.created", {
             "capsule_id": capsule.id,

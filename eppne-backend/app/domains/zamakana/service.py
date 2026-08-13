@@ -327,6 +327,8 @@ class ZamakanaService:
                 details={"campaign_id": campaign.id, "hours": float(pledge.pledged_hours)}
             )
 
+        await self.db.commit()
+
         # تخزين معرف التعهد فقط
         if idempotency_key:
             await self._store_idempotency(idempotency_key, {"pledge_id": pledge.id})
@@ -402,6 +404,8 @@ class ZamakanaService:
                 resource_id=pledge.id,
                 details={"hours": float(pledge.pledged_hours)}
             )
+
+        await self.db.commit()
 
         # تخزين معرف التعهد فقط
         if idempotency_key:

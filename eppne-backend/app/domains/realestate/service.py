@@ -289,22 +289,24 @@ class RealEstateService:
                 body=f"لقد اشتريت {percentage}% من الوحدة {unit_id} بقيمة {cost} MR_USDT"
             )
 
-            # تخزين البيانات كاملة مع استخدام cast لتوضيح الأنواع
-            if idempotency_key:
-                # 🔥 استخدام cast لتجنب مشاكل Column[Decimal] و Column[datetime]
-                acquisition_date = cast(datetime, ownership.acquisition_date)
-                result_data = {
-                    "ownership_id": ownership.id,
-                    "unit_id": ownership.unit_id,
-                    "owner_user_id": ownership.owner_user_id,
-                    "ownership_percentage": float(cast(Any, ownership.ownership_percentage)),
-                    "acquisition_date": acquisition_date.isoformat() if acquisition_date else None,
-                    "deed_nft_token_id": ownership.deed_nft_token_id,
-                    "purchase_tx_hash": ownership.purchase_tx_hash
-                }
-                await self._store_idempotency(idempotency_key, result_data)
+        await self.db.commit()
 
-            return ownership
+        # تخزين البيانات كاملة مع استخدام cast لتوضيح الأنواع
+        if idempotency_key:
+            # 🔥 استخدام cast لتجنب مشاكل Column[Decimal] و Column[datetime]
+            acquisition_date = cast(datetime, ownership.acquisition_date)
+            result_data = {
+                "ownership_id": ownership.id,
+                "unit_id": ownership.unit_id,
+                "owner_user_id": ownership.owner_user_id,
+                "ownership_percentage": float(cast(Any, ownership.ownership_percentage)),
+                "acquisition_date": acquisition_date.isoformat() if acquisition_date else None,
+                "deed_nft_token_id": ownership.deed_nft_token_id,
+                "purchase_tx_hash": ownership.purchase_tx_hash
+            }
+            await self._store_idempotency(idempotency_key, result_data)
+
+        return ownership
 
     async def get_my_ownerships(self, user_id: int) -> list[PropertyOwnership]:
         """جلب ملكيات المستخدم."""
@@ -381,34 +383,36 @@ class RealEstateService:
                 due_date=datetime.utcnow() + timedelta(days=3)
             )
 
-            await self._register_affiliate_commission(tenant_user_id, tenant_id, first_payment)
+        await self.db.commit()
 
-            await audit_log(**{  # type: ignore
-                "user_id": landlord_id,
-                "tenant_id": tenant_id,
-                "action": "RENTAL_CONTRACT_CREATED",
-                "resource_id": contract.id,
-                "details": {"unit_id": unit_id, "monthly_rent": float(monthly_rent)}
-            })
+        await self._register_affiliate_commission(tenant_user_id, tenant_id, first_payment)
 
-            # تخزين البيانات كاملة مع استخدام cast
-            if idempotency_key:
-                # 🔥 استخدام cast لتجنب مشاكل Column
-                start_date_casted = cast(datetime, contract.start_date)
-                end_date_casted = cast(datetime, contract.end_date)
-                result_data = {
-                    "contract_id": contract.id,
-                    "unit_id": contract.unit_id,
-                    "tenant_user_id": contract.tenant_user_id,
-                    "landlord_user_id": contract.landlord_user_id,
-                    "start_date": start_date_casted.isoformat() if start_date_casted else None,
-                    "end_date": end_date_casted.isoformat() if end_date_casted else None,
-                    "monthly_rent_mrusdt": float(cast(Any, contract.monthly_rent_mrusdt)),
-                    "contract_tx_hash": contract.contract_tx_hash
-                }
-                await self._store_idempotency(idempotency_key, result_data)
+        await audit_log(**{  # type: ignore
+            "user_id": landlord_id,
+            "tenant_id": tenant_id,
+            "action": "RENTAL_CONTRACT_CREATED",
+            "resource_id": contract.id,
+            "details": {"unit_id": unit_id, "monthly_rent": float(monthly_rent)}
+        })
 
-            return contract
+        # تخزين البيانات كاملة مع استخدام cast
+        if idempotency_key:
+            # 🔥 استخدام cast لتجنب مشاكل Column
+            start_date_casted = cast(datetime, contract.start_date)
+            end_date_casted = cast(datetime, contract.end_date)
+            result_data = {
+                "contract_id": contract.id,
+                "unit_id": contract.unit_id,
+                "tenant_user_id": contract.tenant_user_id,
+                "landlord_user_id": contract.landlord_user_id,
+                "start_date": start_date_casted.isoformat() if start_date_casted else None,
+                "end_date": end_date_casted.isoformat() if end_date_casted else None,
+                "monthly_rent_mrusdt": float(cast(Any, contract.monthly_rent_mrusdt)),
+                "contract_tx_hash": contract.contract_tx_hash
+            }
+            await self._store_idempotency(idempotency_key, result_data)
+
+        return contract
 
     # ============================================================
     # المخططات الرئيسية (Master Plans)

@@ -2583,3 +2583,186 @@ transaction inside context manager`).
 **مطابق تمامًا لقيم بداية الجلسة**. سيرفر `uvicorn` التجريبي اتوقف.
 
 ---
+
+## 🔴 [2026-08-13] — اكتشاف حرج: 1846 سطر خطأ `tsc --noEmit` عبر 40+
+دومين (أكتر بكثير من الحد الأدنى 20)، اكتُشف أثناء التحقق من تعديل بسيط
+(10 لينكات معطوبة) في الأكاديمية — **غير مرتبط بشغلنا إطلاقًا** (مؤكَّد
+بعزل حي عبر `git stash`)، وخارج نطاق UI/UX بالكامل
+
+**هذا القسم منفصل عمدًا عن أي شغل UI/UX سابق — الأثر هنا على مستوى
+عقد الأنواع (type contracts) بين الفرونت والباك إند عبر عشرات
+الدومينات، مش تصميم واجهة.**
+
+### تقرير تشخيصي بحت. صفر إصلاح. صفر تعديل كود.
+لم يُعدَّل أي ملف كود لإصلاح أي خطأ من الأخطاء الموصوفة تحت. الفحص
+بالكامل قراءة/تشغيل أدوات تشخيص (`tsc --noEmit`) و`git stash`/`git
+stash pop` مؤقت وقابل للعكس بالكامل — تفاصيله في القسم الأخير تحت.
+
+### السياق
+أثناء تدقيق أكاديمية محدود النطاق (`academy-audit.txt`)، اتأكَّد وجود
+10 روابط معطوبة (`/academy/classroom/...`) في 5 ملفات — مسار غير موجود
+فعليًا كـroute على القرص (`Glob` لـ`app/**/classroom/**` رجّع صفر
+نتيجة)، بينما الصفحة الحقيقية هي
+`app/(dashboard)/academy/[id]/learn/page.tsx`:
+- `components/academy/CourseActionButton.tsx` (4 مواضع)
+- `app/(dashboard)/academy/[id]/page.tsx` (2 موضع)
+- `app/(dashboard)/academy/my-learning/page.tsx` (موضع واحد)
+- `app/(dashboard)/academy/instructor/dashboard/page.tsx` (موضع واحد)
+- `app/(dashboard)/academy/certificates/[courseId]/page.tsx` (موضع واحد)
+
+التعديل المطبَّق كان تصحيح نصي بحت لقيمة المسار في الـ10 مواضع دي بس
+(`git diff --stat`: 5 ملفات، 9 إضافة + 9 حذف = 18 سطر diff لـ10 استبدال
+نصي). أثناء التحقق الإلزامي بـ`tsc --noEmit` بعد التعديل، ظهر عدد ضخم
+من الأخطاء غير متوقَّع لتعديل بهذا الحجم — استوجب عزل السبب قبل اعتماد
+التعديل.
+
+### الاكتشاف: 1846 سطر خطأ TypeScript، منتشرة عبر 40+ دومين
+ناتج `node node_modules/typescript/bin/tsc --noEmit 2>&1 | wc -l`
+(موثَّق كامل في `link-fix-verification.txt`، 1872 سطر ملف شاملًا رأس
+`git diff --stat`) = **1846 سطر خطأ**. من ضمنها 1268 كود خطأ مستقل
+(`error TS####`)، وباقي الأسطر شروحات نوع متداخلة لنفس الأخطاء (زي خطأ
+`Variants` في `app/(auth)/login/page.tsx:40` اللي وحده بياخد 8 أسطر).
+
+**عيّنة موثَّقة (file:line) من `link-fix-verification.txt` تثبت الاتساع
+عبر دومينات لا علاقة لها بالأكاديمية إطلاقًا:**
+- `app/(auth)/login/page.tsx(40,9)` / `register/page.tsx(39,19)` —
+  `error TS2322` على `Variants` (framer-motion)، سابق لأي تعديل أكاديمية.
+- `components/realestate/InvestorPortfolio.tsx` — 19 خطأ.
+- `components/automation/NodeSettingsPanel.tsx` — 10 أخطاء.
+- `components/health/AIPrognosisRadar.tsx` — 9 أخطاء.
+- `hooks/useFleets.ts(3,21)` / `hooks/useHubs.ts(3,10)` —
+  `error TS2305`: أعضاء غير مُصدَّرة من `@/services/transport`.
+- `hooks/zamakana/useCampaigns.ts(3,10)` — نفس الشكل من
+  `@/services/zamakana`.
+- `store/agentStore.ts(3,27)` / `store/digitalTwinStore.ts(3,30)` —
+  أنواع غير مُصدَّرة من `ai-agents.service`/`digital-twin.service`.
+
+**بحث منهجي على كل المسارات الفريدة تحت `components/` و`hooks/` في
+`link-fix-verification.txt` رجّع 30 دومين فريد تحت `components/` +
+20 دومين فريد تحت `hooks/` (باتحاد الاتنين 40+ دومين فريد شاملين:**
+`ai-agents, ai-governance, arbitration-syndicates, automation,
+brand-builder, command, commerce, communications, digital-twin,
+employment, entities, finance, health, insurance, invitations, iot,
+logistics, manufacturing, marketplace, privacy, projects, realestate,
+saas, social, sovereign-entities, tenders-auctions, tourism-sports,
+translation, zamakana, affiliate, agritech, transport` **وغيرهم — أكتر
+بكثير من الـ20 دومين كحد أدنى.**
+
+**مثال مباشر يتقاطع مع تعديلنا نفسه (مش سببه):**
+`app/(dashboard)/academy/[id]/learn/page.tsx(278,35)`،
+`(284,69)`، `(307,38)` — ثلاثة أخطاء `error TS2339` على
+`AcademyService.getQuizByNode`/`submitQuiz`/`joinLiveSession` غير
+موجودة إطلاقًا كـmethods حقيقية في `services/academy.service.ts`
+(تحقُّق منفصل مؤكَّد بقراءة كود كاملة للملف، 816 سطر، صفر مطابقة اسم —
+تفاصيل كاملة في `learn-page-service-check.txt`). هذا خطأ حقيقي **سابق
+للتعديل**، اكتُشف بالصدفة أثناء نفس الفحص، مش ناتج عنه.
+
+### التحقق الحاسم: عزل حي عبر `git stash` — الرقم قبل وبعد تعديلاتنا
+**متطابق تمامًا (1846 = 1846)**
+تفاصيل الأوامر والنواتج الكاملة موثَّقة في `stash-verification.txt`.
+بالترتيب:
+1. `git stash push -m "temp-link-fix-verification" -- <الملفات الخمسة
+   بالاسم بس>` (مقصور عمدًا، مش `stash` عام، عشان منلمسش تعديلات
+   `eppne-backend` اللي مش بتاعتنا وشغالة عليها جلسة تانية بالتوازي على
+   نفس الريبو) → نجح بلا أي conflict.
+2. `tsc --noEmit` **بدون** تعديلاتنا (بعد الـstash push) →
+   **1846 سطر خطأ**.
+3. `git stash pop` → نجح بلا أي conflict.
+4. `tsc --noEmit` **مع** تعديلاتنا (بعد الـstash pop) →
+   **1846 سطر خطأ**.
+5. مقارنة: **1846 = 1846 بالحرف** — فرق = صفر. تعديل نصي داخل
+   template literal (قيمة مسار URL) لا يمكن رياضيًا أن يُنتج أو يُزيل
+   أي خطأ TypeScript متعلق بالأنواع، والتحقق الحي أثبت هذا عمليًا مش
+   افتراضيًا فقط.
+6. تأكيد ختامي بـ`git status`: الملفات الخمسة الأصلية ظهرت زي ما هي
+   بالضبط تحت "Changes not staged for commit" بعد الـpop، وملفات
+   `eppne-backend` (مش بتاعتنا) فضلت في نفس حالتها طول الوقت.
+
+### الخلاصة
+الـ1846 سطر خطأ (40+ دومين) موجودين أصلًا في الكود **بشكل مستقل تمامًا
+عن أي تعديل قمنا بيه** — أثبتناها بعزل حي (`git stash`)، مش بقراءة كود
+فقط. الطبيعة بالكامل type-level (`tsc --noEmit`: أعضاء غير مُصدَّرة،
+methods غير موجودة، عدم توافق أنواع بين الفرونت والباك إند) — **صفر
+علاقة بـUI/UX** (ألوان، تخطيط، مكوّنات بصرية، تجربة استخدام). التعديل
+العشري (10 لينكات) اللي كنا بنتحقق منه **سليم ومعزول بالكامل**، ومفيش
+أي داعٍ لربطه بأي من الأخطاء دي.
+
+### القرار
+**لم يُصلَح أي من الأخطاء الـ1846 في هذه الجلسة ولا أي جلسة سابقة.**
+هذا اكتشاف تشخيصي بحت لحجم مشكلة تتجاوز نطاق أي تعديل UI/UX بمراحل —
+يحتاج قرار صريح في جلسة/جلسات منفصلة مخصصة (على غرار
+`.claude/plans/critical-finding-xtenant-systemic.md`) بخصوص الأولوية
+والنطاق قبل أي محاولة إصلاح.
+
+**الملفات المرجعية الكاملة (كلها قراءة/تشخيص فقط، صفر تعديل كود):**
+`academy-audit.txt`، `link-fix-verification.txt`،
+`stash-verification.txt`، `learn-page-service-check.txt`.
+
+### قرار الباك اند بخصوص `learn/page.tsx` ونطاق التنظيف البصري المتبقي
+بناءً على الاكتشاف أعلاه (`getQuizByNode`/`submitQuiz`/`joinLiveSession`
+غير موجودين كـmethods حقيقية في `services/academy.service.ts`)، جاء
+قرار صريح من فريق الباك اند: **`app/(dashboard)/academy/[id]/learn/page.tsx`
+موقوف بالكامل** عن أي تعديل — بصري أو غيره — لحد ما الباك اند يضيف
+الثلاث methods دي فعليًا لطبقة الـservice. ده **خارج نطاقنا تمامًا**
+(مش مسؤولية فرونت/UI). بالتوازي، تم فحص قراءة فقط لباقي ملفات الأكاديمية
+(موثَّق كامل في `blocked-files-list.txt`) للتأكد من عدم وجود اعتماد
+مباشر أو غير مباشر (عبر أي مكوّن مشترك في `components/academy/`) على
+الثلاث methods دي في أي ملف تاني. النتيجة: `learn/page.tsx` هو الملف
+الوحيد المتأثر، وباقي ملفات الأكاديمية (26 صفحة + 4 مكوّنات مشتركة)
+**آمنة ومسموح يكمل عليها التنظيف البصري البحت** بشرط الالتزام بنفس
+الشرط (عدم إضافة أي اعتماد جديد على الثلاث methods دي أثناء التنظيف).
+
+---
+
+## [2026-08-13] — إصلاح باج ترانزاكشن منهجي (`commit()` جوه `begin_nested()`) عبر 24 دومين — حالة التحقق النهائية
+
+**الحالة:** 🟡 جزئي — الكود مُصلَح بالكامل عبر كل الـ24 دومين، **لكن التحقق الحي (DB-level) اتأكَّد فعليًا لـ3 دومين بس من أصل 24**. التفاصيل الكاملة (كل ديف، كل تحقق، كل محاولة) في `.claude/reports/transaction-savepoint-bug-session-log.md`.
+
+**المشكلة الأصلية:** عشرات الـrepository methods عبر المشروع كانت بتعمل `self.db.commit()` مباشر وهي متنادية من جوه `async with self.db.begin_nested()` — ده بيقفل الترانزاكشن اللي الـSAVEPOINT معتمد عليه. **الإصلاح:** `commit()` → `flush()` في الـrepo، + إضافة `commit()` صريح واحد في الـservice بعد ما بلوك `begin_nested()` يقفل (مش قبله) — طُبِّق على 89 موضع عبر 24 دومين + `finance/repository.py` (أصل الانتشار، بيتغطى منها 18 موضع تبعية تلقائيًا عبر `finance.transfer`).
+
+### ✅ 1) الدومينات المؤكَّدة حيًا بالكامل (طلب HTTP فعلي + `SELECT` مستقل قبل/بعد) — 3 بس
+
+`finance` (`transfer` ×2 متتاليين + `swap`، تحويلات مالية حقيقية بأرقام دقيقة اتأكَّدت بالـDB)، `ai_agents` (`resolve_approval`)، `ai_governance` (`set_quota`, `update_rate_limits`, `check_and_consume`, `reset_quotas`).
+
+**⚠️ ملاحظة تحذيرية جوهرية (تستاهل تُقرأ في أي جلسة مستقبلية مشابهة):** أول محاولة تحقق لـ`ai_agents.resolve_approval` و`ai_governance.reset_agent_quotas` (قبل إضافة الـcommit الصريح في الـservice) رجعت **نجاح كاذب** — `status 200/204` بلا أي خطأ ظاهر، لكن الـDB مكنش بيتغيّر خالص (rollback صامت عند إغلاق الـsession، لأن `get_db()` صفر auto-commit). **الدرس المستفاد الدائم: نجاح status code + عدم وجود Traceback ≠ نجاح فعلي — أي تعديل بيمس حدود الترانزاكشن لازم تحقق DB-level إجباري، من غير استثناء.**
+
+### 🟡 2) باقي الـ21 دومين — الكود مُصلَح ومُراجَع، **غير مُختبَر حيًا**
+
+من ضمنهم **6 دومين اتراجعت بتفصيل before/after كامل لكل method اتعملها إعادة هيكلة** (تحريك `return` من جوه بلوك `begin_nested` لبرّه)، وتمت **الموافقة الصريحة** على كل واحدة بعد تحليل دقيق (هل فيه شرط بين آخر كتابة والـ`return`؟ هل بيغيّر مسار الخروج ولا مجرد branching على بيانات؟):
+`health` (5 methods)، `insurance` (3)، `logistics` (1)، `projects` (2)، `realestate` (2)، `service_marketplace` (2) + `saas.pay_invoice` (1، ميثود واحدة ضمن دومين كان المفروض قابل للتحقق الحي لكن اتحجب — التفاصيل تحت).
+
+**باقي الـ15 دومين** (`digital_twin`, `employment`, `invitations`, `manufacturing`, `social`, `tourism_sports`, `transport`, `communications`, `zamakana`, `agritech`, `academy`, `commerce`, `saas`, `sovereign_entities`, `affiliate`, `privacy`) اتصلحوا ميكانيكيًا بنفس القاعدة (تأكَّدت بـ`grep`/`py_compile` مستقل)، لكن صفر تحقق حي — الأسباب مفصَّلة في القسمين التاليين.
+
+**الحالة الرسمية لكل الـ21 دومين دول: "مُصلَح كود + مُراجَع بالكامل، غير مُختبَر حيًا"** — مش "مُصلَح ومؤكَّد" زي الـ3 الأوائل. أي جلسة مستقبلية تعتمد عليهم لازم تعتبرهم كده بالظبط، مش أكتر.
+
+---
+
+### 🔴🔴 3) اكتشاف نطاق ثانٍ — باج `SimpleTenant`/type mismatch (منفصل تمامًا عن باج الترانزاكشن، يستاهل جلسة ثالثة قريبًا)
+
+أثناء محاولة التحقق الحي، اتكشف إن `api/deps.py`'s `get_current_tenant()` بترجع كائن `SimpleTenant` (فيه `.id`)، مش `int` خام. **`finance/router.py` كانت بتعاني من نفس الباج ده بالظبط، واتصلحت في نفس الجلسة دي** (استبدال `get_current_tenant` بـ`current_user.tenant_id` في الـ8 endpoints، مؤكَّد حيًا). **لكن نفس الباج لسه حي بدون إصلاح في دومينات تانية كتير:**
+
+| الدومين | الدليل | التأثير |
+|---|---|---|
+| `academy` | `router.py` — **36 استخدام** لـ`tenant_id: int = Depends(get_current_tenant)`، بيتبعت مباشرة لـ`AcademyService(db, tenant_id)` | أي endpoint بيلمس DB بيكراش (`DataError: SimpleTenant object cannot be interpreted as an integer`) |
+| `commerce` | نفس النمط بالحرف — **12 استخدام**، `CommerceService(db, tenant_id)` | نفس الكراش |
+| `saas` | نفس النمط بالحرف — **17 استخدام**، `SaaSControlService(db, tenant_id)` | نفس الكراش |
+| `sovereign_entities` | نفس النمط، مؤكَّد حيًا بمحاولة فعلية (`deposit_to_entity_wallet` كراشت بنفس الخطأ بالظبط) | نفس الكراش |
+
+**التصنيف:** فئة مختلفة تمامًا عن باج الترانزاكشن — نفس عائلة الباج الموثَّق في `.claude/plans/critical-finding-xtenant-systemic.md` (ثقة هيدر `X-Tenant-ID`)، لكن **طبقة تقنية أعمق** (type mismatch بعد إدخال `SimpleTenant`، مش بس مصدر الثقة). **صفر إصلاح تم عليه في هذه الجلسة** (بتوجيه صريح من المستخدم: "لا تفتح أي باج جديد"). **يستاهل جلسة ثالثة مخصَّصة قريبًا** — النطاق غير معروف بالكامل لسه (الأربعة دومين دول اتكشفوا بالصدفة أثناء محاولات تحقق حي لباج تاني، مش من جرد منهجي شامل — ممكن يكون فيه دومينات تانية متأثرة لم تُكتشف بعد).
+
+---
+
+### 🟠 4) باجات متفرقة إضافية (كل واحدة فئة مختلفة، صفر إصلاح، موثَّقة فقط)
+
+| الدومين | الباج | الفئة |
+|---|---|---|
+| `communications` | `_get_user_tenant` → `self.user_repo.get_user(user_id)` — method غير موجودة (الصح `get_by_id`) | method غير موجودة، بيكسر `send_notification`/`send_mail` بالكامل |
+| `zamakana` | `ZamakanaService.__init__` بينشئ `AIAgentsService(db)` بمعامل واحد بدل اتنين (`tenant_id` ناقص) | فئة constructor (نفس عائلة `FinanceService(db)`، لكن لـ`AIAgentsService`) |
+| `agritech` | **صفر ملف `router.py`** في `app/domains/agritech/` من الأساس — الكود موجود (`service.py`/`repository.py`) لكن **غير معروض بأي endpoint إطلاقًا** | endpoint غير موجود من الأساس (موثَّق سابقًا في `critical-finding-xtenant-systemic.md`) |
+| `sovereign_entities` | `create_entity` (router) → `repository.create_entity()` بترمي `TypeError: got multiple values for keyword argument 'tenant_id'` | باج تمرير معاملات مكرر |
+| `privacy` | `is_privacy_officer(admin_id)` بتتنادى بمعامل `int` (الـuser id)، لكن الدالة الحقيقية (`core/security.py`) بتتوقع كائن `User` كامل وبتقرا `user.system_role` منه — تمرير `int` بيخلي الفحص يرجع `False` دايمًا، فبيرفض أي حد (حتى `SUPER_ADMIN`) بشكل غير مشروط | باج تمرير نوع بيانات غلط (type mismatch مختلف عن `SimpleTenant`) |
+| `affiliate` | صفر باج — لكن `withdraw_commissions`/`bulk_release_commissions` بتحتاج صف `Commission` موجود، وموديله فيه FK إجبارية (`order_id`, `order_item_id`, `product_id`) لجداول `commerce` (نفسها محجوبة بباج `SimpleTenant` فوق) | تعقيد بيانات اختبار، مش باج كود |
+
+**كل الباجات في القسمين 3 و4 موجودة مسبقًا في الكود، سابقة لأي تعديل بتاعنا في هذه الجلسة، ومن فئات مختلفة تمامًا عن `commit()` جوه `begin_nested()`. صفر إصلاح تم عليها — موثَّقة فقط بتوجيه صريح من المستخدم.**
+
+---

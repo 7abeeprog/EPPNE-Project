@@ -19,7 +19,7 @@ class ManufacturingRepository:
     async def create_facility(self, **kwargs) -> ManufacturingFacility:
         facility = ManufacturingFacility(**kwargs)
         self.db.add(facility)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(facility)
         return facility
 
@@ -49,7 +49,7 @@ class ManufacturingRepository:
     async def create_production_line(self, **kwargs) -> ProductionLine:
         line = ProductionLine(**kwargs)
         self.db.add(line)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(line)
         return line
 
@@ -71,7 +71,7 @@ class ManufacturingRepository:
     async def create_blueprint(self, **kwargs) -> ProductBlueprint:
         bp = ProductBlueprint(**kwargs)
         self.db.add(bp)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(bp)
         return bp
 
@@ -91,7 +91,7 @@ class ManufacturingRepository:
     async def create_batch(self, **kwargs) -> ProductionBatch:
         batch = ProductionBatch(**kwargs)
         self.db.add(batch)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(batch)
         return batch
 
@@ -119,7 +119,7 @@ class ManufacturingRepository:
         if notes is not None:
             values["quality_control_notes"] = notes
         await self.db.execute(update(ProductionBatch).where(ProductionBatch.id == batch_id).values(**values))  # type: ignore
-        await self.db.commit()
+        await self.db.flush()
         return await self.get_batch(batch_id, 1)  # tenant_id سيتم تمريره من Service
 
     # ============================================================
@@ -128,7 +128,7 @@ class ManufacturingRepository:
 
     async def bulk_create_items(self, items: List[SmartProductItem]) -> List[SmartProductItem]:
         self.db.add_all(items)
-        await self.db.commit()
+        await self.db.flush()
         for item in items:
             await self.db.refresh(item)
         return items
@@ -162,7 +162,7 @@ class ManufacturingRepository:
     async def create_raw_material_batch(self, **kwargs) -> RawMaterialBatch:
         batch = RawMaterialBatch(**kwargs)
         self.db.add(batch)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(batch)
         return batch
 
@@ -193,7 +193,7 @@ class ManufacturingRepository:
     async def consume_material(self, **kwargs) -> MaterialConsumptionLog:
         log = MaterialConsumptionLog(**kwargs)
         self.db.add(log)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(log)
         return log
 
@@ -204,7 +204,7 @@ class ManufacturingRepository:
     async def create_digital_twin(self, **kwargs) -> ProductDigitalTwin:
         twin = ProductDigitalTwin(**kwargs)
         self.db.add(twin)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(twin)
         return twin
 
@@ -243,7 +243,7 @@ class ManufacturingRepository:
     async def create_quality_certificate(self, **kwargs) -> QualityCertificate:
         cert = QualityCertificate(**kwargs)
         self.db.add(cert)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(cert)
         return cert
 
@@ -265,7 +265,7 @@ class ManufacturingRepository:
     async def create_predictive_log(self, **kwargs) -> PredictiveMaintenanceLog:
         log = PredictiveMaintenanceLog(**kwargs)
         self.db.add(log)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(log)
         return log
 
@@ -288,7 +288,7 @@ class ManufacturingRepository:
                 status="SCHEDULED", maintenance_scheduled_at=scheduled_at
             )
         )
-        await self.db.commit()
+        await self.db.flush()
         result = await self.db.execute(select(PredictiveMaintenanceLog).where(PredictiveMaintenanceLog.id == log_id))  # type: ignore
         return result.scalar_one()
 
@@ -299,7 +299,7 @@ class ManufacturingRepository:
     async def create_spare_part(self, **kwargs) -> SparePart:
         part = SparePart(**kwargs)
         self.db.add(part)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(part)
         return part
 
@@ -328,6 +328,6 @@ class ManufacturingRepository:
             part.stock_quantity += quantity_delta  # type: ignore
             if quantity_delta > 0:
                 part.last_restocked_at = func.now()  # type: ignore
-            await self.db.commit()
+            await self.db.flush()
             await self.db.refresh(part)
         return part

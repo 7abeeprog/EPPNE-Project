@@ -278,7 +278,7 @@ class FinanceService:
             new_total = float(Decimal(str(current_supply)) + amount_decimal)
             setattr(state, "total_supply", {**getattr(state, "total_supply", {}), currency: new_total})
             setattr(state, "updated_by_id", admin_id)
-            await self.db.commit()
+            await self.db.flush()
 
             tx_hash = f"MINT-{uuid.uuid4().hex[:12].upper()}"
             tx = await self.tx_repo.create(
@@ -305,6 +305,8 @@ class FinanceService:
             ip=ip,
             ua=ua,
         )
+
+        await self.db.commit()
 
         return tx
 

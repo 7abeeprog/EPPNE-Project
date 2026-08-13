@@ -383,6 +383,8 @@ class TransportService:
                 body=f"تم حجز رحلتك #{trip.id} بنجاح. السعر: {fare} MR_USDT"
             )
 
+        await self.db.commit()
+
         # تخزين معرف الحجز فقط
         if idempotency_key:
             await self._store_idempotency(idempotency_key, {"booking_id": booking.id})
@@ -445,6 +447,8 @@ class TransportService:
                 resource_id=task.id,
                 details={"receiver_id": data["receiver_id"]}
             )
+
+        await self.db.commit()
 
         # تخزين معرف المهمة فقط
         if idempotency_key:
@@ -545,6 +549,8 @@ class TransportService:
                 "payer_id": payer_id,
                 "tenant_id": tenant_id
             })
+
+        await self.db.commit()
 
         # تخزين معرف المهمة فقط
         if idempotency_key:

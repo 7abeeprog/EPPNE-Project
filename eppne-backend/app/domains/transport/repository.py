@@ -173,7 +173,7 @@ class TransportRepository:
     async def create_booking(self, tenant_id: int, **kwargs) -> TripBooking:
         booking = TripBooking(tenant_id=tenant_id, **kwargs)
         self.db.add(booking)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(booking)
         return booking
 
@@ -198,7 +198,7 @@ class TransportRepository:
     async def create_delivery_task(self, tenant_id: int, **kwargs) -> DeliveryTask:
         task = DeliveryTask(tenant_id=tenant_id, **kwargs)
         self.db.add(task)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(task)
         return task
 

@@ -50,7 +50,7 @@ class ProjectRepository:
             .where(Project.id == project_id, Project.tenant_id == tenant_id)
             .values(**kwargs)
         )
-        await self.db.commit()
+        await self.db.flush()
         return await self.get_project(project_id, tenant_id)
 
     async def list_projects(
@@ -136,7 +136,7 @@ class ProjectRepository:
             .where(Contribution.id == contribution_id)
             .values(**kwargs)
         )
-        await self.db.commit()
+        await self.db.flush()
         return await self.get_contribution(contribution_id, tenant_id)
 
     async def count_contributors(self, project_id: int, tenant_id: int) -> int:
@@ -225,7 +225,7 @@ class ProjectRepository:
             .where(ProjectMilestone.id == milestone_id)
             .values(**kwargs)
         )
-        await self.db.commit()
+        await self.db.flush()
         return await self.get_milestone(milestone_id, tenant_id)
 
     async def get_milestones(self, project_id: int, tenant_id: int) -> List[ProjectMilestone]:

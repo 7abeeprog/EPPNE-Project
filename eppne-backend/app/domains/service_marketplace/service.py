@@ -256,6 +256,8 @@ class ServiceMarketplaceService:
             if idempotency_key:
                 await self._store_idempotency(idempotency_key, {"license_id": license_obj.id})
 
+        await self.db.commit()
+
         deploy_service_task.delay(license_obj.id, buyer_tenant_id)
 
         await self.event_bus.publish("service.purchased", {
@@ -370,7 +372,8 @@ class ServiceMarketplaceService:
 
             new_end = (license_obj.subscription_end or datetime.utcnow()) + timedelta(days=365)
             updated = await self.repo.update_license(license_id, subscription_end=new_end, is_active=True)
-            return updated
+        await self.db.commit()
+        return updated
 
     # ============================================================
     # 6. الإضافات (Add-ons)
@@ -415,7 +418,8 @@ class ServiceMarketplaceService:
                 idempotency_key=f"ADDON-PURCHASE-{license_id}-{addon_id}-{uuid.uuid4().hex[:8]}"
             )
 
-            return updated
+        await self.db.commit()
+        return updated
 
     # ============================================================
     # 7. طلبات التخصيص (Customization) – مع Idempotency محسّن
@@ -478,14 +482,17 @@ class ServiceMarketplaceService:
 
     async def _register_affiliate_commission(self, user_id: int, amount: Decimal, description: str):
         """تسجيل عمولة إحالة (10% من قيمة الشراء)."""
-        user = await self._get_user(user_id)
-        if user and user.referred_by:
-            commission_amount = amount * Decimal("0.10")
-            if commission_amount > 0:
-                await self.affiliate_service.register_commission(
-                    affiliate_id=user.referred_by,
-                    user_id=user_id,
-                    amount=commission_amount,
-                    description=description,
-                    status="PENDING"
-                )
+        try:
+            user = await self._get_user(user_id)
+            if user and user.referred_by:
+                commission_amount = amount * Decimal("0.10")
+                if commission_amount > 0:
+                    await self.affiliate_service.register_commission(
+                        affiliate_id=user.referred_by,
+                        user_id=user_id,
+                        amount=commission_amount,
+                        description=description,
+                        status="PENDING"
+                    )
+        except Exception as e:
+            logger.error(f"Affiliate registration failed: {e}")

@@ -90,13 +90,15 @@ class HealthService:
                     allergies=[],
                     current_medications=[]
                 )
+            await self.db.commit()
         return profile
 
     async def update_profile(self, user_id: int, data: Dict[str, Any]) -> MedicalProfile:
         """تحديث الملف الطبي."""
         async with self.db.begin_nested():
             profile = await self.repo.update_medical_profile(user_id, **data)
-            return profile
+        await self.db.commit()
+        return profile
 
     # ============================================================
     # 2. البيانات الحيوية والذكاء الاصطناعي
@@ -133,12 +135,14 @@ class HealthService:
             if len(metrics) >= 3:
                 prognosis = await self._call_ai_prognosis(cast(int, profile.id), metrics)
 
-            return {
-                "status": "success",
-                "log_id": log.id,
-                "new_health_score": new_score,
-                "prognosis_id": prognosis.id if prognosis else None
-            }
+        await self.db.commit()
+
+        return {
+            "status": "success",
+            "log_id": log.id,
+            "new_health_score": new_score,
+            "prognosis_id": prognosis.id if prognosis else None
+        }
 
     async def _call_ai_prognosis(self, profile_id: int, metrics: Dict) -> Optional[AIHealthPrognosis]:
         """استدعاء Gemini أو نموذج مفتوح المصدر لتوقع المخاطر الصحية."""
@@ -256,6 +260,8 @@ class HealthService:
             details={"title": job.title}  # type: ignore
         )
 
+        await self.db.commit()
+
         # تخزين Idempotency
         if idempotency_key:
             await self._store_idempotency(idempotency_key, appointment)
@@ -281,7 +287,8 @@ class HealthService:
         """إنشاء استشارة طبية بعد الموعد."""
         async with self.db.begin_nested():
             consultation = await self.repo.create_consultation(**data)
-            return consultation
+        await self.db.commit()
+        return consultation
 
     async def get_consultation(self, consultation_id: int) -> Optional[HealthConsultation]:
         """جلب تفاصيل الاستشارة."""
@@ -304,7 +311,8 @@ class HealthService:
                 "status": "ISSUED"
             }
             prescription = await self.repo.create_prescription(**prescription_data)
-            return prescription
+        await self.db.commit()
+        return prescription
 
     # ============================================================
     # 5. الطوارئ (Emergency)
@@ -349,6 +357,8 @@ class HealthService:
             details={"title": job.title}  # type: ignore
         )
 
+        await self.db.commit()
+
         if idempotency_key:
             await self._store_idempotency(idempotency_key, dispatch)
 
@@ -378,7 +388,8 @@ class HealthService:
             resource_id=job.id,  # type: ignore
             details={"title": job.title}  # type: ignore
         )
-            return facility
+        await self.db.commit()
+        return facility
 
     async def list_facilities(
         self,

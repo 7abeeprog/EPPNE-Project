@@ -26,7 +26,7 @@ class InsuranceRepository:
     async def create_policy(self, **kwargs) -> InsurancePolicy:
         policy = InsurancePolicy(**kwargs)
         self.db.add(policy)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(policy)
         return policy
 
@@ -68,7 +68,7 @@ class InsuranceRepository:
     async def create_subscription(self, **kwargs) -> InsuranceSubscription:
         sub = InsuranceSubscription(**kwargs)
         self.db.add(sub)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(sub)
         return sub
 
@@ -107,7 +107,7 @@ class InsuranceRepository:
     async def create_claim(self, **kwargs) -> InsuranceClaim:
         claim = InsuranceClaim(**kwargs)
         self.db.add(claim)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(claim)
         return claim
 
@@ -132,7 +132,7 @@ class InsuranceRepository:
 
     async def update_claim(self, claim_id: int, **kwargs) -> InsuranceClaim:
         await self.db.execute(update(InsuranceClaim).where(InsuranceClaim.id == claim_id).values(**kwargs))  # type: ignore
-        await self.db.commit()
+        await self.db.flush()
         return await self.get_claim(claim_id)
 
     # ============================================================
@@ -142,7 +142,7 @@ class InsuranceRepository:
     async def create_pension(self, **kwargs) -> PensionRecord:
         pension = PensionRecord(**kwargs)
         self.db.add(pension)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(pension)
         return pension
 
@@ -170,7 +170,7 @@ class InsuranceRepository:
     async def create_employee_profile(self, **kwargs) -> EmployeeInsuranceProfile:
         profile = EmployeeInsuranceProfile(**kwargs)
         self.db.add(profile)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(profile)
         return profile
 

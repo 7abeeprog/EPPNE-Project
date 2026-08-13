@@ -64,7 +64,7 @@ class AffiliateRepository:
             .where(and_(AffiliateProfile.user_id == user_id, AffiliateProfile.tenant_id == tenant_id))
             .values(**kwargs)
         )
-        await self.db.commit()
+        await self.db.flush()
         profile = await self.get_affiliate_profile(user_id, tenant_id)
         if not profile:
             raise NotFoundError("ملف الداعي غير موجود")
@@ -128,7 +128,7 @@ class AffiliateRepository:
     async def create_referral_tree(self, tenant_id: int, **kwargs) -> ReferralTree:
         tree = ReferralTree(tenant_id=tenant_id, **kwargs)
         self.db.add(tree)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(tree)
         return tree
 
@@ -204,7 +204,7 @@ class AffiliateRepository:
             .where(and_(Commission.id == commission_id, Commission.tenant_id == tenant_id))
             .values(status=status, **kwargs)
         )
-        await self.db.commit()
+        await self.db.flush()
         commission = await self.get_commission(commission_id, tenant_id)
         if not commission:
             raise NotFoundError("العمولة غير موجودة")
@@ -227,7 +227,7 @@ class AffiliateRepository:
             )
             .values(status=status, **kwargs)
         )
-        await self.db.commit()
+        await self.db.flush()
         return result.rowcount
 
     # ==========================================

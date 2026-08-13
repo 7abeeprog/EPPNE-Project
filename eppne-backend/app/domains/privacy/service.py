@@ -166,6 +166,8 @@ class PrivacyService:
                     queue="blockchain"
                 )
 
+        await self.db.commit()
+
         return updated_request
 
     # ==========================================

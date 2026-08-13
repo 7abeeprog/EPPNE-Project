@@ -275,7 +275,8 @@ class ProjectService:
 
             # 🔥 إضافة await
             await invalidate_cache(f"project_analytics_{project.id}")
-            return updated
+        await self.db.commit()
+        return updated
 
     # ==========================================
     # 3. المراحل (Milestones)
@@ -340,7 +341,8 @@ class ProjectService:
 
             # 🔥 إضافة await
             await invalidate_cache(f"project_analytics_{project.id}")
-            return updated
+        await self.db.commit()
+        return updated
 
     # ==========================================
     # 4. المتابعة (Follow)

@@ -78,6 +78,8 @@ class CommunicationsService:
                 idempotency_key=idempotency_key
             )
 
+        await self.db.commit()
+
         # جدولة الإرسال الفعلي (غير متزامن عبر Celery)
         send_notification_task.delay(  # type: ignore
             notification_id=notification.id,
@@ -178,6 +180,8 @@ class CommunicationsService:
                         mime_type=att.get("mime_type"),
                         ipfs_hash=att.get("ipfs_hash")
                     )
+
+        await self.db.commit()
 
         # إرسال إشعار للمستلم (جدولة عبر Celery) – خارج المعاملة
         send_notification_task.delay(  # type: ignore

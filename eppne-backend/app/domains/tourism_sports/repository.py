@@ -50,7 +50,7 @@ class TourismSportsRepository:
     async def create_program_participant(self, **kwargs) -> ProgramParticipant:
         participant = ProgramParticipant(**kwargs)
         self.db.add(participant)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(participant)
         return participant
 
@@ -72,7 +72,7 @@ class TourismSportsRepository:
     async def create_ticket(self, **kwargs) -> NFTTicket:
         ticket = NFTTicket(**kwargs)
         self.db.add(ticket)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(ticket)
         return ticket
 
@@ -110,7 +110,7 @@ class TourismSportsRepository:
     async def create_transfer(self, **kwargs) -> PlayerTransfer:
         transfer = PlayerTransfer(**kwargs)
         self.db.add(transfer)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(transfer)
         return transfer
 

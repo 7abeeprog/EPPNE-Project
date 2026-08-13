@@ -147,14 +147,14 @@ class ZamakanaRepository:
             .where(PlanetaryCampaign.id == campaign_id, PlanetaryCampaign.tenant_id == tenant_id)
             .values(**kwargs)
         )
-        await self.db.commit()
+        await self.db.flush()
         return await self.get_campaign(campaign_id, tenant_id)
 
     async def add_collected_hours(self, campaign_id: int, tenant_id: int, hours: float) -> PlanetaryCampaign:
         campaign = await self.get_campaign(campaign_id, tenant_id)
         if campaign:
             campaign.collected_time_hours = (campaign.collected_time_hours or 0) + hours
-            await self.db.commit()
+            await self.db.flush()
             await self.db.refresh(campaign)
         return campaign
 
@@ -162,7 +162,7 @@ class ZamakanaRepository:
     async def create_pledge(self, **kwargs) -> TimePledge:
         pledge = TimePledge(**kwargs)
         self.db.add(pledge)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(pledge)
         return pledge
 
@@ -211,7 +211,7 @@ class ZamakanaRepository:
                 verified_at=func.now()
             )
         )
-        await self.db.commit()
+        await self.db.flush()
         return await self.get_pledge(pledge_id, tenant_id)
 
     # ========== Future Scenarios ==========

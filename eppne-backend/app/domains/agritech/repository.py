@@ -120,7 +120,7 @@ class AgriTechRepository:
     async def create_harvest(self, **kwargs) -> HarvestBatch:
         harvest = HarvestBatch(**kwargs)
         self.db.add(harvest)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(harvest)
         return harvest
 
@@ -146,7 +146,7 @@ class AgriTechRepository:
     async def create_bio_yield(self, **kwargs) -> BioProductYield:
         yield_record = BioProductYield(**kwargs)
         self.db.add(yield_record)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(yield_record)
         return yield_record
 
