@@ -2766,3 +2766,163 @@ methods غير موجودة، عدم توافق أنواع بين الفرونت
 **كل الباجات في القسمين 3 و4 موجودة مسبقًا في الكود، سابقة لأي تعديل بتاعنا في هذه الجلسة، ومن فئات مختلفة تمامًا عن `commit()` جوه `begin_nested()`. صفر إصلاح تم عليها — موثَّقة فقط بتوجيه صريح من المستخدم.**
 
 ---
+
+## 🔴🔴🔴 [2026-08-13] — اكتشاف حرج جديد: تسريب بيانات مالية/KYB **بلا أي مصادقة إطلاقًا** في `sovereign_entities` (أخطر من كل باجات `SimpleTenant` المكتشفة في الجلسات الثلاث السابقة، صفر إصلاح، بانتظار توجيه)
+
+**السياق:** اكتُشف أثناء جرد `sovereign_entities/router.py` في جلسة إصلاح `SimpleTenant` (`.claude/reports/simpletenant-fix-session-log.md`). **هذا ليس امتدادًا لباج `SimpleTenant`** — فئة مختلفة تمامًا وأخطر: مش "type mismatch يسبب كراش"، ده **تسريب بيانات فعلي وقابل للاستغلال الآن، بلا حتى الحاجة لتوكن JWT صالح** (كل باجات الجلسات التلاتة السابقة، حتى الأخطر منها، كانت محتاجة توكن مستخدم حقيقي زائف الهيدر — هنا مفيش حتى الحد الأدنى ده).
+
+### الأربعة endpoints المتأثرة (`sovereign_entities/router.py`)
+
+| # | Endpoint | السطر | التوقيع الكامل |
+|---|---|---|---|
+| 1 | `GET /sovereign-entities/` (`list_entities`) | 41-48 | **بلا أي `Depends` مصادقة إطلاقًا** — بارامتراتها كلها `Query`/`Depends(get_current_tenant)`/`Depends(get_db)` بس |
+| 2 | `GET /sovereign-entities/{entity_id}` (`get_entity`) | 73-77 | نفس الشيء — **بلا مصادقة** |
+| 3 | `GET /sovereign-entities/templates` (`list_templates`) | 340-343 | نفس الشيء — **بلا مصادقة** |
+| 4 | `GET /sovereign-entities/components` (`list_components`) | 350-353 | نفس الشيء — **بلا مصادقة** |
+
+### التأكيد الدقيق (قراءة كود مباشرة، `router.py` → `service.py` → `repository.py`، الثلاث طبقات)
+
+**الاستعلامات نفسها *مفلترة* بـ`tenant_id` على مستوى SQL (مش "بترجع الجدول كامل بلا حدود") — لكن مصدر الـ`tenant_id` ده هو الهيدر `X-Tenant-ID` **بلا أي تحقق مصادقة على الإطلاق**، لأن الـ4 دوال دي **مفيهاش `current_user` في توقيعها من الأساس** (لا إجباري ولا حتى Optional):
+
+```python
+# router.py:41-48 — list_entities: صفر current_user
+async def list_entities(
+    entity_type: Optional[SovereignEntityType] = None,
+    kyb_status: Optional[KYBStatus] = None,
+    skip: int = 0, limit: int = 50,
+    tenant_id: int = Depends(get_current_tenant),   # ← الهيدر مباشرة، صفر مصادقة
+    db: AsyncSession = Depends(get_db)
+):
+```
+
+```python
+# repository.py:63-76 — list_entities: فلترة SQL حقيقية، لكن بـtenant_id غير موثوق
+query = select(SovereignEntity).where(
+    and_(SovereignEntity.tenant_id == tenant_id, SovereignEntity.is_deleted == False)
+)
+```
+نفس النمط بالحرف في `get_entity` (`repository.py:26-36`)، `list_templates` (`:283-285`)، `list_components` (`:287-289`).
+
+### التأثير الفعلي — بيانات حساسة مؤكَّدة بالتصريح (`schemas.py:55-64`)
+
+`SovereignEntityResponse` (اللي بترجع من `list_entities`/`get_entity`) بتحتوي صراحة:
+- `treasury_balance_mrusdt` — **رصيد الخزينة المالي الفعلي للكيان**
+- `kyb_status` — حالة التحقق من الهوية (KYB)
+- `created_by` — معرف المستخدم المُنشئ
+- بيانات الكيان الكاملة الأخرى (اسم، نوع، بيانات تسجيل)
+
+**🔴 تصحيح فوري (بعد اختبار حي فعلي، وليس قراءة كود فقط):** الادّعاء الأصلي فوق ("أي زائر مجهول بلا توكن") **غير دقيق على نقطتين، اتصحّح فورًا بعد اختبار حقيقي:**
+
+1. **مصادقة مطلوبة فعليًا:** `app/main.py:300-305` بيلف **كل** الـ30 router (شامل `sovereign_entities`) بـ`Depends(require_sector(sector))` على **مستوى تسجيل الراوتر نفسه** — قبل أي `Depends` خاص بالـendpoint. `require_sector` (`core/security.py:205-226`) بتستخدم `Depends(get_current_active_user)` داخليًا، يعني **بتتطلب توكن JWT صالح لمستخدم حقيقي كحد أدنى، لكل الأربعة endpoints بلا استثناء** — مش "بلا أي مصادقة إطلاقًا" زي ما كان موثَّق. تأكَّد حيًا: طلب بدون أي `Authorization` header رجّع `401 Not authenticated`.
+2. **مين بالظبط يقدر يعدّي؟** بما إن `identity/service.py`'s `_issue_tokens` **مش بيبعت claim `sector` إطلاقًا** لأي مستخدم عادي (موثَّق مسبقًا في `critical-finding-xtenant-systemic.md`)، أي مستخدم عادي (`system_role=USER`) هيترفض دايمًا (`user_sector is None`). **الاستثناء الوحيد:** `SUPER_ADMIN`/`EXECUTIVE_DIRECTOR` (بيتخطوا فحص الـsector كليًا، `security.py:215-216`). **يعني الاستغلال محصور فعليًا في حساب `SUPER_ADMIN`/`EXECUTIVE_DIRECTOR` — مش أي زائر عشوائي.**
+3. **🔴 الأهم: الثغرة حاليًا "كامنة" (latent) مش "حية" — اختبار حي فعلي بحساب `SUPER_ADMIN` حقيقي (تينانت14) بهيدر مزوَّر (تينانت1) رجّع `500`، مش تسريب ناجح:**
+   ```
+   sqlalchemy.exc.DBAPIError: DataError: invalid input for query argument $2:
+   <app.api.deps.SimpleTenant object...> ('SimpleTenant' object cannot be interpreted as an integer)
+   [parameters: (2, <SimpleTenant object>)]
+   ```
+   **السبب:** `get_entity`/`list_entities`/`list_templates`/`list_components` **لسه فيهم نفس باج `SimpleTenant` الأصلي** (الكائن الخام بيتبعت كـbind parameter مباشر، مش `.id`) — **بالتصميم، تم استثناؤهم عمدًا من إصلاح `SimpleTenant` في هذه الجلسة بانتظار قرار التصميم ده بالذات.** يعني: **الكراش الحالي (غير المتعلق أصلًا بالسؤال الأمني) هو اللي بيمنع الاستغلال فعليًا الآن.**
+
+**الخلاصة المُصحَّحة:** هذا **مش تسريب بيانات حي وقابل للاستغلال فورًا حاليًا** — ده **عيب تصميمي كامن (latent architectural flaw)**: بمجرد ما حد يصلح باج `SimpleTenant` في الأربعة endpoints دول بنفس الطريقة الميكانيكية المطبَّقة في باقي المشروع (تحويل `tenant.id` بسيط، بديهي وسهل الوقوع فيه)، **هيبقى الاستغلال شغال فورًا** — لأن مفيش أي ربط بين تينانت الطالب الحقيقي (`current_user.tenant_id`) وتينانت البيانات المطلوبة (`X-Tenant-ID`) في أي من الأربعة. **الخطورة الحقيقية: أي حساب `SUPER_ADMIN`/`EXECUTIVE_DIRECTOR` من أي تينانت (مش بس تينانت الهدف) هيقدر يشوف رصيد الخزينة وحالة الـKYB لكيانات أي تينانت تاني، لحظة ما حد "يصلح" الكراش الحالي بإصلاح سطحي.** هذا يفرّق هذا الاكتشاف جوهريًا عن باقي أمثلة `SimpleTenant` (اللي إصلاحها بيغلق الثغرة الأمنية تلقائيًا) — هنا **إصلاح الكراش وحده هيفتح الثغرة، مش يقفلها**، ما لم يُضَف فحص مصدر الثقة الصحيح (`current_user.tenant_id`) في نفس الوقت.
+
+### هل هذا موثَّق سابقًا في `critical-finding-xtenant-systemic.md`؟ **لا — اكتشاف جديد بالكامل**
+
+`sovereign_entities` **مذكور** في الملف ده (جدول 🔴 SUSPICIOUS، رقم 18) لكن **فقط بخصوص `review_kyb`** (endpoint إداري محمي بـ`get_current_superuser`، نفس نمط `affiliate`). **الأربعة endpoints دول (`list_entities`, `get_entity`, `list_templates`, `list_components`) غير مذكورين إطلاقًا في أي مكان بالملف** — لأن منهجية الفحص الأصلية ركّزت صراحة على "endpoint محمي بصلاحية مرتفعة... معتمدًا على `tenant_id` من الهيدر" (نص الملف، قسم "المنهجية")، وافترضت إن أي endpoint بلا حماية admin على الأقل هيبقى محمي بمصادقة أساسية (`current_user`) — افتراض غير صحيح هنا، لأن الأربعة دول **بلا أي مصادقة إطلاقًا**، مش حتى `get_current_active_user`. **فجوة في تغطية الفحص الأصلي نفسه، مش بس في الكود.**
+
+### الحالة: 🔴 **صفر إصلاح. بانتظار توجيه المستخدم صراحة.**
+
+هذا الاكتشاف **خارج نطاق جلسة `SimpleTenant` بالكامل** (مش type-mismatch، مش كراش) — تم توثيقه هنا فورًا بمجرد التأكد منه، بدل الانتظار لنهاية الجلسة، نظرًا لخطورته. **لم يُتخذ أي قرار تصميمي** (هل الأربعة دول المفروض تبقى endpoints عامة بتصميم مقصود ومحتاجة توثيق كده بس، ولا سهو حقيقي يستاهل إضافة `current_user` كمصادقة إجبارية؟) — القرار ده محتاج مراجعة أمنية/منتجية صريحة، مش قرار تقني بسيط. باقي الـ21 endpoint في `sovereign_entities` (اللي عندها `current_user` فعلي) استمرت في مسار إصلاح `SimpleTenant` العادي بالتوازي، بمعزل تام عن هذا الاكتشاف.
+
+---
+
+## 🔴🔴 [2026-08-13] — اكتشاف ثانٍ حرج: `review_kyb` و`update_entity` (`sovereign_entities`) بيفقدوا الكتابة صامتًا — regression من جلسة `transaction-savepoint-bug-session-log.md` السابقة، مش من هذه الجلسة
+
+**السياق:** اكتُشف أثناء التحقق الحي (DB-level، مش status code) لـ`sovereign_entities` ضمن جلسة `SimpleTenant`. **هذا مش باج `SimpleTenant`** — فئة "نجاح كاذب" (نفس التحذير الحرفي من جلسة الترانزاكشن السابقة)، اكتشفناه بالصدفة بسبب التزامنا بالتحقق الحي الصارم اللي طلبه المستخدم.
+
+### التأكيد (مؤكَّد بـ`SELECT` مستقل، مش افتراض)
+
+- `PUT /sovereign-entities/{id}/kyb/status` (`review_kyb`): الـAPI رجّع `200 {"kyb_status": "REJECTED"}`. `SELECT` فوري على الـDB: **`kyb_status = PENDING`، لم يتغيّر إطلاقًا.**
+- `PUT /sovereign-entities/{id}` (`update_entity`): نفس النتيجة بالحرف — الـresponse رجّع القيمة الجديدة (`legal_name`)، الـDB فاضل بالقيمة القديمة.
+
+### السبب الجذري (قراءة كود مباشرة)
+
+`repository.py:97-107` (`update_entity`) بتعمل `await self.db.flush()` **بس** (مش `commit()`) — **نفس التعديل اللي طُبِّق في جلسة `transaction-savepoint-bug-session-log.md`** على كل الـrepository methods المستدعاة من جوه `begin_nested()`. لكن `service.py`'s `review_kyb` (سطر 193-218) و`update_entity` (سطر 134-140) **معندهمش `async with self.db.begin_nested():` من الأساس** — يعني ماكانوش ضمن جرد/نطاق فحص الجلسة السابقة (اللي كانت بتدوّر على `begin_nested()` تحديدًا)، فمحصلش لهم إضافة `await self.db.commit()` الصريح بعد الكتابة (زي اللي اتضاف لـ24 method تانيين في نفس الجلسة). **النتيجة: أي كتابة عبر الـ2 method دول بتضيع صامتة الآن، بلا أي خطأ ظاهر.**
+
+**تأكيد النطاق (بالقراءة، مش تخمين):** باقي methods الدومين اللي بتنادي `self.repo.update_entity` (`deposit_to_entity_wallet` سطر 366، `transfer_from_entity` سطر 442) **معمولة صح** — ملفوفة بـ`begin_nested()` + `commit()` صريح بعده (سطور 364/392 و431/465 على الترتيب)، لأنها كانت فعليًا ضمن نطاق الجلسة السابقة. **المشكلة محصورة في `review_kyb`/`update_entity` بس داخل هذا الدومين** — لم يُفحَص باقي المشروع بحثًا عن نفس النمط (service method بتنادي repo method بقت flush-only، بلا `begin_nested()`/`commit()` خاص بيها) — **يستاهل جرد منهجي منفصل عبر كل الـ24 دومين اللي اتلمست في الجلسة السابقة، مش بس `sovereign_entities`.**
+
+### الحالة: 🔴 **صفر إصلاح. موثَّق فقط بتوجيه صريح من المستخدم — القرار مؤجَّل لجلسة/مراجعة مخصَّصة.**
+
+**ملاحظة مهمة:** هذا الاكتشاف **يبرهن على قيمة منهجية "التحقق الحي بـ`SELECT` مستقل، مش status code" اللي أصرّ عليها المستخدم طول الجلسات الثلاث** — لولاها كان هيتسجَّل "✅ `review_kyb` نجح حيًا" غلط، بالظبط زي `ai_governance.reset_agent_quotas` في الجلسة السابقة.
+
+### 🔴 تحديث فوري — فحص استباقي سريع (read-only، بتوجيه المستخدم) وسّع النطاق: 3 حالات إضافية في `saas`
+
+بتوجيه صريح من المستخدم ("هذا الاكتشاف يستاهل معاملة استثنائية... فحص سريع 10 دقايق")، اتعمل `grep` مركَّز على `await self.db.flush()` في `repository.py` بتاع الأربعة دومينات (`academy`, `commerce`, `sovereign_entities`, `saas`)، ولكل نتيجة اتفحص الـcaller في `service.py` (هل ملفوف بـ`begin_nested()`+`commit()` صريح، ولا لأ):
+
+| الدومين | النتيجة |
+|---|---|
+| `academy` | ✅ نظيف — موضع `flush()`-only واحد بس (`enroll`)، والـcaller (`enroll_in_course`) مؤكَّد ملفوف صح (`begin_nested()` + `commit()` من الجلسة السابقة) |
+| `commerce` | ✅ نظيف — مؤكَّد تجريبيًا بالفعل (كل الطلبات الحية في هذه الجلسة لـ`checkout`/`create_product` أثبتت كتابة صحيحة عبر `SELECT` مستقل) |
+| `sovereign_entities` | 🔴 حالتان مؤكَّدتان مسبقًا (`review_kyb`, `update_entity`) — راجع القسم فوق |
+| **`saas`** | 🔴🔴 **3 حالات إضافية جديدة، غير مؤكَّدة حيًا بعد (تأكيد بالقراءة فقط، مش تحقق DB مباشر زي `sovereign_entities`)** |
+
+### الثلاث حالات الجديدة في `saas/service.py`
+
+1. **`cancel_subscription`** (سطر 134-147): بتنادي `self.repo.update_subscription(...)` (flush-only، `repository.py:188-198`) **بلا أي `begin_nested()`/`commit()` إطلاقًا في الدالة كلها**.
+2. **`process_auto_renewals`'s فرع `except InsufficientBalanceError`** (سطر 190-198): المسار الناجح (try) ملفوف صح (`begin_nested()` سطر 161 + `commit()` سطر 185)، **لكن فرع الفشل (رصيد غير كافٍ) بينادي `update_subscription(...)` تاني برّه أي `begin_nested()`/`commit()`** — تحديث حالة الاشتراك لـ`PAST_DUE` (مع مهلة سماح) **بيضيع صامت**.
+3. **`can_access_service`** (سطر 209-231، سطر 228 تحديدًا): بتنادي `update_subscription_status` (بتستدعي نفس `update_subscription` flush-only) لتحديث اشتراك منتهي الصلاحية لحالة `EXPIRED`، **برّه أي `begin_nested()`/`commit()`**.
+
+---
+
+## 🔴🔴🔴 [2026-08-13] قسم موحَّد — نمط "regression الكتابة الصامتة" عبر `sovereign_entities` + `saas` (5 حالات، درجات تأكيد مختلفة، أولوية عاجلة)
+
+**هذا القسم يجمع ويوحّد كل حالات "نجاح ظاهري + كتابة مفقودة صامتة" المكتشفة في هذه الجلسة، مع تمييز صريح بين مستوى التأكيد لكل حالة — بعضها مؤكَّد بـ`SELECT` مستقل فعلي (DB-level)، وبعضها لسه مؤكَّد بقراءة الكود بس. الخلط بين المستويين غير مقبول، فالجدول التالي يوضّح كل حالة بدقة.**
+
+| # | الدومين.الدالة | مستوى التأكيد | الدليل |
+|---|---|---|---|
+| 1 | `sovereign_entities.review_kyb` | ✅ **مؤكَّد DB-level** | طلب فعلي (`PUT .../kyb/status`) رجّع `kyb_status=REJECTED`، `SELECT` مستقل فوري رجّع `kyb_status=PENDING` (لم يتغيّر) |
+| 2 | `sovereign_entities.update_entity` | ✅ **مؤكَّد DB-level** | طلب فعلي (`PUT /sovereign-entities/{id}`) رجّع `legal_name` الجديد، `SELECT` مستقل رجّع القيمة القديمة (فاضية) |
+| 3 | `saas.cancel_subscription` | ✅ **مؤكَّد DB-level (تحقق إضافي مخصَّص، بطلب المستخدم — الأولوية لأنه أعلى أثر مباشر على العميل)** | طلب فعلي (`PUT /saas/subscriptions/1/cancel`) رجّع `status=CANCELLED`، `SELECT` مستقل فوري على `saas_tenant_subscriptions id=1` رجّع **`status=ACTIVE` — لم يتغيّر إطلاقًا**. **يعني: عميل يظن إنه ألغى اشتراكه، والنظام لسه شغّال عليه فعليًا (خطر إعادة خصم/تجديد تلقائي لاحقًا).** |
+| 4 | `saas.process_auto_renewals` (فرع `except InsufficientBalanceError`) | 🟡 **مؤكَّد بقراءة الكود فقط — غير مُختبَر DB-level** | نفس النمط البنيوي بالحرف (`update_subscription` خارج أي `begin_nested`/`commit`)، لم يُنفَّذ طلب حي لتفعيل هذا المسار تحديدًا |
+| 5 | `saas.can_access_service` (تحديث `EXPIRED`) | 🟡 **مؤكَّد بقراءة الكود فقط — غير مُختبَر DB-level** | نفس النمط البنيوي، لم يُنفَّذ طلب حي |
+
+### السبب الجذري الموحَّد (نفس الآلية بالضبط في الحالات الخمس)
+
+جلسة `transaction-savepoint-bug-session-log.md` السابقة غيّرت عشرات الـrepository methods من `commit()` مباشر إلى `flush()`-only، على افتراض إن كل service method حاضنة ملفوفة بـ`begin_nested()` وهتاخد `commit()` صريح مُضاف بعدها. **الافتراض ده صحيح للـmethods اللي كانت فعليًا ضمن جرد تلك الجلسة (اللي كانت بتدوّر على `begin_nested()` تحديدًا) — لكن أي service method تانية بتنادي نفس الـrepo method flush-only، **بلا `begin_nested()` خاص بيها من الأساس**، مالهاش أي طريقة تاخد `commit()`. النتيجة: كتابة صامتة مفقودة، نجاح ظاهري 100% (status code سليم، صفر خطأ)، **بلا أي أثر فعلي في الـDB**.
+
+### توصية صريحة (بتوجيه المستخدم، أعلى أولوية مسجَّلة في هذه الجلسة)
+
+**هذا الاكتشاف يستحق جلسة تصحيح عاجلة منفصلة، بأولوية أعلى من جلسة "duplicate-kwarg" المقترَحة سابقًا** — لأنه يمس نتائج جلسة سابقة كانت مُعتبَرة مقفولة وآمنة (`transaction-savepoint-bug-session-log.md`، مغلقة بـcommit `a9bbae4`). **الجرد الحالي جزئي بالكامل** (4 دومينات فقط — `academy`, `commerce`, `saas`, `sovereign_entities` — من أصل 24 دومين اتلمست في الجلسة السابقة؛ داخل الأربعة، تأكيد DB-level حصل على 3 حالات بس من أصل 5 المكتشفة). **الخطوة الأولى المقترَحة لأي جلسة مخصَّصة قادمة:** جرد منهجي كامل (`grep` لـ`await self.db.flush()` في كل `repository.py` عبر الـ24 دومين، ثم تتبّع كل caller في `service.py` المقابل: هل ملفوف بـ`begin_nested()`+`commit()` صريح، ولا لأ) — **نفس المنهجية المستخدَمة هنا بالضبط، لكن بنطاق كامل بدل 4 دومينات فقط.**
+
+---
+
+## 📌 [2026-08-14] قاعدة عملية دائمة — `psql -c` متعدد العبارات = ترانزاكشن ضمنية واحدة
+
+**اكتُشفت أثناء تنظيف بيانات throwaway جلسة `SimpleTenant`، بنفس أهمية "درس البورت المعلَّق" المُسجَّل سابقًا في نفس الجلسة.**
+
+`docker exec ... psql -c "DELETE FROM a; DELETE FROM b; DELETE FROM c;"` — لو أي عبارة من الثلاثة فشلت (زي FK constraint)، **كل العبارات التانية في نفس الاستدعاء بترجع (rollback)، حتى اللي طبعت "DELETE N" ناجحة قبل الفشل**. السبب: PostgreSQL's simple query protocol بيعامل الـstring متعدد العبارات دي كترانزاكشن ضمنية واحدة.
+
+**القاعدة:** أي `DELETE`/`UPDATE` متعدد العبارات عبر `psql -c` (أو أي أداة بتبعت multi-statement query واحدة) **لازم إما:**
+1. يتقسّم لاستدعاءات `-c` منفصلة (كل واحد ترانزاكشن مستقلة)، أو
+2. يُتحقَّق منه بـ`SELECT COUNT` مستقل **بعد** كل محاولة (ناجحة أو فاشلة) — **متعتمدش على رسائل "DELETE N" وحدها كدليل نجاح**، خصوصًا لو الاستدعاء كان فيه أكتر من عبارة.
+
+---
+
+## ✅ [2026-08-14] — إغلاق جلسة `SimpleTenant` — الحالة النهائية
+
+**التفاصيل الكاملة، كل ديف، كل تحقق حي، كل خطوة:** `.claude/reports/simpletenant-fix-session-log.md`.
+
+**المُنجز:** إصلاح باج `SimpleTenant`/type-mismatch (`get_current_tenant()` بترجع كائن، مش `int` خام) عبر **4 دومينات مؤكَّدة مسبقًا** (`academy` 36 موضع، `commerce` 11، `saas` 17، `sovereign_entities` 17) = **81 endpoint مُصلَح بالقاعدة الموحّدة** (`current_user.tenant_id` بدل `X-Tenant-ID` header). **مؤكَّد حيًا بالكامل** عبر endpoints ممثِّلة لكل مستوى حماية (`active_user`/`instructor_or_admin`/`superuser`) في الأربعة دومينات، بمعيار صارم (`SELECT` مستقل قبل/بعد) على كل مسار مالي (`finance` integration في `commerce`, `sovereign_entities`).
+
+**5 مواضع مؤجَّلة عمدًا، بقرار صريح، خارج نطاق أي إصلاح تلقائي مستقبلي:**
+- `commerce.visa_webhook` — webhook دفع خارجي بلا `current_user`، يحتاج مراجعة أمنية مخصَّصة لبوابة الدفع كاملة (توقيع، تكرار) قبل أي تعديل على مصدر `tenant_id`.
+- `sovereign_entities`: `list_entities`, `get_entity`, `list_templates`, `list_components` — **🔴🔴🔴 تحذير بارز مُضاف في أعلى `critical-finding-xtenant-systemic.md` نفسه** — الأربعة دول endpoints بلا `current_user`، إصلاح الكراش وحده (بدون قرار منتجي بخصوص مصدر المصادقة) هيفتح ثغرة تسريب مالي/KYB حقيقية. تقرير مخصَّص: `.claude/reports/CRITICAL-sovereign-entities-unauthenticated-endpoints.md`.
+
+**اكتشافان حرجان إضافيان، خارج نطاق `SimpleTenant` بالكامل، صفر إصلاح:**
+1. **كشف بيانات مالية/KYB كامن (latent)** في الأربعة endpoints فوق — غير قابل للاستغلال حاليًا (محجوب بنفس كراش `SimpleTenant`)، لكنه هيبقى قابل للاستغلال فورًا لحظة ما حد يصلح الكراش بدون معالجة مصدر المصادقة.
+2. **نمط "regression الكتابة الصامتة"** — 5 حالات (`sovereign_entities.review_kyb`, `sovereign_entities.update_entity`, `saas.cancel_subscription` **الثلاثة مؤكَّدة DB-level**؛ `saas.process_auto_renewals` فرع الفشل، `saas.can_access_service` **مؤكَّدتان بقراءة الكود بس**) ناتجة عن تفاعل جلسة `transaction-savepoint-bug-session-log.md` السابقة مع service methods لم تكن ضمن نطاقها. **موصى بجلسة تصحيح عاجلة منفصلة، أعلى أولوية من أي عمل تاني معلَّق** (بما فيه جلسة duplicate-kwarg المقترَحة سابقًا) — لأنها تمس نتائج جلسة كانت مُعتبَرة مقفولة بأمان.
+
+**بيانات throwaway الأربعة دومينات:** اتنضّفت بالكامل، تحقق مستقل شامل (20 استعلام، كلهم صفر) + تأكيد إضافي إن `academy_tenants` رجعت لحالتها الأصلية بالحرف.
+
+**Commit:** معزول واحد، يغطي بالضبط نطاق هذه الجلسة (4 ملفات router.py + التحذير في الملف المرجعي + هذا الملف + تقريرين جدد)، صفر تلوّث من جلسات تانية.
+
+---

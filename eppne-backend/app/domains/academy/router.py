@@ -8,7 +8,7 @@ import hashlib
 import uuid
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user, get_current_superuser, get_current_instructor_or_admin, require_subscription, get_current_tenant
+from app.api.deps import get_current_active_user, get_current_superuser, get_current_instructor_or_admin, require_subscription
 from app.domains.identity.models import User
 
 from app.domains.academy.service import AcademyService
@@ -80,9 +80,9 @@ async def get_tenant_by_domain(
 async def create_org_entity(
     data: OrganizationEntityCreate,
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.create_org_entity(**data.model_dump())
 
@@ -104,9 +104,9 @@ async def list_org_entities(
 async def create_bootcamp(
     data: BootcampCreate,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.create_bootcamp(data.model_dump(), cast(int, current_user.id))
 
@@ -125,9 +125,9 @@ async def list_bootcamps(
 async def create_track(
     data: TrackCreate,
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.create_track(data.model_dump())
 
@@ -155,9 +155,9 @@ async def list_tracks(
 async def create_cohort(
     data: CohortCreate,
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.create_cohort(data.model_dump())
 
@@ -179,9 +179,9 @@ async def list_cohorts(
 async def create_course(
     data: CourseCreate,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.create_course(data.model_dump(), cast(int, current_user.id))
 
@@ -189,10 +189,10 @@ async def create_course(
 async def get_courses(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    tenant_id: int = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     repo = AcademyRepository(db)
     result = await repo.list_all_courses(tenant_id, skip=skip, limit=limit)
     return result.data
@@ -200,11 +200,11 @@ async def get_courses(
 @router.get("/courses/{course_id}", response_model=CourseResponse)
 async def get_course_by_id(
     course_id: int,
-    tenant_id: int = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(rate_limit)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     repo = AcademyRepository(db)
     course = await repo.get_course(course_id, tenant_id)
     if not course:
@@ -216,9 +216,9 @@ async def update_course(
     course_id: int,
     data: CourseUpdate,
     current_user: User = Depends(get_current_instructor_or_admin),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     course = await service.update_course(course_id, data.model_dump(exclude_unset=True), cast(int, current_user.id))
     if not course:
@@ -233,9 +233,9 @@ async def get_store_courses(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.get_store_courses(cast(int, current_user.id), skip=skip, limit=limit)
 
@@ -244,9 +244,9 @@ async def get_my_enrollments(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     result = await service.get_user_enrollments(cast(int, current_user.id), skip=skip, limit=limit)
     return result.data
@@ -256,9 +256,9 @@ async def enroll_in_course(
     course_id: int,
     data: EnrollmentCreate,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.enroll_in_course(
         user_id=cast(int, current_user.id),
@@ -273,9 +273,9 @@ async def enroll_in_course(
 async def enroll_in_course_simple(
     course_id: int,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.enroll_in_course(
         user_id=cast(int, current_user.id),
@@ -290,9 +290,9 @@ async def update_enrollment_progress(
     course_id: int,
     data: ProgressUpdate,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     enrollment = await service.update_progress(cast(int, current_user.id), course_id, data.progress_percentage)
     if not enrollment:
@@ -307,9 +307,9 @@ async def create_course_unit(
     course_id: int,
     data: CourseUnitCreate,
     current_user: User = Depends(get_current_instructor_or_admin),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.create_course_unit(course_id, data.model_dump())
 
@@ -319,9 +319,9 @@ async def get_course_units(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     result = await service.get_course_units(course_id, skip=skip, limit=limit)
     return result.data
@@ -331,9 +331,9 @@ async def update_unit(
     unit_id: int,
     data: UpdateTitleSchema,
     current_user: User = Depends(get_current_instructor_or_admin),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     unit = await service.update_course_unit(unit_id, data.title)
     if not unit:
@@ -344,9 +344,9 @@ async def update_unit(
 async def delete_unit(
     unit_id: int,
     current_user: User = Depends(get_current_instructor_or_admin),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     success = await service.delete_course_unit(unit_id)
     if not success:
@@ -357,9 +357,9 @@ async def delete_unit(
 async def create_node(
     data: KnowledgeNodeCreate,
     current_user: User = Depends(get_current_instructor_or_admin),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.create_knowledge_node(data.model_dump())
 
@@ -369,9 +369,9 @@ async def get_course_nodes(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     result = await service.get_course_nodes(course_id, skip=skip, limit=limit)
     return result.data
@@ -381,9 +381,9 @@ async def update_node(
     node_id: int,
     data: UpdateTitleSchema,
     current_user: User = Depends(get_current_instructor_or_admin),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     node = await service.update_knowledge_node(node_id, data.title)
     if not node:
@@ -394,9 +394,9 @@ async def update_node(
 async def delete_node(
     node_id: int,
     current_user: User = Depends(get_current_instructor_or_admin),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     success = await service.delete_knowledge_node(node_id)
     if not success:
@@ -408,9 +408,9 @@ async def create_node_live_session(
     node_id: int,
     data: LiveSessionCreate,
     current_user: User = Depends(get_current_instructor_or_admin),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.create_live_session(node_id, data.model_dump())
 
@@ -422,9 +422,9 @@ async def create_material(
     node_id: int,
     data: NodeMaterialCreate,
     current_user: User = Depends(get_current_instructor_or_admin),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.create_node_material(node_id, data.model_dump())
 
@@ -432,9 +432,9 @@ async def create_material(
 async def get_materials(
     node_id: int,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.get_node_materials(node_id)
 
@@ -443,9 +443,9 @@ async def create_node_quiz(
     node_id: int,
     data: QuizCreate,
     current_user: User = Depends(get_current_instructor_or_admin),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.create_quiz(node_id, data.model_dump())
 
@@ -458,9 +458,9 @@ async def upload_file(
     file: UploadFile = File(...),
     course_id: int = Query(..., description="معرف الكورس لربط الصورة به"),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     file_content = await file.read()
     file_url = await service.upload_course_thumbnail(
@@ -483,9 +483,9 @@ async def upload_file(
 async def create_task(
     data: TaskCreate,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.create_task(data.model_dump())
 
@@ -495,9 +495,9 @@ async def get_course_tasks(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     result = await service.get_course_tasks(course_id, skip=skip, limit=limit)
     return result.data
@@ -507,9 +507,9 @@ async def submit_task(
     task_id: int,
     data: TaskSubmissionCreate,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.submit_task(cast(int, current_user.id), task_id, data.model_dump())
 
@@ -522,9 +522,9 @@ async def get_task_submissions(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_instructor_or_admin),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     result = await service.get_task_submissions(task_id, skip=skip, limit=limit)
     return result.data
@@ -534,9 +534,9 @@ async def grade_student_submission(
     submission_id: int,
     data: TaskGradeUpdate,
     current_user: User = Depends(get_current_instructor_or_admin),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     submission = await service.grade_submission(
         submission_id,
@@ -553,9 +553,9 @@ async def get_my_submissions(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     result = await service.get_my_submissions(cast(int, current_user.id), skip=skip, limit=limit)
     return result.data
@@ -566,9 +566,9 @@ async def get_my_submissions(
 @router.get("/instructor/stats")
 async def get_instructor_stats(
     current_user: User = Depends(get_current_instructor_or_admin),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.get_instructor_stats(cast(int, current_user.id))
 
@@ -578,9 +578,9 @@ async def get_instructor_stats(
 @router.get("/reports/financial", response_model=FinancialSummaryResponse)
 async def get_financial_summary(
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.get_financial_summary()
 
@@ -591,10 +591,10 @@ async def get_financial_summary(
 async def get_leaderboard(
     limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(rate_limit)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     return await service.get_leaderboard(limit)
 
@@ -604,9 +604,9 @@ async def get_leaderboard(
 @router.get("/digital-twin/me", response_model=StudentDigitalTwinResponse)
 async def get_my_digital_twin(
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
     twin = await service.get_or_create_digital_twin(cast(int, current_user.id))
     return twin

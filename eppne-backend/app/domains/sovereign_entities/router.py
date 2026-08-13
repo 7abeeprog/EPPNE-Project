@@ -20,9 +20,9 @@ router = APIRouter(prefix="/sovereign-entities", tags=["Sovereign Entities & Bra
 async def create_entity(
     data: SovereignEntityCreate,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     user_id = cast(int, current_user.id)
     entity_data = data.model_dump()
@@ -60,9 +60,9 @@ async def list_entities(
 @router.get("/me", response_model=List[SovereignEntityResponse])
 async def get_my_entities(
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     user_id = cast(int, current_user.id)
     entities = await service.get_my_entities(user_id)
@@ -86,9 +86,9 @@ async def update_entity(
     entity_id: int,
     data: SovereignEntityUpdate,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     user_id = cast(int, current_user.id)
     entity = await service.update_entity(entity_id, user_id, data.model_dump(exclude_unset=True))
@@ -101,9 +101,9 @@ async def delete_entity(
     entity_id: int,
     soft: bool = True,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     user_id = cast(int, current_user.id)
     await service.delete_entity(entity_id, user_id, soft)
@@ -117,9 +117,9 @@ async def add_representative(
     entity_id: int,
     data: EntityRepresentativeCreate,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     user_id = cast(int, current_user.id)
     rep = await service.add_representative(entity_id, user_id, data.model_dump())
@@ -130,9 +130,9 @@ async def add_representative(
 async def get_representatives(
     entity_id: int,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     reps = await service.get_representatives(entity_id)
     return reps
@@ -144,9 +144,9 @@ async def remove_representative(
     entity_id: int,
     user_id: int,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     admin_user_id = cast(int, current_user.id)
     await service.remove_representative(entity_id, admin_user_id, user_id)
@@ -160,9 +160,9 @@ async def upload_kyb_document(
     entity_id: int,
     data: KYBDocumentUpload,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     user_id = cast(int, current_user.id)
     doc = await service.upload_kyb_document(
@@ -178,9 +178,9 @@ async def upload_kyb_document(
 async def get_kyb_documents(
     entity_id: int,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     user_id = cast(int, current_user.id)
     docs = await service.get_kyb_documents(entity_id, user_id)
@@ -193,9 +193,9 @@ async def review_kyb(
     entity_id: int,
     data: KYBUpdateStatus,
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     admin_id = cast(int, current_user.id)
     entity = await service.review_kyb(
@@ -226,9 +226,9 @@ async def update_entity_page(
     entity_id: int,
     data: EntityPageUpdate,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     user_id = cast(int, current_user.id)
     page = await service.update_entity_page(entity_id, user_id, data.model_dump(exclude_unset=True))
@@ -240,9 +240,9 @@ async def update_entity_page(
 async def publish_entity_page(
     entity_id: int,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     user_id = cast(int, current_user.id)
     page = await service.publish_entity_page(entity_id, user_id)
@@ -266,9 +266,9 @@ async def get_public_entity_page(
 async def get_entity_balance(
     entity_id: int,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     balance = await service.get_entity_balance(entity_id)
     return {"entity_id": entity_id, "balance_mrusdt": float(balance)}
@@ -281,9 +281,9 @@ async def deposit_to_entity(
     data: EntityDepositRequest,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     user_id = cast(int, current_user.id)
     result = await service.deposit_to_entity_wallet(
@@ -304,9 +304,9 @@ async def transfer_from_entity(
     data: EntityTransferRequest,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     user_id = cast(int, current_user.id)
     tx_hash = await service.transfer_from_entity(
@@ -327,9 +327,9 @@ async def transfer_from_entity(
 async def create_page_template(
     data: PageTemplateCreate,
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     user_id = cast(int, current_user.id)
     template = await service.create_page_template(user_id, data.model_dump())
@@ -361,9 +361,9 @@ async def list_components(
 async def get_entity_tree(
     entity_id: int,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     tree = await service.get_entity_tree(entity_id)
     return tree
