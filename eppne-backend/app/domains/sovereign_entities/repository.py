@@ -100,7 +100,7 @@ class SovereignEntitiesRepository:
             .where(and_(SovereignEntity.id == entity_id, SovereignEntity.tenant_id == tenant_id))
             .values(**kwargs)
         )
-        await self.db.commit()
+        await self.db.flush()
         entity = await self.get_entity(entity_id, tenant_id)
         if not entity:
             raise NotFoundError("Entity not found")

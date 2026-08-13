@@ -389,6 +389,8 @@ class SovereignEntitiesService:
                 "user_id": admin_user_id
             })
 
+        await self.db.commit()
+
         result = {
             "transaction_hash": tx_hash,
             "new_balance": float(cast(Decimal, new_balance)),
@@ -459,6 +461,8 @@ class SovereignEntitiesService:
                 "to": to_address,
                 "user_id": from_representative_id
             })
+
+        await self.db.commit()
 
         result = {
             "transaction_hash": tx_hash,

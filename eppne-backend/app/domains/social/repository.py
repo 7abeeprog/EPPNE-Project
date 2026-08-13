@@ -169,14 +169,14 @@ class SocialRepository:
     async def create_digital_gift(self, **kwargs) -> DigitalGift:
         gift = DigitalGift(**kwargs)
         self.db.add(gift)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(gift)
         return gift
 
     async def create_physical_gift_request(self, **kwargs) -> PhysicalGiftRequest:
         gift = PhysicalGiftRequest(**kwargs)
         self.db.add(gift)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(gift)
         return gift
 
@@ -222,7 +222,7 @@ class SocialRepository:
     async def create_group_subscription(self, **kwargs) -> GroupSubscription:
         sub = GroupSubscription(**kwargs)
         self.db.add(sub)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(sub)
         return sub
 

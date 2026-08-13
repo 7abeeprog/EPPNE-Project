@@ -112,6 +112,8 @@ class ManufacturingService:
                 real_estate_unit_id=data.get("real_estate_unit_id")
             )
 
+        await self.db.commit()
+
         await self._register_affiliate_commission(user_id, tenant_id, "FACILITY_CREATED")
 
         await audit_log(**{  # type: ignore
@@ -163,6 +165,8 @@ class ManufacturingService:
                 **data
             )
 
+        await self.db.commit()
+
         await audit_log(**{  # type: ignore
             "user_id": user_id,
             "tenant_id": tenant_id,
@@ -208,6 +212,8 @@ class ManufacturingService:
                 has_digital_twin=data.get("has_digital_twin", True)
             )
 
+        await self.db.commit()
+
         await audit_log(**{  # type: ignore
             "user_id": user_id,
             "tenant_id": tenant_id,
@@ -246,6 +252,8 @@ class ManufacturingService:
                 tenant_id=tenant_id,
                 **data
             )
+
+        await self.db.commit()
 
         await audit_log(**{  # type: ignore
             "user_id": user_id,
@@ -349,6 +357,8 @@ class ManufacturingService:
                 notes="Production completed, awaiting QC"
             )
 
+        await self.db.commit()
+
         await audit_log(**{  # type: ignore
             "user_id": user_id,
             "tenant_id": tenant_id,
@@ -412,6 +422,8 @@ class ManufacturingService:
                 batch_number=batch_number,
                 blockchain_tx_hash=None
             )
+
+        await self.db.commit()
 
         await audit_log(**{  # type: ignore
             "user_id": user_id,
@@ -500,6 +512,8 @@ class ManufacturingService:
                 idempotency_key=idempotency_key
             )
 
+        await self.db.commit()
+
         await audit_log(**{  # type: ignore
             "user_id": user_id,
             "tenant_id": tenant_id,
@@ -563,6 +577,8 @@ class ManufacturingService:
                 ipfs_metadata_hash=None
             )
 
+        await self.db.commit()
+
         await audit_log(**{  # type: ignore
             "user_id": user_id,
             "tenant_id": tenant_id,
@@ -597,6 +613,8 @@ class ManufacturingService:
                 created_by=user_id,
                 **data
             )
+
+        await self.db.commit()
 
         await audit_log(**{  # type: ignore
             "user_id": user_id,
@@ -698,6 +716,8 @@ class ManufacturingService:
             due_date=datetime.utcnow() + timedelta(days=30)
         )
 
+        await self.db.commit()
+
         await audit_log(**{  # type: ignore
             "user_id": user_id,
             "tenant_id": tenant_id,
@@ -740,6 +760,8 @@ class ManufacturingService:
                 supplier_id=data.get("supplier_id")
             )
 
+        await self.db.commit()
+
         await audit_log(**{  # type: ignore
             "user_id": user_id,
             "tenant_id": tenant_id,
@@ -768,6 +790,8 @@ class ManufacturingService:
 
         async with self.db.begin_nested():
             updated = await self.repo.update_spare_part_stock(part_id, quantity_added)
+
+        await self.db.commit()
 
         await audit_log(**{  # type: ignore
             "user_id": user_id,

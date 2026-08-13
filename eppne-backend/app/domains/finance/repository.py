@@ -41,7 +41,7 @@ class WalletRepository:
             }
         )
         self.db.add(wallet)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(wallet)
         return wallet
 
@@ -49,7 +49,7 @@ class WalletRepository:
         await self.db.execute(
             update(Wallet).where(Wallet.id == wallet_id).values(balances=new_balances)
         )
-        await self.db.commit()
+        await self.db.flush()
         result = await self.db.execute(select(Wallet).where(Wallet.id == wallet_id))
         wallet = result.scalar_one_or_none()
         if not wallet:
@@ -74,7 +74,7 @@ class TransactionRepository:
     async def create(self, **kwargs) -> Transaction:
         tx = Transaction(**kwargs)
         self.db.add(tx)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(tx)
         return tx
 
@@ -251,6 +251,6 @@ class AuditLogRepository:
             user_agent=user_agent
         )
         self.db.add(log)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(log)
         return log

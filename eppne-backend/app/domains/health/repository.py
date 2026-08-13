@@ -14,7 +14,7 @@ class HealthRepository:
     async def create_facility(self, **kwargs) -> HealthFacility:
         facility = HealthFacility(**kwargs)
         self.db.add(facility)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(facility)
         return facility
 
@@ -38,7 +38,7 @@ class HealthRepository:
     async def create_medical_profile(self, user_id: int, **kwargs) -> MedicalProfile:
         profile = MedicalProfile(user_id=user_id, **kwargs)
         self.db.add(profile)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(profile)
         return profile
 
@@ -48,7 +48,7 @@ class HealthRepository:
             raise NotFoundError("Medical profile not found")
         for key, value in kwargs.items():
             setattr(profile, key, value)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(profile)
         return profile
 
@@ -56,7 +56,7 @@ class HealthRepository:
     async def create_biometric_log(self, **kwargs) -> BiometricLog:
         log = BiometricLog(**kwargs)
         self.db.add(log)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(log)
         return log
 
@@ -70,7 +70,7 @@ class HealthRepository:
     async def create_prognosis(self, **kwargs) -> AIHealthPrognosis:
         prognosis = AIHealthPrognosis(**kwargs)
         self.db.add(prognosis)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(prognosis)
         return prognosis
 
@@ -85,7 +85,7 @@ class HealthRepository:
     async def create_appointment(self, **kwargs) -> MedicalAppointment:
         appointment = MedicalAppointment(**kwargs)
         self.db.add(appointment)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(appointment)
         return appointment
 
@@ -109,7 +109,7 @@ class HealthRepository:
     async def create_consultation(self, **kwargs) -> HealthConsultation:
         consultation = HealthConsultation(**kwargs)
         self.db.add(consultation)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(consultation)
         return consultation
 
@@ -121,7 +121,7 @@ class HealthRepository:
     async def create_prescription(self, **kwargs) -> Prescription:
         prescription = Prescription(**kwargs)
         self.db.add(prescription)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(prescription)
         return prescription
 
@@ -129,7 +129,7 @@ class HealthRepository:
     async def create_dispatch(self, **kwargs) -> EmergencyDispatch:
         dispatch = EmergencyDispatch(**kwargs)
         self.db.add(dispatch)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(dispatch)
         return dispatch
 

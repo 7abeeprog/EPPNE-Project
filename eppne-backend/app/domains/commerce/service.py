@@ -210,6 +210,8 @@ class CommerceService:
             ua=ua
         )
 
+        await self.db.commit()
+
         if checkout_data.affiliate_code and cast(bool, store.is_affiliate_enabled):  # type: ignore
             await self.distribute_commissions(
                 cast(int, order.id),
@@ -481,7 +483,8 @@ class CommerceService:
                 if variant:
                     variant.stock_quantity = cast(int, variant.stock_quantity) + quantity  # type: ignore
                     await self.db.flush()
-            await self.db.commit()
+
+        await self.db.commit()
 
     async def update_inventory(self, product_id: int, quantity_change: int) -> Dict[str, Any]:
         product = await self.repo.get_product(product_id)

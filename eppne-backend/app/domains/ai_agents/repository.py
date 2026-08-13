@@ -194,7 +194,7 @@ class AIAgentsRepository:
         await self.db.execute(
             update(AgentApprovalQueue).where(AgentApprovalQueue.id == approval_id).values(**values)
         )
-        await self.db.commit()
+        await self.db.flush()
         return await self.get_approval(approval_id, tenant_id)
 
     async def list_approvals(
@@ -237,7 +237,7 @@ class AIAgentsRepository:
     async def create_task_log(self, tenant_id: int, **kwargs) -> AITaskLog:
         log = AITaskLog(tenant_id=tenant_id, **kwargs)
         self.db.add(log)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(log)
         return log
 

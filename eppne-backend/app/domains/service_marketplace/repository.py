@@ -122,7 +122,7 @@ class ServiceMarketplaceRepository:
         """إنشاء ترخيص خدمة جديد (يتضمن idempotency_key)."""
         license = ServiceLicense(**kwargs)
         self.db.add(license)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(license)
         return license
 
@@ -179,7 +179,7 @@ class ServiceMarketplaceRepository:
             .where(ServiceLicense.id == license_id)
             .values(**kwargs)
         )
-        await self.db.commit()
+        await self.db.flush()
         return await self.get_license(license_id)
 
     async def update_deployment_status(
@@ -315,7 +315,7 @@ class ServiceMarketplaceRepository:
         """إنشاء سجل شراء إضافة (يتضمن idempotency_key)."""
         purchase = ServiceAddonPurchase(**kwargs)
         self.db.add(purchase)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(purchase)
         return purchase
 

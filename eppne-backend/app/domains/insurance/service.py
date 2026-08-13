@@ -134,7 +134,8 @@ class InsuranceService:
                 resource_id=policy.id,  # type: ignore
                 details={"name": policy.name, "type": policy.policy_type}  # type: ignore
             )
-            return policy
+        await self.db.commit()
+        return policy
 
     async def list_policies(
         self,
@@ -226,6 +227,8 @@ class InsuranceService:
                 **{k: v for k, v in data.items() if k not in target_fields + ["policy_id", "beneficiaries_json"]},
                 **target
             )
+
+        await self.db.commit()
 
         await self.event_bus.publish("insurance.subscription.created", {
             "subscription_id": subscription.id,
@@ -359,6 +362,8 @@ class InsuranceService:
                 **{k: v for k, v in data.items() if k not in ["incident_description", "subscription_id"]}
             )
 
+        await self.db.commit()
+
         await self.event_bus.publish("insurance.claim.submitted", {
             "claim_id": claim.id,
             "tenant_id": tenant_id,
@@ -477,6 +482,8 @@ class InsuranceService:
                     investigation_notes=notes
                 )
 
+        await self.db.commit()
+
         await self.event_bus.publish("insurance.claim.resolved", {
             "claim_id": claim.id,
             "tenant_id": tenant_id,
@@ -513,7 +520,8 @@ class InsuranceService:
                 resource_id=pension.id,  # type: ignore
                 details={"beneficiary": data.get("beneficiary_id"), "amount": float(data.get("monthly_amount_mrusdt", 0))}
             )
-            return pension
+        await self.db.commit()
+        return pension
 
     async def get_my_pensions(self, user_id: int) -> List[PensionRecord]:
         return await self.repo.list_pensions_for_beneficiary(user_id)
@@ -556,7 +564,8 @@ class InsuranceService:
                 resource_id=profile.id,  # type: ignore
                 details={"employee": data.get("user_id")}
             )
-            return profile
+        await self.db.commit()
+        return profile
 
     async def get_employee_profile(self, user_id: int) -> Optional[EmployeeInsuranceProfile]:
         return await self.repo.get_employee_profile(user_id)

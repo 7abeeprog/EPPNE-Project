@@ -31,8 +31,8 @@ class AIGovernanceRepository:
         else:
             quota = AgentQuota(tenant_id=tenant_id, agent_id=agent_id, **kwargs)
             self.db.add(quota)
-            
-        await self.db.commit()
+
+        await self.db.flush()
         await self.db.refresh(quota)
         return quota
 
@@ -53,7 +53,7 @@ class AIGovernanceRepository:
             .where(and_(AgentQuota.agent_id == agent_id, AgentQuota.tenant_id == tenant_id))
             .values(current_usage=0)
         )
-        await self.db.commit()
+        await self.db.flush()
 
     # ========== Usage Logs (مع tenant_id في Idempotency) ==========
     async def create_usage_log(self, **kwargs) -> AgentUsageLog:
@@ -119,8 +119,8 @@ class AIGovernanceRepository:
         else:
             limit = AgentRateLimit(agent_id=agent_id, tenant_id=tenant_id, **data)
             self.db.add(limit)
-            
-        await self.db.commit()
+
+        await self.db.flush()
         await self.db.refresh(limit)
         return limit
 
@@ -139,7 +139,7 @@ class AIGovernanceRepository:
     async def create_audit_log(self, **kwargs) -> AgentAuditLog:
         log = AgentAuditLog(**kwargs)
         self.db.add(log)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(log)
         return log
 

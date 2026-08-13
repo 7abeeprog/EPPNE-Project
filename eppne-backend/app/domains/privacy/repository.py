@@ -193,7 +193,7 @@ class PrivacyRepository:
             if hasattr(request_obj, key):
                 setattr(request_obj, key, value)
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(request_obj)
         return request_obj
 

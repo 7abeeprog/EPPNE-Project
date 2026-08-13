@@ -301,6 +301,8 @@ class AcademyService:
                 except Exception as e:
                     print(f"⚠️ [Affiliate Tracking] Failed to track referral: {str(e)}")
 
+        await self.db.commit()
+
         await self.repo._invalidate_cache(f"user_enrollments_{user_id}")
         await self.repo._invalidate_cache("published_courses")
 

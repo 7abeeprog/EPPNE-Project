@@ -24,7 +24,7 @@ class LogisticsRepository:
     async def create_warehouse(self, **kwargs) -> Warehouse:
         warehouse = Warehouse(**kwargs)
         self.db.add(warehouse)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(warehouse)
         return warehouse
 
@@ -75,7 +75,7 @@ class LogisticsRepository:
             warehouse.used_capacity_units += units  # type: ignore
         else:
             warehouse.used_capacity_units = max(0, warehouse.used_capacity_units - units)  # type: ignore
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(warehouse)
         return warehouse
 
@@ -94,7 +94,7 @@ class LogisticsRepository:
     async def create_zone(self, **kwargs) -> WarehouseZone:
         zone = WarehouseZone(**kwargs)
         self.db.add(zone)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(zone)
         return zone
 
@@ -135,7 +135,7 @@ class LogisticsRepository:
     async def create_inventory_item(self, **kwargs) -> InventoryItem:
         item = InventoryItem(**kwargs)
         self.db.add(item)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(item)
         return item
 
@@ -189,7 +189,7 @@ class LogisticsRepository:
             .where(InventoryItem.id == item_id, InventoryItem.tenant_id == tenant_id)  # type: ignore
             .values(**kwargs)
         )
-        await self.db.commit()
+        await self.db.flush()
         return await self.get_inventory_item(item_id, tenant_id)
 
     async def get_low_stock_items(self, tenant_id: int, warehouse_id: Optional[int] = None) -> List[InventoryItem]:
@@ -228,7 +228,7 @@ class LogisticsRepository:
     async def create_transaction(self, **kwargs) -> InventoryTransaction:
         transaction = InventoryTransaction(**kwargs)
         self.db.add(transaction)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(transaction)
         return transaction
 
@@ -299,7 +299,7 @@ class LogisticsRepository:
     async def create_equipment(self, **kwargs) -> Equipment:
         equipment = Equipment(**kwargs)
         self.db.add(equipment)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(equipment)
         return equipment
 
@@ -360,7 +360,7 @@ class LogisticsRepository:
     async def create_maintenance(self, **kwargs) -> EquipmentMaintenance:
         maintenance = EquipmentMaintenance(**kwargs)
         self.db.add(maintenance)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(maintenance)
         return maintenance
 
@@ -486,7 +486,7 @@ class LogisticsRepository:
     async def create_forecast(self, **kwargs) -> InventoryForecast:
         forecast = InventoryForecast(**kwargs)
         self.db.add(forecast)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(forecast)
         return forecast
 

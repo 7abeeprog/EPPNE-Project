@@ -46,6 +46,8 @@ class AIGovernanceService:
                 ip_address=ip_address
             )
 
+        await self.db.commit()
+
         logger.info(f"Admin {admin_id} updated quota for agent {agent_id}")
         return quota
 
@@ -85,6 +87,8 @@ class AIGovernanceService:
                 new_value=data,
                 ip_address=ip_address
             )
+
+        await self.db.commit()
 
         return limits
 
@@ -190,6 +194,8 @@ class AIGovernanceService:
                 status="SUCCESS"
             )
 
+        await self.db.commit()
+
         return True
 
     # ============================================================
@@ -213,5 +219,7 @@ class AIGovernanceService:
                 new_value={"current_usage": 0},
                 ip_address=ip_address
             )
+
+        await self.db.commit()
 
         logger.info(f"Admin {admin_id} reset quotas for agent {agent_id}")

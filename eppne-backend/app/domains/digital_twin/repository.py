@@ -31,7 +31,7 @@ class DigitalTwinRepository:
         """إنشاء إعدادات توأم رقمي جديدة (يتضمن tenant_id)."""
         twin = DigitalTwinConfig(**kwargs)
         self.db.add(twin)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(twin)
         return twin
 
@@ -85,7 +85,7 @@ class DigitalTwinRepository:
         """إنشاء خزنة زمنية جديدة (يتضمن tenant_id)."""
         capsule = TimeCapsule(**kwargs)
         self.db.add(capsule)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(capsule)
         return capsule
 
@@ -117,7 +117,7 @@ class DigitalTwinRepository:
         """إنشاء مستفيد جديد (يتضمن tenant_id)."""
         beneficiary = LegacyBeneficiary(**kwargs)
         self.db.add(beneficiary)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(beneficiary)
         return beneficiary
 

@@ -198,6 +198,8 @@ class TourismSportsService:
                 details={"program_id": program_id, "amount": float(program.base_price_mrusdt)}  # type: ignore
             )
 
+        await self.db.commit()
+
         # تخزين معرف المشارك فقط
         if idempotency_key:
             await self._store_idempotency(idempotency_key, {"participant_id": participant.id})
@@ -316,6 +318,8 @@ class TourismSportsService:
                 resource_id=ticket.id,
                 details={"event_id": event_id, "tier": tier, "amount": float(price)}
             )
+
+        await self.db.commit()
 
         # تخزين معرف التذكرة فقط
         if idempotency_key:
@@ -455,6 +459,8 @@ class TourismSportsService:
                 resource_id=transfer.id,
                 details={"player_id": data["player_id"], "bid_amount": float(data["bid_amount_mrusdt"])}
             )
+
+        await self.db.commit()
 
         # تخزين معرف التحويل فقط
         if idempotency_key:

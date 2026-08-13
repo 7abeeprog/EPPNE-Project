@@ -297,6 +297,8 @@ class AIAgentsService:
             if status_value == "APPROVED" or status_value == ApprovalStatus.APPROVED.value:
                 pass
 
+        await self.db.commit()
+
         await audit_log(
             user_id=human_approver_id,
             action="AI_APPROVAL_RESOLVED",

@@ -13,7 +13,7 @@ from app.domains.finance.schemas import (
     ExchangeRatesUpdate, MintRequest, PaginatedTransactionResponse, MaxSupplyUpdate
 )
 from app.domains.finance.service import FinanceService
-from app.api.deps import get_current_active_user, get_current_superuser, get_current_tenant
+from app.api.deps import get_current_active_user, get_current_superuser
 from app.domains.identity.models import User
 from app.core.rate_limiter import rate_limit
 
@@ -24,10 +24,9 @@ router = APIRouter(prefix="/finance", tags=["Sovereign Finance"])
 @rate_limit(max_requests=60, window_seconds=60)
 async def get_balances(
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = FinanceService(db, tenant_id)
+    service = FinanceService(db, cast(int, current_user.tenant_id))
     state = await service.state_repo.get_state()
     crypto_mode = str(getattr(state, "crypto_mode", "FULL_CRYPTO"))
     hide_crypto = (crypto_mode == "POINTS_ONLY")
@@ -41,10 +40,9 @@ async def transfer_funds(
     req: TransferRequest,
     request: Request,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = FinanceService(db, tenant_id)
+    service = FinanceService(db, cast(int, current_user.tenant_id))
     idempotency_key = req.idempotency_key or f"transfer-{uuid.uuid4().hex[:16]}"
     tx = await service.transfer(
         sender_id=cast(int, current_user.id),
@@ -56,6 +54,7 @@ async def transfer_funds(
         ip=request.client.host if request.client else None,
         ua=request.headers.get("user-agent")
     )
+    await db.commit()
     return TransferResponse(
         tx_hash=cast(str, tx.tx_hash),
         amount=cast(float, tx.amount),
@@ -71,10 +70,9 @@ async def swap_currencies(
     req: SwapRequest,
     request: Request,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = FinanceService(db, tenant_id)
+    service = FinanceService(db, cast(int, current_user.tenant_id))
     idempotency_key = req.idempotency_key or f"swap-{uuid.uuid4().hex[:16]}"
     result = await service.swap(
         user_id=cast(int, current_user.id),
@@ -85,6 +83,7 @@ async def swap_currencies(
         ip=request.client.host if request.client else None,
         ua=request.headers.get("user-agent")
     )
+    await db.commit()
     return SwapResponse(**result)
 
 
@@ -98,10 +97,9 @@ async def get_history(
     currency: Optional[str] = None,
     tx_type: Optional[str] = None,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = FinanceService(db, tenant_id)
+    service = FinanceService(db, cast(int, current_user.tenant_id))
     safe_limit = min(limit, 1000)
     result = await service.get_transaction_history(
         user_id=cast(int, current_user.id),
@@ -132,10 +130,9 @@ async def get_crypto_mode(
 async def set_crypto_mode(
     req: CryptoModeToggle,
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = FinanceService(db, tenant_id)
+    service = FinanceService(db, cast(int, current_user.tenant_id))
     await service.state_repo.update_crypto_mode(req.mode, cast(int, current_user.id))
     return {"status": "SUCCESS", "mode": req.mode}
 
@@ -144,10 +141,9 @@ async def set_crypto_mode(
 async def set_exchange_rates(
     req: ExchangeRatesUpdate,
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = FinanceService(db, tenant_id)
+    service = FinanceService(db, cast(int, current_user.tenant_id))
     await service.state_repo.update_exchange_rates(req.rates, cast(int, current_user.id))
     return {"status": "SUCCESS", "rates": req.rates}
 
@@ -157,10 +153,9 @@ async def mint_funds(
     req: MintRequest,
     request: Request,
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = FinanceService(db, tenant_id)
+    service = FinanceService(db, cast(int, current_user.tenant_id))
     idempotency_key = f"mint-{uuid.uuid4().hex[:16]}"
     tx = await service.mint_currency(
         admin_id=cast(int, current_user.id),
@@ -182,9 +177,8 @@ async def mint_funds(
 async def set_max_supply(
     req: MaxSupplyUpdate,
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    service = FinanceService(db, tenant_id)
+    service = FinanceService(db, cast(int, current_user.tenant_id))
     await service.state_repo.update_max_supply(req.max_supply, cast(int, current_user.id))
     return {"status": "SUCCESS", "max_supply": req.max_supply}

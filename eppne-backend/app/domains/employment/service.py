@@ -331,6 +331,8 @@ class EmploymentService:
                 idempotency_key=idempotency_key,
             )
 
+        await self.db.commit()
+
         await self._register_affiliate_commission(employer_id, tenant_id, "CONTRACT_CREATED", data["base_salary"])
         await audit_log(
             user_id=employer_id,

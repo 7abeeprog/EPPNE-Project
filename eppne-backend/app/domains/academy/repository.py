@@ -454,7 +454,7 @@ class AcademyRepository:
     async def enroll(self, **kwargs) -> Enrollment:
         enrollment = Enrollment(**kwargs)
         self.db.add(enrollment)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(enrollment)
         return enrollment
 

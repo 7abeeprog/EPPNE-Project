@@ -106,6 +106,8 @@ class LogisticsService:
                 manager_id=data.get("manager_id")
             )
 
+        await self.db.commit()
+
         await audit_log(
             user_id=user_id,
             tenant_id=tenant_id,  # type: ignore
@@ -164,7 +166,8 @@ class LogisticsService:
                 warehouse_id=warehouse_id,
                 **data
             )
-            return zone
+        await self.db.commit()
+        return zone
 
     # ============================================================
     # 2. إدارة المخزون – استلام المخزون (مع Idempotency محسّن)
@@ -232,6 +235,8 @@ class LogisticsService:
                 performed_by=user_id,
                 idempotency_key=idempotency_key
             )
+
+        await self.db.commit()
 
         await audit_log(
             user_id=user_id,
@@ -314,6 +319,8 @@ class LogisticsService:
                 idempotency_key=idempotency_key
             )
 
+        await self.db.commit()
+
         await audit_log(
             user_id=user_id,
             tenant_id=tenant_id,  # type: ignore
@@ -385,6 +392,8 @@ class LogisticsService:
                 idempotency_key=idempotency_key
             )
 
+        await self.db.commit()
+
         await audit_log(
             user_id=user_id,
             tenant_id=tenant_id,  # type: ignore
@@ -455,6 +464,8 @@ class LogisticsService:
                 smart_asset_id=data.get("smart_asset_id")
             )
 
+        await self.db.commit()
+
         await audit_log(
             user_id=user_id,
             tenant_id=tenant_id,  # type: ignore
@@ -502,7 +513,8 @@ class LogisticsService:
                 equipment_id=equipment_id,
                 **data
             )
-            return maintenance
+        await self.db.commit()
+        return maintenance
 
     # ============================================================
     # 4. التنبؤ بالطلب (Forecasting) – مع Idempotency محسّن
@@ -585,6 +597,8 @@ class LogisticsService:
                 external_factors=external,
                 ai_agent_id=13
             )
+
+        await self.db.commit()
 
         # تخزين معرف التوقع فقط
         if idempotency_key:

@@ -126,6 +126,8 @@ class SaaSControlService:
                     user_limit=plan.max_users,
                 )
 
+        await self.db.commit()
+
         logger.info(f"Subscription created: tenant {self.tenant_id}, plan {plan_id}, trial until {trial_end}")
         return subscription
 
@@ -180,8 +182,10 @@ class SaaSControlService:
                         plan=plan,
                     )
 
-                    results.append({"subscription_id": cast(int, sub.id), "status": "SUCCESS", "tx_hash": tx.tx_hash})
-                    logger.info(f"Auto-renewal success: subscription {sub.id}")
+                await self.db.commit()
+
+                results.append({"subscription_id": cast(int, sub.id), "status": "SUCCESS", "tx_hash": tx.tx_hash})
+                logger.info(f"Auto-renewal success: subscription {sub.id}")
 
             except InsufficientBalanceError:
                 await self.repo.update_subscription(
@@ -321,10 +325,11 @@ class SaaSControlService:
                         grace_period_end_date=None,
                     )
 
-                return invoice
-
             except InsufficientBalanceError:
                 raise InsufficientBalanceError("الرصيد غير كافٍ لدفع الفاتورة")
+
+        await self.db.commit()
+        return invoice
 
     # ==========================================
     # 6. رايات الميزات (Feature Flags)

@@ -180,7 +180,7 @@ class SaaSRepository:
     async def create_subscription(self, **kwargs) -> TenantSubscription:
         subscription = TenantSubscription(**kwargs)
         self.db.add(subscription)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(subscription)
         return subscription
 
@@ -195,7 +195,7 @@ class SaaSRepository:
             .where(and_(TenantSubscription.id == subscription_id, TenantSubscription.tenant_id == tenant_id))
             .values(**kwargs)
         )
-        await self.db.commit()
+        await self.db.flush()
         subscription = await self.get_subscription(subscription_id, tenant_id)
         if not subscription:
             raise NotFoundError("الاشتراك غير موجود")
@@ -260,7 +260,7 @@ class SaaSRepository:
     async def create_service_access(self, **kwargs) -> TenantServiceAccess:
         access = TenantServiceAccess(**kwargs)
         self.db.add(access)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(access)
         return access
 
@@ -336,7 +336,7 @@ class SaaSRepository:
     async def create_invoice(self, **kwargs) -> Invoice:
         invoice = Invoice(**kwargs)
         self.db.add(invoice)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(invoice)
         return invoice
 
@@ -346,7 +346,7 @@ class SaaSRepository:
             .where(and_(Invoice.id == invoice_id, Invoice.tenant_id == tenant_id))
             .values(**kwargs)
         )
-        await self.db.commit()
+        await self.db.flush()
         result = await self.db.execute(
             select(Invoice).where(and_(Invoice.id == invoice_id, Invoice.tenant_id == tenant_id))
         )

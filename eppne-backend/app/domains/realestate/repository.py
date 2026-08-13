@@ -86,14 +86,14 @@ class RealEstateRepository:
             updates["is_available_for_rent"] = for_rent
         if updates:
             await self.db.execute(update(PropertyUnit).where(PropertyUnit.id == unit_id).values(**updates))
-            await self.db.commit()
+            await self.db.flush()
         return await self.get_unit(unit_id)
 
     # ---------- Ownership ----------
     async def create_ownership(self, **kwargs) -> PropertyOwnership:
         ownership = PropertyOwnership(**kwargs)
         self.db.add(ownership)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(ownership)
         return ownership
 
@@ -115,7 +115,7 @@ class RealEstateRepository:
     async def create_rental_contract(self, **kwargs) -> RentalContract:
         contract = RentalContract(**kwargs)
         self.db.add(contract)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(contract)
         return contract
 

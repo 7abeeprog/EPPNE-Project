@@ -161,7 +161,7 @@ class EmploymentRepository:
     async def create_contract(self, **kwargs) -> EmploymentContract:
         contract = EmploymentContract(**kwargs)
         self.db.add(contract)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(contract)
         return contract
 

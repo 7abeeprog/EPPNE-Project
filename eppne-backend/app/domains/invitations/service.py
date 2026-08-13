@@ -200,13 +200,15 @@ class InvitationsService:
 
             if client_insight:
                 client_insight.invitation_id = invitation.id  # type: ignore
-                await self.db.commit()
+                await self.db.flush()
 
         ai_agent = await self._assign_ai_agent(invitation)
         if ai_agent:
             invitation = await self.repo.update_invitation(
                 cast(int, invitation.id), tenant_id, assigned_ai_agent_id=ai_agent.id
             )
+
+        await self.db.commit()
 
         await self._register_affiliate_commission(sender_id, tenant_id, "INVITATION_CREATED")
 
@@ -320,6 +322,8 @@ class InvitationsService:
                 content=f"Accepted invitation: {invitation.title}",
                 idempotency_key=idempotency_key
             )
+
+        await self.db.commit()
 
         await self._register_affiliate_commission(cast(int, user_id), tenant_id, "LEAD_CONVERTED")
 
@@ -442,6 +446,8 @@ class InvitationsService:
                         idempotency_key=idempotency_key
                     )
 
+        await self.db.commit()
+
         result = {"reply": reply_text, "conversation_id": ai_message.id}
 
         if idempotency_key:
@@ -487,6 +493,8 @@ class InvitationsService:
                 idempotency_key=idempotency_key,
                 **data
             )
+
+        await self.db.commit()
 
         await audit_log(
             user_id=user_id,
@@ -574,6 +582,8 @@ class InvitationsService:
                 idempotency_key=idempotency_key,
                 **data
             )
+
+        await self.db.commit()
 
         await audit_log(
             user_id=user_id,
@@ -663,6 +673,8 @@ class InvitationsService:
                 channels=data.get("channels", []),
                 idempotency_key=idempotency_key
             )
+
+        await self.db.commit()
 
         await self._register_affiliate_commission(user_id, tenant_id, "CAMPAIGN_CREATED")
 
@@ -765,6 +777,8 @@ class InvitationsService:
                 idempotency_key=idempotency_key
             )
 
+        await self.db.commit()
+
         await audit_log(
             user_id=user_id,
             tenant_id=tenant_id,  # type: ignore
@@ -859,6 +873,8 @@ class InvitationsService:
             if not is_internal and ticket.status == TicketStatus.OPEN:  # type: ignore
                 await self.repo.update_ticket_status(ticket_id, tenant_id, TicketStatus.IN_PROGRESS)
 
+        await self.db.commit()
+
         await audit_log(
             user_id=user_id,
             tenant_id=tenant_id,  # type: ignore
@@ -940,6 +956,8 @@ class InvitationsService:
                 actions=request_data.get("actions", []),
                 idempotency_key=idempotency_key
             )
+
+        await self.db.commit()
 
         if idempotency_key:
             # 🔥 تخزين البيانات كاملة مع استخدام cast لـ created_at

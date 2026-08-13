@@ -24,7 +24,7 @@ class InvitationsRepository:
     async def create_invitation(self, **kwargs) -> SovereignInvitation:
         inv = SovereignInvitation(**kwargs)
         self.db.add(inv)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(inv)
         return inv
 
@@ -65,7 +65,7 @@ class InvitationsRepository:
                 SovereignInvitation.tenant_id == tenant_id  # type: ignore
             ).values(**kwargs)
         )
-        await self.db.commit()
+        await self.db.flush()
         return await self.get_invitation(inv_id, tenant_id)
 
     async def delete_invitation(self, inv_id: int, tenant_id: int) -> None:
@@ -94,7 +94,7 @@ class InvitationsRepository:
     async def create_tracking(self, **kwargs) -> InvitationTracking:
         track = InvitationTracking(**kwargs)
         self.db.add(track)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(track)
         return track
 
@@ -110,7 +110,7 @@ class InvitationsRepository:
     async def create_conversation(self, **kwargs) -> InvitationConversation:
         conv = InvitationConversation(**kwargs)
         self.db.add(conv)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(conv)
         return conv
 
@@ -146,7 +146,7 @@ class InvitationsRepository:
     async def create_lead(self, **kwargs) -> Lead:
         lead = Lead(**kwargs)
         self.db.add(lead)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(lead)
         return lead
 
@@ -208,7 +208,7 @@ class InvitationsRepository:
     async def create_interaction(self, **kwargs) -> CustomerInteraction:
         interaction = CustomerInteraction(**kwargs)
         self.db.add(interaction)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(interaction)
         return interaction
 
@@ -228,7 +228,7 @@ class InvitationsRepository:
     async def create_campaign(self, **kwargs) -> MarketingCampaign:
         campaign = MarketingCampaign(**kwargs)
         self.db.add(campaign)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(campaign)
         return campaign
 
@@ -288,7 +288,7 @@ class InvitationsRepository:
     async def create_ticket(self, **kwargs) -> SupportTicket:
         ticket = SupportTicket(**kwargs)
         self.db.add(ticket)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(ticket)
         return ticket
 
@@ -332,13 +332,13 @@ class InvitationsRepository:
         await self.db.execute(
             update(SupportTicket).where(SupportTicket.id == ticket_id, SupportTicket.tenant_id == tenant_id).values(**values)  # type: ignore
         )
-        await self.db.commit()
+        await self.db.flush()
         return await self.get_ticket(ticket_id, tenant_id)
 
     async def create_ticket_comment(self, **kwargs) -> TicketComment:
         comment = TicketComment(**kwargs)
         self.db.add(comment)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(comment)
         return comment
 

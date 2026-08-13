@@ -523,6 +523,7 @@ class SocialService:
             if idempotency_key:
                 await self._store_idempotency(idempotency_key, {"gift_id": gift.id})
 
+        await self.db.commit()
         return gift
 
     async def request_physical_gift(
@@ -585,6 +586,7 @@ class SocialService:
             if idempotency_key:
                 await self._store_idempotency(idempotency_key, {"request_id": gift.id})
 
+        await self.db.commit()
         return gift
 
     # ============================================================
@@ -659,6 +661,7 @@ class SocialService:
             if idempotency_key:
                 await self._store_idempotency(idempotency_key, {"subscription_id": sub.id})
 
+        await self.db.commit()
         return sub
 
     async def get_group_features(self, group_id: int, tenant_id: int) -> List[str]:

@@ -25,7 +25,7 @@ class CommunicationsRepository:
     async def create_notification(self, **kwargs) -> Notification:
         notification = Notification(**kwargs)
         self.db.add(notification)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(notification)
         return notification
 
@@ -117,7 +117,7 @@ class CommunicationsRepository:
     async def create_thread(self, subject: str, tenant_id: int) -> MailThread:
         thread = MailThread(subject=subject, tenant_id=tenant_id)
         self.db.add(thread)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(thread)
         return thread
 
@@ -128,7 +128,7 @@ class CommunicationsRepository:
     async def create_message(self, **kwargs) -> MailMessage:
         message = MailMessage(**kwargs)
         self.db.add(message)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(message)
         return message
 
@@ -145,7 +145,7 @@ class CommunicationsRepository:
     async def add_to_mailbox(self, message_id: int, owner_id: int, folder: MailFolder) -> MailboxItem:
         item = MailboxItem(message_id=message_id, owner_id=owner_id, folder=folder)
         self.db.add(item)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(item)
         return item
 
@@ -218,7 +218,7 @@ class CommunicationsRepository:
     async def add_attachment(self, **kwargs) -> MailAttachment:
         attachment = MailAttachment(**kwargs)
         self.db.add(attachment)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(attachment)
         return attachment
 

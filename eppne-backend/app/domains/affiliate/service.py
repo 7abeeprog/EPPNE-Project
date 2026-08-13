@@ -505,6 +505,8 @@ class AffiliateService:
             total_paid=getattr(profile, "total_paid", Decimal(0)) + amount,
         )
 
+        await self.db.commit()
+
         return {
             "message": "تم سحب العمولات بنجاح",
             "tx_hash": tx.tx_hash,

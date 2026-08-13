@@ -255,6 +255,8 @@ class AgriTechService:
                 **sanitized_data
             )
 
+        await self.db.commit()
+
         ai_logistics_actions = self._get_harvest_actions(harvest)
 
         await audit_log(
@@ -373,6 +375,8 @@ class AgriTechService:
                 idempotency_key=idempotency_key,
                 **yield_data
             )
+
+        await self.db.commit()
 
         actions = self._get_bio_yield_actions(yield_record)
 
