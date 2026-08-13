@@ -5,7 +5,7 @@ from typing import Optional, List, cast
 from datetime import datetime
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user, get_current_superuser, get_current_tenant
+from app.api.deps import get_current_active_user, get_current_superuser
 from app.domains.identity.models import User
 from app.domains.saas.service import SaaSControlService
 from app.domains.saas.schemas import *
@@ -25,9 +25,9 @@ router = APIRouter(prefix="/saas", tags=["Sovereign SaaS"])
 @rate_limit(max_requests=30, window_seconds=60)
 async def list_services(
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     return await service.get_all_services()
 
@@ -37,9 +37,9 @@ async def list_services(
 async def create_service(
     data: ServiceCatalogCreate,
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     result = await service.create_service(data.model_dump())
     logger.info(f"Service created: {result.code} by user {current_user.id}")
@@ -50,9 +50,9 @@ async def create_service(
 async def get_service(
     service_id: int = Path(..., description="معرف الخدمة"),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     return await service.get_service_by_id(service_id)
 
@@ -65,9 +65,9 @@ async def get_service(
 async def list_service_plans(
     service_id: int = Path(..., description="معرف الخدمة"),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     return await service.get_plans_by_service(service_id)
 
@@ -77,9 +77,9 @@ async def list_service_plans(
 async def create_plan(
     data: ServicePlanCreate,
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     plan = await service.create_plan(data.model_dump())
     logger.info(f"Plan created: {plan.code} for service {plan.service_id} by user {current_user.id}")
@@ -95,9 +95,9 @@ async def get_my_subscriptions(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     return await service.get_tenant_subscriptions(skip, limit)
 
@@ -107,9 +107,9 @@ async def get_my_subscriptions(
 async def subscribe_to_plan(
     plan_id: int = Path(..., description="معرف الخطة"),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     subscription = await service.create_subscription(plan_id=plan_id)
     return subscription
@@ -119,9 +119,9 @@ async def subscribe_to_plan(
 async def cancel_subscription(
     subscription_id: int = Path(..., description="معرف الاشتراك"),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     subscription = await service.cancel_subscription(subscription_id)
     return subscription
@@ -131,9 +131,9 @@ async def cancel_subscription(
 async def get_subscription_status(
     subscription_id: int = Path(..., description="معرف الاشتراك"),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     return await service.get_subscription_status(subscription_id)
 
@@ -145,9 +145,9 @@ async def get_subscription_status(
 @router.get("/access", response_model=List[ServiceAccessStatus])
 async def get_services_access(
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     return await service.get_services_access()
 
@@ -156,9 +156,9 @@ async def get_services_access(
 async def check_service_access(
     service_code: str = Path(..., description="كود الخدمة"),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     return await service.check_service_access(service_code)
 
@@ -173,9 +173,9 @@ async def get_my_invoices(
     limit: int = Query(20, ge=1, le=100),
     status: Optional[str] = Query(None, description="حالة الفاتورة"),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     return await service.get_tenant_invoices(skip, limit)
 
@@ -184,9 +184,9 @@ async def get_my_invoices(
 async def get_invoice(
     invoice_id: int = Path(..., description="معرف الفاتورة"),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     return await service.get_invoice(invoice_id)
 
@@ -196,9 +196,9 @@ async def get_invoice(
 async def pay_invoice(
     invoice_id: int = Path(..., description="معرف الفاتورة"),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     invoice = await service.pay_invoice(invoice_id)
     return invoice
@@ -211,9 +211,9 @@ async def pay_invoice(
 @router.get("/feature-flags")
 async def list_feature_flags(
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     flags = await service.list_feature_flags()
     return flags
@@ -226,9 +226,9 @@ async def toggle_feature_flag(
     feature_key: str = Path(..., description="مفتاح الميزة"),
     enabled: bool = Query(..., description="True للتفعيل، False للتعطيل"),
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     flag = await service.toggle_feature_flag(service_code, feature_key, enabled)
     return {"message": f"تم {'تفعيل' if enabled else 'تعطيل'} الميزة '{feature_key}' بنجاح", "flag": flag}
@@ -254,9 +254,9 @@ async def get_tenant_subscriptions_admin(
 @rate_limit(max_requests=10, window_seconds=60)
 async def get_saas_dashboard(
     current_user: User = Depends(get_current_superuser),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SaaSControlService(db, tenant_id)
     stats = await service.get_dashboard_stats()
     return stats

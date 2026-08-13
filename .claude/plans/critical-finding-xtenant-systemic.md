@@ -1,5 +1,38 @@
 # اكتشاف حرج نظامي — ثقة `X-Tenant-ID` بديلًا عن `current_user.tenant_id` في 20 دومين + فئة مستقلة (identity) من 34 دومين حقيقي (+1 دومين محذوف مستبعد من العدّ)
 
+> # 🔴🔴🔴 تحذير إلزامي — اقرأ قبل أي إصلاح على `sovereign_entities` — يخص أي جلسة `SimpleTenant`/X-Tenant-ID مستقبلية
+>
+> **لو انت (أو أي Claude Code تاني، أي جلسة، أي سياق) بتفكر تصلح باج
+> `SimpleTenant`/type-mismatch في `sovereign_entities/router.py`: توقف
+> هنا الأول.**
+>
+> أربعة endpoints في `sovereign_entities/router.py` — `list_entities`
+> (سطر ~41)، `get_entity` (سطر ~72)، `list_templates` (سطر ~339)،
+> `list_components` (سطر ~349) — **معندهمش `current_user` في توقيعها
+> إطلاقًا**. القاعدة الميكانيكية المعتادة (`tenant_id: int =
+> Depends(get_current_tenant)` → `tenant_id = cast(int,
+> current_user.tenant_id)`) **غير قابلة للتطبيق عليهم حرفيًا، ولو
+> اتطبّقت بأي شكل بديل ساذج (زي مجرد تصحيح `tenant.id` بدون إضافة فحص
+> هوية) هتفتح ثغرة تسريب مالي/KYB حقيقية cross-tenant فورًا** —
+> التفاصيل الكاملة، الدليل الحي، والتحليل الدقيق في تقرير مخصَّص:
+> **`.claude/reports/CRITICAL-sovereign-entities-unauthenticated-endpoints.md`**
+> — اقرأه بالكامل أولًا.
+>
+> **الوضع الحالي (بتاريخ 2026-08-13):** الأربعة endpoints دول **لسه
+> فيهم باج `SimpleTenant` الأصلي غير مُصلَح عمدًا** — استُثنوا صراحة من
+> إصلاح `SimpleTenant` الشامل اللي اتطبّق على باقي المشروع (راجع
+> `.claude/reports/simpletenant-fix-session-log.md`)، **بانتظار قرار
+> منتجي/أمني صريح من المستخدم**: هل الأربعة دول المفروض يبقوا public
+> بتصميم مقصود (ووقتها لازم مراجعة الحقول المُرجَعة أصلًا — إخفاء
+> `treasury_balance_mrusdt`/`kyb_status`/`wallet_address` عن أي نسخة
+> عامة)، ولا يتحولوا لمحمية بـ`current_user` إجباري زي باقي الدومين؟
+> **القرار ده لسه معلّق، مؤجَّل لجلسة مخصَّصة — صفر افتراض، صفر إصلاح
+> تلقائي.**
+>
+> **باقي الـ21 موضع (18 endpoint) في `sovereign_entities` اتصلحوا
+> بالفعل بنجاح** (نفس القاعدة الميكانيكية، مؤكَّدة حيًا) — التحذير ده
+> يخص الأربعة دول بالذات بس.
+
 > **تحديث [2026-08-11] — Phase 14 (فحص read-only إضافي لسدّ فجوة في
 > الفحص الأصلي، صفر تنفيذ):** الفحص الأصلي (29 دومين) كان ناقصًا — 6
 > مجلدات فعلية تحت `app/domains/` لم تُغطَّ إطلاقًا: `admin`, `auth`,

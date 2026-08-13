@@ -23,9 +23,9 @@ router = APIRouter(prefix="/commerce", tags=["Sovereign Commerce"])
 async def create_store(
     data: StoreCreate,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = CommerceService(db, tenant_id)
     store = await service.get_or_create_store(name=data.name)
     return store
@@ -39,9 +39,9 @@ async def create_store(
 async def create_product(
     data: ProductCreate,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = CommerceService(db, tenant_id)
     product = await service.create_product(
         data=data,
@@ -55,10 +55,10 @@ async def list_products(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     only_published: bool = True,
-    tenant_id: int = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = CommerceService(db, tenant_id)
     result = await service.list_products(
         skip=skip,
@@ -76,9 +76,9 @@ async def list_products(
 async def checkout(
     data: CheckoutRequest,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = CommerceService(db, tenant_id)
     order = await service.checkout(
         customer_id=cast(int, current_user.id),
@@ -92,9 +92,9 @@ async def get_my_orders(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = CommerceService(db, tenant_id)
     result = await service.get_user_orders(
         user_id=cast(int, current_user.id),
@@ -112,9 +112,9 @@ async def get_my_orders(
 async def set_affiliate_sponsor(
     sponsor_code: str,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = CommerceService(db, tenant_id)
     tree = await service.register_affiliate(
         user_id=cast(int, current_user.id),
@@ -128,9 +128,9 @@ async def get_my_commissions(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = CommerceService(db, tenant_id)
     result = await service.get_user_commissions(
         user_id=cast(int, current_user.id),
@@ -143,9 +143,9 @@ async def get_my_commissions(
 @router.post("/affiliate/commissions/release")
 async def release_my_commissions(
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = CommerceService(db, tenant_id)
     await service.release_commissions(beneficiary_id=cast(int, current_user.id))
     return {"message": "تم تحرير العمولات المعلقة بنجاح"}
@@ -160,9 +160,9 @@ async def release_my_commissions(
 async def create_payment_request(
     data: PaymentRequestCreate,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = CommerceService(db, tenant_id)
     pr = await service.create_payment_request(
         order_id=data.order_id,
@@ -178,9 +178,9 @@ async def create_payment_request(
 async def confirm_agent_payment(
     data: AgentConfirmPayment,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = CommerceService(db, tenant_id)
     order = await service.confirm_agent_payment(
         agent_code=data.agent_code,
@@ -210,9 +210,9 @@ async def visa_webhook(
 async def get_payment_status(
     order_id: int,
     current_user: User = Depends(get_current_active_user),
-    tenant_id: int = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = CommerceService(db, tenant_id)
     status_data = await service.get_payment_status(
         order_id=order_id,
