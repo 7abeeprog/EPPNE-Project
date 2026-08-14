@@ -152,6 +152,7 @@ async def _deploy_service_async(license_id: int, tenant_id: int) -> Dict[str, An
                 deployment_status=DeploymentStatus.ACTIVE,
                 deployment_log=f"✅ Deployment completed successfully at {datetime.utcnow().isoformat()}"
             )
+            await db.commit()
 
             logger.info(f"✅ Service {service.name} deployed successfully for tenant {tenant_id}")
 
@@ -212,6 +213,7 @@ def cleanup_failed_deployment_task(self, license_id: int, tenant_id: int):
                     deployment_status=DeploymentStatus.FAILED,
                     deployment_log=f"🧹 Cleanup completed at {datetime.utcnow().isoformat()}"
                 )
+                await db.commit()
 
                 logger.info(f"🧹 Cleanup completed for failed deployment {license_id}")
                 return {"status": "cleaned", "license_id": license_id}
@@ -268,6 +270,8 @@ def health_check_deployment_task(self, license_id: int, tenant_id: int):
                         deployment_status=DeploymentStatus.FAILED,
                         deployment_log=f"⚠️ Health check failed at {datetime.utcnow().isoformat()}"
                     )
+
+                await db.commit()
 
                 return {
                     "status": "healthy" if is_healthy else "unhealthy",

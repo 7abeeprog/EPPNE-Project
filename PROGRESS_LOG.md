@@ -2926,3 +2926,68 @@ query = select(SovereignEntity).where(
 **Commit:** معزول واحد، يغطي بالضبط نطاق هذه الجلسة (4 ملفات router.py + التحذير في الملف المرجعي + هذا الملف + تقريرين جدد)، صفر تلوّث من جلسات تانية.
 
 ---
+
+## 📌 [2026-08-14] ملاحظة منفصلة — `health_check_deployment_task`'s `is_healthy` مُثبَّتة
+
+`app/tasks/deployment.py`'s `health_check_deployment_task`: `is_healthy = True  # محاكاة` — فحص الصحة الفعلي للخدمة المنشورة (ping, DB connection, API response) **غير منفَّذ بعد**، مجرد قيمة ثابتة. يستاهل جلسة منفصلة مستقبلية لتنفيذ الفحص الحقيقي. **لا علاقة له بباج الكتابة الصامتة** (اكتُشف أثناء التحقق من إصلاح `.claude/reports/silent-write-regression-session-log.md`، موثَّق هناك بالتفصيل).
+
+---
+
+## 📌 [2026-08-14] ملاحظة منفصلة — `academy_tenants.admin_id=1` كانت بالفعل تشاور على مستخدم غير موجود
+
+`academy_tenants(id=1, "Local Test Tenant")`'s `admin_id=1` كانت بالفعل **dangling FK** (تشاور على `users.id=1` غير موجود) **قبل بداية جلسة `silent-write-regression` بالكامل** — اكتُشف بالصدفة أثناء محاولة تنظيف بيانات throwaway (`INSERT INTO users (id=1, ...)` نجح بلا أي تعارض، يعني الـID كان فاضي أصلًا رغم إن التينانت بيشاور عليه من زمان). **غير متعلق بأي عمل في هذه الجلسة أو أي جلسة سابقة موثَّقة** — يستاهل فحص مستقل لسلامة بيانات `academy_tenants` الأساسية (خصوصًا التينانت الافتراضي id=1 المُستخدَم عبر كل الجلسات). **تحذير لأي جلسة مستقبلية:** لو حاولت تمسح أي مستخدم بمعرِّف `id=1`، هتتفاجئ بنفس عائق الـFK ده — التفاصيل الكاملة في `.claude/reports/silent-write-regression-session-log.md`.
+
+---
+
+## ✅🔴 [2026-08-14] — جلسة `silent-write-regression` — الحالة النهائية (جرد كامل + إصلاحان فعليان استثنائيان)
+
+**التفاصيل الكاملة، كل ديف، كل تحقق حي، كل خطوة:** `.claude/reports/silent-write-regression-session-log.md`.
+
+**السياق:** جلسة مخصَّصة لتتبّع النطاق الكامل لـ"regression الكتابة الصامتة" (service methods بترجع نجاح API لكن الكتابة فعليًا مبتترجعش للـDB) المكتشف في نهاية جلسة `SimpleTenant` السابقة — امتداد مباشر لـ`transaction-savepoint-bug-session-log.md` (اللي غيّرت 89 repo method من `commit()` لـ`flush()`، على افتراض إن كل caller محمي بـ`begin_nested()`+`commit()` صريح — افتراض غير صحيح لأي caller خارج نطاق تلك الجلسة).
+
+### ⚠️ استثناء منهجي صريح — هذه الجلسة كانت مفروض تكون "توثيق فقط"، وخرجت عن القاعدة مرتين
+
+**القاعدة الأصلية المتفق عليها بداية الجلسة:** صفر انتقال للمرحلة 3 (إصلاح فعلي) لأي حالة قبل ما التحقق DB-level يخلص لكل الحالات المكتشفة — الحجم كبير جدًا (35 موضع)، وأي افتراض غير مؤكَّد مكلف (فلوس حقيقية). **بتوجيه صريح من المستخدم، تم الخروج عن القاعدة دي مرتين، لسببين مختلفين موثَّقين بالتفصيل:**
+
+1. **`app/tasks/deployment.py`** (3 دوال، 4 مواضع كتابة) — **الوحيدة في كل الجلسة اللي كانت شغالة فعليًا، بلا أي عائق حامي (constructor bug أو غيره)، وبتتفعّل تلقائيًا** بعد كل عملية شراء خدمة حقيقية (`service_marketplace.purchase_service`). نجاح كاذب حي مؤكَّد DB-level (مش نظري ولا محجوب) — **الاستثناء الوحيد اللي بيستاهل فعلًا معاملة "أعلى أولوية من كل حاجة تانية".**
+2. **`app/domains/ai_agents/service.py`'s `execute_agent_action`** — مش نجاح كاذب حي مؤكَّد زي الأول (محتاج شرط "تكلفة=0 + بلا موافقة بشرية")، لكن بتوجيه المستخدم اعتُبر إصلاح بسيط وميكانيكي بما يكفي إنه يُطبَّق فورًا بدل انتظار جلسة منفصلة.
+
+**كل الإصلاحين مؤكَّدين DB-level بالكامل (تفاصيل تحت) — أي مراجعة مستقبلية لازم تفهم إن الـcommit ده فيه كود production متغيّر فعليًا، مش بس تعليقات توثيقية/تحذيرية.**
+
+### 1) الجرد الكامل — 160 موضع استدعاء عبر 25 دومين/ملف + 34 موضع `finance.transfer/swap` عبر المشروع كله
+
+**125 (أ) محمي، 35 (ب) غير محمي عبر 32 دالة/method مستقلة.** المنهجية: 6 دفعات جرد متوازية (agents)، كل واحدة غطّت مجموعة دومينات، لكل موضع `flush()`-only تتبّع كل الأماكن اللي بتناديه (جوه الدومين وعبره) وفحص هل الـcommit موجود فعليًا على المسار الناجح.
+
+### 2) الإصلاحان الفعليان (Phase 3، استثنائيان) — مؤكَّدان DB-level بالكامل
+
+**`tasks/deployment.py` (4 مواضع):**
+| الموضع | قبل الإصلاح | بعد الإصلاح (مؤكَّد DB-level) |
+|---|---|---|
+| `_deploy_service_async` | نجاح كاذب (`status=active` لكن `deployment_status` لسه `DEPLOYING`) | ✅ `deployment_status=ACTIVE`, `deployed_domain` صحيح |
+| `cleanup_failed_deployment_task` | نجاح كاذب (حتى Celery نفسه سجّل "succeeded") | ✅ `deployment_status=FAILED` صحيح |
+| `health_check_deployment_task` (فرع `True`) | لم يكن مختبَرًا حيًا من قبل — اتنفَّذ فعليًا الآن | ✅ `deployment_status=ACTIVE` صحيح |
+| `health_check_deployment_task` (فرع `False`) | dead code حاليًا (`is_healthy` مُثبَّتة `True`) | ✅ تحقق بديل أمين لنفس آلية الحماية (سطر الـcommit نفسه) |
+
+**`ai_agents.execute_agent_action` (فرعان):**
+- فرع `except Exception`: كان دايمًا بيضيع (صفر منفذ هروب) → ✅ مؤكَّد حيًا (طلب HTTP فعلي اصطدم بباج AI منفصل غير متعلق، فعّل الفرع فعليًا)
+- مسار النجاح (سيناريو "تكلفة=0 + بلا موافقة بشرية"): كان بيضيع أحيانًا → ✅ مؤكَّد عبر سكريبت معزول (monkey-patch مؤقت لـ`ai_engine.generate` داخل الـprocess بس، صفر تعديل ملفات)
+
+### 3) تعليقات تحذيرية وقائية — 7 مواضع، صفر تغيير سلوك
+
+`digital_twin/repository.py:create_interaction_log`، `employment/repository.py:update_payroll_status`، `commerce/repository.py:release_commission`، `insurance/repository.py:update_subscription`، `invoicing/repository.py:create_invoice`+`update_invoice`، `projects/repository.py:create_contribution` — كل واحدة بتحذّر من تحويل `commit()` لـ`flush()` بدون معالجة الـservice method المعتمدة عليها بالصدفة أولًا.
+
+### 4) الفئات المؤجَّلة (موثَّقة بالكامل، صفر إصلاح، خارج نطاق هذه الجلسة)
+
+- **باج constructor منتشر** (`FinanceService(db)`/`InvoicingService(db)` بمعامل واحد بدل اتنين): يحجب 7 من أصل 8 مواضع `finance.transfer` المتناثرة (`arbitration_syndicates.join_syndicate`, `insurance.renew_subscription`, `insurance.disburse_monthly_pensions`, `invoicing.update_invoice_status` — مؤكَّد حيًا كمحجوب عبر HTTP فعلي، `iot.settle_carbon_credits`, `projects.add_contribution`, `tasks/billing.py`) + `digital_twin.interact_with_twin` — **صفر خطر فعلي حاليًا لكل الحالات دي**، أولوية غير عاجلة، يحتاج جلسة/جلسات منفصلة.
+- **🔴 تنويه خاص — `iot.settle_carbon_credits`:** الوحيدة في كل مجموعة `finance.transfer` اللي لو اتصلح عائق الـconstructor بمعزل عن باقي الملف، **هتكون (ب) حقيقي غير محمي إطلاقًا** (صفر آلية حماية بالصدفة، بعكس باقي المجموعة). يستاهل تنويه بارز لأي جلسة مستقبلية تصلح باج الـconstructor.
+- **🟢 `insurance.disburse_monthly_pensions`:** أعمق باج أمان في القائمة كلها — استعلام "المعاشات المستحقة" بيمرر `None` بدل الفلتر الحقيقي، فبيرجع صفر نتيجة دايمًا. مؤكَّد حيًا: صفر معاش هيتصرف أبدًا، بغض النظر عن أي باج تاني.
+- **🟠 `health` (3 مواضع، `book_appointment`/`trigger_emergency`/`create_facility`):** crash-bugs حقيقية (`NameError` على متغيّر `job` غير معرَّف، سابق لأي تعديل بتاعنا) — **فئة مختلفة تمامًا عن نمط الترانزاكشن**، إصلاح الـcommit وحده مش هيخلي الـendpoints دي تشتغل. يحتاج جلسة منفصلة تصحح مصدر `audit_log` الملوَّث.
+- **`tenders_auctions.close_auction`:** محجوبة ببجّين مستقلين (constructor + method غير موجودة `release_held_funds`) — أقل أولوية.
+
+**5 حالات معروفة سابقًا من جلسة `SimpleTenant` (`sovereign_entities.review_kyb`/`update_entity`, `saas.cancel_subscription`, `saas.process_auto_renewals`, `saas.can_access_service`) — لم تُلمس في هذه الجلسة، لسه محتاجة قرار/إصلاح منفصل.**
+
+### 5) بيانات throwaway وتنظيف
+
+اتنضّفت بالكامل عبر 17 استعلام `COUNT` مستقل (كلهم صفر) + تأكيد `academy_tenants` مطابق للـbaseline. **استثناء واحد موثَّق:** `users id=1` (`p_system_treasury`) متقدرش يتمسح — `academy_tenants(id=1)`'s `admin_id` بيشاور عليه (إشارة كانت dangling من قبل الجلسة أصلًا، تفصيل في الملاحظة المنفصلة فوق) — تم اختيار تركه بدل المساس ببيانات مشتركة بين كل الجلسات.
+
+**Commit:** معزول واحد — 8 ملفات كود (اتنين فيهم تغيير سلوك فعلي: `tasks/deployment.py`, `ai_agents/service.py`؛ الستة الباقيين تعليقات تحذيرية بس) + تقرير الجلسة الجديد + هذا الملف.

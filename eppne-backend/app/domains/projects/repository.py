@@ -104,6 +104,9 @@ class ProjectRepository:
 
     async def create_contribution(self, **kwargs) -> Contribution:
         """إنشاء مساهمة جديدة (يتضمن tenant_id و idempotency_key اختياري)."""
+        # WARNING: هذا الـcommit() بيغطي كمان كتابة finance.transfer() جوه
+        # service.add_contribution (اللي فيها flush() بس، بلا commit مستقل خاص بيها) —
+        # لا تحوّل الـcommit() ده لـflush() بدون إضافة commit() صريح لـadd_contribution أولًا.
         contrib = Contribution(**kwargs)
         self.db.add(contrib)
         await self.db.commit()

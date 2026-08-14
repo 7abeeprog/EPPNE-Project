@@ -253,6 +253,9 @@ class CommerceRepository:
         return PaginatedResponse(data=schema_items, total=total, skip=skip, limit=limit)
 
     async def release_commission(self, commission_id: int, tx_hash: str) -> CommissionRecord:
+        # WARNING: هذا الـcommit() بيغطي كمان كتابة finance.transfer() جوه
+        # service.release_commissions (اللي فيها flush() بس، بلا commit مستقل خاص بيها) —
+        # لا تحوّل الـcommit() ده لـflush() بدون إضافة commit() صريح لـrelease_commissions أولًا.
         await self.db.execute(
             update(CommissionRecord).where(CommissionRecord.id == commission_id).values(
                 status="RELEASED", release_date=func.now(), release_tx_hash=tx_hash

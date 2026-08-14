@@ -56,6 +56,9 @@ class DigitalTwinRepository:
 
     async def create_interaction_log(self, **kwargs) -> TwinInteractionLog:
         """إنشاء سجل تفاعل جديد (يتضمن tenant_id و idempotency_key)."""
+        # WARNING: هذا الـcommit() بيغطي كمان كتابات service.interact_with_twin's finance.transfer()
+        # (اللي فيها flush() بس، بلا commit مستقل جوه begin_nested بتاعتها) — لا تحوّل الـcommit()
+        # ده لـflush() بدون إضافة commit() صريح لـinteract_with_twin نفسها أولًا، وإلا الكتابة هتضيع صامتة.
         log = TwinInteractionLog(**kwargs)
         self.db.add(log)
         await self.db.commit()
