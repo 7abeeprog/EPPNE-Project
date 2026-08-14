@@ -220,7 +220,10 @@ class AIAgentsService:
                 settlement_type="WEB3_CRYPTO",
                 used_model=agent.base_model
             )
+            await self.db.commit()
             raise
+
+        await self.db.commit()
 
         if cast(bool, agent.requires_human_approval):
             approval = await self.repo.create_approval_request(

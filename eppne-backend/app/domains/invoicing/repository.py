@@ -20,6 +20,10 @@ class InvoicingRepository:
     # ============================================================
 
     async def create_invoice(self, **kwargs) -> Invoice:
+        # WARNING: هذا الـcommit() بيغطي كمان كتابات finance.transfer() جوه service methods
+        # تانية (زي arbitration_syndicates.join_syndicate) بتنادي InvoicingService.create_invoice
+        # بعد finance.transfer مباشرة (flush() بس، بلا commit مستقل خاص بيها) — لا تحوّل الـcommit()
+        # ده لـflush() بدون فحص شامل لكل الـcallers أولًا.
         invoice = Invoice(**kwargs)
         self.db.add(invoice)
         await self.db.commit()
@@ -47,6 +51,9 @@ class InvoicingRepository:
         if not invoice:
             raise NotFoundError(f"Invoice {invoice_id} not found")
 
+        # WARNING: هذا الـcommit() بيغطي كمان كتابة finance.transfer() جوه
+        # service.update_invoice_status (اللي فيها flush() بس، بلا commit مستقل خاص بيها) —
+        # لا تحوّل الـcommit() ده لـflush() بدون إضافة commit() صريح لـupdate_invoice_status أولًا.
         await self.db.execute(
             update(Invoice)
             .where(and_(Invoice.id == invoice_id, Invoice.tenant_id == tenant_id))

@@ -96,6 +96,9 @@ class InsuranceRepository:
         return list(result.scalars().all())
 
     async def update_subscription(self, subscription_id: int, **kwargs) -> InsuranceSubscription:
+        # WARNING: هذا الـcommit() بيغطي كمان كتابة finance.transfer() جوه
+        # service.renew_subscription (اللي فيها flush() بس، بلا commit مستقل خاص بيها) —
+        # لا تحوّل الـcommit() ده لـflush() بدون إضافة commit() صريح لـrenew_subscription أولًا.
         await self.db.execute(update(InsuranceSubscription).where(InsuranceSubscription.id == subscription_id).values(**kwargs))  # type: ignore
         await self.db.commit()
         return await self.get_subscription(subscription_id)

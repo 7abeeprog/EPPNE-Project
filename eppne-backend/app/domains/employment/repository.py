@@ -421,6 +421,9 @@ class EmploymentRepository:
         return list(result.scalars().all())
 
     async def update_payroll_status(self, payroll_id: int, status: str, payment_tx_hash: Optional[str] = None) -> PayrollRecord:
+        # WARNING: هذا الـcommit() بيغطي كمان كتابة finance.transfer() جوه tasks/employment.py's
+        # pay_payroll_task (اللي فيها flush() بس، بلا commit مستقل خاص بيها) — لا تحوّل الـcommit()
+        # ده لـflush() بدون إضافة commit() صريح لـpay_payroll_task نفسها أولًا، وإلا الراتب المدفوع هيضيع صامت.
         values = {"status": status}
         if payment_tx_hash:
             values["payment_tx_hash"] = payment_tx_hash
