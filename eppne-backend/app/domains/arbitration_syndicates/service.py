@@ -104,7 +104,6 @@ class ArbitrationSyndicatesService:
             try:
                 ai_result = await ai_service.execute_agent_action(
                     agent_id=11,
-                    tenant_id=tenant_id,
                     action_type="ANALYZE_SENSOR",
                     payload={
                         "dispute_reason": sanitized_reason,

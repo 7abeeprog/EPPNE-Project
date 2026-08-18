@@ -207,16 +207,16 @@ class TendersAuctionsService:
                 cost=Decimal("0.05")
             )
 
-            ai_result = await ai_service.execute_agent_action(  # type: ignore[call-arg]
+            ai_result = await ai_service.execute_agent_action(
                 agent_id=8,
-                tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
                 payload={
                     "bid_id": bid_id,
                     "technical_envelope": bid.technical_envelope,
                     "score": float(score)
                 },
-                executor_user_id=evaluator_id
+                executor_user_id=evaluator_id,
+                idempotency_key=f"AI-BIDEVAL-T{tenant_id}-{bid_id}"
             )
             logger.info(f"AI evaluation result: {ai_result}")
         except Exception as e:
@@ -326,16 +326,16 @@ class TendersAuctionsService:
         # AI تحليل
         ai_service = AIAgentsService(self.db, tenant_id)
         try:
-            ai_result = await ai_service.execute_agent_action(  # type: ignore[call-arg]
+            ai_result = await ai_service.execute_agent_action(
                 agent_id=9,
-                tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
                 payload={
                     "auction_id": auction_id,
                     "bid_amount": float(bid_amount),
                     "user_id": user_id
                 },
-                executor_user_id=user_id
+                executor_user_id=user_id,
+                idempotency_key=f"AI-AUCTIONBID-T{tenant_id}-{idempotency_key}" if idempotency_key else f"AI-AUCTIONBID-T{tenant_id}-{uuid.uuid4().hex[:12]}"
             )
             logger.info(f"AI auction analysis: {ai_result}")
         except Exception as e:

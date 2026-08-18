@@ -83,10 +83,10 @@ class InvitationsService:
         try:
             ai_result = await ai_service.execute_agent_action(
                 agent_id=12,
-                tenant_id=tenant_id,  # type: ignore
                 action_type="ANALYZE_SENSOR",
                 payload={"user_id": user_id},
                 executor_user_id=user_id,
+                idempotency_key=f"AI-CRMTARGET-T{tenant_id}-{user_id}-{uuid.uuid4().hex[:8]}",
             )
             return ai_result.get("result", {
                 "analysis": {"interests": ["General"], "engagement_level": "medium"},

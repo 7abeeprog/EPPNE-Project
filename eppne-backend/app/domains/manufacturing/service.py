@@ -307,9 +307,8 @@ class ManufacturingService:
 
         ai_service = AIAgentsService(self.db, tenant_id)
         try:
-            ai_result = await ai_service.execute_agent_action(  # type: ignore
+            ai_result = await ai_service.execute_agent_action(
                 agent_id=4,
-                tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
                 payload={
                     "batch_id": batch.id,
@@ -317,7 +316,8 @@ class ManufacturingService:
                     "blueprint": blueprint.sku,
                     "line_id": batch.line_id  # type: ignore
                 },
-                executor_user_id=user_id
+                executor_user_id=user_id,
+                idempotency_key=f"AI-BATCH-T{tenant_id}-{batch.id}"
             )
             logger.info(f"AI Manufacturing optimization: {ai_result}")
         except Exception as e:
@@ -668,15 +668,15 @@ class ManufacturingService:
 
         ai_service = AIAgentsService(self.db, tenant_id)
         try:
-            ai_result = await ai_service.execute_agent_action(  # type: ignore
+            ai_result = await ai_service.execute_agent_action(
                 agent_id=4,
-                tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
                 payload={
                     "line_id": production_line_id,
                     "sensor_data": sensor_data
                 },
-                executor_user_id=user_id
+                executor_user_id=user_id,
+                idempotency_key=f"AI-MAINTENANCE-T{tenant_id}-{production_line_id}-{uuid.uuid4().hex[:8]}"
             )
             ai_prediction = ai_result.get("result", {})
         except Exception as e:

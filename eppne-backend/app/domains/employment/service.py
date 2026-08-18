@@ -141,7 +141,6 @@ class EmploymentService:
             ai_service = AIAgentsService(self.db, cast(int, job.tenant_id))
             result = await ai_service.execute_agent_action(
                 agent_id=1,
-                tenant_id=cast(int, job.tenant_id),
                 action_type="ANALYZE_SENSOR",
                 payload={"prompt": prompt},
                 executor_user_id=applicant_id,

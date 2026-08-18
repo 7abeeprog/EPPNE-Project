@@ -344,7 +344,6 @@ class InsuranceService:
             )
             ai_result = await ai_service.execute_agent_action(
                 agent_id=10,
-                tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
                 payload={
                     "description": sanitized_description,
@@ -437,14 +436,14 @@ class InsuranceService:
         try:
             ai_result = await ai_service.execute_agent_action(
                 agent_id=10,
-                tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
                 payload={
                     "claim_id": claim_id,
                     "claimed_amount": float(claim.claimed_amount_mrusdt),  # type: ignore
                     "evidence_urls": claim.evidence_urls  # type: ignore
                 },
-                executor_user_id=reviewer_id
+                executor_user_id=reviewer_id,
+                idempotency_key=cast(str, idempotency_key)
             )
             logger.info(f"AI claim review: {ai_result}")
         except Exception as e:

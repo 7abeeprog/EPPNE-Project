@@ -556,7 +556,6 @@ class LogisticsService:
         try:
             ai_result = await ai_service.execute_agent_action(
                 agent_id=13,
-                tenant_id=tenant_id,  # type: ignore
                 action_type="ANALYZE_SENSOR",
                 payload={
                     "product_id": product_id,

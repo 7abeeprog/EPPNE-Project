@@ -518,12 +518,12 @@ class ZamakanaService:
             """
 
             ai_service = AIAgentsService(self.db, tenant_id)
-            ai_result = await ai_service.execute_agent_action(  # type: ignore[call-arg]
+            ai_result = await ai_service.execute_agent_action(
                 agent_id=ai_agent_id,
-                tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
                 payload={"prompt": prompt, "scenario_id": scenario_id},
-                executor_user_id=user_id
+                executor_user_id=user_id,
+                idempotency_key=f"AI-SCENARIO-T{tenant_id}-{scenario_id}"
             )
 
             report = ai_result.get("result", {}).get("report", {

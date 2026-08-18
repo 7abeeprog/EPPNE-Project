@@ -701,12 +701,11 @@ class AutomationEngine:
         idempotency_key = f"workflow-{self.workflow.id}-exec-{self.execution.id}-agent-{agent_id}-{uuid.uuid4().hex[:8]}"
 
         # 4. استدعاء خدمة الـ AI Agents
-        ai_service = AIAgentsService(self.db)
+        ai_service = AIAgentsService(self.db, cast(int, self.workflow.tenant_id))
         
         try:
             result = await ai_service.execute_agent_action(
                 agent_id=agent_id,
-                tenant_id=self.workflow.tenant_id,  # type: ignore
                 action_type=action_type,
                 payload=payload,
                 executor_user_id=self.workflow.created_by,  # type: ignore

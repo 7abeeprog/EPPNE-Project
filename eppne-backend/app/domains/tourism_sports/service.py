@@ -268,12 +268,12 @@ class TourismSportsService:
         if require_vip_transport:
             ai_service = AIAgentsService(self.db, tenant_id)
             try:
-                await ai_service.execute_agent_action(  # type: ignore[call-arg]
+                await ai_service.execute_agent_action(
                     agent_id=5,
-                    tenant_id=tenant_id,
                     action_type="ANALYZE_SENSOR",
                     payload={"event_id": event_id, "tier": tier},
-                    executor_user_id=user_id
+                    executor_user_id=user_id,
+                    idempotency_key=f"AI-VIPTRANSPORT-T{tenant_id}-{idempotency_key}" if idempotency_key else f"AI-VIPTRANSPORT-T{tenant_id}-{uuid.uuid4().hex[:12]}"
                 )
             except Exception as e:
                 logger.warning(f"AI transport optimization failed: {e}")
@@ -411,16 +411,16 @@ class TourismSportsService:
         medical_report = None
         ai_service = AIAgentsService(self.db, tenant_id)
         try:
-            ai_result = await ai_service.execute_agent_action(  # type: ignore[call-arg]
+            ai_result = await ai_service.execute_agent_action(
                 agent_id=6,
-                tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
                 payload={
                     "player_id": data["player_id"],
                     "medical_profile_id": player.medical_profile_id,  # type: ignore
                     "sport_category": player.sport_category.value  # type: ignore
                 },
-                executor_user_id=user_id
+                executor_user_id=user_id,
+                idempotency_key=f"AI-MEDICAL-T{tenant_id}-{idempotency_key}" if idempotency_key else f"AI-MEDICAL-T{tenant_id}-{uuid.uuid4().hex[:12]}"
             )
             medical_flag = ai_result.get("result", {}).get("flag", False)
             medical_report = ai_result.get("result", {}).get("summary")

@@ -160,14 +160,13 @@ async def _analyze_high_priority(db, reading, zone, farm):
     from app.core.redis_client import redis_client as redis_client_wrapper
     import uuid
 
-    ai_service = AIAgentsService(db)
+    ai_service = AIAgentsService(db, farm.tenant_id if farm else 0)
     redis_client = await redis_client_wrapper.get_client()
     event_bus = EventBus(redis_client)
 
     try:
         ai_result = await ai_service.execute_agent_action(
             agent_id=3,
-            tenant_id=farm.tenant_id if farm else 0,
             action_type="ANALYZE_SENSOR",
             payload={
                 "zone_id": zone.id,
