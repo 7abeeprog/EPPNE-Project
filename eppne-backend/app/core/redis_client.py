@@ -112,6 +112,10 @@ class RedisClientWrapper:
         client = await self.get_client()
         return await client.expire(key, time)
 
+    async def publish(self, channel: str, message: str):
+        client = await self.get_client()
+        return await client.publish(channel, message)
+
     # ========== عمليات التخزين المؤقت الجماعية (لـ Cache Aside) ==========
     async def get_json(self, key: str):
         """جلب قيمة JSON وتحويلها إلى قاموس (dict)"""
