@@ -92,10 +92,10 @@ class ArbitrationSyndicatesService:
         if judging_mode in ["AI_ONLY", "AI_HYBRID"]:
             from app.domains.ai_governance.service import AIGovernanceService
             governance = AIGovernanceService(self.db, tenant_id)
-            await governance.check_and_consume(  # type: ignore
-                tenant_id=tenant_id,
+            await governance.check_and_consume(
                 agent_id=11,
                 user_id=claimant_id,
+                action_type="AI_JUDGE_ANALYSIS",
                 tokens=500,
                 cost=Decimal("0.05")
             )

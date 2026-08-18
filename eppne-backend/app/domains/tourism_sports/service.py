@@ -430,9 +430,9 @@ class TourismSportsService:
         from app.domains.ai_governance.service import AIGovernanceService
         governance = AIGovernanceService(self.db, tenant_id)
         await governance.check_and_consume(
-            tenant_id=tenant_id,
             agent_id=6,
             user_id=user_id,
+            action_type="PLAYER_TRANSFER_ANALYSIS",
             tokens=200,
             cost=Decimal("0.02")
         )

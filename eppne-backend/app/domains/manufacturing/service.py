@@ -298,7 +298,6 @@ class ManufacturingService:
 
         governance = AIGovernanceService(self.db, tenant_id)
         await governance.check_and_consume(
-            tenant_id=tenant_id,
             agent_id=4,
             user_id=user_id,
             action_type="MANUFACTURING_ANALYSIS",
@@ -660,7 +659,6 @@ class ManufacturingService:
 
         governance = AIGovernanceService(self.db, tenant_id)
         await governance.check_and_consume(
-            tenant_id=tenant_id,
             agent_id=4,
             user_id=user_id,
             action_type="MAINTENANCE_ANALYSIS",

@@ -37,11 +37,6 @@ class SocialService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = SocialRepository(db)
-        self.finance = FinanceService(db)
-        self.ai_service = AIAgentsService(db)
-        self.saas_service = SaaSSubscriptionService(db)
-        self.affiliate_service = AffiliateService(db)
-        self.invoicing_service = InvoicingService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
 
@@ -64,7 +59,8 @@ class SocialService:
 
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "social"):
-        has_access = await self.saas_service.can_access_service(tenant_id, feature)
+        saas_service = SaaSSubscriptionService(self.db, tenant_id)
+        has_access = await saas_service.can_access_service(tenant_id, feature)
         if not has_access:
             raise PermissionDeniedError(f"Social feature '{feature}' is not included in your current plan.")
         return None, {}
@@ -304,17 +300,18 @@ class SocialService:
             raise NotFoundError("Please set up your match profile first.")
 
         from app.domains.ai_governance.service import AIGovernanceService
-        governance = AIGovernanceService(self.db)
+        governance = AIGovernanceService(self.db, tenant_id)
         await governance.check_and_consume(
-            tenant_id=tenant_id,
             agent_id=7,
             user_id=user_id,
+            action_type="MATCH_SUGGESTIONS",
             tokens=300,
             cost=Decimal("0.03")
         )
 
+        ai_service = AIAgentsService(self.db, tenant_id)
         try:
-            ai_result = await self.ai_service.execute_agent_action(  # type: ignore[call-arg]
+            ai_result = await ai_service.execute_agent_action(  # type: ignore[call-arg]
                 agent_id=7,
                 tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
@@ -487,9 +484,10 @@ class SocialService:
                         return gift
                 raise ValidationError("Idempotency record exists but gift not found.")
 
+        finance = FinanceService(self.db, tenant_id)
         async with self.db.begin_nested():
             if gift_value > 0:
-                await self.finance.transfer(
+                await finance.transfer(
                     sender_id=sender_id,
                     receiver_email=await self._get_user_email(receiver_id),
                     currency="MR_USDT",
@@ -551,8 +549,9 @@ class SocialService:
                         return gift_request
                 raise ValidationError("Idempotency record exists but gift request not found.")
 
+        finance = FinanceService(self.db, tenant_id)
         async with self.db.begin_nested():
-            await self.finance.transfer(
+            await finance.transfer(
                 sender_id=sender_id,
                 receiver_email="shop@eppne.com",
                 currency="MR_USDT",
@@ -628,8 +627,9 @@ class SocialService:
         else:
             price = plan.price_monthly_mrusdt * duration_months
 
+        finance = FinanceService(self.db, tenant_id)
         async with self.db.begin_nested():
-            await self.finance.transfer(
+            await finance.transfer(
                 sender_id=0,
                 receiver_email="saas@eppne.com",
                 currency="MR_USDT",

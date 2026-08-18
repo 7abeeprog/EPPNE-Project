@@ -33,11 +33,6 @@ class TendersAuctionsService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = TendersAuctionsRepository(db)
-        self.finance = FinanceService(db)
-        self.ai_service = AIAgentsService(db)
-        self.saas_service = SaaSSubscriptionService(db)
-        self.affiliate_service = AffiliateService(db)
-        self.invoicing_service = InvoicingService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
 
@@ -60,7 +55,8 @@ class TendersAuctionsService:
 
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "tenders_auctions"):
-        has_access = await self.saas_service.can_access_service(tenant_id, feature)
+        saas_service = SaaSSubscriptionService(self.db, tenant_id)
+        has_access = await saas_service.can_access_service(tenant_id, feature)
         if not has_access:
             raise PermissionDeniedError("Tenders & Auctions feature is not included in your current plan.")
         return None, {}
@@ -199,18 +195,19 @@ class TendersAuctionsService:
             raise PermissionDeniedError("Tender is not in evaluation phase")
 
         # AI Governance
+        ai_service = AIAgentsService(self.db, tenant_id)
         try:
             from app.domains.ai_governance.service import AIGovernanceService
-            governance = AIGovernanceService(self.db)
+            governance = AIGovernanceService(self.db, tenant_id)
             await governance.check_and_consume(
-                tenant_id=tenant_id,
                 agent_id=8,
                 user_id=evaluator_id,
+                action_type="BID_EVALUATION",
                 tokens=500,
                 cost=Decimal("0.05")
             )
 
-            ai_result = await self.ai_service.execute_agent_action(  # type: ignore[call-arg]
+            ai_result = await ai_service.execute_agent_action(  # type: ignore[call-arg]
                 agent_id=8,
                 tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
@@ -327,8 +324,9 @@ class TendersAuctionsService:
             raise PermissionDeniedError(f"Minimum bid: {min_required} MR_USDT")
 
         # AI تحليل
+        ai_service = AIAgentsService(self.db, tenant_id)
         try:
-            ai_result = await self.ai_service.execute_agent_action(  # type: ignore[call-arg]
+            ai_result = await ai_service.execute_agent_action(  # type: ignore[call-arg]
                 agent_id=9,
                 tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
@@ -344,8 +342,9 @@ class TendersAuctionsService:
             logger.warning(f"AI analysis failed: {e}")
 
         # حجز المبلغ
+        finance = FinanceService(self.db, tenant_id)
         try:
-            await self.finance.hold_funds(  # type: ignore[attr-defined]
+            await finance.hold_funds(  # type: ignore[attr-defined]
                 user_id,
                 bid_amount,
                 "MR_USDT",
@@ -403,13 +402,14 @@ class TendersAuctionsService:
             bidder_id = cast(int, highest_bid.bidder_id)
             bid_amount = cast(Decimal, highest_bid.bid_amount_mrusdt)
             
-            await self.finance.release_held_funds(  # type: ignore[attr-defined]
+            finance = FinanceService(self.db, tenant_id)
+            await finance.release_held_funds(  # type: ignore[attr-defined]
                 bidder_id,
                 bid_amount,
                 "MR_USDT",
                 f"Auction {auction_id} winner payment"
             )
-            await self.finance.transfer(
+            await finance.transfer(
                 sender_id=bidder_id,
                 receiver_email="system@eppne.com",
                 currency="MR_USDT",
@@ -418,7 +418,8 @@ class TendersAuctionsService:
                 idempotency_key=f"AUCTION-SALE-{auction_id}-{uuid.uuid4().hex[:8]}"
             )
 
-            await self.invoicing_service.create_invoice(  # type: ignore[attr-defined]
+            invoice_service = InvoicingService(self.db, tenant_id)
+            await invoice_service.create_invoice(  # type: ignore[attr-defined]
                 entity_id=tenant_id,
                 user_id=bidder_id,
                 amount=bid_amount,
@@ -476,13 +477,14 @@ class TendersAuctionsService:
         return sanitized
 
     async def _register_affiliate_commission(self, user_id: int, tenant_id: int, action_type: str):
+        affiliate_service = AffiliateService(self.db, tenant_id)
         try:
             from app.domains.identity.repository import UserRepository
             user_repo = UserRepository(self.db)
             user = await user_repo.get_by_id(user_id)
             if user and user.referred_by:
                 commission = Decimal("5.00") if action_type == "TENDER_CREATED" else Decimal("25.00")
-                await self.affiliate_service.register_commission(  # type: ignore[attr-defined]
+                await affiliate_service.register_commission(  # type: ignore[attr-defined]
                     affiliate_id=user.referred_by,
                     user_id=user_id,
                     amount=commission,
