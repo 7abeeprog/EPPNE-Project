@@ -311,9 +311,8 @@ class SocialService:
 
         ai_service = AIAgentsService(self.db, tenant_id)
         try:
-            ai_result = await ai_service.execute_agent_action(  # type: ignore[call-arg]
+            ai_result = await ai_service.execute_agent_action(
                 agent_id=7,
-                tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
                 payload={
                     "user_id": user_id,
@@ -321,7 +320,8 @@ class SocialService:
                     "seek_type": profile.seek_type,
                     "limit": limit
                 },
-                executor_user_id=user_id
+                executor_user_id=user_id,
+                idempotency_key=f"AI-MATCHSUGGEST-T{tenant_id}-{user_id}-{uuid.uuid4().hex[:8]}"
             )
             suggestions = ai_result.get("result", {}).get("suggestions", [])
             return suggestions

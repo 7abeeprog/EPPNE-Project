@@ -162,9 +162,8 @@ class TransportService:
 
         try:
             ai_service = AIAgentsService(self.db, tenant_id)
-            ai_result = await ai_service.execute_agent_action(  # type: ignore[call-arg]
+            ai_result = await ai_service.execute_agent_action(
                 agent_id=3,
-                tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
                 payload={
                     "start_hub": data["start_hub_id"],
@@ -172,7 +171,8 @@ class TransportService:
                     "waypoints": data.get("waypoints", []),
                     "distance_km": float(data["distance_km"])
                 },
-                executor_user_id=0
+                executor_user_id=0,
+                idempotency_key=f"AI-ROUTE-T{tenant_id}-{uuid.uuid4().hex[:12]}"
             )
             if ai_result and "optimized_path" in ai_result.get("result", {}):
                 optimized = ai_result["result"]["optimized_path"]
