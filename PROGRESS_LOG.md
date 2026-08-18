@@ -8,9 +8,9 @@
 
 ## 📌 بانر الحالة [آخر تحديث: 2026-08-18]
 
-آخر إغلاق رسمي: **Backlog #11a (فرع `invitations` فقط)** — راجع الجدول تحت. **⚠️ تصحيح صريح على القرار السابق:** بند #11 **مُغلَق جزئيًا بس** — الفرع الأصلي (#11b: `realestate`/`service_marketplace`/`insurance`/`arbitration_syndicates`، نفس السبب الجذري `commit()`-جوه-`begin_nested()` لكن عبر `InvoicingService.create_invoice` مش `identity`) **لسه مفتوح تمامًا، صفر إصلاح عليه، يحتاج جلسة منفصلة.**
+آخر إغلاق رسمي: **Backlog #11a (فرع `invitations` فقط)** — راجع الجدول تحت. **⚠️ تصحيح صريح على القرار السابق:** بند #11 **مُغلَق جزئيًا بس** — الفرع الأصلي (#11b، نفس السبب الجذري `commit()`-جوه-`begin_nested()` لكن عبر `InvoicingService.create_invoice` مش `identity`) **لسه مفتوح تمامًا، صفر إصلاح عليه، يحتاج جلسة منفصلة.** **نطاقه المؤكَّد حيًا [2026-08-18]: `realestate`/`insurance` فقط (4 دوال) — `service_marketplace`/`arbitration_syndicates` كانا مذكورين سابقًا كافتراض من الأرشيف، اتضح بالقراءة المباشرة إنهما غير مشمولين (راجع بند #11b في الجدول تحت للتفاصيل الكاملة).**
 
-صفر قيد نشط حاليًا يمنع فتح أي بند تاني (القيد السابق على Backlog #9 اتشال [2026-08-18]).
+**⚠️ قيد نشط جديد [2026-08-18]:** Backlog #9 **معلَّقة رسميًا — ممنوع إصلاحها قبل إغلاق #11b.** جلسة تشخيص #9 اكتشفت إن `realestate`/`insurance` (4 دوال) بتعتمد حاليًا على كراش #9 كحماية بالصدفة من #11b، بنفس نمط `invitations`/#11a قبل إغلاقها — لكن هنا بفلوس حقيقية (`finance.transfer`) مش مجرد يوزر بلا محفظة. **#11b بقت أولوية حرجة نتيجة هذا الاكتشاف.** التفاصيل: `.claude/reports/saas-control-service-missing-methods-session-log.md`.
 
 **استثناء throwaway-cleanup نشط (تنظيف روتيني غير عاجل، مش عاجل):** `users id=52` (دليل جلسة `invitations`) و`users id=71/72`/دعوات `sovereign_invitations_v2 id=2,3` (بيانات تحقق حي لنفس الجلسة).
 
@@ -30,10 +30,10 @@
 | 6 | `commerce.visa_webhook` مراجعة أمنية | 🔴 مفتوح، لم يبدأ | أرشيف ~3073 |
 | 7 | `redis-client-wrapper-missing-methods` (`hincrbyfloat`, `setnx`) | 🔴 مفتوح | أرشيف ~3074 |
 | 8 | `user-repository-get-user-audit` (method غير موجودة، 6 مواضع) | 🔴 مفتوح | أرشيف ~3075 |
-| 9 | `saas-control-service-missing-methods` (`get_active_subscription`) | 🟢 **مسموح البدء الآن** — القيد السابق (بانتظار إغلاق #11a) اتشال [2026-08-18] | أرشيف ~3076 |
+| 9 | `saas-control-service-missing-methods` (`get_active_subscription`) | 🟡 **معلَّقة — محظورة بسبب #11b [2026-08-18]** — تشخيص كامل تم؛ اكتشاف حي إن `realestate`/`insurance` (4 دوال) بتعتمد حاليًا على كراش #9 كحماية بالصدفة من #11b المفتوح (نفس نمط #11a قبل إغلاقها). صفر كود على #9 لحد ما يُغلق #11b رسميًا. | `.claude/reports/saas-control-service-missing-methods-session-log.md` |
 | 10 | `affiliate-service-missing-methods` | 🔴 مفتوح | أرشيف ~3077 |
 | 11a | `invitations-user-registration-savepoint-leak` (امتداد #11، فرع `invitations`) | ✅ **مُغلَق رسميًا [2026-08-18]** | `.claude/reports/invitations-savepoint-leak-session-log.md` |
-| 11b | `realestate-invoicing-savepoint-conflict` (الفرع الأصلي: `realestate`/`service_marketplace`/`insurance`/`arbitration_syndicates`، عبر `InvoicingService.create_invoice`) | 🔴 **مفتوح تمامًا — نفس السبب الجذري زي 11a، لم يُصلَح، يحتاج جلسة منفصلة** | أرشيف ~3078، 3104، 3132 |
+| 11b | `realestate-invoicing-savepoint-conflict` (النطاق المؤكَّد حيًا [2026-08-18]: `realestate`/`insurance` فقط — راجع ملاحظة النطاق تحت) | 🔴🔴 **أولوية حرجة [2026-08-18] — يحجب #9 أيضًا، إصلاح فوري مطلوب.** مؤكَّد حيًا بالقراءة المباشرة: `realestate.buy_fractional_ownership`/`rent_unit` و`insurance.subscribe`/`review_claim` (4 دوال فقط، تحويلات مالية حقيقية جوه `begin_nested()` مقفولة بـ`commit()` مباشر في `invoicing.create_invoice`) — تفاصيل كاملة + جدول أدلة في `.claude/reports/saas-control-service-missing-methods-session-log.md` قسم 4. **تصحيح نطاق صريح على العنوان القديم (كان بيذكر `service_marketplace`/`arbitration_syndicates` كجزء من "الفرع الأصلي" بناءً على افتراض من الأرشيف فقط، غير مؤكَّد بقراءة كود مباشرة وقتها):** (أ) `arbitration_syndicates` — 3 مواضع `invoicing.create_invoice` فُحصت مباشرة (`create_dispute`, `join_syndicate`, `issue_license`) ووُجدت **الثلاثة خارج أي `begin_nested()` فعليًا** — **آمنة، مش جزء من #11b**، لا تحتاج إصلاح ضمن هذا البند. (ب) `service_marketplace` — `_check_saas_limits` بتاعتها بتنادي `can_access_service` مش `get_active_subscription` إطلاقًا، فمحجوبة حاليًا ببج مختلف تمامًا (**Backlog #12**، `wrong-arity call`) — **صفر علاقة بـ#11b أو بكراش #9**. | أرشيف ~3078، 3104، 3132؛ دليل حي إضافي/تصحيح النطاق: `.claude/reports/saas-control-service-missing-methods-session-log.md` قسم 4.5 |
 | 12 | `saas-control-service-wrong-arity-call` | 🔴 مفتوح | أرشيف ~3111 |
 | 13 | `invoicing-create-invoice-wrong-kwarg` | 🔴 مفتوح | أرشيف ~3114 |
 | 14 | `audit-log-wrong-kwargs` | 🔴 مفتوح، أولوية عالية (grep شامل غير منفَّذ) — تأكيد إضافي [2026-08-18] داخل `invitations.accept_invitation` نفسها | أرشيف ~3137، 3407 |
