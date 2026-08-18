@@ -38,10 +38,6 @@ class ZamakanaService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = ZamakanaRepository(db)
-        self.ai_service = AIAgentsService(db)
-        self.saas_service = SaaSSubscriptionService(db)
-        self.affiliate_service = AffiliateService(db)
-        self.invoicing_service = InvoicingService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
 
@@ -64,7 +60,8 @@ class ZamakanaService:
 
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "zamakana"):
-        has_access = await self.saas_service.can_access_service(tenant_id, feature)
+        saas_service = SaaSSubscriptionService(self.db, tenant_id)
+        has_access = await saas_service.can_access_service(tenant_id, feature)
         if not has_access:
             raise PermissionDeniedError("Zamakana feature is not included in your current plan.")
         return None, {}
@@ -299,6 +296,7 @@ class ZamakanaService:
         if campaign.collected_time_hours >= campaign.target_time_hours:  # type: ignore
             raise PermissionDeniedError("Campaign already reached its target")
 
+        invoicing_service = InvoicingService(self.db, tenant_id)
         async with self.db.begin_nested():
             pledge = await self.repo.create_pledge(
                 tenant_id=tenant_id,
@@ -309,16 +307,6 @@ class ZamakanaService:
                 idempotency_key=idempotency_key
             )
 
-            # إنشاء فاتورة (للخدمات المدفوعة) – إذا تجاوزت الساعات 10
-            if pledge.pledged_hours > 10:  # type: ignore
-                await self.invoicing_service.create_invoice(  # type: ignore[attr-defined]
-                    entity_id=tenant_id,
-                    user_id=user_id,
-                    amount=Decimal("5.00"),
-                    description=f"Time pledge registration for campaign {campaign.title}",
-                    due_date=datetime.utcnow() + timedelta(days=30)
-                )
-
             await audit_log(  # type: ignore[call-arg]
                 user_id=user_id,
                 tenant_id=tenant_id,
@@ -328,6 +316,19 @@ class ZamakanaService:
             )
 
         await self.db.commit()
+
+        # إنشاء فاتورة (للخدمات المدفوعة) – إذا تجاوزت الساعات 10
+        if pledge.pledged_hours > 10:  # type: ignore
+            try:
+                await invoicing_service.create_invoice(  # type: ignore[attr-defined]
+                    entity_id=tenant_id,
+                    user_id=user_id,
+                    amount=Decimal("5.00"),
+                    description=f"Time pledge registration for campaign {campaign.title}",
+                    due_date=datetime.utcnow() + timedelta(days=30)
+                )
+            except Exception as e:
+                logger.error(f"Invoice creation failed for time pledge {pledge.id}: {e}")
 
         # تخزين معرف التعهد فقط
         if idempotency_key:
@@ -493,7 +494,7 @@ class ZamakanaService:
 
         # التحقق من حوكمة الذكاء الاصطناعي
         from app.domains.ai_governance.service import AIGovernanceService
-        governance = AIGovernanceService(self.db)
+        governance = AIGovernanceService(self.db, tenant_id)
         await governance.check_and_consume(
             tenant_id=tenant_id,
             agent_id=ai_agent_id,
@@ -516,7 +517,8 @@ class ZamakanaService:
             4. التوصيات للاستعداد لهذا السيناريو
             """
 
-            ai_result = await self.ai_service.execute_agent_action(  # type: ignore[call-arg]
+            ai_service = AIAgentsService(self.db, tenant_id)
+            ai_result = await ai_service.execute_agent_action(  # type: ignore[call-arg]
                 agent_id=ai_agent_id,
                 tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
@@ -542,7 +544,8 @@ class ZamakanaService:
             }
 
         # إنشاء فاتورة لخدمة التحليل
-        await self.invoicing_service.create_invoice(  # type: ignore[attr-defined]
+        invoicing_service = InvoicingService(self.db, tenant_id)
+        await invoicing_service.create_invoice(  # type: ignore[attr-defined]
             entity_id=tenant_id,
             user_id=user_id,
             amount=Decimal("10.00"),
@@ -640,13 +643,14 @@ class ZamakanaService:
     # 9. دوال مساعدة
     # ============================================================
     async def _register_affiliate_commission(self, user_id: int, tenant_id: int, action_type: str):
+        affiliate_service = AffiliateService(self.db, tenant_id)
         try:
             from app.domains.identity.repository import UserRepository
             user_repo = UserRepository(self.db)
             user = await user_repo.get_by_id(user_id)
             if user and user.referred_by:
                 commission = Decimal("2.00") if action_type in ["NODE_CREATED", "CAMPAIGN_CREATED"] else Decimal("1.00")
-                await self.affiliate_service.register_commission(  # type: ignore[attr-defined]
+                await affiliate_service.register_commission(  # type: ignore[attr-defined]
                     affiliate_id=user.referred_by,
                     user_id=user_id,
                     amount=commission,
