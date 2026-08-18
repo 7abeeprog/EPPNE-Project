@@ -30,22 +30,20 @@ class ArbitrationSyndicatesService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = ArbitrationSyndicatesRepository(db)
-        self.finance = FinanceService(db)
-        self.ai_service = AIAgentsService(db)
-        self.saas_service = SaaSSubscriptionService(db)
-        self.affiliate_service = AffiliateService(db)
-        self.invoicing_service = InvoicingService(db)
         self.event_bus = EventBus(redis_client)  # type: ignore
         self.redis = redis_client
 
     # ========== التحقق من صلاحيات SaaS ==========
 
     async def _check_saas_limits(self, tenant_id: int, feature: str = "arbitration_syndicates"):
-        subscription = await self.saas_service.get_active_subscription(tenant_id)  # type: ignore
+        saas_service = SaaSSubscriptionService(self.db, tenant_id)
+        subscription = await saas_service.get_active_subscription(tenant_id)  # type: ignore
         if not subscription:
             raise PermissionDeniedError("No active subscription found.")
-        features = subscription.features or {}
-        if not features.get(feature, False):
+        if not subscription.plan:
+            raise PermissionDeniedError("No valid subscription plan found.")
+        features = subscription.plan.features or []
+        if feature not in features:
             raise PermissionDeniedError("Arbitration & Syndicates feature is not included in your current plan.")
         return subscription, features
 
@@ -93,7 +91,7 @@ class ArbitrationSyndicatesService:
         ai_judge_id = None
         if judging_mode in ["AI_ONLY", "AI_HYBRID"]:
             from app.domains.ai_governance.service import AIGovernanceService
-            governance = AIGovernanceService(self.db)
+            governance = AIGovernanceService(self.db, tenant_id)
             await governance.check_and_consume(  # type: ignore
                 tenant_id=tenant_id,
                 agent_id=11,
@@ -102,8 +100,9 @@ class ArbitrationSyndicatesService:
                 cost=Decimal("0.05")
             )
 
+            ai_service = AIAgentsService(self.db, tenant_id)
             try:
-                ai_result = await self.ai_service.execute_agent_action(
+                ai_result = await ai_service.execute_agent_action(
                     agent_id=11,
                     tenant_id=tenant_id,
                     action_type="ANALYZE_SENSOR",
@@ -132,7 +131,8 @@ class ArbitrationSyndicatesService:
 
         await self._register_affiliate_commission(claimant_id, tenant_id, "ARBITRATION_CASE_CREATED")
 
-        await self.invoicing_service.create_invoice(  # type: ignore
+        invoice_service = InvoicingService(self.db, tenant_id)
+        await invoice_service.create_invoice(  # type: ignore
             entity_id=tenant_id,
             user_id=claimant_id,
             amount=Decimal("25.00"),
@@ -336,8 +336,9 @@ class ArbitrationSyndicatesService:
 
         fee = syndicate.annual_fee_mrusdt
         if cast(Any, fee) > 0:
+            finance = FinanceService(self.db, tenant_id)
             try:
-                tx_hash = await self.finance.transfer(
+                tx_hash = await finance.transfer(
                     sender_id=user_id,
                     receiver_email=await self._get_treasury_email(syndicate_id),
                     currency="MR_USDT",
@@ -348,7 +349,8 @@ class ArbitrationSyndicatesService:
             except InsufficientBalanceError:
                 raise PermissionDeniedError("Insufficient balance for membership fee")
 
-            await self.invoicing_service.create_invoice(  # type: ignore
+            invoice_service = InvoicingService(self.db, tenant_id)
+            await invoice_service.create_invoice(  # type: ignore
                 entity_id=tenant_id,
                 user_id=user_id,
                 amount=fee,  # type: ignore
@@ -431,7 +433,8 @@ class ArbitrationSyndicatesService:
             **{k: v for k, v in data.items() if k not in ["license_name", "syndicate_id"]}
         )
 
-        await self.invoicing_service.create_invoice(  # type: ignore
+        invoice_service = InvoicingService(self.db, tenant_id)
+        await invoice_service.create_invoice(  # type: ignore
             entity_id=tenant_id,
             user_id=user_id,
             amount=Decimal("10.00"),
@@ -555,13 +558,14 @@ class ArbitrationSyndicatesService:
         return f"treasury_{syndicate_id}@syndicates.eppne.com"
 
     async def _register_affiliate_commission(self, user_id: int, tenant_id: int, action_type: str):
+        affiliate_service = AffiliateService(self.db, tenant_id)
         try:
             from app.domains.identity.repository import UserRepository
             user_repo = UserRepository(self.db)
             user = await user_repo.get_by_id(user_id)
             if user and user.referred_by:
                 commission = Decimal("5.00") if action_type == "ARBITRATION_CASE_CREATED" else Decimal("2.00")
-                await self.affiliate_service.register_commission(  # type: ignore
+                await affiliate_service.register_commission(  # type: ignore
                     affiliate_id=user.referred_by,
                     user_id=user_id,
                     amount=commission,

@@ -32,11 +32,6 @@ class ManufacturingService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = ManufacturingRepository(db)
-        self.finance = FinanceService(db)
-        self.ai_service = AIAgentsService(db)
-        self.saas_service = SaaSSubscriptionService(db)
-        self.affiliate_service = AffiliateService(db)
-        self.invoicing_service = InvoicingService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
 
@@ -45,11 +40,14 @@ class ManufacturingService:
     # ============================================================
 
     async def _check_saas_limits(self, tenant_id: int, feature: str = "manufacturing"):
-        subscription = await self.saas_service.get_active_subscription(tenant_id)  # type: ignore
+        saas_service = SaaSSubscriptionService(self.db, tenant_id)
+        subscription = await saas_service.get_active_subscription(tenant_id)  # type: ignore
         if not subscription:
             raise PermissionDeniedError("No active subscription found.")
-        features = subscription.features or {}
-        if not features.get(feature, False):
+        if not subscription.plan:
+            raise PermissionDeniedError("No valid subscription plan found.")
+        features = subscription.plan.features or []
+        if feature not in features:
             raise PermissionDeniedError("Manufacturing feature is not included in your current plan.")
         return subscription, features
 
@@ -63,11 +61,12 @@ class ManufacturingService:
         return user.email if user else f"user_{user_id}@eppne.com"  # type: ignore
 
     async def _register_affiliate_commission(self, user_id: int, tenant_id: int, action_type: str):
+        affiliate_service = AffiliateService(self.db, tenant_id)
         try:
             user = await self._get_user(user_id)
             if user and user.referred_by:  # type: ignore
                 commission = Decimal("10.00") if action_type == "FACILITY_CREATED" else Decimal("5.00")
-                await self.affiliate_service.register_commission(  # type: ignore
+                await affiliate_service.register_commission(  # type: ignore
                     affiliate_id=user.referred_by,  # type: ignore
                     user_id=user_id,
                     amount=commission,
@@ -297,7 +296,7 @@ class ManufacturingService:
         if not blueprint:
             raise NotFoundError("Blueprint not found")
 
-        governance = AIGovernanceService(self.db)
+        governance = AIGovernanceService(self.db, tenant_id)
         await governance.check_and_consume(
             tenant_id=tenant_id,
             agent_id=4,
@@ -307,8 +306,9 @@ class ManufacturingService:
             cost=Decimal("0.015")
         )
 
+        ai_service = AIAgentsService(self.db, tenant_id)
         try:
-            ai_result = await self.ai_service.execute_agent_action(  # type: ignore
+            ai_result = await ai_service.execute_agent_action(  # type: ignore
                 agent_id=4,
                 tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
@@ -325,7 +325,8 @@ class ManufacturingService:
             logger.warning(f"AI analysis failed, proceeding without: {e}")
 
         estimated_cost = Decimal(batch.target_quantity) * Decimal("0.50")  # type: ignore
-        await self.invoicing_service.create_invoice(  # type: ignore
+        invoice_service = InvoicingService(self.db, tenant_id)
+        await invoice_service.create_invoice(  # type: ignore
             entity_id=tenant_id,
             user_id=user_id,
             amount=estimated_cost,
@@ -657,7 +658,7 @@ class ManufacturingService:
         if not line:
             raise NotFoundError("Production line not found")
 
-        governance = AIGovernanceService(self.db)
+        governance = AIGovernanceService(self.db, tenant_id)
         await governance.check_and_consume(
             tenant_id=tenant_id,
             agent_id=4,
@@ -667,8 +668,9 @@ class ManufacturingService:
             cost=Decimal("0.02")
         )
 
+        ai_service = AIAgentsService(self.db, tenant_id)
         try:
-            ai_result = await self.ai_service.execute_agent_action(  # type: ignore
+            ai_result = await ai_service.execute_agent_action(  # type: ignore
                 agent_id=4,
                 tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
@@ -708,7 +710,8 @@ class ManufacturingService:
                     "scheduled_at": log.maintenance_scheduled_at
                 })
 
-        await self.invoicing_service.create_invoice(  # type: ignore
+        invoice_service = InvoicingService(self.db, tenant_id)
+        await invoice_service.create_invoice(  # type: ignore
             entity_id=tenant_id,
             user_id=user_id,
             amount=Decimal("25.00"),

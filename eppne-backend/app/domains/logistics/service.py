@@ -37,11 +37,6 @@ class LogisticsService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = LogisticsRepository(db)
-        self.ai_service = AIAgentsService(db)
-        self.saas_service = SaaSControlService(db)
-        self.affiliate_service = AffiliateService(db)
-        self.invoicing_service = InvoicingService(db)
-        self.finance = FinanceService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
 
@@ -50,11 +45,14 @@ class LogisticsService:
     # ============================================================
 
     async def _check_saas_limits(self, tenant_id: int, feature: str = "logistics"):
-        subscription = await self.saas_service.get_active_subscription(tenant_id)  # type: ignore
+        saas_service = SaaSControlService(self.db, tenant_id)
+        subscription = await saas_service.get_active_subscription(tenant_id)  # type: ignore
         if not subscription:
             raise PermissionDeniedError("No active subscription found.")
-        features = subscription.features or {}
-        if not features.get(feature, False):
+        if not subscription.plan:
+            raise PermissionDeniedError("No valid subscription plan found.")
+        features = subscription.plan.features or []
+        if feature not in features:
             raise PermissionDeniedError("Logistics feature is not included in your current plan.")
         return subscription, features
 
@@ -544,7 +542,7 @@ class LogisticsService:
         inventory_history = await self.repo.get_inventory_history(tenant_id, product_id, days=90)
 
         from app.domains.ai_governance.service import AIGovernanceService
-        governance = AIGovernanceService(self.db)
+        governance = AIGovernanceService(self.db, tenant_id)
         await governance.check_and_consume(
             tenant_id=tenant_id,  # type: ignore
             agent_id=13,
@@ -555,8 +553,9 @@ class LogisticsService:
         )
 
         prediction: Dict[str, Any] = {}
+        ai_service = AIAgentsService(self.db, tenant_id)
         try:
-            ai_result = await self.ai_service.execute_agent_action(
+            ai_result = await ai_service.execute_agent_action(
                 agent_id=13,
                 tenant_id=tenant_id,  # type: ignore
                 action_type="ANALYZE_SENSOR",

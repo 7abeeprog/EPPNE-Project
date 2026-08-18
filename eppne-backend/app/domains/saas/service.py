@@ -87,6 +87,10 @@ class SaaSControlService:
             "is_active": sub.status in ["ACTIVE", "TRIAL"],
         }
 
+    async def get_active_subscription(self, tenant_id: int) -> Optional[TenantSubscription]:
+        """اشتراك واحد شامل نشط/تجريبي للـtenant (wrapper حول SaaSRepository.get_any_active_subscription) — تُستخدَم من _check_saas_limits عبر 8 دومينات."""
+        return await self.repo.get_any_active_subscription(tenant_id)
+
     async def create_subscription(
         self,
         plan_id: int,

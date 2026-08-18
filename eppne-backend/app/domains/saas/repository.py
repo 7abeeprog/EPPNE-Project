@@ -139,6 +139,24 @@ class SaaSRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_any_active_subscription(
+        self,
+        tenant_id: int
+    ) -> Optional[TenantSubscription]:
+        """اشتراك واحد شامل نشط/تجريبي للـtenant، بغض النظر عن الخدمة (يستخدمه _check_saas_limits عبر الدومينات)."""
+        result = await self.db.execute(
+            select(TenantSubscription)
+            .where(
+                and_(
+                    TenantSubscription.tenant_id == tenant_id,
+                    TenantSubscription.status.in_(["ACTIVE", "TRIAL"])
+                )
+            )
+            .order_by(TenantSubscription.created_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def get_subscriptions_for_renewal(self, tenant_id: Optional[int] = None) -> List[TenantSubscription]:
         now = datetime.now(timezone.utc)
         query = select(TenantSubscription).where(

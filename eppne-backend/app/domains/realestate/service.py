@@ -62,8 +62,10 @@ class RealEstateService:
         subscription = await saas.get_active_subscription(tenant_id)  # type: ignore
         if not subscription:
             raise PermissionDeniedError("No active subscription found.")
-        features = subscription.features or {}
-        if not features.get(feature, False):
+        if not subscription.plan:
+            raise PermissionDeniedError("No valid subscription plan found.")
+        features = subscription.plan.features or []
+        if feature not in features:
             raise PermissionDeniedError("Real Estate feature is not included in your current plan.")
         return subscription, features
 
