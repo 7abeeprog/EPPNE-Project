@@ -31,11 +31,6 @@ class InvitationsService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = InvitationsRepository(db)
-        self.ai_service = AIAgentsService(db)
-        self.saas_service = SaaSSubscriptionService(db)
-        self.affiliate_service = AffiliateService(db)
-        self.invoicing_service = InvoicingService(db)
-        self.finance = FinanceService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
 
@@ -44,11 +39,14 @@ class InvitationsService:
     # ============================================================
 
     async def _check_saas_limits(self, tenant_id: int, feature: str = "crm"):
-        subscription = await self.saas_service.get_active_subscription(tenant_id)  # type: ignore
+        saas_service = SaaSSubscriptionService(self.db, tenant_id)
+        subscription = await saas_service.get_active_subscription(tenant_id)  # type: ignore
         if not subscription:
             raise PermissionDeniedError("No active subscription found.")
-        features = subscription.features or {}
-        if not features.get(feature, False):
+        if not subscription.plan:
+            raise PermissionDeniedError("No valid subscription plan found.")
+        features = subscription.plan.features or []
+        if feature not in features:
             raise PermissionDeniedError("CRM feature is not included in your current plan.")
         return subscription, features
 
@@ -65,11 +63,12 @@ class InvitationsService:
         return f"entity_{entity_id}@eppne.com"
 
     async def _register_affiliate_commission(self, user_id: int, tenant_id: int, action_type: str):
+        affiliate_service = AffiliateService(self.db, tenant_id)
         try:
             user = await self._get_user(user_id)
             if user and user.referred_by:  # type: ignore
                 commission = Decimal("2.00") if action_type in ["INVITATION_CREATED", "CAMPAIGN_CREATED"] else Decimal("5.00")
-                await self.affiliate_service.register_commission(  # type: ignore
+                await affiliate_service.register_commission(  # type: ignore
                     affiliate_id=user.referred_by,  # type: ignore
                     user_id=user_id,
                     amount=commission,
@@ -80,8 +79,9 @@ class InvitationsService:
             logger.error(f"Affiliate registration failed: {e}")
 
     async def _analyze_target_user(self, user_id: int, tenant_id: int) -> dict:
+        ai_service = AIAgentsService(self.db, tenant_id)
         try:
-            ai_result = await self.ai_service.execute_agent_action(
+            ai_result = await ai_service.execute_agent_action(
                 agent_id=12,
                 tenant_id=tenant_id,  # type: ignore
                 action_type="ANALYZE_SENSOR",
@@ -112,16 +112,16 @@ class InvitationsService:
         )
         return agents[0] if agents else None
 
-    async def _create_user_from_invitation(self, data: dict, tenant_id: int):
+    async def _create_user_from_invitation(self, data: dict, tenant_id: int, invitation_id: int):
         from app.domains.identity.service import UserService
-        identity_service = UserService(self.db)
+        identity_service = UserService(self.db, tenant_id)
         from app.domains.identity.schemas import UserCreate
         user_create = UserCreate(
             username=data.get("email", "").split("@")[0],
             email=cast(str, data.get("email")),
             password=data.get("password", "TempPass123!")
         )
-        return await identity_service.register(user_create, f"INV-{uuid.uuid4().hex[:12]}")
+        return await identity_service.register(user_create, f"INV-ACCEPT-T{tenant_id}-{invitation_id}")
 
     async def _apply_discount_gift(self, user_id: int, invitation: SovereignInvitation):
         pass
@@ -285,11 +285,11 @@ class InvitationsService:
         if not invitation or invitation.status != InvitationStatus.SENT:  # type: ignore
             raise NotFoundError("Invitation not found or not sent")
 
-        async with self.db.begin_nested():
-            if not user_id:
-                new_user = await self._create_user_from_invitation(accept_data, tenant_id)
-                user_id = cast(int, new_user.id)
+        if not user_id:
+            new_user = await self._create_user_from_invitation(accept_data, tenant_id, invitation_id)
+            user_id = cast(int, new_user.id)
 
+        async with self.db.begin_nested():
             lead = await self.repo.create_lead(
                 tenant_id=tenant_id,  # type: ignore
                 source=LeadSource.INVITATION,
@@ -379,7 +379,7 @@ class InvitationsService:
             raise NotFoundError("Invitation not found")
 
         from app.domains.ai_governance.service import AIGovernanceService
-        governance = AIGovernanceService(self.db)
+        governance = AIGovernanceService(self.db, tenant_id)
         await governance.check_and_consume(
             tenant_id=tenant_id,  # type: ignore
             agent_id=invitation.assigned_ai_agent_id or 1,  # type: ignore
@@ -391,6 +391,7 @@ class InvitationsService:
 
         sanitized_message = bleach.clean(user_message, tags=[], strip=True)
 
+        ai_service = AIAgentsService(self.db, tenant_id)
         async with self.db.begin_nested():
             await self.repo.create_conversation(
                 tenant_id=tenant_id,  # type: ignore
@@ -411,7 +412,7 @@ class InvitationsService:
             قم بالرد بأسلوب ودود ومقنع.
             """
 
-            ai_response = await self.ai_service.execute_agent_action(
+            ai_response = await ai_service.execute_agent_action(
                 agent_id=ai_agent_id,
                 tenant_id=tenant_id,  # type: ignore
                 action_type="CHAT",
@@ -642,7 +643,9 @@ class InvitationsService:
         budget = data.get("budget_mrusdt", Decimal("0.0"))
         if budget > 0:
             payment_idempotency = f"campaign_budget_{idempotency_key or uuid.uuid4().hex[:12]}"
-            await self.finance.transfer(
+            finance = FinanceService(self.db, tenant_id)
+            invoice_service = InvoicingService(self.db, tenant_id)
+            await finance.transfer(
                 sender_id=user_id,
                 receiver_email="marketing@eppne.com",
                 currency="MR_USDT",
@@ -651,7 +654,7 @@ class InvitationsService:
                 idempotency_key=payment_idempotency
             )
 
-            await self.invoicing_service.create_invoice(  # type: ignore
+            await invoice_service.create_invoice(  # type: ignore
                 entity_id=tenant_id,
                 user_id=user_id,
                 amount=budget,

@@ -56,12 +56,7 @@ class EmploymentService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
         self.repo = EmploymentRepository(db)
-        self.finance = FinanceService(db)
         self.academy = AcademyRepository(db)
-        self.ai_service = AIAgentsService(db)
-        self.saas_service = SaaSSubscriptionService(db)
-        self.affiliate_service = AffiliateService(db)
-        self.invoicing_service = InvoicingService(db)
         self.event_bus = EventBus(redis_client)
         self.redis = redis_client
 
@@ -73,11 +68,14 @@ class EmploymentService:
         """
         التحقق من أن المستأجر لديه اشتراك فعال يتضمن الميزة المطلوبة.
         """
-        subscription = await self.saas_service.get_active_subscription(tenant_id)
+        saas_service = SaaSSubscriptionService(self.db, tenant_id)
+        subscription = await saas_service.get_active_subscription(tenant_id)
         if not subscription:
             raise PermissionDeniedError("No active subscription found for this entity.")
-        features = subscription.features or {}
-        if not features.get(feature, False):
+        if not subscription.plan:
+            raise PermissionDeniedError("No valid subscription plan found.")
+        features = subscription.plan.features or []
+        if feature not in features:
             raise PermissionDeniedError(
                 f"Feature '{feature}' is not included in your current plan."
             )
@@ -97,6 +95,7 @@ class EmploymentService:
         self, user_id: int, tenant_id: int, action_type: str, amount: Decimal
     ) -> None:
         """تسجيل عمولة إحالة للوكيل إن وجد."""
+        affiliate_service = AffiliateService(self.db, tenant_id)
         try:
             user = await self._get_user(user_id)
             if user and user.referred_by:
@@ -105,7 +104,7 @@ class EmploymentService:
                     if action_type == "JOB_CREATED"
                     else amount * Decimal("0.02")
                 )
-                await self.affiliate_service.register_commission(
+                await affiliate_service.register_commission(
                     affiliate_id=user.referred_by,
                     user_id=user_id,
                     amount=commission,
@@ -139,7 +138,8 @@ class EmploymentService:
             قم بحساب نسبة التوافق كرقم بين 0 و 100. أعد الرقم فقط بدون أي نص إضافي.
             """
             idempotency_key = f"ai_match_{applicant_id}_{job.id}_{uuid.uuid4().hex[:8]}"
-            result = await self.ai_service.execute_agent_action(
+            ai_service = AIAgentsService(self.db, cast(int, job.tenant_id))
+            result = await ai_service.execute_agent_action(
                 agent_id=1,
                 tenant_id=cast(int, job.tenant_id),
                 action_type="ANALYZE_SENSOR",

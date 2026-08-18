@@ -27,9 +27,6 @@ class DigitalTwinService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = DigitalTwinRepository(db)
-        self.finance = FinanceService(db)
-        self.saas_service = SaaSControlService(db)
-        self.affiliate_service = AffiliateService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
 
     # ============================================================
@@ -38,11 +35,14 @@ class DigitalTwinService:
 
     async def _check_saas_limits(self, tenant_id: int):
         """التحقق من صلاحية التوأم الرقمي في خطة الاشتراك."""
-        subscription = await self.saas_service.get_active_subscription(tenant_id)  # type: ignore
+        saas_service = SaaSControlService(self.db, tenant_id)
+        subscription = await saas_service.get_active_subscription(tenant_id)  # type: ignore
         if not subscription:
             raise PermissionDeniedError("No active subscription found for this entity.")
-        features = subscription.features or {}
-        if not features.get("digital_twin", False):
+        if not subscription.plan:
+            raise PermissionDeniedError("No valid subscription plan found.")
+        features = subscription.plan.features or []
+        if "digital_twin" not in features:
             raise PermissionDeniedError("Digital Twin feature is not included in your current plan.")
         return subscription, features
 
@@ -66,6 +66,7 @@ class DigitalTwinService:
         affiliate_code: Optional[str] = None
     ):
         """تسجيل عمولة إحالة عند إنشاء توأم أو تفاعل مدفوع."""
+        affiliate_service = AffiliateService(self.db, tenant_id)
         try:
             user = await self._get_user(user_id)
             if not user:
@@ -76,7 +77,7 @@ class DigitalTwinService:
                 return
 
             if affiliate_code and not referrer_id:
-                referrer = await self.affiliate_service.get_user_by_code(affiliate_code)  # type: ignore
+                referrer = await affiliate_service.get_user_by_code(affiliate_code)  # type: ignore
                 if referrer:
                     referrer_id = referrer.id
 
@@ -93,7 +94,7 @@ class DigitalTwinService:
                 return
 
             if commission_amount > 0:
-                await self.affiliate_service.register_commission(  # type: ignore
+                await affiliate_service.register_commission(  # type: ignore
                     affiliate_id=referrer_id,
                     user_id=user_id,
                     amount=commission_amount,
@@ -172,8 +173,9 @@ class DigitalTwinService:
         payout_tx_hash = None
         if fee > 0:
             # 🔥 معاملة ذرية للدفع
+            finance = FinanceService(self.db, tenant_id)
             async with self.db.begin_nested():
-                tx = await self.finance.transfer(
+                tx = await finance.transfer(
                     sender_id=visitor_id,
                     receiver_email=await self._get_user_email(twin_owner_id),
                     currency="MR_USDT",
