@@ -544,7 +544,6 @@ class LogisticsService:
         from app.domains.ai_governance.service import AIGovernanceService
         governance = AIGovernanceService(self.db, tenant_id)
         await governance.check_and_consume(
-            tenant_id=tenant_id,  # type: ignore
             agent_id=13,
             user_id=user_id,
             action_type="LOGISTICS_FORECAST",

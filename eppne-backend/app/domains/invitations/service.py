@@ -381,7 +381,6 @@ class InvitationsService:
         from app.domains.ai_governance.service import AIGovernanceService
         governance = AIGovernanceService(self.db, tenant_id)
         await governance.check_and_consume(
-            tenant_id=tenant_id,  # type: ignore
             agent_id=invitation.assigned_ai_agent_id or 1,  # type: ignore
             user_id=user_id or 0,
             action_type="CRM_CHAT",

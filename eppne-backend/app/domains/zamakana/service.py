@@ -496,9 +496,9 @@ class ZamakanaService:
         from app.domains.ai_governance.service import AIGovernanceService
         governance = AIGovernanceService(self.db, tenant_id)
         await governance.check_and_consume(
-            tenant_id=tenant_id,
             agent_id=ai_agent_id,
             user_id=user_id,
+            action_type="SCENARIO_ANALYSIS",
             tokens=500,
             cost=Decimal("0.05")
         )

@@ -40,15 +40,8 @@ class ServiceMarketplaceService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = ServiceMarketplaceRepository(db)
-        self.finance = FinanceService(db)
-        self.entity_service = SovereignEntitiesService(db)
         self.redis = redis_client
         self.event_bus = EventBus(cast(Any, redis_client))
-
-        self.saas_service = SaaSSubscriptionService(db)
-        self.affiliate_service = AffiliateService(db)
-        self.invoice_service = InvoicingService(db)
-        self.governance_service = AIGovernanceService(db)
 
     # ============================================================
     # 0. دوال Idempotency الموحّدة
@@ -73,7 +66,8 @@ class ServiceMarketplaceService:
 
     async def _check_saas_limits(self, tenant_id: int):
         """التحقق من صلاحية Service Marketplace في خطة الاشتراك."""
-        has_access = await self.saas_service.can_access_service(tenant_id, "service_marketplace")
+        saas_service = SaaSSubscriptionService(self.db, tenant_id)
+        has_access = await saas_service.can_access_service(tenant_id, "service_marketplace")
         if not has_access:
             raise PermissionDeniedError("Service Marketplace feature is not included in your current plan.")
         return None, {}
@@ -160,9 +154,9 @@ class ServiceMarketplaceService:
         if not service or not service.is_active:
             raise NotFoundError("Service not available")
 
+        governance_service = AIGovernanceService(self.db, buyer_tenant_id)
         if "ai" in service.service_type.value.lower() or (service.requires_modules and "ai" in service.requires_modules):
-            allowed = await self.governance_service.check_and_consume(
-                tenant_id=buyer_tenant_id,
+            allowed = await governance_service.check_and_consume(
                 agent_id=0,
                 user_id=buyer_user_id,
                 action_type="SERVICE_PURCHASE",
@@ -191,8 +185,10 @@ class ServiceMarketplaceService:
 
         tx_hash = None
         if total_price > 0:
+            finance = FinanceService(self.db, buyer_tenant_id)
+            invoice_service = InvoicingService(self.db, buyer_tenant_id)
             try:
-                tx_hash = await self.finance.transfer(
+                tx_hash = await finance.transfer(
                     sender_id=buyer_user_id,
                     receiver_email=await self._get_owner_email(service.tenant_id),
                     currency="MR_USDT",
@@ -203,7 +199,7 @@ class ServiceMarketplaceService:
             except InsufficientBalanceError:
                 raise PermissionDeniedError("Insufficient balance to purchase this service")
 
-            await self.invoice_service.create_invoice(
+            await invoice_service.create_invoice(
                 tenant_id=buyer_tenant_id,
                 user_id=buyer_user_id,
                 amount=total_price,
@@ -214,6 +210,7 @@ class ServiceMarketplaceService:
 
             await self._register_affiliate_commission(
                 user_id=buyer_user_id,
+                tenant_id=buyer_tenant_id,
                 amount=total_price,
                 description=f"Service purchase: {service.name}"
             )
@@ -361,7 +358,8 @@ class ServiceMarketplaceService:
             }.get(plan, Decimal(0))
 
             if base_price > 0:
-                await self.finance.transfer(
+                finance = FinanceService(self.db, license_obj.tenant_id)
+                await finance.transfer(
                     sender_id=user_id,
                     receiver_email=await self._get_owner_email(service.tenant_id),
                     currency="MR_USDT",
@@ -397,7 +395,8 @@ class ServiceMarketplaceService:
 
             addon_price = addon.price_mrusdt
             if addon_price > 0:
-                await self.finance.transfer(
+                finance = FinanceService(self.db, license_obj.tenant_id)
+                await finance.transfer(
                     sender_id=user_id,
                     receiver_email=await self._get_owner_email(license_obj.tenant_id),
                     currency="MR_USDT",
@@ -480,14 +479,15 @@ class ServiceMarketplaceService:
         """جلب بريد مالك المستأجر (تبسيط)."""
         return f"owner_tenant_{tenant_id}@eppne.com"
 
-    async def _register_affiliate_commission(self, user_id: int, amount: Decimal, description: str):
+    async def _register_affiliate_commission(self, user_id: int, tenant_id: int, amount: Decimal, description: str):
         """تسجيل عمولة إحالة (10% من قيمة الشراء)."""
         try:
+            affiliate_service = AffiliateService(self.db, tenant_id)
             user = await self._get_user(user_id)
             if user and user.referred_by:
                 commission_amount = amount * Decimal("0.10")
                 if commission_amount > 0:
-                    await self.affiliate_service.register_commission(
+                    await affiliate_service.register_commission(
                         affiliate_id=user.referred_by,
                         user_id=user_id,
                         amount=commission_amount,

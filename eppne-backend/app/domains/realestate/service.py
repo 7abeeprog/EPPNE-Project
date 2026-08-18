@@ -74,9 +74,9 @@ class RealEstateService:
         try:
             governance = AIGovernanceService(self.db, tenant_id)
             result = await governance.check_and_consume(
-                tenant_id=tenant_id,
                 agent_id=2,
                 user_id=user_id,
+                action_type=action,
                 tokens=100,
                 cost=cost
             )

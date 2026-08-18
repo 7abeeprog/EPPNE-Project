@@ -37,11 +37,6 @@ class TransportService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = TransportRepository(db)
-        self.finance = FinanceService(db)
-        self.affiliate = AffiliateService(db)
-        self.saas = SaaSSubscriptionService(db)
-        self.ai = AIAgentsService(db)
-        self.governance = AIGovernanceService(db)
         self.communications = CommunicationsService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
@@ -66,7 +61,8 @@ class TransportService:
 
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "transport"):
-        has_access = await self.saas.can_access_service(tenant_id, feature)
+        saas_service = SaaSSubscriptionService(self.db, tenant_id)
+        has_access = await saas_service.can_access_service(tenant_id, feature)
         if not has_access:
             raise PermissionDeniedError("Transport feature is not included in your current plan.")
         return None, {}
@@ -74,10 +70,11 @@ class TransportService:
     # ========== التحقق من حوكمة الذكاء الاصطناعي ==========
     async def _check_ai_governance(self, tenant_id: int, user_id: int, action: str, cost: Decimal):
         try:
-            return await self.governance.check_and_consume(
-                tenant_id=tenant_id,
+            governance = AIGovernanceService(self.db, tenant_id)
+            return await governance.check_and_consume(
                 agent_id=3,
                 user_id=user_id,
+                action_type=action,
                 tokens=50,
                 cost=cost
             )
@@ -164,7 +161,8 @@ class TransportService:
         await self._check_saas_limits(tenant_id, "transport")
 
         try:
-            ai_result = await self.ai.execute_agent_action(  # type: ignore[call-arg]
+            ai_service = AIAgentsService(self.db, tenant_id)
+            ai_result = await ai_service.execute_agent_action(  # type: ignore[call-arg]
                 agent_id=3,
                 tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
@@ -327,9 +325,10 @@ class TransportService:
 
         driver = await self._get_user_by_id(cast(int, trip.driver_id))  # type: ignore
 
+        finance = FinanceService(self.db, tenant_id)
         async with self.db.begin_nested():
             try:
-                tx_hash = await self.finance.transfer(
+                tx_hash = await finance.transfer(
                     sender_id=passenger_id,
                     receiver_email=cast(str, driver.email),
                     currency="MR_USDT",
@@ -352,7 +351,7 @@ class TransportService:
                 idempotency_key=idempotency_key
             )
 
-            await self.finance.create_invoice(  # type: ignore[attr-defined]
+            await finance.create_invoice(  # type: ignore[attr-defined]
                 entity_id=tenant_id,
                 user_id=passenger_id,
                 amount=cast(Decimal, fare),
@@ -507,9 +506,10 @@ class TransportService:
             raise NotFoundError("Trip not found")
         driver = await self._get_user_by_id(cast(int, trip.driver_id))  # type: ignore
 
+        finance = FinanceService(self.db, tenant_id)
         async with self.db.begin_nested():
             try:
-                tx_hash = await self.finance.transfer(
+                tx_hash = await finance.transfer(
                     sender_id=payer_id,
                     receiver_email=cast(str, driver.email),
                     currency="MR_USDT",
@@ -526,7 +526,7 @@ class TransportService:
                 )
             )
 
-            await self.finance.create_invoice(  # type: ignore[attr-defined]
+            await finance.create_invoice(  # type: ignore[attr-defined]
                 entity_id=tenant_id,
                 user_id=payer_id,
                 amount=cast(Decimal, task.delivery_fee_mrusdt),  # type: ignore
@@ -572,11 +572,12 @@ class TransportService:
         return user
 
     async def _register_affiliate_commission(self, user_id: int, tenant_id: int, amount: Decimal):
+        affiliate_service = AffiliateService(self.db, tenant_id)
         try:
             user = await self.user_repo.get_by_id(user_id)
             if user and user.referred_by:
                 commission = amount * Decimal("0.02")
-                await self.affiliate.register_commission(  # type: ignore[attr-defined]
+                await affiliate_service.register_commission(  # type: ignore[attr-defined]
                     affiliate_id=user.referred_by,
                     user_id=user_id,
                     amount=commission,
