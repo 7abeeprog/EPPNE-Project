@@ -32,11 +32,6 @@ class InsuranceService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = InsuranceRepository(db)
-        self.finance = FinanceService(db)
-        self.ai_service = AIAgentsService(db)
-        self.saas_service = SaaSSubscriptionService(db)
-        self.affiliate_service = AffiliateService(db)
-        self.invoicing_service = InvoicingService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
 
@@ -45,7 +40,8 @@ class InsuranceService:
     # ============================================================
 
     async def _check_saas_limits(self, tenant_id: int, feature: str = "insurance"):
-        subscription = await self.saas_service.get_active_subscription(tenant_id)  # type: ignore
+        saas_service = SaaSSubscriptionService(self.db, tenant_id)
+        subscription = await saas_service.get_active_subscription(tenant_id)  # type: ignore
         if not subscription:
             raise PermissionDeniedError("No active subscription found.")
         features = subscription.features or {}
@@ -84,11 +80,12 @@ class InsuranceService:
         return sanitized
 
     async def _register_affiliate_commission(self, user_id: int, tenant_id: int, action_type: str, amount: Decimal):
+        affiliate_service = AffiliateService(self.db, tenant_id)
         try:
             user = await self._get_user(user_id)
             if user and user.referred_by:  # type: ignore
                 commission = amount * Decimal("0.02")
-                await self.affiliate_service.register_commission(  # type: ignore
+                await affiliate_service.register_commission(  # type: ignore
                     affiliate_id=user.referred_by,  # type: ignore
                     user_id=user_id,
                     amount=commission,
@@ -190,11 +187,13 @@ class InsuranceService:
         premium = cast(Decimal, policy.base_premium_mrusdt)  # type: ignore
         payment_idempotency = f"insurance_payment_{idempotency_key or uuid.uuid4().hex[:12]}"
 
+        finance = FinanceService(self.db, tenant_id)
+        invoice_service = InvoicingService(self.db, tenant_id)
         # 🔥 معاملة ذرية للاشتراك والدفع
         async with self.db.begin_nested():
             if premium > 0:
                 try:
-                    tx_hash = await self.finance.transfer(
+                    tx_hash = await finance.transfer(
                         sender_id=user_id,
                         receiver_email=await self._get_entity_email(policy.issuer_entity_id),  # type: ignore
                         currency="MR_USDT",
@@ -204,14 +203,6 @@ class InsuranceService:
                     )
                 except InsufficientBalanceError:
                     raise PermissionDeniedError("Insufficient balance for premium payment")
-
-                await self.invoicing_service.create_invoice(  # type: ignore
-                    entity_id=tenant_id,
-                    user_id=user_id,
-                    amount=premium,
-                    description=f"Insurance premium: {policy.name}",
-                    due_date=datetime.utcnow() + timedelta(days=30)
-                )
 
                 await self._register_affiliate_commission(user_id, tenant_id, "INSURANCE_SUBSCRIPTION", premium)
 
@@ -229,6 +220,18 @@ class InsuranceService:
             )
 
         await self.db.commit()
+
+        if premium > 0:
+            try:
+                await invoice_service.create_invoice(  # type: ignore
+                    entity_id=tenant_id,
+                    user_id=user_id,
+                    amount=premium,
+                    description=f"Insurance premium: {policy.name}",
+                    due_date=datetime.utcnow() + timedelta(days=30)
+                )
+            except Exception as e:
+                logger.error(f"Invoice creation failed for insurance subscription {subscription.id}: {e}")
 
         await self.event_bus.publish("insurance.subscription.created", {
             "subscription_id": subscription.id,
@@ -271,7 +274,8 @@ class InsuranceService:
             raise NotFoundError("Policy not found")
 
         payment_idempotency = f"renew_{subscription_id}_{uuid.uuid4().hex[:12]}"
-        await self.finance.transfer(
+        finance = FinanceService(self.db, cast(int, policy.tenant_id))
+        await finance.transfer(
             sender_id=user_id,
             receiver_email=await self._get_entity_email(cast(int, policy.issuer_entity_id)),  # type: ignore
             currency="MR_USDT",
@@ -325,9 +329,10 @@ class InsuranceService:
         sanitized_description = bleach.clean(data["incident_description"], tags=[], strip=True)
 
         # استدعاء وكيل الذكاء الاصطناعي
+        ai_service = AIAgentsService(self.db, tenant_id)
         try:
             from app.domains.ai_governance.service import AIGovernanceService
-            governance = AIGovernanceService(self.db)
+            governance = AIGovernanceService(self.db, tenant_id)
             await governance.check_and_consume(
                 tenant_id=tenant_id,
                 agent_id=10,
@@ -336,7 +341,7 @@ class InsuranceService:
                 tokens=300,
                 cost=Decimal("0.03")
             )
-            ai_result = await self.ai_service.execute_agent_action(
+            ai_result = await ai_service.execute_agent_action(
                 agent_id=10,
                 tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
@@ -427,8 +432,9 @@ class InsuranceService:
             raise PermissionDeniedError("Not authorized to review this claim")
 
         # AI Review
+        ai_service = AIAgentsService(self.db, tenant_id)
         try:
-            ai_result = await self.ai_service.execute_agent_action(
+            ai_result = await ai_service.execute_agent_action(
                 agent_id=10,
                 tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
@@ -443,6 +449,8 @@ class InsuranceService:
         except Exception as e:
             logger.warning(f"AI claim review failed: {e}")
 
+        finance = FinanceService(self.db, tenant_id)
+        invoice_service = InvoicingService(self.db, tenant_id)
         # 🔥 معاملة ذرية للموافقة والصرف
         async with self.db.begin_nested():
             if approve:
@@ -451,21 +459,13 @@ class InsuranceService:
                     final_amount = cast(Decimal, policy.max_coverage_limit_mrusdt)  # type: ignore
 
                 payment_idempotency = f"claim_payout_{claim_id}_{uuid.uuid4().hex[:12]}"
-                payout_tx = await self.finance.transfer(
+                payout_tx = await finance.transfer(
                     sender_id=reviewer_id,
                     receiver_email=await self._get_user_email(claim.claimant_user_id),  # type: ignore
                     currency="MR_USDT",
                     amount=final_amount,
                     notes=f"Insurance claim payout for {cast(Any, policy).name}",
                     idempotency_key=payment_idempotency
-                )
-
-                await self.invoicing_service.create_invoice(  # type: ignore
-                    entity_id=tenant_id,
-                    user_id=claim.claimant_user_id,  # type: ignore
-                    amount=final_amount,
-                    description=f"Insurance claim payout: {cast(Any, policy).name}",
-                    due_date=datetime.utcnow()
                 )
 
                 claim = await self.repo.update_claim(
@@ -483,6 +483,18 @@ class InsuranceService:
                 )
 
         await self.db.commit()
+
+        if approve:
+            try:
+                await invoice_service.create_invoice(  # type: ignore
+                    entity_id=tenant_id,
+                    user_id=claim.claimant_user_id,  # type: ignore
+                    amount=final_amount,
+                    description=f"Insurance claim payout: {cast(Any, policy).name}",
+                    due_date=datetime.utcnow()
+                )
+            except Exception as e:
+                logger.error(f"Invoice creation failed for insurance claim payout {claim_id}: {e}")
 
         await self.event_bus.publish("insurance.claim.resolved", {
             "claim_id": claim.id,
@@ -535,8 +547,9 @@ class InsuranceService:
                 last_payout_date = await self._get_payout_date(pension.last_payout_tx)  # type: ignore
                 if last_payout_date and last_payout_date.month == datetime.utcnow().month:
                     continue
+            finance = FinanceService(self.db, cast(int, pension.tenant_id))
             try:
-                tx = await self.finance.transfer(
+                tx = await finance.transfer(
                     sender_id=1,
                     receiver_email=await self._get_user_email(pension.beneficiary_id),  # type: ignore
                     currency="MR_USDT",

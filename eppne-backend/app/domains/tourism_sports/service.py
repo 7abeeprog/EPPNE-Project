@@ -35,11 +35,6 @@ class TourismSportsService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = TourismSportsRepository(db)
-        self.finance = FinanceService(db)
-        self.ai_service = AIAgentsService(db)
-        self.saas_service = SaaSSubscriptionService(db)
-        self.affiliate_service = AffiliateService(db)
-        self.invoicing_service = InvoicingService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
 
@@ -62,7 +57,8 @@ class TourismSportsService:
 
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "tourism_sports"):
-        has_access = await self.saas_service.can_access_service(tenant_id, feature)
+        saas_service = SaaSSubscriptionService(self.db, tenant_id)
+        has_access = await saas_service.can_access_service(tenant_id, feature)
         if not has_access:
             raise PermissionDeniedError("Tourism & Sports feature is not included in your current plan.")
         return None, {}
@@ -157,9 +153,11 @@ class TourismSportsService:
         if participants_count >= program.max_capacity:  # type: ignore
             raise InsufficientBalanceError("البرنامج مكتمل العدد")
 
+        finance = FinanceService(self.db, tenant_id)
+        invoice_service = InvoicingService(self.db, tenant_id)
         async with self.db.begin_nested():
             try:
-                tx_hash = await self.finance.transfer(
+                tx_hash = await finance.transfer(
                     sender_id=user_id,
                     receiver_email="tourism@eppne.com",
                     currency="MR_USDT",
@@ -169,14 +167,6 @@ class TourismSportsService:
                 )
             except InsufficientBalanceError:
                 raise PermissionDeniedError("Insufficient balance")
-
-            await self.invoicing_service.create_invoice(  # type: ignore[attr-defined]
-                entity_id=tenant_id,
-                user_id=user_id,
-                amount=program.base_price_mrusdt,  # type: ignore
-                description=f"Tourism program booking: {program.title}",
-                due_date=datetime.utcnow() + timedelta(days=30)
-            )
 
             await self._register_affiliate_commission(user_id, tenant_id, "PROGRAM_BOOKED", program.base_price_mrusdt)  # type: ignore
 
@@ -199,6 +189,17 @@ class TourismSportsService:
             )
 
         await self.db.commit()
+
+        try:
+            await invoice_service.create_invoice(  # type: ignore[attr-defined]
+                entity_id=tenant_id,
+                user_id=user_id,
+                amount=program.base_price_mrusdt,  # type: ignore
+                description=f"Tourism program booking: {program.title}",
+                due_date=datetime.utcnow() + timedelta(days=30)
+            )
+        except Exception as e:
+            logger.error(f"Invoice creation failed for program booking {program_id}: {e}")
 
         # تخزين معرف المشارك فقط
         if idempotency_key:
@@ -265,8 +266,9 @@ class TourismSportsService:
             price += Decimal(50)
 
         if require_vip_transport:
+            ai_service = AIAgentsService(self.db, tenant_id)
             try:
-                await self.ai_service.execute_agent_action(  # type: ignore[call-arg]
+                await ai_service.execute_agent_action(  # type: ignore[call-arg]
                     agent_id=5,
                     tenant_id=tenant_id,
                     action_type="ANALYZE_SENSOR",
@@ -276,9 +278,11 @@ class TourismSportsService:
             except Exception as e:
                 logger.warning(f"AI transport optimization failed: {e}")
 
+        finance = FinanceService(self.db, tenant_id)
+        invoice_service = InvoicingService(self.db, tenant_id)
         async with self.db.begin_nested():
             try:
-                tx_hash = await self.finance.transfer(
+                tx_hash = await finance.transfer(
                     sender_id=user_id,
                     receiver_email="events@eppne.com",
                     currency="MR_USDT",
@@ -288,14 +292,6 @@ class TourismSportsService:
                 )
             except InsufficientBalanceError:
                 raise PermissionDeniedError("Insufficient balance")
-
-            await self.invoicing_service.create_invoice(  # type: ignore[attr-defined]
-                entity_id=tenant_id,
-                user_id=user_id,
-                amount=price,
-                description=f"Event ticket: {event.title} ({tier})",
-                due_date=datetime.utcnow() + timedelta(days=30)
-            )
 
             nft_id = f"TKT-{event_id}-{user_id}-{uuid.uuid4().hex[:12].upper()}"
             qr_data = hashlib.sha256(f"{nft_id}-{uuid.uuid4().hex}".encode()).hexdigest()[:16]
@@ -320,6 +316,17 @@ class TourismSportsService:
             )
 
         await self.db.commit()
+
+        try:
+            await invoice_service.create_invoice(  # type: ignore[attr-defined]
+                entity_id=tenant_id,
+                user_id=user_id,
+                amount=price,
+                description=f"Event ticket: {event.title} ({tier})",
+                due_date=datetime.utcnow() + timedelta(days=30)
+            )
+        except Exception as e:
+            logger.error(f"Invoice creation failed for ticket purchase (event {event_id}): {e}")
 
         # تخزين معرف التذكرة فقط
         if idempotency_key:
@@ -402,8 +409,9 @@ class TourismSportsService:
 
         medical_flag = False
         medical_report = None
+        ai_service = AIAgentsService(self.db, tenant_id)
         try:
-            ai_result = await self.ai_service.execute_agent_action(  # type: ignore[call-arg]
+            ai_result = await ai_service.execute_agent_action(  # type: ignore[call-arg]
                 agent_id=6,
                 tenant_id=tenant_id,
                 action_type="ANALYZE_SENSOR",
@@ -420,7 +428,7 @@ class TourismSportsService:
             logger.warning(f"AI medical analysis failed: {e}")
 
         from app.domains.ai_governance.service import AIGovernanceService
-        governance = AIGovernanceService(self.db)
+        governance = AIGovernanceService(self.db, tenant_id)
         await governance.check_and_consume(
             tenant_id=tenant_id,
             agent_id=6,
@@ -429,6 +437,7 @@ class TourismSportsService:
             cost=Decimal("0.02")
         )
 
+        invoice_service = InvoicingService(self.db, tenant_id)
         async with self.db.begin_nested():
             transfer = await self.repo.create_transfer(
                 tenant_id=tenant_id,
@@ -441,13 +450,6 @@ class TourismSportsService:
             )
 
             agency_fee = data["bid_amount_mrusdt"] * (data.get("agency_fee_percentage", 10) / 100)
-            await self.invoicing_service.create_invoice(  # type: ignore[attr-defined]
-                entity_id=tenant_id,
-                user_id=user_id,
-                amount=agency_fee,
-                description=f"Agency fee for transfer of player {player.user_id}",
-                due_date=datetime.utcnow() + timedelta(days=30)
-            )
 
             if data.get("facilitating_agency_id"):
                 await self._register_affiliate_commission(user_id, tenant_id, "PLAYER_TRANSFER", agency_fee)
@@ -461,6 +463,17 @@ class TourismSportsService:
             )
 
         await self.db.commit()
+
+        try:
+            await invoice_service.create_invoice(  # type: ignore[attr-defined]
+                entity_id=tenant_id,
+                user_id=user_id,
+                amount=agency_fee,
+                description=f"Agency fee for transfer of player {player.user_id}",
+                due_date=datetime.utcnow() + timedelta(days=30)
+            )
+        except Exception as e:
+            logger.error(f"Invoice creation failed for player transfer bid {transfer.id}: {e}")
 
         # تخزين معرف التحويل فقط
         if idempotency_key:
@@ -498,13 +511,14 @@ class TourismSportsService:
         action_type: str,
         amount: Decimal
     ):
+        affiliate_service = AffiliateService(self.db, tenant_id)
         try:
             from app.domains.identity.repository import UserRepository
             user_repo = UserRepository(self.db)
             user = await user_repo.get_by_id(user_id)
             if user and user.referred_by:
                 commission = amount * Decimal("0.05")
-                await self.affiliate_service.register_commission(  # type: ignore[attr-defined]
+                await affiliate_service.register_commission(  # type: ignore[attr-defined]
                     affiliate_id=user.referred_by,
                     user_id=user_id,
                     amount=commission,

@@ -35,12 +35,6 @@ class RealEstateService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = RealEstateRepository(db)
-        self.finance = FinanceService(db)
-        self.invoicing = InvoicingService(db)
-        self.affiliate = AffiliateService(db)
-        self.saas = SaaSSubscriptionService(db)
-        self.ai = AIAgentsService(db)
-        self.governance = AIGovernanceService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
         self.user_repo = UserRepository(db)
@@ -64,7 +58,8 @@ class RealEstateService:
 
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "real_estate"):
-        subscription = await self.saas.get_active_subscription(tenant_id)  # type: ignore
+        saas = SaaSSubscriptionService(self.db, tenant_id)
+        subscription = await saas.get_active_subscription(tenant_id)  # type: ignore
         if not subscription:
             raise PermissionDeniedError("No active subscription found.")
         features = subscription.features or {}
@@ -75,7 +70,8 @@ class RealEstateService:
     # ========== التحقق من حوكمة الذكاء الاصطناعي ==========
     async def _check_ai_governance(self, tenant_id: int, user_id: int, action: str, cost: Decimal):
         try:
-            result = await self.governance.check_and_consume(
+            governance = AIGovernanceService(self.db, tenant_id)
+            result = await governance.check_and_consume(
                 tenant_id=tenant_id,
                 agent_id=2,
                 user_id=user_id,
@@ -210,6 +206,9 @@ class RealEstateService:
                         raise ValidationError("Idempotency record exists but cannot reconstruct ownership.")
                 raise ValidationError("Idempotency record exists but ownership not found.")
 
+        ai = AIAgentsService(self.db, tenant_id)
+        finance = FinanceService(self.db, tenant_id)
+        invoicing = InvoicingService(self.db, tenant_id)
         async with self.db.begin_nested():
             unit = await self.repo.get_unit(unit_id)
             if not unit or not unit.is_available_for_sale:  # type: ignore
@@ -228,7 +227,7 @@ class RealEstateService:
             # ========================================
             # استدعاء الوكيل الذكي
             # ========================================
-            await self.ai.execute_agent_action(agent_id=2, tenant_id=tenant_id, action_type="ANALYZE_PROJECT", payload={"unit_id": unit_id, "price": float(cost), "percentage": float(percentage), "buyer_id": buyer_id}, executor_user_id=buyer_id)  # type: ignore[call-arg]
+            await ai.execute_agent_action(agent_id=2, tenant_id=tenant_id, action_type="ANALYZE_PROJECT", payload={"unit_id": unit_id, "price": float(cost), "percentage": float(percentage), "buyer_id": buyer_id}, executor_user_id=buyer_id)  # type: ignore[call-arg]
 
             await self._check_ai_governance(tenant_id, buyer_id, "FRACTIONAL_PURCHASE", cost)
 
@@ -237,18 +236,9 @@ class RealEstateService:
             owner_email = cast(str, owner.email)
             try:
                 # نقل الأموال
-                tx_hash = await self.finance.transfer(sender_id=buyer_id, receiver_email=owner_email, currency="MR_USDT", amount=cost, notes=f"Purchase {percentage}% of unit {unit_id}", idempotency_key=idempotency_key or "")  # type: ignore[call-arg]
+                tx_hash = await finance.transfer(sender_id=buyer_id, receiver_email=owner_email, currency="MR_USDT", amount=cost, notes=f"Purchase {percentage}% of unit {unit_id}", idempotency_key=idempotency_key or "")  # type: ignore[call-arg]
             except InsufficientBalanceError:
                 raise PermissionDeniedError("Insufficient balance")
-
-            # إنشاء فاتورة
-            await self.invoicing.create_invoice(  # type: ignore
-                entity_id=tenant_id,
-                user_id=buyer_id,
-                amount=cost,
-                description=f"Fractional ownership purchase: {percentage}% of unit {unit_id}",
-                due_date=datetime.utcnow() + timedelta(days=30)
-            )
 
             await self._register_affiliate_commission(buyer_id, tenant_id, cost)
 
@@ -290,6 +280,17 @@ class RealEstateService:
             )
 
         await self.db.commit()
+
+        try:
+            await invoicing.create_invoice(  # type: ignore
+                entity_id=tenant_id,
+                user_id=buyer_id,
+                amount=cost,
+                description=f"Fractional ownership purchase: {percentage}% of unit {unit_id}",
+                due_date=datetime.utcnow() + timedelta(days=30)
+            )
+        except Exception as e:
+            logger.error(f"Invoice creation failed for fractional ownership purchase (unit {unit_id}): {e}")
 
         # تخزين البيانات كاملة مع استخدام cast لتوضيح الأنواع
         if idempotency_key:
@@ -357,6 +358,7 @@ class RealEstateService:
                         raise ValidationError("Idempotency record exists but cannot reconstruct contract.")
                 raise ValidationError("Idempotency record exists but contract not found.")
 
+        invoicing = InvoicingService(self.db, tenant_id)
         async with self.db.begin_nested():
             unit = await self.repo.get_unit(unit_id)
             if not unit or not unit.is_available_for_rent:  # type: ignore
@@ -375,15 +377,19 @@ class RealEstateService:
             )
 
             first_payment = monthly_rent * Decimal(1)
-            await self.invoicing.create_invoice(  # type: ignore
+
+        await self.db.commit()
+
+        try:
+            await invoicing.create_invoice(  # type: ignore
                 entity_id=tenant_id,
                 user_id=tenant_user_id,
                 amount=first_payment,
                 description=f"First month rent for unit {unit_id}",
                 due_date=datetime.utcnow() + timedelta(days=3)
             )
-
-        await self.db.commit()
+        except Exception as e:
+            logger.error(f"Invoice creation failed for rental contract (unit {unit_id}): {e}")
 
         await self._register_affiliate_commission(tenant_user_id, tenant_id, first_payment)
 
@@ -572,10 +578,11 @@ class RealEstateService:
 
     async def _register_affiliate_commission(self, user_id: int, tenant_id: int, amount: Decimal):
         try:
+            affiliate = AffiliateService(self.db, tenant_id)
             user = await self.user_repo.get_by_id(user_id)
             if user and user.referred_by:
                 commission = amount * Decimal("0.02")
-                await self.affiliate.register_commission(  # type: ignore
+                await affiliate.register_commission(  # type: ignore
                     affiliate_id=user.referred_by,
                     user_id=user_id,
                     amount=commission,
