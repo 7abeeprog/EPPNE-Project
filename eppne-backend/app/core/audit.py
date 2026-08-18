@@ -10,8 +10,10 @@ audit_logger.setLevel(logging.INFO)
 
 # سيتم إرفاق معالج ملف خاص به في logging_conf.py لاحقاً
 async def audit_log(
-    action: str, 
-    user_id: Optional[int] = None, 
+    action: str,
+    user_id: Optional[int] = None,
+    tenant_id: Optional[int] = None,
+    resource_id: Optional[int] = None,
     details: Optional[Dict[str, Any]] = None,
     ip_address: Optional[str] = None
 ) -> None:
@@ -20,6 +22,8 @@ async def audit_log(
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "action": action,
         "user_id": user_id,
+        "tenant_id": tenant_id,
+        "resource_id": resource_id,
         "ip": ip_address,  # سيتم تشفيره في طبقة الأمان قبل الوصول لهنا
         "details": details or {}
     }
