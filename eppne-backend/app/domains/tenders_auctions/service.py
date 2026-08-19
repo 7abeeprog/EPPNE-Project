@@ -481,7 +481,7 @@ class TendersAuctionsService:
         try:
             from app.domains.identity.repository import UserRepository
             user_repo = UserRepository(self.db)
-            user = await user_repo.get_by_id(user_id)
+            user = await user_repo.get_by_id(user_id, tenant_id)
             if user and user.referred_by:
                 commission = Decimal("5.00") if action_type == "TENDER_CREATED" else Decimal("25.00")
                 await affiliate_service.register_commission(  # type: ignore[attr-defined]

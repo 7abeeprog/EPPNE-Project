@@ -323,7 +323,7 @@ class TransportService:
         fare = trip.base_fare_mrusdt * Decimal(data.get("seats_count", 1))  # type: ignore
         await self._check_ai_governance(tenant_id, passenger_id, "BOOK_TRIP", cast(Decimal, fare))
 
-        driver = await self._get_user_by_id(cast(int, trip.driver_id))  # type: ignore
+        driver = await self._get_user_by_id(cast(int, trip.driver_id), tenant_id)  # type: ignore
 
         finance = FinanceService(self.db, tenant_id)
         async with self.db.begin_nested():
@@ -504,7 +504,7 @@ class TransportService:
         trip = await self.repo.get_trip(task.trip_id, tenant_id)  # type: ignore
         if not trip:
             raise NotFoundError("Trip not found")
-        driver = await self._get_user_by_id(cast(int, trip.driver_id))  # type: ignore
+        driver = await self._get_user_by_id(cast(int, trip.driver_id), tenant_id)  # type: ignore
 
         finance = FinanceService(self.db, tenant_id)
         async with self.db.begin_nested():
@@ -565,8 +565,8 @@ class TransportService:
     def calculate_carbon(vehicle: Vehicle, distance_km: float) -> float:
         return float(vehicle.carbon_per_km) * distance_km  # type: ignore
 
-    async def _get_user_by_id(self, user_id: int) -> User:
-        user = await self.user_repo.get_by_id(user_id)
+    async def _get_user_by_id(self, user_id: int, tenant_id: int) -> User:
+        user = await self.user_repo.get_by_id(user_id, tenant_id)
         if not user:
             raise NotFoundError("User not found")
         return user
@@ -574,7 +574,7 @@ class TransportService:
     async def _register_affiliate_commission(self, user_id: int, tenant_id: int, amount: Decimal):
         affiliate_service = AffiliateService(self.db, tenant_id)
         try:
-            user = await self.user_repo.get_by_id(user_id)
+            user = await self.user_repo.get_by_id(user_id, tenant_id)
             if user and user.referred_by:
                 commission = amount * Decimal("0.02")
                 await affiliate_service.register_commission(  # type: ignore[attr-defined]

@@ -234,7 +234,7 @@ class RealEstateService:
             await self._check_ai_governance(tenant_id, buyer_id, "FRACTIONAL_PURCHASE", cost)
 
             # جلب المالك
-            owner = await self._get_land_owner_for_unit(unit)
+            owner = await self._get_land_owner_for_unit(unit, tenant_id)
             owner_email = cast(str, owner.email)
             try:
                 # نقل الأموال
@@ -564,7 +564,7 @@ class RealEstateService:
     # ============================================================
     # دوال مساعدة خاصة
     # ============================================================
-    async def _get_land_owner_for_unit(self, unit: PropertyUnit):
+    async def _get_land_owner_for_unit(self, unit: PropertyUnit, tenant_id: int):
         """جلب مالك الأرض المرتبطة بالوحدة."""
         dev_id = unit.development_id  # type: ignore
         dev = await self.repo.get_development(cast(int, dev_id))
@@ -573,7 +573,7 @@ class RealEstateService:
         land = await self.repo.get_land_asset(cast(int, dev.land_asset_id))
         if not land:
             raise NotFoundError("Land asset not found")
-        owner = await self.user_repo.get_by_id(cast(int, land.owner_id))
+        owner = await self.user_repo.get_by_id(cast(int, land.owner_id), tenant_id)
         if not owner:
             raise NotFoundError("Land owner not found")
         return owner
@@ -581,7 +581,7 @@ class RealEstateService:
     async def _register_affiliate_commission(self, user_id: int, tenant_id: int, amount: Decimal):
         try:
             affiliate = AffiliateService(self.db, tenant_id)
-            user = await self.user_repo.get_by_id(user_id)
+            user = await self.user_repo.get_by_id(user_id, tenant_id)
             if user and user.referred_by:
                 commission = amount * Decimal("0.02")
                 await affiliate.register_commission(  # type: ignore

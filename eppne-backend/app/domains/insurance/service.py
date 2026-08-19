@@ -54,13 +54,13 @@ class InsuranceService:
     async def _get_entity_email(self, entity_id: int) -> str:
         return f"entity_{entity_id}@eppne.com"
 
-    async def _get_user(self, user_id: int) -> Optional[User]:
+    async def _get_user(self, user_id: int, tenant_id: int) -> Optional[User]:
         from app.domains.identity.repository import UserRepository
         user_repo = UserRepository(self.db)
-        return await user_repo.get_by_id(user_id)
+        return await user_repo.get_by_id(user_id, tenant_id)
 
-    async def _get_user_email(self, user_id: int) -> str:
-        user = await self._get_user(user_id)
+    async def _get_user_email(self, user_id: int, tenant_id: int) -> str:
+        user = await self._get_user(user_id, tenant_id)
         return user.email if user else f"user_{user_id}@eppne.com"  # type: ignore
 
     async def _get_payout_date(self, tx_hash: str) -> datetime:
@@ -84,7 +84,7 @@ class InsuranceService:
     async def _register_affiliate_commission(self, user_id: int, tenant_id: int, action_type: str, amount: Decimal):
         affiliate_service = AffiliateService(self.db, tenant_id)
         try:
-            user = await self._get_user(user_id)
+            user = await self._get_user(user_id, tenant_id)
             if user and user.referred_by:  # type: ignore
                 commission = amount * Decimal("0.02")
                 await affiliate_service.register_commission(  # type: ignore
@@ -461,7 +461,7 @@ class InsuranceService:
                 payment_idempotency = f"claim_payout_{claim_id}_{uuid.uuid4().hex[:12]}"
                 payout_tx = await finance.transfer(
                     sender_id=reviewer_id,
-                    receiver_email=await self._get_user_email(claim.claimant_user_id),  # type: ignore
+                    receiver_email=await self._get_user_email(claim.claimant_user_id, tenant_id),  # type: ignore
                     currency="MR_USDT",
                     amount=final_amount,
                     notes=f"Insurance claim payout for {cast(Any, policy).name}",
@@ -551,7 +551,7 @@ class InsuranceService:
             try:
                 tx = await finance.transfer(
                     sender_id=1,
-                    receiver_email=await self._get_user_email(pension.beneficiary_id),  # type: ignore
+                    receiver_email=await self._get_user_email(pension.beneficiary_id, cast(int, pension.tenant_id)),  # type: ignore
                     currency="MR_USDT",
                     amount=pension.monthly_amount_mrusdt,  # type: ignore
                     notes=f"Pension payment for {pension.pension_type}"

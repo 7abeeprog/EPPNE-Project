@@ -515,7 +515,7 @@ class TourismSportsService:
         try:
             from app.domains.identity.repository import UserRepository
             user_repo = UserRepository(self.db)
-            user = await user_repo.get_by_id(user_id)
+            user = await user_repo.get_by_id(user_id, tenant_id)
             if user and user.referred_by:
                 commission = amount * Decimal("0.05")
                 await affiliate_service.register_commission(  # type: ignore[attr-defined]
