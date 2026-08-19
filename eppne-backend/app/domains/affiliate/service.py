@@ -14,6 +14,7 @@ from app.domains.affiliate.models import (
     AffiliateProfile,
     ReferralTree,
     Commission,
+    ActionCommission,
     CommissionTier,
     AffiliateLink,
     AffiliateClickLog,
@@ -646,3 +647,45 @@ class AffiliateService:
         deleted_count = await self.repo.delete_expired_invitations(cutoff_date, self.tenant_id)
         logger.info(f"✅ Cleaned {deleted_count} expired affiliate links for tenant {self.tenant_id}")
         return deleted_count
+
+    # ==========================================
+    # 11. عمولات الأحداث العابرة للدومينات (Backlog #10)
+    # ==========================================
+    # ملاحظة: هذه السجلات منفصلة عن `Commission` (التجاري، مرتبط بـOrder
+    # إجباريًا) وتُخزَّن في `ActionCommission`. غير مدموجة حاليًا في
+    # get_affiliate_stats/withdraw_commissions/release_commissions —
+    # قرار نطاق صريح، راجع تقرير الجلسة قسم 10 وبند Backlog جديد في
+    # PROGRESS_LOG.md.
+
+    async def register_commission(
+        self,
+        affiliate_id: int,
+        user_id: int,
+        amount: Decimal,
+        description: str,
+        status: str = "PENDING",
+        entity_type: str = "CROSS_DOMAIN",
+        action_type: Optional[str] = None,
+    ) -> ActionCommission:
+        """تسجيل عمولة إحالة لحدث عابر للدومينات (بلا Order تجاري).
+
+        `affiliate_id` هنا هو user_id الخاص بالمُحيل (نفس القيمة
+        الممرَّرة من كل مواضع الاستدعاء الـ12 كـ`user.referred_by`) — يتم
+        حل ملفه (`AffiliateProfile`) تلقائيًا عبر `get_or_create_profile`
+        لتفادي التباس نطاق users.id/affiliate_profiles.id.
+        """
+        profile = await self.get_or_create_profile(affiliate_id)
+        return await self.repo.create_action_commission(
+            tenant_id=self.tenant_id,
+            affiliate_profile_id=cast(int, profile.id),
+            user_id=user_id,
+            amount=amount,
+            description=description,
+            status=status,
+            entity_type=entity_type,
+            action_type=action_type,
+        )
+
+    async def get_user_by_code(self, referral_code: str) -> Optional[AffiliateProfile]:
+        """جلب ملف الداعي عبر كود الإحالة (wrapper حول repo)."""
+        return await self.repo.get_affiliate_by_code(referral_code, self.tenant_id)
