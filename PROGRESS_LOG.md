@@ -6,189 +6,132 @@
 
 ---
 
-## 📌 بانر الحالة [آخر تحديث: 2026-08-19]
+## 📌 بانر الحالة [آخر تحديث: 2026-08-20]
 
-آخر إغلاق رسمي: **`security-deps-unification` — توحيد `app/core/security.py`
-+ `app/api/deps.py` [2026-08-19]** — **جلسة أمنية عاجلة صريحة (أعلى أولوية
-من أي مسار عمل آخر جارٍ وقتها، شمل تعليق مسار تصميم نظام الصلاحيات
-الجديد).** خلفية الجلسة: تشخيص `permissions-systems-investigation`
-(نفس اليوم) اكتشف نسختين متوازيتين ومتباينتين فعليًا لكل دوال
-المصادقة/الصلاحية الأساسية، مستوردتين معًا بحرية عبر 40 ملفًا (4 منها
-تستوردان الاثنتين معًا في نفس الوقت) — `core/security.py` تفحص
-`session_version` (إبطال الجلسة عن بُعد) وتطابق `tenant_id` الصارم،
-بينما `api/deps.py` **لا تفحص أيًا منهما إطلاقًا**، و`require_sector`
-فيها معطَّلة بالكامل (تعتمد على `getattr(user, "sector", None)` وحقل
-`sector` غير موجود على `User` model، فتسقط دائمًا لـfallback ثابت
-`"academy"`). **القرار المعتمَد صراحة من المستخدم: الدمج لا الاختيار** —
-`security.py` هو الموقع النهائي (الأساس الأمني الصارم منه غير قابل
-للتفاوض)، أدوات `deps.py` العملية (`SimpleTenant`, `get_current_tenant`,
-`require_tenant_access`, `require_subscription`,
-`get_current_instructor_or_admin`) تُنقَل فوقه، و`deps.py` يتحول لـ
-re-export shim مؤقت (لا حذف فوري — يقلل مخاطر تعديل الـ40 ملفًا دفعة
-واحدة). **قرار دمج الست دوال المشتركة بالاسم:** نسخة `security.py` فازت
-بالكامل في الست جميعًا (`get_current_user`, `get_current_active_user`,
-`get_current_superuser`, `require_sector`, `is_privacy_officer`,
-`require_roles`) — فروق أمنية جوهرية تُحسم دائمًا لصالح الصارم، فروق
-نصية/تجميلية بلا أثر سلوكي حقيقي. **توسيع نطاق مُعتمَد أثناء التخطيط
-(اكتشاف جانبي بنفس مستوى خطورة الجلسة، أُدمج بموافقة صريحة لا كاكتشاف
-منفصل):** `get_current_user_optional` (دالة سابعة بنفس الاسم، لم تكن
-مذكورة صراحة) كانت تحمل نفس فئة الثغرة في نسخة `deps.py` (تتجاوز
-`get_current_user` كليًا، صفر فحص `session_version`) لثلاثة راوترات فيها
-endpoints ضيوف (`communications`, `sovereign_entities`, `invitations`) —
-وحتى نسخة `security.py` نفسها لم تكن تدعم الكوكيز. أُصلحت الاثنتان معًا:
-دعم `cookie_token` الكامل + تمرير عبر `get_current_user` الآمنة الموحَّدة.
+آخر إغلاق رسمي: **`entity-membership-foundation` — بناء الأساس العام لنظام
+`EntityMembership` (الجلسة 1 من 2، مسار الصلاحيات الجديد) [2026-08-20]**
+— ✅ **مُغلَق رسميًا، مُتحقَّق منه حيًا بالكامل.**
 
-**التنفيذ (خطوات متسلسلة، تحقق حي بعد كل خطوة، بلا استعجال):**
-1. بناء `security.py` الموحَّد (الدوال المنقولة + `get_current_user_optional`
-   المُصلَحة) — بلا لمس `deps.py`. تحقق: استيراد معزول ناجح + `pytest`
-   كامل (71 passed، صفر تغيير عن الأساس).
-2. تحويل `deps.py` لشِم كامل (39 سطرًا بدل 234) يعيد تصدير كل الأسماء
-   الـ15 من `security.py` + alias واحد (`get_current_privacy_officer =
-   get_privacy_officer`، داخل الشِم فقط). تحقق `is` صريح: **كل اسم
-   مشترك بين الملفين نفس كائن الدالة بالحرف** — شِم شفاف 100%.
-3. إعادة كتابة `tests/test_identity_router_protection.py` (كان سيفشل
-   حتمًا بعد الدمج — كان يفترض صراحة أن `weak_get_current_active_user`
-   من `deps` كائن مختلف عن `strong_` من `security`؛ بعد الشِم أصبحا نفس
-   الكائن). استُبدل بتأكيد إيجابي (`weak is strong`) + 8 اختبارات حية
-   جديدة لـ`get_current_user`/`get_current_user_optional` (صالح عبر
-   Header/Cookie، منتهي، مُبطَل `session_version`، `tenant` مزوَّر).
-4. `pytest` كامل بعد الشِم: **80 passed, 4 xfailed — صفر فشل جديد** عبر
-   كل الـ40 ملفًا المستوردة من الملفين.
-5. **تحقق حي عبر HTTP حقيقي فعلي** (سيرفر `uvicorn` حقيقي على
-   `127.0.0.1` + طلبات `curl` عبر الشبكة — لا استدعاء دالة Python مباشر):
-   `GET /api/communications/notifications/me` (كانت تعتمد على
-   `deps.get_current_active_user` الأضعف) — توكن صالح شكليًا لكن جلسته
-   أُبطلت عبر `POST /api/identity/revoke-all` **رُفض فورًا بعدها بنفس
-   التوكن القديم بالحرف**: `{"detail":"Session has been revoked",
-   "code":"AuthenticationError"}` **HTTP 401** (بعد أن كان `200` قبل
-   الإبطال). **هذا الإثبات المباشر لإغلاق الثغرة الأمنية الأصلية لهذه
-   الجلسة كلها.**
-6. **تحقق حي عبر HTTP حقيقي لإصلاح `require_sector`**: حساب غير إداري
-   بتوكنين بقيم `sector` صريحة مختلفة — توكن `sector=communications` على
-   راوتر `communications` → `200`؛ نفس التوكن على راوتر `academy` → `403`
-   **`"قطاعك الحالي: communications"`** (القيمة الحقيقية من التوكن عبر
-   `ContextVar`، لا fallback ثابت)؛ توكن `sector=academy` على `academy` →
-   `200`. النسخة القديمة كانت تتجاهل قيمة `sector` الحقيقية تمامًا.
-7. مراجعة الأربعة ملفات المزدوجة الاستيراد فعليًا بعد الدمج
-   (`communications/router.py`, `identity/router.py`, `privacy/router.py`,
-   `tests/test_identity_router_protection.py`) — تحقق `is` مباشر لكل
-   استيراد: **صفر تعارض، صفر استيراد دائري**، كل الأسماء المشترَكة نفس
-   الكائن بالحرف.
-8. `tests/test_security_deps_unification.py` (ملف جديد، 4 اختبارات) —
-   النسخة الدائمة القابلة لإعادة التشغيل لسيناريو `require_sector` المُتحقَّق
-   منه يدويًا في الخطوة 6 (تطابق/عدم تطابق/بلا `sector` claim/تخطي
-   `SUPER_ADMIN`)، عبر استدعاء حقيقي لنفس الدوال (`get_current_user` ثم
-   `require_sector(...)`) بنفس نمط بيانات التحقق الحي. سيناريو
-   `session_version` (خطوة 5) مُغطًّى بالفعل في `test_identity_router_protection.py`
-   ولم يُكرَّر. `pytest` كامل نهائي: **84 passed, 4 xfailed**.
+خلفية الجلسة: امتداد تنفيذي مباشر لأربعة مستندات رؤية/تصميم متتالية بلا
+كود (`multilevel-referral-system-design-vision.md` ←
+`entity-permissions-and-lifecycle-vision.md` ←
+`entity-membership-system-vision.md` ←
+`entity-membership-technical-design.md`، كلها [2026-08-19]) — أول جلسة
+تنفيذية فعلية (كود + migration) في مسار توحيد صلاحيات/عضوية الكيانات،
+بعد أن عُلِّق هذا المسار مؤقتًا لصالح جلسة `security-deps-unification`
+الأمنية العاجلة.
 
-**التنظيف:** كل المستخدمين التجريبيين المُنشَأين للتحقق الحي عبر HTTP
-(حسابان — واحد `SUPER_ADMIN` throwaway لسيناريو #5، وواحد `USER` عادي
-لسيناريو #6) حُذفا من القاعدة فور انتهاء التحقق (`DELETED_ROWS=2`
-مؤكَّد). السيرفر التجريبي أُوقف (`TaskStop`).
+**النطاق (Foundation فقط، Strangler Fig — الجلسة 1 من 2):** ثلاثة جداول
+جديدة كليًا في `app/core/`، تعميمًا لنظام `EntityRole`/`EntityRepresentative`/
+`can_sign_contracts` الحالي في `sovereign_entities`، **بمعزل تام عنه**.
 
-**خارج النطاق صراحة (بقرار مسبق موثَّق في تعليمات الجلسة):** حذف
-`deps.py` نهائيًا وتحديث الـ40 ملف لاستيراد `security.py` مباشرة (جلسة
-تنظيف منفصلة لاحقة)؛ ثغرة `sovereign_entities` المنفصلة (باج
-`SimpleTenant`)؛ تصميم نظام الصلاحيات الجديد (يُستأنف الآن بعد إغلاق هذه
-الجلسة). تفصيل كامل بكل قرار دمج دالة-بدالة + التحقق الحي الكامل:
-`.claude/reports/security-deps-unification-session-log.md`.
+**الموديلات الثلاثة (`app/core/models.py`، ملف جديد):**
+- `EntityMembership` — `id`, `tenant_id` (FK `academy_tenants.id`)،
+  `entity_type` (`VARCHAR(50)`)، `entity_id` (بلا FK — Polymorphic)،
+  `user_id` (FK `users.id`)، `role` (Enum `EntityMembershipRole`:
+  `OWNER`/`EXECUTIVE_DIRECTOR`/`SIGNATORY`/`REPRESENTATIVE`)،
+  `created_at`/`updated_at`. `UNIQUE(entity_type, entity_id, user_id)` +
+  فهرسا `(entity_type, entity_id)` و`(user_id, tenant_id)`.
+- `EntityPermissionOverride` — نفس أعمدة الـPolymorphic + `permission`
+  (`VARCHAR(100)`)، `granted` (`BOOLEAN NOT NULL`)، `granted_by` (FK
+  `users.id`، `ondelete=RESTRICT`)، `granted_at`, `reason`.
+  `UNIQUE(entity_type, entity_id, user_id, permission)` — **صف واحد
+  يُحدَّث في مكانه دائمًا (state لا سجل تاريخي)**.
+- `PermissionAuditLog` — `scope` (Enum `PLATFORM`/`ENTITY`)، `tenant_id`،
+  `entity_type`/`entity_id` (`NULLABLE`)، `target_user_id`, `permission`,
+  `action` (Enum `GRANT`/`REVOKE`), `performed_by` (FK `users.id`،
+  `ondelete=RESTRICT`), `performed_at`, `reason`. فهارس منفصلة على
+  `performed_by`/`target_user_id`/`performed_at`. **جدول موحَّد واحد
+  لكل تغييرات الصلاحيات (منصة + كياني معًا)** — بعكس فصل جداول
+  الـoverrides نفسها (قرار متعمَّد، موثَّق في `entity-membership-technical-design.md` §5).
 
-**إغلاق سابق ذو صلة:** **`user-repository-get-user-audit` (Backlog #8) [2026-08-19]** —
-إصلاح `.get_user(` المكسورة (method غير موجودة إطلاقًا على `UserRepository`
-— `AttributeError` مباشر، بعكس Backlog #1 اللي كانت `TypeError` بمعامل
-ناقص) عبر **5 مواضع فعليًا، 8 نقاط استدعاء حية + موضعان Dead code**.
-`grep` شامل جديد بالكامل عن `\.get_user\(` (بلا اعتماد على القايمة
-التاريخية الـ6 مواضع كمرجع نهائي) كشف: `employment/service.py:87`
-(`_get_user`، 3 نقاط استدعاء — عمولة إحالة صامتة، `_calculate_ai_match_score`
-صامتة **[ميزة AI matching كانت معطَّلة 100%، كل طلب توظيف ياخد درجة
-افتراضية 50]**، و**نقطة خارجية جديدة غير موثَّقة تاريخيًا**:
-`app/tasks/employment.py:308` داخل `pay_payroll_task` — **كانت تفشل دفع
-الرواتب الفعلي وتُعاد المحاولة 3 مرات ثم تستسلم نهائيًا**)،
-`digital_twin/service.py:53` (`_get_user`، عمولة إحالة صامتة +
-**نقطة أخطر غير موثَّقة تاريخيًا**: `interact_with_twin:180` عبر
-`_get_user_email` — **كسر واضح 500 داخل `begin_nested()` بلا أي
-`try/except` إطلاقًا**، نفس نمط `social:678` من Backlog #1)،
-و`communications/service.py:29` (`_get_user_tenant` — **استثناء معماري
-مختلف جوهريًا عن كل الأنماط**: الغرض من الدالة هو اكتشاف `tenant_id`
-نفسه، فلا يوجد `tenant_id` متاح في أي من نقاط الاستدعاء الثلاث
-(`send_notification:63`, `send_mail:144/145`) أصلًا — الحل المعتاد
-"أضف معامل tenant_id" لا ينطبق). **موضعان Dead code مؤكَّدان** (صفر
-مستدعٍ حي): `communications/service.py:36`, `health/service.py:54` —
-تُركا بلا لمس عمدًا. **الحل المعتمَد لـ`employment`/`digital_twin`:**
-نفس منهجية Backlog #1 بالحرف (تعديل توقيع كل helper ليقبل `tenant_id`،
-صفر `try/except` جديد). **الحل المعتمَد لـ`communications` (قرار
-معماري صريح من المستخدم):** **method جديدة على `UserRepository`**،
-`get_tenant_id_by_user_id(user_id) -> Optional[int]` — تبحث بـ`user_id`
-وحده عبر كل الـtenants وترجع `tenant_id` فقط (لا كائن `User` كامل —
-قرار **least-privilege** صريح). **اكتشاف حي حاسم يُغلق سلسلة Backlog
-#10 لطبقة موحَّدة كاملة:** أثناء التحقق الحي، `_register_affiliate_commission`
-في كل من `employment`/`digital_twin` وصلت الآن بنجاح لـ`get_by_id`،
-واصطدمت فورًا **بنفس طبقة `identity-user-referred-by-field-missing`**
-الموثَّقة مسبقًا للـ10 دومينات الأخرى — **كل الـ12 دومينًا في سلسلة
-affiliate/#10 بقوا الآن محجوزين عند نفس الحاجز الوحيد المتبقي
-(`User.referred_by`)**. تحقق حي كامل لكل الـ8 نقاط استدعاء (12 اختبار
-فعلي شمل الـmethod الجديدة وموضعي الـdead code) + regression test دائم
-`tests/test_user_repository_get_user_audit.py` (11 passed ×2، صفر
-تذبذب) + suite كامل بعد الإصلاح (71 passed, 4 xfailed — 60 السابقة +
-11 الجديدة، صفر أثر جانبي). راجع تفصيل كامل في
-`.claude/reports/user-repository-get-user-audit-session-log.md`.
+**قرار تسمية متعمَّد:** `EntityMembershipRole` Enum **منفصل تمامًا** عن
+`sovereign_entities.EntityRole` رغم تطابق القيم الأربعة حرفيًا — لتفادي
+أي استيراد من `sovereign_entities` داخل `app/core/` (عكس اتجاه الاعتمادية
+الذي يحذّر منه المستند التقني، ويكسر "صفر لمس" حرفيًا).
 
-**إغلاق سابق ذو صلة:** `user-repository-get-by-id-audit` (Backlog #1) [2026-08-19] —
-إصلاح `UserRepository.get_by_id(user_id, tenant_id, ...)` (`app/domains/identity/repository.py:21`)
-اللي كانت بتتنادى بمعامل واحد بس عبر **15 موضعًا فعليًا في 13 دومين**
-(`grep` شامل جديد بالكامل من الصفر — لم يعتمد على القايمة التاريخية
-كمرجع نهائي، وتأكَّد إنها **لم تتغيَّر إطلاقًا** رغم كل الجلسات اللي
-حصلت من وقتها). **4 مواضع كانت كسر واضح فوري (500)**: `transport`
-(`_get_user_by_id`، مستدعاة من `book_trip`/`pay_delivery`)، `social`
-(`_get_user_email` جوّه `begin_nested()` بلا حماية — **صفر `try/except`
-جديد اتضاف بقرار مستخدم صريح**)، `realestate` (`_get_land_owner_for_unit`)،
-و`insurance.review_claim` (نفس البج المُوثَّق حيًا مسبقًا في
-`test_saas_active_subscription.py`). **موضع واحد كان الأخطر: صمت كامل
-بلا أي تسجيل** (`insurance.disburse_monthly_pensions`، دفعات معاشات
-شهرية حقيقية، `except Exception: pass` بلا `logger.error` إطلاقًا).
-**9 مواضع صمت مُسجَّل** (`logger.error` ثم نجاح الطلب ظاهريًا)، **موضع
-واحد يتحوَّل لخطأ عمل** (`iot` → `BusinessError`)، **وموضع واحد Dead
-code متروك عمدًا بلا لمس** (`logistics` — بلا أي مستدعٍ حي، وثِّق كبند
-Backlog منفصل `logistics-affiliate-commission-dead-code-uses-broken-get-by-id`).
-الإصلاح: تمرير `tenant_id` المتاح أصلًا في نطاق كل دالة (معامل مباشر أو
-مُشتق من صف محمَّل زي `pension.tenant_id`)، مع تعديل توقيع أي دالة
-مساعدة خاصة ما كانتش بتقبله. **صفر تغيير في منطق معالجة الأخطاء
-الموجود.** **اكتشاف حي حاسم أثناء التحقق:** كل الـ10 دومينات المستدعية
-لـ`_register_affiliate_commission` (9 + `insurance`) وصلت الآن فعليًا
-لـ`get_by_id` بنجاح تام، لكن فورًا اصطدمت بطبقة الفشل التالية الموثَّقة
-مسبقًا (`identity-user-referred-by-field-missing`، Backlog #10) —
-**يعني سلسلة Backlog #10 تقدَّمت طبقة كاملة لـ10 من الـ12 دومين
-(الاتنين الباقيين `digital_twin`/`employment` لسه محجوزين عند Backlog
-#8)**. **أثر جانبي مُعالَج في نفس الجلسة:** اختبار موجود مسبقًا
-(`test_saas_active_subscription.py::test_insurance_review_claim_...`)
-كان بيعتمد صراحة على `TypeError` بتاع هذا البج كدليل غير مباشر — حُدِّث
-ليعتمد بدلًا منه على الطبقة التالية الحقيقية المؤكَّدة حيًا
-(`insurance-review-claim-issuer-entity-id-reviewer-id-conflict` →
-`PermissionDeniedError`)، بدل ما يُترَك outdated. تحقق حي كامل لكل
-الـ15 موضعًا (بمعامل `tenant_id` صحيح وخاطئ لكل واحد، عزل tenant فعلي
-مؤكَّد) + regression test دائم `tests/test_user_repository_get_by_id_audit.py`
-(15 passed ×2، صفر تذبذب) + تشغيل الـsuite الكامل بعد الإصلاح (60
-passed, 4 xfailed، صفر أثر جانبي غير مُعالَج). راجع تفصيل كامل في
-`.claude/reports/user-repository-get-by-id-audit-session-log.md`.
+**اكتشاف جانبي مُصحَّح بموافقة صريحة أثناء التخطيط:**
+`entity-membership-technical-design.md` §3/§4 يكتب حرفيًا `tenant_id ...
+FK → tenants.id` — **لا يوجد جدول باسم `tenants` في قاعدة الكود فعليًا**
+(تحقق بحث شامل). الجدول الحقيقي `academy_tenants`
+(`app/domains/academy/models.py:13`)، وهو ما يستخدمه بالفعل كل FK مشابه
+قائم اليوم (`sovereign_entities.tenant_id`،
+`affiliate_action_commissions.tenant_id`). استُخدم `academy_tenants.id`
+فعليًا في الجدولين — **تطبيق لنية المستند (denormalized FK لجدول الـtenant
+الحقيقي)، لا انحراف عنه** — موثَّق كملاحظة تكميلية في سجل الجلسة.
 
-**إغلاق سابق ذو صلة:** `redis-client-wrapper-missing-methods` (Backlog #7، المرحلة 1.4) [2026-08-19] — إضافة ست methods (`hincrbyfloat, hgetall, lpush, ltrim, setnx, pubsub`) على `RedisClientWrapper` (`app/core/redis_client.py`) — إضافة صرفة، صفر لمس لأي ملف مستدعٍ. **النطاق الفعلي توسَّع عن الخمسة المُعلَنة أصلًا في تعليمات الجلسة:** `setnx` أُضيفت لأنها موثَّقة أصلًا كجزء من بند #7 نفسه منذ إنشائه (تصحيح صريح بموافقة المستخدم)؛ `ltrim` أُضيفت استباقيًا بلا استخدام حي مؤكَّد على الـwrapper نفسه (قرار مستخدم صريح). **قرار معماري محوري:** `pubsub()` وحدها متزامنة (بلا `async`/`await`، أول method من نوعها في الكلاس) — مبنية على دليلين حيّين مستقلين (`communications/router.py:48` endpoint حي `/communications/ws`، و`event_bus.py:44`) بيستدعوها بلا `await`. **تصحيح/توسيع جوهري على تقدير الأثر:** الوصف السابق ("يُسقط `execute_agent_action`" فقط) كان ناقصًا — مؤكَّد بالقراءة المباشرة إن `CostTracker.record_usage()` (تُستدعى من `AIEngine.generate()` بلا `try/except`) كانت تُسقط **أي نجاح AI عبر المنصة بالكامل**، بما فيها `POST /api/ai/chat` (`main.py:356`)، endpoint عام مستقل تمامًا عن `ai_agents`. **تحقق حي مزدوج غير مسبوق:** الست methods منفردة بأدوات تحقق مستقلة (HGET/LRANGE/GET/subscriber منفصل)، **زائد `execute_agent_action` + `ai_engine.generate()` بلا أي `monkeypatch` إطلاقًا** (ممكن لأول مرة لأن `AIEngine._call_model()` أصلًا محاكاة داخلية جاهزة، اتصال الشبكة الحقيقي معلَّق في الكود) — نتيجة أنظف من تحقق #16 السابق اللي اضطر يتجاوز هذا الباج بالذات. `AITaskLog.task_type` رجعت `ARABIC_CHAT` مش `ERROR`، `AgentApprovalQueue` اتسجَّلت فعليًا لأول مرة، تنظيف كامل + SELECT/`redis-cli` مستقل أثبتا صفر أثر متبقٍ. اكتشاف جانبي وُثِّق منفصلًا (صفر لمس): `agritech-redis-calls-missing-await-orphaned-coroutines`. regression test دائم: `tests/test_redis_client_wrapper_missing_methods.py` (6 passed ×2، صفر تذبذب). راجع تفصيل كامل في `.claude/reports/redis-client-wrapper-missing-methods-session-log.md`.
+**Migration `029_create_entity_membership_foundation`**
+(`down_revision='028_create_affiliate_action_commissions'`) — إنشاء
+الجداول الثلاثة فقط، **صفر لمس على أي جدول موجود**. طُبِّقت فعليًا على
+القاعدة الحية (`eppne_v2`، حاوية `eppne_db`، منفذ 5435)؛ تحقق `\d` مباشر
+على الجداول الثلاثة طابق الموثَّق بالضبط (كل عمود، `NOT NULL`، القيم
+الافتراضية، القيود الفريدة، الفهارس، كل الـFK بما فيها `ondelete='RESTRICT'`
+على `granted_by`/`performed_by`). تعديل مصاحب وحيد على ملف موجود:
+`migrations/env.py` — إضافة `from app.core.models import *` لتسجيل
+الموديلات في `Base.metadata`.
 
-**إغلاق سابق ذو صلة:** `ai-agents-execute-agent-action-wrong-kwarg` (Backlog #16، الجزء ب) [2026-08-18] — إزالة `tenant_id=` الزائدة و/أو إضافة `idempotency_key=` الناقصة عبر `AIAgentsService.execute_agent_action()`. **إغلاق جزئي بنطاق مُعدَّل: 17 من 19 موضع فقط.** 6 مواضع كانت `idempotency_key` عندها صحيحة أصلًا (حذف `tenant_id=` فقط: `tasks/agritech.py`, `arbitration_syndicates`, `logistics`, `insurance:345`, `automation`, `employment`). 11 موضع أضيفت لهم `idempotency_key=` بقيم جديدة بنمط `PREFIX-T{tenant_id}-{unique_id}` (`zamakana`, `transport`, `tourism_sports`×2, `tenders_auctions`×2, `social`, `manufacturing`×2, `invitations:84`, `insurance:439`) — 7 منهم أعاد استخدام معامل `idempotency_key` خارجي موجود بالفعل في توقيع الدالة المحيطة بدل تجاهله. **موضعان استُثنيا عمدًا من الإصلاح** (`realestate/service.py:232`, `invitations/service.py:415`) لاكتشاف حرج جديد: `execute_agent_action` تنفّذ `self.db.commit()` داخل جسمها، وهذان الموضعان يستدعيانها من **جوّه `async with self.db.begin_nested()`** خارجي — تصحيح الـkwargs فيهما كان سيجعلهما يصلان لأول مرة فعليًا لهذا التعارض (نفس جذر #11a/#11b)، باحتمال تلف transaction حقيقي (`realestate:232` داخل عملية شراء ملكية بأموال حقيقية) — وُثِّق كبند Backlog منفصل جديد (`ai-agents-execute-action-commit-inside-begin-nested`)، **صفر إصلاح لهما الآن**. **تحقق حي كامل** (docker `eppne_db`، تينانتان حقيقيان 1/15، throwaway + SELECT مستقل) أثبت: الاستدعاءات المُصلَحة تعمل بدون `TypeError`، التسجيل صحيح في `ai_task_logs`/`agent_approval_queue`، **كاش idempotency شغّال فعليًا** (إعادة محاولة = صفر تكرار)، **ونمط `T{tenant_id}` يمنع تصادم فعلي عبر تينانتين** بينما **مفتاح خام بلا `tenant_id` يسبب `IntegrityError` حقيقي مؤكَّد حيًا** (اكتشاف جديد: عمود `AgentApprovalQueue.idempotency_key` فريد عالميًا بلا قيد tenant_id في الـschema). **اكتشاف حي إضافي غير متوقَّع:** بند #7 (`redis-client-wrapper-missing-methods`، موجود مسبقًا) مؤكَّد الآن أنه **يُسقِط `execute_agent_action` بالكامل بـException** في أي استدعاء حقيقي (`CostTracker.record_usage()` تنادي `redis_client.hincrbyfloat()` غير الموجودة) — مش مجرد فشل تتبع تكلفة صامت كما كان مفترضًا. راجع تفصيل كامل في `.claude/reports/ai-agents-execute-action-fix-session-log.md`.
+**منطق CRUD — Repository + Service جديدان في `app/core/`** (نفس نمط
+`sovereign_entities/repository.py`+`service.py` القائم فعليًا):
 
-**إغلاق سابق ذو صلة:** `ai-governance-check-and-consume-wrong-kwarg` (Backlog #15) [2026-08-18] — إزالة `tenant_id=` الزائدة من كل الـ13 موضع استدعاء `AIGovernanceService.check_and_consume()` عبر 13 دومين (التوقيع الحقيقي لا يقبل `tenant_id` أصلًا — الـmethod تستخدم `self.tenant_id` من الـconstructor في كل منطق فعلي: فلترة حصة، تسجيل استهلاك). **القرار المحوري كان عكس اتجاه `audit_log`/#14 عمدًا:** هناك وسّعنا التوقيع لأن الدالة لم تملك سياق tenant؛ هنا شِلنا الـkwarg الزائد لأن الـmethod تملكه بالفعل عبر الـconstructor، والقيمة الممرَّرة كانت في كل موضع مطابقة تمامًا لـ`self.tenant_id`. **7 من الـ13 موضع كان عندهم بج ثانٍ متزامن (`action_type` الإجباري مفقود بالكامل)** — أُضيف بقيم معبِّرة عن السياق الفعلي لكل موضع (`SCENARIO_ANALYSIS`, `PLAYER_TRANSFER_ANALYSIS`, `BID_EVALUATION`, `MATCH_SUGGESTIONS`, `AI_JUDGE_ANALYSIS`)، واتنين منهم (`transport`, `realestate`) استخدموا حلًا أدق: تمرير معامل `action: str` كان موجودًا أصلًا في توقيع `_check_ai_governance()` helper وغير مُستخدَم، بدل نص ثابت جديد. **تحقق حي كامل** (docker `eppne_db`، بيانات throwaway + SELECT مستقل) أثبت: (أ) الاستدعاءات الحقيقية بالتوقيع المُصلَح تعمل بدون `TypeError`، (ب) فحص الحصة يحسب الاستهلاك صح فعليًا، (ج) قيم `action_type` الجديدة تُسجَّل بدقة ومنفصلة في `agent_usage_logs`، (د) **الرفض الفعلي عند تجاوز الحصة يعمل حقيقةً** (سيناريو مخصَّص: `False` + صفر استهلاك + صفر usage_log للمحاولة المرفوضة). **اكتشافان حرجان جانبيان وُثِّقا كبنود Backlog منفصلة، غير مُلمَسين في هذه الجلسة:** `ai-governance-quota-result-ignored` (10 من 13 موضع بتتجاهل الناتج الراجع `bool`، يعني إنفاذ الحصة غير فعّال فعليًا في أغلب الدومينات حتى بعد هذا الإصلاح) و`ai-governance-create-or-update-quota-multiple-results` (اكتُشف حيًا أثناء التحقق — أي وكيل حقيقي بأكثر من نوع حصة واحد فعّال سيتسبب في `MultipleResultsFound`). **ملاحظة نطاق:** هذا يُغلق #15 (`check_and_consume`) فقط — #16 (`execute_agent_action`، 19 موضع، نفس النمط + `idempotency_key` مفقودة في 13 موضع) **لا يزال مفتوحًا**، جلسة منفصلة تالية بنفس المنهجية. راجع تفصيل كامل في `.claude/reports/ai-governance-agents-fix-session-log.md`.
+- **`app/core/entity_membership_repository.py`** — `EntityMembershipRepository(db)`:
+  `add_member(*, entity_type, entity_id, user_id, tenant_id, role) -> EntityMembership`،
+  `update_member_role(*, entity_type, entity_id, user_id, new_role) -> Optional[EntityMembership]`،
+  `remove_member(*, entity_type, entity_id, user_id) -> None`،
+  `get_member(*, entity_type, entity_id, user_id) -> Optional[EntityMembership]`،
+  `list_members(*, entity_type, entity_id) -> List[EntityMembership]`،
+  `list_entities_for_user(*, user_id, tenant_id) -> List[EntityMembership]`،
+  زائد دالتين **داخليتين** (بادئة `_`، لا تُستدعيان إلا من الـService):
+  `_upsert_override(...)` (INSERT ON CONFLICT DO UPDATE على القيد الفريد)
+  و`has_permission_override(*, entity_type, entity_id, user_id, permission) -> Optional[bool]`،
+  و`_insert_audit_row(...)`.
+- **`app/core/entity_membership_service.py`** — `EntityMembershipService(db)`:
+  تمرير مباشر لعمليات العضوية (`add_member`/`change_role`/`remove_member`/
+  `get_members`/`get_user_entities`)، زائد `grant_permission(*, entity_type,
+  entity_id, user_id, tenant_id, permission, granted_by, reason=None) -> EntityPermissionOverride`
+  و`revoke_permission(...)` (نفس التوقيع، `revoked_by`) — **المسار الوحيد
+  المتاح في الكودبيس لتعديل `entity_permission_overrides`**، كل واحدة
+  تستدعي `_upsert_override` و`_insert_audit_row` **في نفس الـtransaction،
+  commit واحد** — يضمن تسجيل `permission_audit_log` تلقائيًا بلا أي مسار
+  استدعاء يسمح بتخطيه. و`check_permission(...) -> Optional[bool]`.
+  **`EntityMembershipService` لا تستورد أي شيء من `sovereign_entities` أو
+  أي دومين وظيفي آخر** (تحقق مباشر)، وdocstring صريح يوضح أن فحص التفويض
+  ("هل current_user مسموح له يستدعي هذه الدوال؟") مسؤولية الدومين
+  المستدعي وقت الدمج في الجلسة 2 — **غير مُطبَّق في هذه الجلسة عمدًا**.
 
-**إغلاق سابق ذو صلة:** `audit-log-wrong-kwargs` [2026-08-18] — توسيع توقيع `audit_log()` (`app/core/audit.py`) ليقبل `tenant_id`/`resource_id` فعليًا (يُسجَّلان في الـJSON log entry، صفر migration لأن الدالة أصلًا لا تكتب DB). **تصحيح جوهري عن الرقم الموثَّق سابقًا:** **95 موضع مكسور فعليًا عبر 18 ملف (مش ~112 عبر 22)** — `agritech` (11) و`ai_agents` (4) و`commerce` (1 من أصل استدعاءاته) آمنة أصلًا (تحمل `tenant_id` جوّه `details` أو بلا kwargs زيادة أصلًا)، و`communications/router.py` فيه 7 مكسورة من 8 مش 8. **اكتشاف حرج جانبي:** الباج مش "audit trail بيفشل بصمت" كما كان مفترضًا — بما إن صفر `try/except` بيغلّف الاستدعاءات المكسورة وصفر exception handler عام في `main.py`، كانت العمليات الأساسية (بوليصة تأمين، وظيفة، فاتورة، إلخ) بترجع 500 حقيقي وبتتراجع (rollback) بالكامل، مش مجرد فقدان سجل تدقيق. **تحقق حي كامل** (SELECT مستقل يثبت اختفاء الـ500/rollback، مش بس صفر استثناء) عبر 4 عيّنات تغطي كل الأنماط: `insurance` (kwargs مباشرة)، `zamakana` (نفس النمط، عبر repo مباشرة تفاديًا لبج #12 غير مرتبط)، `communications/router.py` (النمط الناقص بلا `tenant_id`)، `realestate` (نمط `**{...}` unpacking). راجع تفصيل كامل في `.claude/reports/audit-log-fix-session-log.md`.
+**تحقق حي مزدوج (يدوي ثم Regression دائم):**
+1. سكريبت تحقق يدوي عبر `EntityMembershipService` مباشرة، بيانات throwaway
+   (`entity_type="_TEST_ENTITY"`, `entity_id` وهمي كبير، مستخدمان/tenant
+   حقيقيون كـFK صالح فقط) — كل نتيجة تحقَّق منها بـ`psql` مستقل تمامًا
+   (جلسة منفصلة، لا ثقة بالقيمة المُرجَعة): القيد الفريد فشل كما يجب
+   (`IntegrityError`)، `list_members`/`list_entities_for_user` صحيحان
+   (الفهرسان)، `grant_permission`→`revoke_permission` لنفس التركيبة أنتجا
+   **نفس صف الـoverride دائمًا** (`COUNT`=1، upsert مؤكَّد)، و**صفَّي audit
+   بالضبط** (`GRANT` ثم `REVOKE`) بلا أي استدعاء منفصل لدالة الـaudit من
+   طرف السكريبت — الضمان الأساسي محقَّق فعليًا. تنظيف كامل بعدها، `COUNT`=0
+   نهائي.
+2. **Regression test دائم:** `tests/test_entity_membership_foundation.py`
+   (8 اختبارات) + `tests/test_entity_membership_foundation.md` (README).
+   يغطي نفس السيناريوهات بمنهجية pytest حقيقية (بيانات throwaway جديدة لكل
+   اختبار، تحقق مستقل عبر `AsyncSessionLocal` منفصلة حيث ينطبق، تنظيف كامل
+   في `finally`). **اكتشاف جانبي أثناء الكتابة (مُصحَّح فورًا، لا يمس الكود
+   المُنتَج):** اختبار القيد الفريد أول تشغيلة فشل بـ`sqlalchemy.exc.MissingGreenlet`
+   لأن إعادة استخدام نفس جلسة `db` بعد `IntegrityError` (حتى بعد
+   `rollback()`) تُسمِّم الجلسة — **نمط معروف وموثَّق مسبقًا في المشروع
+   نفسه** (نفس احتياط `test_ai_agents_execute_action.py`/
+   `test_saas_active_subscription.py`)؛ الإصلاح: عزل المحاولة المتوقَّع
+   فشلها في `AsyncSessionLocal` مستقلة تمامًا. نتيجة نهائية: **8 passed
+   ×2 تشغيلتان متتاليتان، صفر تذبذب**، تحقق `psql` مستقل بعد كل تشغيلة
+   أكَّد صفر بيانات throwaway متبقية.
 
-**إغلاق سابق ذو صلة:** `eventbus-redis-wrapper-missing-publish` [2026-08-18] — إضافة `RedisClientWrapper.publish()` حقيقية (5 أسطر، `app/core/redis_client.py`) تصلح 22 دومين مكسور فعليًا (تصحيح عن الرقم الموثَّق سابقًا "34"). تحقق حي كامل (إثبات استلام فعلي، مش بس صفر استثناء) في 3 دومينات (`insurance`, `zamakana`, `arbitration_syndicates`) + فحص قرائي مؤكِّد للـ19 الباقية. راجع تفصيل كامل في `.claude/reports/eventbus-publish-fix-session-log.md`.
+**✅ تأكيد صريح:** صفر لمس على `sovereign_entities` في هذه الجلسة —
+لا الموديلات (`EntityRole`, `EntityRepresentative`, عمود
+`can_sign_contracts`)، لا `service.py`، لا الراوتر (تحقق `git status`
+مباشر: 4 ملفات جديدة + تعديل سطر واحد في `migrations/env.py` فقط).
+**الجلسة 2 (الربط الفعلي بـ`sovereign_entities` + حذف الموديلات القديمة،
+موصوفة في `entity-membership-technical-design.md` §6) لم تبدأ بعد.**
 
-**إغلاق سابق ذو صلة:** Backlog #9 (`saas-control-service-missing-methods`) [2026-08-18] — إضافة `SaaSRepository.get_any_active_subscription`/`SaaSControlService.get_active_subscription` (اشتراك واحد شامل لكل tenant) + تصحيح `subscription.features`→`subscription.plan.features` (list membership بدل dict `.get()`) عبر الثمانية دومينات. راجع تفصيل كامل في `.claude/reports/saas-control-service-fix-session-log.md`.
-
-**ملخص إغلاق #9:** `_check_saas_limits` الحقيقية (بلا `monkeypatch`) اتحققت حيًا في الأربعة دوال الأصلية (`realestate.rent_unit`, `realestate.buy_fractional_ownership`, `insurance.subscribe`, `insurance.review_claim`) — عدّت بنجاح في الأربعة بلا استثناء (إثبات قاطع إن #9 اتصلحت). `rent_unit`/`subscribe` وصلتا لتنفيذ كامل ناجح (SELECT مستقل). `buy_fractional_ownership`/`review_claim` محجوبتان ببجات مسبقة موثَّقة (Backlog #16 و#1 على التوالي — **مش** `tx_hash`/`Transaction` كما كان متوقَّعًا، وكلاهما مؤكَّد بتراجع نظيف بلا أثر جزئي).
-
-**إغلاق سابق ذو صلة:** Backlog #11b (`invoicing-savepoint-conflict`) [2026-08-18] — 8 دوال عبر 4 دومينات، تفصيل كامل في `.claude/reports/realestate-insurance-savepoint-fix-session-log.md`.
-
-**استثناء throwaway-cleanup نشط (تنظيف روتيني غير عاجل، مش عاجل):** `users id=52` (دليل جلسة `invitations`)، `users id=71/72`/دعوات `sovereign_invitations_v2 id=2,3` (تحقق #11a/#11b)، و`p_saas9_verify_*` (يوزرات/أرض/تطوير/وحدتين/بوليصة/كيان/اشتراك تأميني/مطالبة/خطة SaaS — تحقق #9).
+تقرير كامل بكل قرار + التحقق الحي الكامل خطوة بخطوة:
+`.claude/reports/entity-membership-foundation-session-log.md`.
 
 ---
 
@@ -279,5 +222,7 @@ passed, 4 xfailed، صفر أثر جانبي غير مُعالَج). راجع ت
 - **user-repository-get-user-audit — إصلاح `.get_user(` غير الموجودة على `UserRepository` عبر 5 مواضع [2026-08-19]** — ✅ **مُغلَق رسميًا** (Backlog #8). `grep` شامل جديد بالكامل عن `\.get_user\(` (بلا اعتماد على القايمة التاريخية "6 مواضع" كمرجع نهائي) كشف **5 مواضع فعليًا: 8 نقاط استدعاء حية + موضعان Dead code مؤكَّدان**. `employment/service.py:87` و`digital_twin/service.py:53` (كلاهما `_get_user`) — نفس منهجية Backlog #1 بالحرف (توقيع كل helper يقبل `tenant_id`، صفر `try/except` جديد)؛ كشفت التتبع الكامل لنقاط الاستدعاء (بدل الاكتفاء بسطر `.get_user(` نفسه) نقطتين خطيرتين غير موثَّقتين تاريخيًا: `interact_with_twin:180` (`digital_twin`، عبر `_get_user_email`) كانت **كسر واضح 500 داخل `begin_nested()` بلا أي `try/except`** (نفس نمط `social:678` من #1)، و`app/tasks/employment.py:308` (`pay_payroll_task`) كانت **تفشل دفع الرواتب الفعلي فعليًا وتُعاد المحاولة 3 مرات ثم تستسلم نهائيًا**. `communications/service.py:29` (`_get_user_tenant`) كانت **استثناء معماري**: الغرض من الدالة اكتشاف `tenant_id` نفسه، فلا يوجد `tenant_id` متاح في أي من نقاط الاستدعاء الثلاث (`send_notification:63`, `send_mail:144/145`) أصلًا — الحل المعتمَد (قرار مستخدم صريح، **least-privilege**): method جديدة `UserRepository.get_tenant_id_by_user_id(user_id) -> Optional[int]` ترجع `tenant_id` فقط (لا كائن `User` كامل) عبر كل الـtenants بلا فلتر. `communications/service.py:36` و`health/service.py:54` (كلاهما `_get_user_email`) **Dead code مؤكَّد، بلا لمس عمدًا** — نفس فئة `logistics-affiliate-commission-dead-code-uses-broken-get-by-id`. **اكتشاف حي حاسم يُغلق سلسلة Backlog #10 لطبقة موحَّدة كاملة عبر كل الـ12 دومين:** `_register_affiliate_commission` في `employment`/`digital_twin` وصلت الآن بنجاح لـ`get_by_id`، واصطدمت فورًا بنفس طبقة `identity-user-referred-by-field-missing` الموثَّقة مسبقًا للـ10 دومينات الأخرى — **`User.referred_by` بقى الحاجز الوحيد المتبقي لكل الـ12 دومينًا بلا استثناء، الخطوة الوحيدة الباقية لإغلاق Backlog #10 نهائيًا**. تحقق حي كامل (12 فحص throwaway، `db.rollback()`، صفر بيانات متبقية) + regression test دائم `tests/test_user_repository_get_user_audit.py` (11 passed ×2، صفر تذبذب) + suite كامل بعد الإصلاح (71 passed, 4 xfailed — 60 السابقة + 11 الجديدة، صفر أثر جانبي). تقرير: `.claude/reports/user-repository-get-user-audit-session-log.md`.
 
 - **security-deps-unification — توحيد `app/core/security.py` + `app/api/deps.py` [2026-08-19]** — ✅ **مُغلَق رسميًا. جلسة أمنية عاجلة صريحة (أعلى أولوية من أي مسار عمل آخر جارٍ وقتها).** اكتشاف خلفية (`permissions-systems-investigation`، نفس اليوم): نسختان متوازيتان ومتباينتان فعليًا لكل دوال المصادقة/الصلاحية الأساسية، مستوردتان معًا بحرية عبر 40 ملفًا (4 منها تستوردان الاثنتين معًا في نفس الوقت) — `core/security.py` تفحص `session_version` (إبطال الجلسة عن بُعد) وتطابق `tenant_id` الصارم، `api/deps.py` **لا تفحص أيًا منهما إطلاقًا**، و`require_sector` فيها معطَّلة بالكامل (`getattr(user, "sector", None)` — حقل `sector` غير موجود على `User` model، fallback ثابت `"academy"` دائمًا لغير الإداريين). **القرار المعتمَد: الدمج لا الاختيار** — `security.py` الموقع النهائي (أساسه الأمني الصارم غير قابل للتفاوض)، أدوات `deps.py` العملية (`SimpleTenant`, `get_current_tenant`, `require_tenant_access`, `require_subscription`, `get_current_instructor_or_admin`) نُقلت فوقه، و`deps.py` أصبح re-export shim مؤقت (234→39 سطرًا، صفر منطق محلي متبقٍ، تحقق `is` صريح: كل اسم مشترك بين الملفين نفس كائن الدالة بالحرف). **الست دوال المشتركة بالاسم** (`get_current_user`, `get_current_active_user`, `get_current_superuser`, `require_sector`, `is_privacy_officer`, `require_roles`): نسخة `security.py` فازت بالكامل في الست جميعًا. **توسيع نطاق مُعتمَد أثناء التخطيط:** `get_current_user_optional` (دالة سابعة بنفس الاسم غير مذكورة صراحة، لكن بنفس فئة الثغرة — كانت تتجاوز `get_current_user` كليًا في `deps.py`، تُستخدم في 3 راوترات ضيوف) أُصلحت أيضًا: دعم `cookie_token` الكامل (فجوة كانت موجودة حتى في `security.py` الأصلية) + تمرير عبر `get_current_user` الموحَّدة. **تحقق حي عبر HTTP حقيقي فعلي (سيرفر `uvicorn` حقيقي + `curl` عبر الشبكة، لا استدعاء Python مباشر):** (1) `session_version` — توكن صالح شكليًا لكن جلسته أُبطلت عبر `POST /api/identity/revoke-all` رُفض فورًا بعدها بنفس التوكن القديم من `GET /api/communications/notifications/me` (كانت تعتمد على `deps.get_current_active_user` الأضعف): `{"detail":"Session has been revoked","code":"AuthenticationError"}` **HTTP 401** (بعد أن كان `200` قبل الإبطال) — **الإثبات المباشر لإغلاق الثغرة الأمنية الأصلية لهذه الجلسة كلها**. (2) `require_sector` — حساب غير إداري بتوكنين بقيم `sector` صريحة مختلفة: توكن `sector=communications` على راوتر `communications` → `200`؛ نفس التوكن على راوتر `academy` → `403` **"قطاعك الحالي: communications"** (القيمة الحقيقية من التوكن عبر `ContextVar`، لا fallback ثابت)؛ توكن `sector=academy` على `academy` → `200`. مستخدمان تجريبيان حُذفا من القاعدة فور التحقق (`DELETED_ROWS=2`)، السيرفر أُوقف. **الأربعة ملفات المزدوجة الاستيراد** (`communications/router.py`, `identity/router.py`, `privacy/router.py`, `tests/test_identity_router_protection.py`) رُوجعت فعليًا بعد الدمج — صفر تعارض، صفر استيراد دائري، كل الأسماء المشترَكة نفس الكائن بالحرف. `tests/test_identity_router_protection.py` أُعيد كتابته (كان سيفشل حتمًا بعد الدمج — كان يفترض أن نسخة `deps.py` كائن منفصل فعليًا) + 8 اختبارات حية جديدة (صالح Header/Cookie، منتهي، مُبطَل `session_version`، `tenant` مزوَّر). `tests/test_security_deps_unification.py` (ملف جديد، 4 اختبارات) يوفّر النسخة الدائمة القابلة لإعادة التشغيل لسيناريو `require_sector` (تطابق/عدم تطابق/بلا `sector` claim/تخطي `SUPER_ADMIN`) عبر استدعاء حقيقي لنفس الدوال. `pytest` كامل نهائي: **84 passed, 4 xfailed** (71 قبل الجلسة + 13 اختبار جديد صافي، صفر فشل جديد عبر كل الـ40 ملفًا). **خارج النطاق صراحة (بقرار مسبق):** حذف `deps.py` نهائيًا وتحديث الـ40 ملف (جلسة تنظيف منفصلة لاحقة)؛ ثغرة `sovereign_entities` المنفصلة (باج `SimpleTenant`)؛ تصميم نظام الصلاحيات الجديد (يُستأنف الآن). تقرير كامل بكل قرار دمج دالة-بدالة + التحقق الحي الكامل: `.claude/reports/security-deps-unification-session-log.md`.
+
+- **entity-membership-foundation — بناء الأساس العام لنظام `EntityMembership` (الجلسة 1 من 2، مسار الصلاحيات الجديد) [2026-08-20]** — ✅ **مُغلَق رسميًا، مُتحقَّق منه حيًا بالكامل.** أول جلسة تنفيذية فعلية (كود + migration) بعد أربعة مستندات رؤية/تصميم متتالية بلا كود (`multilevel-referral-system-design-vision.md` ← `entity-permissions-and-lifecycle-vision.md` ← `entity-membership-system-vision.md` ← `entity-membership-technical-design.md`، كلها [2026-08-19])، مستأنَفة بعد تعليقها مؤقتًا لصالح `security-deps-unification` الأمنية العاجلة. **ثلاثة جداول جديدة كليًا في `app/core/`** (`app/core/models.py`): `EntityMembership` (`tenant_id` FK `academy_tenants.id`، `entity_type`/`entity_id` Polymorphic بلا FK، `user_id` FK `users.id`، `role` Enum `EntityMembershipRole` منفصل عمدًا عن `sovereign_entities.EntityRole`، `UNIQUE(entity_type, entity_id, user_id)`، فهرسا `(entity_type, entity_id)`/`(user_id, tenant_id)`)؛ `EntityPermissionOverride` (`permission`, `granted` `NOT NULL`, `granted_by` FK `RESTRICT`, `reason`، `UNIQUE(entity_type, entity_id, user_id, permission)` — صف state يُحدَّث في مكانه، لا سجل تاريخي)؛ `PermissionAuditLog` (`scope` `PLATFORM`/`ENTITY` موحَّد، `action` `GRANT`/`REVOKE`، `performed_by` FK `RESTRICT`، فهارس منفصلة على `performed_by`/`target_user_id`/`performed_at`). **اكتشاف جانبي مُصحَّح بموافقة صريحة:** المستند التقني يكتب حرفيًا `tenant_id ... FK → tenants.id` — لا يوجد جدول `tenants` في المشروع فعليًا؛ استُخدم `academy_tenants.id` (الجدول الحقيقي، نفس ما تستخدمه `sovereign_entities`/`affiliate_action_commissions` بالفعل) تطبيقًا لنية المستند لا لنصه الحرفي. **Migration `029_create_entity_membership_foundation`** (`down_revision='028_create_affiliate_action_commissions'`)، طُبِّقت على القاعدة الحية وتحقَّق منها `\d` مباشرةً مطابقة تامة للـschema الموثَّق؛ تعديل مصاحب وحيد على ملف موجود: `migrations/env.py` (إضافة `from app.core.models import *`). **منطق CRUD — `app/core/entity_membership_repository.py`** (`EntityMembershipRepository`: `add_member`/`update_member_role`/`remove_member`/`get_member`/`list_members`/`list_entities_for_user`، زائد `_upsert_override`/`has_permission_override`/`_insert_audit_row` الداخلية) **و`app/core/entity_membership_service.py`** (`EntityMembershipService`: تمرير مباشر لعمليات العضوية، زائد `grant_permission`/`revoke_permission` — المسار الوحيد لتعديل `entity_permission_overrides`، كل واحدة تستدعي upsert الـoverride + insert سطر audit في نفس الـtransaction وcommit واحد، يضمن تسجيل `permission_audit_log` تلقائيًا بلا مسار يسمح بتخطيه — و`check_permission`). **`EntityMembershipService` لا تستورد أي شيء من `sovereign_entities` أو أي دومين وظيفي آخر** (تحقق مباشر)، وdocstring صريح يوضح أن فحص التفويض مسؤولية الدومين المستدعي وقت الدمج في الجلسة 2. **تحقق حي مزدوج:** (أ) سكريبت يدوي عبر بيانات throwaway (`entity_type="_TEST_ENTITY"`) مع تحقق `psql` مستقل تمامًا بعد كل خطوة — القيد الفريد فشل كما يجب، upsert الـoverride أنتج نفس الصف دائمًا (`COUNT`=1)، وصفَّا audit بالضبط (`GRANT` ثم `REVOKE`) بلا استدعاء منفصل من طرف السكريبت؛ (ب) **regression test دائم** `tests/test_entity_membership_foundation.py` (8 اختبارات) + README مخصص — اكتشاف جانبي أثناء الكتابة (`IntegrityError` بيسمّم أي جلسة تحصل فيها، نفس نمط موثَّق مسبقًا في `test_ai_agents_execute_action.py`) مُصحَّح بعزل المحاولة المتوقَّع فشلها في جلسة `AsyncSessionLocal` مستقلة؛ **8 passed ×2 تشغيلتان متتاليتان، صفر تذبذب**، صفر بيانات throwaway متبقية (تحقق `psql` مستقل). **✅ تأكيد صريح: صفر لمس على `sovereign_entities` في هذه الجلسة** — لا الموديلات (`EntityRole`, `EntityRepresentative`, `can_sign_contracts`)، لا `service.py`، لا الراوتر (`git status`: 4 ملفات جديدة + تعديل سطر واحد في `migrations/env.py` فقط). **الجلسة 2 (الربط الفعلي + حذف الموديلات القديمة) لم تبدأ بعد.** تقرير كامل: `.claude/reports/entity-membership-foundation-session-log.md`.
 
 **⚠️ لم تُراجَع بثقة كافية في هذا الفهرس (موجودة كملفات في `.claude/reports/` لكن حالتها النهائية غير مُدمَجة هنا):** `silent-write-regression-session-log.md`، `phase16-session-log.md`، ملفات `.claude/reports/CRITICAL-*.md` الأخرى غير المذكورة أعلاه. راجع الأرشيف أو الملفات نفسها عند الحاجة.

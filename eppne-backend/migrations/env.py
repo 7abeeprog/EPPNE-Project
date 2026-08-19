@@ -21,6 +21,9 @@ from app.core.config import settings
 # 🔥 تسجيل النماذج (Models Registration) بترتيب الاعتماديات الدقيق
 # ==========================================
 
+# المستوى 0: بنية تحتية عامة عابرة للدومينات
+from app.core.models import *
+
 # المستوى 1: القطاعات السيادية الأساسية
 from app.domains.identity.models import *
 from app.domains.saas.models import *
