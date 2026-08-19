@@ -469,11 +469,11 @@ class ServiceMarketplaceService:
     # 8. دوال مساعدة
     # ============================================================
 
-    async def _get_user(self, user_id: int):
+    async def _get_user(self, user_id: int, tenant_id: int):
         """جلب المستخدم من قاعدة البيانات."""
         from app.domains.identity.repository import UserRepository
         user_repo = UserRepository(self.db)
-        return await user_repo.get_by_id(user_id)
+        return await user_repo.get_by_id(user_id, tenant_id)
 
     async def _get_owner_email(self, tenant_id: int) -> str:
         """جلب بريد مالك المستأجر (تبسيط)."""
@@ -483,7 +483,7 @@ class ServiceMarketplaceService:
         """تسجيل عمولة إحالة (10% من قيمة الشراء)."""
         try:
             affiliate_service = AffiliateService(self.db, tenant_id)
-            user = await self._get_user(user_id)
+            user = await self._get_user(user_id, tenant_id)
             if user and user.referred_by:
                 commission_amount = amount * Decimal("0.10")
                 if commission_amount > 0:

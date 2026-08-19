@@ -19,17 +19,16 @@ class IoTService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = IoTRepository(db)
-        self.finance = FinanceService(db)
         self.redis = cast(Any, get_redis_client)
 
     # ============================================================
     # دوال مساعدة
     # ============================================================
 
-    async def _get_user_email(self, user_id: int) -> str:
+    async def _get_user_email(self, user_id: int, tenant_id: int) -> str:
         from app.domains.identity.repository import UserRepository
         user_repo = UserRepository(self.db)
-        user = await user_repo.get_by_id(user_id)
+        user = await user_repo.get_by_id(user_id, tenant_id)
         return user.email if user else f"user_{user_id}@eppne.com"  # type: ignore
 
     # ============================================================
@@ -208,10 +207,11 @@ class IoTService:
             monetary_value = total_credits * Decimal('50.0')
 
             payment_idempotency = f"carbon_settle_{idempotency_key or uuid.uuid4().hex[:12]}"
+            finance = FinanceService(self.db, tenant_id)
             try:
-                await self.finance.transfer(
+                await finance.transfer(
                     sender_id=1,
-                    receiver_email=await self._get_user_email(owner_id),
+                    receiver_email=await self._get_user_email(owner_id, tenant_id),
                     currency="MR_USDT",
                     amount=cast(Decimal, monetary_value),
                     notes=f"تسييل {total_credits} طن كربون",
@@ -240,6 +240,8 @@ class IoTService:
                 "monetary_value_added_mrusdt": float(cast(Decimal, monetary_value)),
                 "readings_processed": len(reading_ids)
             }
+
+        await self.db.commit()
 
         # تخزين النتيجة كاملة
         if idempotency_key:

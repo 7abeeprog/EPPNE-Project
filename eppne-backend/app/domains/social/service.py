@@ -489,7 +489,7 @@ class SocialService:
             if gift_value > 0:
                 await finance.transfer(
                     sender_id=sender_id,
-                    receiver_email=await self._get_user_email(receiver_id),
+                    receiver_email=await self._get_user_email(receiver_id, tenant_id),
                     currency="MR_USDT",
                     amount=gift_value,
                     notes=f"Digital gift from user {sender_id}",
@@ -672,8 +672,8 @@ class SocialService:
     # 11. دوال مساعدة
     # ============================================================
 
-    async def _get_user_email(self, user_id: int) -> str:
+    async def _get_user_email(self, user_id: int, tenant_id: int) -> str:
         from app.domains.identity.repository import UserRepository
         user_repo = UserRepository(self.db)
-        user = await user_repo.get_by_id(user_id)
+        user = await user_repo.get_by_id(user_id, tenant_id)
         return cast(str, user.email) if user else f"user_{user_id}@eppne.com"

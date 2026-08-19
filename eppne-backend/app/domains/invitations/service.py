@@ -50,13 +50,13 @@ class InvitationsService:
             raise PermissionDeniedError("CRM feature is not included in your current plan.")
         return subscription, features
 
-    async def _get_user(self, user_id: int) -> Optional[User]:
+    async def _get_user(self, user_id: int, tenant_id: int) -> Optional[User]:
         from app.domains.identity.repository import UserRepository
         user_repo = UserRepository(self.db)
-        return await user_repo.get_by_id(user_id)
+        return await user_repo.get_by_id(user_id, tenant_id)
 
-    async def _get_user_email(self, user_id: int) -> str:
-        user = await self._get_user(user_id)
+    async def _get_user_email(self, user_id: int, tenant_id: int) -> str:
+        user = await self._get_user(user_id, tenant_id)
         return user.email if user else f"user_{user_id}@eppne.com"  # type: ignore
 
     async def _get_entity_email(self, entity_id: int) -> str:
@@ -65,7 +65,7 @@ class InvitationsService:
     async def _register_affiliate_commission(self, user_id: int, tenant_id: int, action_type: str):
         affiliate_service = AffiliateService(self.db, tenant_id)
         try:
-            user = await self._get_user(user_id)
+            user = await self._get_user(user_id, tenant_id)
             if user and user.referred_by:  # type: ignore
                 commission = Decimal("2.00") if action_type in ["INVITATION_CREATED", "CAMPAIGN_CREATED"] else Decimal("5.00")
                 await affiliate_service.register_commission(  # type: ignore

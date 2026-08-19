@@ -31,7 +31,7 @@ regression test لجلسة `saas-control-service-get-active-subscription-fix`
 | `realestate.rent_unit` | ✅ تحقق حي كامل، نجاح تام |
 | `insurance.subscribe` | ✅ تحقق حي كامل للمسار المالي (commit+create_subscription) |
 | `realestate.buy_fractional_ownership` | 🟡 تحقق حي جزئي (#9 مؤكَّدة، الباقي محجوب ببج مسبق) |
-| `insurance.review_claim` | 🟡 تحقق حي جزئي (#9 مؤكَّدة، الباقي محجوب ببج مسبق) |
+| `insurance.review_claim` | 🟡 تحقق حي جزئي (#9 مؤكَّدة، الباقي محجوب بـ`insurance-review-claim-issuer-entity-id-reviewer-id-conflict` — Backlog #1 اتصلح في جلسة `user-repository-get-by-id-audit` وبقى غير ظاهر في هذا المسار لأن هذه الطبقة الأسبق بتحجبه) |
 
 **منهجية التحقق لكل دالة:** استدعاء حي حقيقي (بلا `monkeypatch` على
 `_check_saas_limits` نفسها — هذا بالظبط جوهر ما بنتحقق منه، بعكس منهجية
@@ -111,6 +111,7 @@ from app.domains.insurance.models import (
     InsurancePolicy, InsuranceSubscription, InsuranceClaim,
     PolicyType, PremiumCycle, ClaimStatus,
 )
+from app.core.errors import PermissionDeniedError
 
 TENANT_ID = 1
 # land_assets id=1 و sovereign_entities_v2 id=4 — صفوف throwaway موجودة
@@ -321,8 +322,18 @@ async def test_realestate_buy_fractional_ownership_saas_check_passes_then_hits_k
 @pytest.mark.asyncio
 async def test_insurance_review_claim_saas_check_passes_then_hits_known_bug(db):
     """`_check_saas_limits` الحقيقية لازم تعدي بنجاح، ثم تكراش بالبج المسبق
-    المُوثَّق تحديدًا (Backlog #1، `UserRepository.get_by_id()` من غير
-    `tenant_id`) — نفس مستوى التقرير الأصلي (قسم 13.1/14.1، الصف 4).
+    المُوثَّق تحديدًا — نفس مستوى التقرير الأصلي (قسم 13.1/14.1، الصف 4).
+
+    **⚠️ تحديث [جلسة `user-repository-get-by-id-audit`، Backlog #1]:**
+    الاختبار ده كان أصلًا بيعتمد على `pytest.raises(TypeError, match="tenant_id")`
+    كدليل غير مباشر على الوصول لنفس النقطة — يعني `UserRepository.get_by_id()`
+    اتنادت بمعامل واحد بس رغم إن توقيعها الحقيقي بيطلب `tenant_id` إجباريًا
+    (Backlog #1). **البج ده اتصلح فعليًا في جلسة `user-repository-get-by-id-audit`**
+    (`.claude/reports/user-repository-get-by-id-audit-session-log.md`،
+    القسم 12.1 — `insurance/service.py:57-64`)، فبقى التوقُّع القديم باطل:
+    الكود دلوقتي بيعدي `get_by_id` بنجاح تام. **حُدِّث الاختبار ليعتمد على
+    الطبقة التالية الحقيقية المؤكَّدة حيًا** بدل الطبقة القديمة المُصلَحة —
+    راجع الفقرة التالية.
 
     **🔴 اكتشاف بج production حقيقي [2026-08-19] (مش غلطة بيانات throwaway):**
     الكود الأصلي (قبل هنج VS Code) كان بيمرر `reviewer.id` (يوزر throwaway
@@ -340,14 +351,19 @@ async def test_insurance_review_claim_saas_check_passes_then_hits_known_bug(db):
     في `PROGRESS_LOG.md`، **صفر لمس على `insurance/service.py` هنا** (خارج
     نطاق #9 تمامًا).
 
-    **الحل هنا للتجاوز (مش إصلاح البج، مجرد عزل الهدف):** نستخدم
-    `EXISTING_ISSUER_ENTITY_ID` (صف throwaway موجود فعلًا، قراءة فقط) كـ
-    `issuer_entity_id` عند إنشاء البوليصة، **ونمرر نفس القيمة بالحرف** كـ
-    `reviewer_id` عند استدعاء `review_claim()` تحت — بيخلي الفحص المكسور
-    (سطر 431) يعدي بالصدفة (مش لأنه بيشتغل صح)، عشان نوصل فعليًا لهدف هذا
-    الاختبار (تأكيد #9 ثم Backlog #1 بعده). **هذا الاختبار مش سيناريو واقعي
-    لمسار المراجع الحقيقي — لا يثبت ولا ينفي البج الجديد، فقط بيتجنبه عمدًا**
-    ليصل لما بعده."""
+    **الاختبار المُحدَّث [جلسة `user-repository-get-by-id-audit`] — يثبت
+    البج الحقيقي بدل تجاوزه:** بعد إصلاح Backlog #1، الطبقة اللي كانت
+    بتحجب هذا المسار اختفت — فبقى ممكن (وواجب) نختبر السيناريو الواقعي
+    الفعلي مباشرة بدل الـtrick القديم. `EXISTING_ISSUER_ENTITY_ID` لسه
+    مُستخدَمة كـ`issuer_entity_id` عند إنشاء البوليصة (صف throwaway موجود
+    فعلًا، قراءة فقط)، **لكن `reviewer_id` بقى `claimant.id`** — قيمة
+    حقيقية من نطاق `users.id` (بالظبط زي `current_user.id` الممرَّرة من
+    `insurance/router.py:195` في الاستدعاء الحقيقي من الـAPI)، **مختلفة
+    عمدًا عن `EXISTING_ISSUER_ENTITY_ID`** — فالفحص المكسور (سطر 431)
+    هيفشل **بشكل واقعي وحقيقي هذه المرة**، مش بالصدفة كالسابق. هذا يثبت
+    حيًا بالضبط السيناريو الموثَّق: أي مراجع حقيقي (`users.id`) هيترفض
+    دايمًا لأن `policy.issuer_entity_id` (نطاق `sovereign_entities_v2.id`)
+    مش نفس النطاق أصلًا."""
     ins_repo = InsuranceRepository(db)
     claimant = await _create_funded_user(db, "p_regtest_saas9_ins_claimant")
     user_ids = [claimant.id]
@@ -376,9 +392,9 @@ async def test_insurance_review_claim_saas_check_passes_then_hits_known_bug(db):
     service = InsuranceService(db)
 
     try:
-        with pytest.raises(TypeError, match="tenant_id"):
+        with pytest.raises(PermissionDeniedError, match="Not authorized to review this claim"):
             await service.review_claim(
-                claim_id=claim_id, reviewer_id=EXISTING_ISSUER_ENTITY_ID, tenant_id=TENANT_ID,
+                claim_id=claim_id, reviewer_id=claimant.id, tenant_id=TENANT_ID,
                 approve=True,
                 idempotency_key=f"REGTEST-SAAS9-CLAIM-{_suffix()}",
             )
