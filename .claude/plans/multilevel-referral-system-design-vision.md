@@ -305,3 +305,17 @@ Admin فقط؟ Entity Owner لكيانه الخاص ضمن قيود المنصة
 
 **لا تُفتَح أي جلسة Claude Code تنفيذية لكتابة كود أو migrations قبل
 إتمام الجلستين أعلاه والموافقة الصريحة عليهما.**
+
+**مستند مترابط:** راجع
+[`.claude/plans/entity-permissions-and-lifecycle-vision.md`](./entity-permissions-and-lifecycle-vision.md)
+— يحسم بالتفصيل دورة حياة الكيان (§5 أعلاه) ونموذج الصلاحيات
+(RBAC + Permission Overrides) المطلوب لبوابات الموافقة، بما فيها
+الربط الحاسم مع تغييرات إعداد العمولة (`approve_commission_config_change:{ENTITY_TYPE}`)
+الذي يغذّي مباشرة الخطوة 2 أعلاه.
+
+**مستند مترابط ثالث:** راجع
+[`.claude/plans/entity-membership-system-vision.md`](./entity-membership-system-vision.md)
+— يحسم من يملك/يمثِّل نسخة كيان بعينها يوميًا (`EntityMembership`،
+تعميم `EntityRole` الحالي من `sovereign_entities`)، كمكوّن ثالث مكمِّل
+لنموذج الصلاحيات، منفصل عن RBAC العام أعلاه لكن مبني فوق نفس الكيانات
+المتداخلة الموصوفة في §5.
