@@ -116,6 +116,34 @@ class RedisClientWrapper:
         client = await self.get_client()
         return await client.publish(channel, message)
 
+    async def hincrbyfloat(self, key: str, field: str, amount):
+        client = await self.get_client()
+        return await client.hincrbyfloat(key, field, amount)
+
+    async def hgetall(self, key: str):
+        client = await self.get_client()
+        return await client.hgetall(key)
+
+    async def lpush(self, key: str, *values):
+        client = await self.get_client()
+        return await client.lpush(key, *values)
+
+    async def ltrim(self, key: str, start: int, end: int):
+        client = await self.get_client()
+        return await client.ltrim(key, start, end)
+
+    async def setnx(self, key: str, value: str):
+        client = await self.get_client()
+        return await client.setnx(key, value)
+
+    def pubsub(self):
+        """متزامنة عمدًا (بلا async/await) — مطابقة لسلوك redis.asyncio.Redis.pubsub()
+        الحقيقية (لا تنفّذ I/O، فقط تُنشئ كائن PubSub). تعتمد على أن initialize()
+        استُدعيت بالفعل في الـ lifespan قبل خدمة أي طلب."""
+        if self._client is None:
+            raise RuntimeError("Redis client غير مُهيَّأ بعد — استدعِ initialize() أولاً (عادة عبر lifespan في main.py).")
+        return self._client.pubsub()
+
     # ========== عمليات التخزين المؤقت الجماعية (لـ Cache Aside) ==========
     async def get_json(self, key: str):
         """جلب قيمة JSON وتحويلها إلى قاموس (dict)"""
