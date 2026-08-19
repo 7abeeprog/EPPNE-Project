@@ -103,6 +103,46 @@ class Commission(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class ActionCommission(Base):
+    """عمولات الأحداث العابرة للدومينات (بلا Order تجاري) — Backlog #10.
+
+    منفصل عمدًا عن `Commission` (التجاري، مرتبط بـOrder إجباريًا) لأن
+    الاستدعاءات الفعلية (12 دومين: zamakana, transport, insurance...)
+    كلها أحداث بلا order_id/product_id حقيقي. راجع
+    `.claude/reports/affiliate-service-missing-methods-session-log.md`
+    قسم 5 و9 للتفاصيل الكاملة لهذا القرار.
+    """
+    __tablename__ = "affiliate_action_commissions"
+    __table_args__ = (
+        Index("ix_affiliate_action_commissions_tenant_id", "tenant_id"),
+        Index("ix_affiliate_action_commissions_affiliate_profile_id", "affiliate_profile_id"),
+        Index("ix_affiliate_action_commissions_user_id", "user_id"),
+        Index("ix_affiliate_action_commissions_status", "status"),
+        Index("ix_affiliate_action_commissions_entity_type", "entity_type"),
+        Index("ix_affiliate_action_commissions_created_at", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    affiliate_profile_id = Column(Integer, ForeignKey("affiliate_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    amount = Column(Numeric(30, 8), nullable=False)
+    currency = Column(String(20), default="MR_USDT", nullable=False)
+    description = Column(String(255), nullable=False)
+
+    entity_type = Column(String(50), nullable=False)
+    action_type = Column(String(50), nullable=True)
+
+    status = Column(String(20), default="PENDING", nullable=False)
+    paid_at = Column(DateTime(timezone=True), nullable=True)
+    paid_tx_hash = Column(String(100), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class CommissionTier(Base):
     """إعدادات نسب العمولات حسب المستوى لكل مستأجر (مع دعم المنتجات)"""
     __tablename__ = "affiliate_commission_tiers"

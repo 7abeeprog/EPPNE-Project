@@ -77,9 +77,9 @@ class DigitalTwinService:
                 return
 
             if affiliate_code and not referrer_id:
-                referrer = await affiliate_service.get_user_by_code(affiliate_code)  # type: ignore
+                referrer = await affiliate_service.get_user_by_code(affiliate_code)
                 if referrer:
-                    referrer_id = referrer.id
+                    referrer_id = referrer.user_id  # AffiliateProfile.user_id — register_commission's affiliate_id متوقع user_id، مش profile id
 
             if not referrer_id:
                 return

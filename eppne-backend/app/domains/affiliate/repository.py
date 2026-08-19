@@ -11,6 +11,7 @@ from app.domains.affiliate.models import (
     AffiliateProfile,
     ReferralTree,
     Commission,
+    ActionCommission,
     CommissionTier,
     AffiliateLink,
     AffiliateClickLog,
@@ -137,6 +138,13 @@ class AffiliateRepository:
     # ==========================================
     async def create_commission(self, tenant_id: int, **kwargs) -> Commission:
         commission = Commission(tenant_id=tenant_id, **kwargs)
+        self.db.add(commission)
+        await self.db.commit()
+        await self.db.refresh(commission)
+        return commission
+
+    async def create_action_commission(self, tenant_id: int, **kwargs) -> ActionCommission:
+        commission = ActionCommission(tenant_id=tenant_id, **kwargs)
         self.db.add(commission)
         await self.db.commit()
         await self.db.refresh(commission)
