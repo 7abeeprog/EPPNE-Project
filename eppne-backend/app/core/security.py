@@ -3,7 +3,7 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 
-from fastapi import Depends, HTTPException, status, Cookie
+from fastapi import Depends, HTTPException, status, Cookie, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from jose import jwt, JWTError, ExpiredSignatureError
@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.domains.identity.models import User
 from app.domains.identity.repository import UserRepository
+from app.domains.saas.service import SaaSControlService
 from app.core.logging_conf import logger, set_sector, get_sector
 from app.core.errors import AuthenticationError, PermissionDeniedError
 
@@ -243,15 +244,76 @@ def require_roles(roles: List[str]):
 # ============================================================
 async def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    cookie_token: Optional[str] = Cookie(None, alias="access_token"),
 ) -> Optional[User]:
     """
-    محاولة استخراج المستخدم من التوكن، مع إرجاع None إذا فشل.
-    تستخدم في نقاط النهاية التي تسمح للضيوف.
+    محاولة استخراج المستخدم من التوكن (Header Bearer أو HttpOnly Cookie)،
+    مع إرجاع None إذا فشل. تستخدم في نقاط النهاية التي تسمح للضيوف.
+    تمر عبر get_current_user نفسها، فتفحص session_version وتطابق tenant
+    الصارم بنفس منطق النسخة الإجبارية - توكن مُبطَل لا يُقبَل حتى كـ"ضيف
+    مسجَّل اختياريًا".
     """
-    if not credentials:
+    if not credentials and not cookie_token:
         return None
     try:
-        return await get_current_user(credentials, db)
+        return await get_current_user(credentials, db, cookie_token)
     except (HTTPException, AuthenticationError):
         return None
+
+
+# ============================================================
+# 10. التحقق من المستأجر (Tenant) - منقولة من api/deps.py
+# ============================================================
+class SimpleTenant:
+    id: int
+
+
+async def get_current_tenant(
+    x_tenant_id: int = Header(default=1, alias="X-Tenant-ID")
+) -> SimpleTenant:
+    tenant = SimpleTenant()
+    tenant.id = x_tenant_id
+    return tenant
+
+
+async def require_tenant_access(
+    current_user: User = Depends(get_current_active_user),
+    tenant: SimpleTenant = Depends(get_current_tenant),
+) -> User:
+    if current_user.tenant_id != tenant.id:
+        raise PermissionDeniedError(
+            f"عذراً، أنت لا تنتمي إلى المستأجر {tenant.id}. مستأجرك: {current_user.tenant_id}"
+        )
+    return current_user
+
+
+# ============================================================
+# 11. مستخدم مدرب أو أدمن - منقولة من api/deps.py
+# ============================================================
+async def get_current_instructor_or_admin(
+    current_user: User = Depends(get_current_active_user)
+) -> User:
+    allowed_roles = ["INSTRUCTOR", "SUPER_ADMIN", "EXECUTIVE_DIRECTOR", "ADMIN"]
+    current_role = getattr(current_user, "system_role", None)
+    if current_role is not None:
+        role_value = current_role.value if hasattr(current_role, "value") else current_role
+    else:
+        role_value = None
+    if role_value not in allowed_roles:
+        raise PermissionDeniedError("عذراً، هذا الإجراء مخصص للمدربين والإدارة فقط.")
+    return current_user
+
+
+# ============================================================
+# 12. صلاحية الاشتراك (Subscription) - منقولة من api/deps.py
+# ============================================================
+def require_subscription(service_code: str):
+    async def subscription_checker(
+        current_user: User = Depends(get_current_active_user),
+        db: AsyncSession = Depends(get_db),
+    ):
+        service = SaaSControlService(db, current_user.tenant_id)
+        await service.check_and_enforce_access(current_user.tenant_id, service_code)
+        return current_user
+    return subscription_checker
