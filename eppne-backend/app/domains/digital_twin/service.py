@@ -46,15 +46,15 @@ class DigitalTwinService:
             raise PermissionDeniedError("Digital Twin feature is not included in your current plan.")
         return subscription, features
 
-    async def _get_user(self, user_id: int):
+    async def _get_user(self, user_id: int, tenant_id: int):
         """جلب المستخدم من قاعدة البيانات."""
         from app.domains.identity.repository import UserRepository
         user_repo = UserRepository(self.db)
-        return await user_repo.get_user(user_id)  # type: ignore
+        return await user_repo.get_by_id(user_id, tenant_id)
 
-    async def _get_user_email(self, user_id: int) -> str:
+    async def _get_user_email(self, user_id: int, tenant_id: int) -> str:
         """جلب بريد المستخدم."""
-        user = await self._get_user(user_id)
+        user = await self._get_user(user_id, tenant_id)
         return user.email if user else f"user_{user_id}@eppne.com"
 
     async def _register_affiliate_commission(
@@ -68,7 +68,7 @@ class DigitalTwinService:
         """تسجيل عمولة إحالة عند إنشاء توأم أو تفاعل مدفوع."""
         affiliate_service = AffiliateService(self.db, tenant_id)
         try:
-            user = await self._get_user(user_id)
+            user = await self._get_user(user_id, tenant_id)
             if not user:
                 return
 
@@ -177,7 +177,7 @@ class DigitalTwinService:
             async with self.db.begin_nested():
                 tx = await finance.transfer(
                     sender_id=visitor_id,
-                    receiver_email=await self._get_user_email(twin_owner_id),
+                    receiver_email=await self._get_user_email(twin_owner_id, tenant_id),
                     currency="MR_USDT",
                     amount=fee,
                     notes=f"Interaction with digital twin of user {twin_owner_id}",

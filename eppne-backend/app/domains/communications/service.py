@@ -26,10 +26,7 @@ class CommunicationsService:
 
     async def _get_user_tenant(self, user_id: int) -> Optional[int]:
         """جلب tenant_id الحقيقي للمستخدم من قاعدة البيانات."""
-        user = await self.user_repo.get_user(user_id)  # type: ignore
-        if not user:
-            return None
-        return user.tenant_id  # type: ignore
+        return await self.user_repo.get_tenant_id_by_user_id(user_id)
 
     async def _get_user_email(self, user_id: int) -> str:
         """جلب البريد الإلكتروني للمستخدم."""
