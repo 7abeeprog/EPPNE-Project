@@ -319,3 +319,10 @@ Admin فقط؟ Entity Owner لكيانه الخاص ضمن قيود المنصة
 تعميم `EntityRole` الحالي من `sovereign_entities`)، كمكوّن ثالث مكمِّل
 لنموذج الصلاحيات، منفصل عن RBAC العام أعلاه لكن مبني فوق نفس الكيانات
 المتداخلة الموصوفة في §5.
+
+**مستند مترابط رابع:** راجع
+[`.claude/plans/entity-membership-technical-design.md`](./entity-membership-technical-design.md)
+— يحسم الـschema التقني الكامل (جداول، أعمدة، قيود، فهارس) لـ
+`EntityMembership` والـEntity-Level Permission Overrides، بما فيها
+قرار الحذف المباشر بلا ترحيل بيانات (مبني على نفس سند §1 هنا)،
+واستراتيجية التنفيذ المرحلية (Strangler Fig).

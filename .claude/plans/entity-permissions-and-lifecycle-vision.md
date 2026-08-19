@@ -285,3 +285,11 @@ schema العمولات المذكورة في §8 من المستند الساب
 في §2 أعلاه، منفصلان تمامًا عنه لكن مترابطان معه (راجع §3 من ذلك
 المستند لتوضيح دقيق للعلاقة بين بوابة إضافة الشريك هنا §1 المرحلة 4
 وEntityMembership).
+
+**مستند مترابط رابع:** راجع
+[`.claude/plans/entity-membership-technical-design.md`](./entity-membership-technical-design.md)
+— يحسم الـschema التقني الكامل لـ`EntityMembership` والـEntity-Level
+Permission Overrides، ويضيف توضيحًا تكميليًا على §2 هنا: مبدأ فصل
+جدول overrides (يُفحص وقت التنفيذ) عن جدول audit منفصل (للمراجعة
+الإدارية فقط) يجب أن يُطبَّق أيضًا على overrides RBAC العام الموصوف
+في §2، لا فقط على الـoverrides الكياني.
