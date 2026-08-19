@@ -17,6 +17,7 @@ from app.core.errors import InsufficientBalanceError, PermissionDeniedError
 from app.domains.employment.service import EmploymentService
 from app.domains.employment.models import AttendanceStatus, PayrollStatus, EmploymentStatus
 from app.domains.finance.service import FinanceService
+from app.domains.invoicing.service import InvoicingService
 
 
 # ============================================================
@@ -267,7 +268,8 @@ def pay_payroll_task(
             async with SessionLocal() as db:
                 service = EmploymentService(db)
                 repo = service.repo
-                finance = FinanceService(db)
+                finance = FinanceService(db, tenant_id)
+                invoicing_service = InvoicingService(db, tenant_id)
 
                 # التحقق من Idempotency
                 if idempotency_key:
@@ -303,7 +305,7 @@ def pay_payroll_task(
 
                 # 3. جلب البريد الإلكتروني للموظف
                 employee_id = cast(int, contract.employee_id)
-                employee_email = await service._get_user_email(employee_id)
+                employee_email = await service._get_user_email(employee_id, tenant_id)
 
                 # 4. تنفيذ التحويل المالي
                 net_salary = cast(Decimal, payroll.net_salary)
@@ -331,7 +333,7 @@ def pay_payroll_task(
                 )
 
                 # 6. إنشاء فاتورة (Invoicing)
-                await service.invoicing_service.create_invoice(
+                await invoicing_service.create_invoice(
                     entity_id=tenant_id,
                     user_id=employee_id,
                     amount=net_salary,

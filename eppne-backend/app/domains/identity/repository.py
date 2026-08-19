@@ -53,6 +53,14 @@ class UserRepository:
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
+    async def get_tenant_id_by_user_id(self, user_id: int) -> Optional[int]:
+        """يبحث بـuser_id وحده عبر كل الـtenants ويرجع tenant_id فقط
+        (بلا أي بيانات أخرى عن المستخدم) — للحالات التي يكون فيها
+        اكتشاف tenant_id نفسه هو الغرض من الاستدعاء."""
+        query = select(User.tenant_id).where(User.id == user_id)
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()
+
     async def create(self, user: User) -> User:
         self.db.add(user)
         await self.db.commit()

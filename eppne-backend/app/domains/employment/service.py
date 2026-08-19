@@ -81,14 +81,14 @@ class EmploymentService:
             )
         return subscription, features
 
-    async def _get_user(self, user_id: int) -> Optional[User]:
+    async def _get_user(self, user_id: int, tenant_id: int) -> Optional[User]:
         """جلب بيانات المستخدم."""
         from app.domains.identity.repository import UserRepository
-        return await UserRepository(self.db).get_user(user_id)
+        return await UserRepository(self.db).get_by_id(user_id, tenant_id)
 
-    async def _get_user_email(self, user_id: int) -> str:
+    async def _get_user_email(self, user_id: int, tenant_id: int) -> str:
         """جلب البريد الإلكتروني للمستخدم."""
-        user = await self._get_user(user_id)
+        user = await self._get_user(user_id, tenant_id)
         return user.email if user else f"user_{user_id}@eppne.com"
 
     async def _register_affiliate_commission(
@@ -97,7 +97,7 @@ class EmploymentService:
         """تسجيل عمولة إحالة للوكيل إن وجد."""
         affiliate_service = AffiliateService(self.db, tenant_id)
         try:
-            user = await self._get_user(user_id)
+            user = await self._get_user(user_id, tenant_id)
             if user and user.referred_by:
                 commission = (
                     Decimal("2.00")
@@ -129,7 +129,7 @@ class EmploymentService:
     async def _calculate_ai_match_score(self, applicant_id: int, job: JobListing) -> Decimal:
         """حساب نسبة التوافق بين المتقدم والوظيفة باستخدام الذكاء الاصطناعي."""
         try:
-            user = await self._get_user(applicant_id)
+            user = await self._get_user(applicant_id, cast(int, job.tenant_id))
             user_skills = getattr(user, "skills", [])
             prompt = f"""
             قم بتحليل التوافق بين المتقدم للوظيفة والوظيفة المعلنة.
