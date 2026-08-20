@@ -162,7 +162,7 @@ class EmploymentService:
         await self._check_saas_limits(tenant_id, "hr_management")
         sanitized_data = {
             "title": bleach.clean(data.get("title", ""), tags=[], strip=True),
-            "description": bleach.clean(data.get("description", ""), tags=[], strip=True),
+            "description": bleach.clean(data.get("description", ""), tags=[], strip=True) if data.get("description") else None,
             "required_skills": data.get("required_skills", []),
             "required_certificate_ids": data.get("required_certificate_ids", []),
             "required_rank": data.get("required_rank"),

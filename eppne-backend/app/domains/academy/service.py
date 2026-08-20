@@ -109,7 +109,8 @@ class AcademyService:
     async def create_course(self, data: dict, instructor_id: int):
         if data.get('tenant_id') != self.tenant_id:
             raise PermissionDeniedError("تعارض في المستأجر")
-        course = await self.repo.create_course(**data, instructor_id=instructor_id)
+        course_data = {k: v for k, v in data.items() if k != 'instructor_id'}
+        course = await self.repo.create_course(**course_data, instructor_id=instructor_id)
         await self.repo._invalidate_cache("courses")
         await self.repo._invalidate_cache("published_courses")
         return course
@@ -197,6 +198,9 @@ class AcademyService:
         node = await self.repo.get_node(node_id)
         if not node:
             raise NotFoundError("الدرس غير موجود")
+        course = await self.repo.get_course(cast(int, node.course_id), self.tenant_id)
+        if not course:
+            raise NotFoundError("الدرس غير موجود")
         live_session = await self.repo.create_live_session(node_id, data)
         await self.repo._invalidate_cache(f"live_sessions_{node_id}")
         return live_session
@@ -208,11 +212,20 @@ class AcademyService:
         node = await self.repo.get_node(node_id)
         if not node:
             raise NotFoundError("الدرس غير موجود")
+        course = await self.repo.get_course(cast(int, node.course_id), self.tenant_id)
+        if not course:
+            raise NotFoundError("الدرس غير موجود")
         material = await self.repo.create_node_material(node_id=node_id, **data)
         await self.repo._invalidate_cache(f"node_materials_{node_id}")
         return material
 
     async def get_node_materials(self, node_id: int):
+        node = await self.repo.get_node(node_id)
+        if not node:
+            raise NotFoundError("الدرس غير موجود")
+        course = await self.repo.get_course(cast(int, node.course_id), self.tenant_id)
+        if not course:
+            raise NotFoundError("الدرس غير موجود")
         return await self.repo.get_node_materials(node_id)
 
     # ============================================================
@@ -221,6 +234,9 @@ class AcademyService:
     async def create_quiz(self, node_id: int, data: dict):
         node = await self.repo.get_node(node_id)
         if not node:
+            raise NotFoundError("الدرس غير موجود")
+        course = await self.repo.get_course(cast(int, node.course_id), self.tenant_id)
+        if not course:
             raise NotFoundError("الدرس غير موجود")
         quiz = await self.repo.create_quiz(node_id=node_id, data=data)
         await self.repo._invalidate_cache(f"quiz_{node_id}")

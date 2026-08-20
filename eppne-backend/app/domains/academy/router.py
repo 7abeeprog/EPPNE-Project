@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from pydantic import BaseModel
 from typing import Optional, List, cast
+from decimal import Decimal
 import hashlib
 import uuid
 
@@ -84,7 +85,8 @@ async def create_org_entity(
 ):
     tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
-    return await service.create_org_entity(**data.model_dump())
+    entity_data = data.model_dump(exclude={"tenant_id"})
+    return await service.create_org_entity(**entity_data)
 
 @router.get("/entities", response_model=list[OrganizationEntityResponse])
 async def list_org_entities(
@@ -276,6 +278,13 @@ async def enroll_in_course_simple(
     db: AsyncSession = Depends(get_db),
 ):
     tenant_id = cast(int, current_user.tenant_id)
+    repo = AcademyRepository(db)
+    course = await repo.get_course(course_id, tenant_id)
+    if course and not cast(bool, course.is_free) and cast(Decimal, course.price_mrusdt) > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="هذا الكورس مدفوع. استخدم POST /academy/store/courses/{course_id}/enroll بطريقة دفع WALLET."
+        )
     service = AcademyService(db, tenant_id)
     return await service.enroll_in_course(
         user_id=cast(int, current_user.id),
