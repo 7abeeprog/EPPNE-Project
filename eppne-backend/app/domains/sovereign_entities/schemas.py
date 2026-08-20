@@ -4,8 +4,9 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from decimal import Decimal
 from app.domains.sovereign_entities.models import (
-    SovereignEntityType, KYBStatus, EntityRole
+    SovereignEntityType, KYBStatus
 )
+from app.core.models import EntityMembershipRole
 
 
 # ========== Sovereign Entity ==========
@@ -67,7 +68,7 @@ class SovereignEntityResponse(SovereignEntityCreate):
 # ========== Entity Representatives ==========
 class EntityRepresentativeCreate(BaseModel):
     user_id: int = Field(description="معرف المستخدم")
-    role: EntityRole = Field(description="الدور")
+    role: EntityMembershipRole = Field(description="الدور")
     can_sign_contracts: bool = Field(default=False, description="يمكنه التوقيع على العقود")
     signature_pub_key: Optional[str] = Field(default=None, description="مفتاح التوقيع العام")
 
@@ -75,7 +76,6 @@ class EntityRepresentativeCreate(BaseModel):
 class EntityRepresentativeResponse(EntityRepresentativeCreate):
     id: int = Field(description="معرف التمثيل")
     entity_id: int = Field(description="معرف الكيان")
-    is_active: bool = Field(description="نشط")
     created_at: datetime = Field(description="تاريخ الإنشاء")
     model_config = ConfigDict(from_attributes=True)
 

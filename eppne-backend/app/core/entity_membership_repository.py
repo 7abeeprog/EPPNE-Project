@@ -27,10 +27,11 @@ class EntityMembershipRepository:
     async def add_member(
         self, *, entity_type: str, entity_id: int, user_id: int,
         tenant_id: int, role: EntityMembershipRole,
+        signature_pub_key: Optional[str] = None,
     ) -> EntityMembership:
         member = EntityMembership(
             entity_type=entity_type, entity_id=entity_id, user_id=user_id,
-            tenant_id=tenant_id, role=role,
+            tenant_id=tenant_id, role=role, signature_pub_key=signature_pub_key,
         )
         self.db.add(member)
         await self.db.commit()
@@ -60,6 +61,18 @@ class EntityMembershipRepository:
     async def remove_member(
         self, *, entity_type: str, entity_id: int, user_id: int,
     ) -> None:
+        """يحذف عضوية العضو + أي entity_permission_overrides مرتبطة به
+        على نفس الكيان، في نفس الـtransaction — بدون هذا، إعادة إضافة
+        العضو لاحقًا كانت ترث overrides قديمة بلا منح جديد صريح."""
+        await self.db.execute(
+            delete(EntityPermissionOverride).where(
+                and_(
+                    EntityPermissionOverride.entity_type == entity_type,
+                    EntityPermissionOverride.entity_id == entity_id,
+                    EntityPermissionOverride.user_id == user_id,
+                )
+            )
+        )
         await self.db.execute(
             delete(EntityMembership).where(
                 and_(

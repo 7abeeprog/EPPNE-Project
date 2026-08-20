@@ -64,7 +64,7 @@ from decimal import Decimal
 from typing import Iterator, List
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import and_, delete, select
 
 from app.main import fastapi_app  # noqa: F401 — يضمن تسجيل كل الـmodels
 
@@ -76,8 +76,9 @@ from app.domains.finance.models import AuditLog
 from app.domains.insurance.service import InsuranceService
 from app.domains.insurance.models import InsurancePolicy, PolicyType, PremiumCycle
 
-from app.domains.sovereign_entities.service import SovereignEntitiesService
-from app.domains.sovereign_entities.models import SovereignEntity, EntityPage, EntityRepresentative, SovereignEntityType
+from app.domains.sovereign_entities.service import SovereignEntitiesService, ENTITY_TYPE as SOVEREIGN_ENTITY_TYPE
+from app.domains.sovereign_entities.models import SovereignEntity, EntityPage, SovereignEntityType
+from app.core.models import EntityMembership, EntityPermissionOverride, PermissionAuditLog as CoreAuditLog
 
 from app.domains.zamakana.repository import ZamakanaRepository
 from app.domains.zamakana.models import ZamakanaNode, ZamakanaNodeType
@@ -221,7 +222,18 @@ async def test_sovereign_entities_create_entity_audit_log_no_500_and_entity_pers
         assert refreshed.entity_type == SovereignEntityType.ENTERPRISE
     finally:
         if entity_id is not None:
-            await db.execute(delete(EntityRepresentative).where(EntityRepresentative.entity_id == entity_id))
+            # ترتيب الحذف: audit/overrides/memberships أولاً (FK RESTRICT على
+            # performed_by/granted_by → users.id لازم تُحذف قبل حذف المستخدم
+            # في _cleanup_user أدناه)
+            await db.execute(delete(CoreAuditLog).where(
+                and_(CoreAuditLog.entity_type == SOVEREIGN_ENTITY_TYPE, CoreAuditLog.entity_id == entity_id)
+            ))
+            await db.execute(delete(EntityPermissionOverride).where(
+                and_(EntityPermissionOverride.entity_type == SOVEREIGN_ENTITY_TYPE, EntityPermissionOverride.entity_id == entity_id)
+            ))
+            await db.execute(delete(EntityMembership).where(
+                and_(EntityMembership.entity_type == SOVEREIGN_ENTITY_TYPE, EntityMembership.entity_id == entity_id)
+            ))
             await db.execute(delete(EntityPage).where(EntityPage.entity_id == entity_id))
             await db.execute(delete(SovereignEntity).where(SovereignEntity.id == entity_id))
             await db.commit()

@@ -25,12 +25,16 @@ from app.core.idempotency import get_idempotency_result, store_idempotency_resul
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
+from app.core.entity_membership_service import EntityMembershipService
+from app.core.models import EntityMembership, EntityMembershipRole
 from app.domains.sovereign_entities.models import (
-    SovereignEntity, EntityRepresentative, EntityPage, EntityDocument,
-    KYBStatus, EntityRole, SovereignEntityType,
+    SovereignEntity, EntityPage, EntityDocument,
+    KYBStatus, SovereignEntityType,
     EntityPageTemplate, PageComponent
 )
 from sqlalchemy.sql import func
+
+ENTITY_TYPE = "SOVEREIGN_ENTITY"
 
 
 class SovereignEntitiesService:
@@ -40,6 +44,7 @@ class SovereignEntitiesService:
         self.repo = SovereignEntitiesRepository(db)
         self.finance = FinanceService(db, tenant_id)
         self.event_bus = EventBus(cast(Any, redis_client))
+        self.membership = EntityMembershipService(db)
 
     # ==============================
     # 0. دوال Idempotency الموحّدة (مع tenant_id)
@@ -82,11 +87,14 @@ class SovereignEntitiesService:
             custom_structure=None
         )
 
-        await self.repo.add_representative(
-            entity_id=entity.id,
-            user_id=user_id,
-            role=EntityRole.OWNER,
-            can_sign_contracts=True
+        await self.membership.add_member(
+            entity_type=ENTITY_TYPE, entity_id=entity.id, user_id=user_id,
+            tenant_id=self.tenant_id, role=EntityMembershipRole.OWNER,
+        )
+        await self.membership.grant_permission(
+            entity_type=ENTITY_TYPE, entity_id=entity.id, user_id=user_id,
+            tenant_id=self.tenant_id, permission="can_sign_contracts",
+            granted_by=user_id, reason="Entity owner — auto-granted on creation",
         )
 
         await audit_log(
@@ -127,8 +135,8 @@ class SovereignEntitiesService:
         )
 
     async def get_my_entities(self, user_id: int) -> List[SovereignEntity]:
-        reps = await self.repo.get_representatives_by_user(user_id, self.tenant_id)
-        entity_ids = [cast(int, r.entity_id) for r in reps]
+        memberships = await self.membership.get_user_entities(user_id=user_id, tenant_id=self.tenant_id)
+        entity_ids = [m.entity_id for m in memberships if m.entity_type == ENTITY_TYPE]
         return await self.repo.list_entities_by_ids(entity_ids, self.tenant_id)
 
     async def update_entity(self, entity_id: int, user_id: int, data: dict) -> SovereignEntity:
@@ -151,18 +159,53 @@ class SovereignEntitiesService:
     # 2. إدارة الممثلين (مع tenant_id)
     # ==============================
 
-    async def add_representative(self, entity_id: int, admin_user_id: int, data: dict) -> EntityRepresentative:
-        if not await self._is_authorized_representative(entity_id, admin_user_id, [EntityRole.OWNER, EntityRole.EXECUTIVE_DIRECTOR]):
+    async def add_representative(self, entity_id: int, admin_user_id: int, data: dict) -> dict:
+        if not await self._is_authorized_representative(
+            entity_id, admin_user_id, [EntityMembershipRole.OWNER, EntityMembershipRole.EXECUTIVE_DIRECTOR]
+        ):
             raise PermissionDeniedError("Only owner or executive director can add representatives")
-        return await self.repo.add_representative(entity_id=entity_id, **data)
+        target_user_id = data["user_id"]
+        member = await self.membership.add_member(
+            entity_type=ENTITY_TYPE, entity_id=entity_id, user_id=target_user_id,
+            tenant_id=self.tenant_id, role=data["role"],
+            signature_pub_key=data.get("signature_pub_key"),
+        )
+        if data.get("can_sign_contracts"):
+            await self.membership.grant_permission(
+                entity_type=ENTITY_TYPE, entity_id=entity_id, user_id=target_user_id,
+                tenant_id=self.tenant_id, permission="can_sign_contracts",
+                granted_by=admin_user_id,
+            )
+        return await self._to_representative_response(member)
 
     async def remove_representative(self, entity_id: int, admin_user_id: int, user_id_to_remove: int) -> None:
-        if not await self._is_authorized_representative(entity_id, admin_user_id, [EntityRole.OWNER, EntityRole.EXECUTIVE_DIRECTOR]):
+        if not await self._is_authorized_representative(
+            entity_id, admin_user_id, [EntityMembershipRole.OWNER, EntityMembershipRole.EXECUTIVE_DIRECTOR]
+        ):
             raise PermissionDeniedError("Only owner or executive director can remove representatives")
-        await self.repo.remove_representative(entity_id, user_id_to_remove)
+        await self.membership.remove_member(entity_type=ENTITY_TYPE, entity_id=entity_id, user_id=user_id_to_remove)
 
-    async def get_representatives(self, entity_id: int) -> List[EntityRepresentative]:
-        return await self.repo.get_representatives(entity_id)
+    async def get_representatives(self, entity_id: int) -> List[dict]:
+        members = await self.membership.get_members(entity_type=ENTITY_TYPE, entity_id=entity_id)
+        return [await self._to_representative_response(m) for m in members]
+
+    async def _to_representative_response(self, member: EntityMembership) -> dict:
+        """يبني شكل الـresponse القديم (EntityRepresentativeResponse) من صف
+        EntityMembership + نتيجة check_permission — can_sign_contracts لم يعد
+        عمودًا على العضوية نفسها، بل override منفصل (None يُعامَل كـFalse)."""
+        can_sign = await self.membership.check_permission(
+            entity_type=ENTITY_TYPE, entity_id=member.entity_id, user_id=member.user_id,
+            permission="can_sign_contracts",
+        )
+        return {
+            "id": member.id,
+            "entity_id": member.entity_id,
+            "user_id": member.user_id,
+            "role": member.role,
+            "can_sign_contracts": can_sign is True,
+            "signature_pub_key": member.signature_pub_key,
+            "created_at": member.created_at,
+        }
 
     # ==============================
     # 3. KYB (مع tenant_id)
@@ -348,7 +391,7 @@ class SovereignEntitiesService:
             if cached is not None:
                 return cached
 
-        if not await self._is_authorized_representative(entity_id, admin_user_id, [EntityRole.OWNER, EntityRole.EXECUTIVE_DIRECTOR]):
+        if not await self._is_authorized_representative(entity_id, admin_user_id, [EntityMembershipRole.OWNER, EntityMembershipRole.EXECUTIVE_DIRECTOR]):
             raise PermissionDeniedError("Only owner or executive director can deposit to entity wallet")
 
         entity = await self.repo.get_entity(entity_id, self.tenant_id)
@@ -421,8 +464,16 @@ class SovereignEntitiesService:
         if not entity:
             raise NotFoundError("Entity not found")
 
-        rep = await self.repo.get_representative(entity_id, from_representative_id, self.tenant_id)
-        if not rep or not rep.can_sign_contracts:
+        member = await self.membership.get_member(
+            entity_type=ENTITY_TYPE, entity_id=entity_id, user_id=from_representative_id,
+        )
+        if member is None:
+            raise PermissionDeniedError("You are not authorized to sign transfers from this entity")
+        can_sign = await self.membership.check_permission(
+            entity_type=ENTITY_TYPE, entity_id=entity_id, user_id=from_representative_id,
+            permission="can_sign_contracts",
+        )
+        if can_sign is not True:  # None (لا override) يُعامَل صراحةً كـFalse
             raise PermissionDeniedError("You are not authorized to sign transfers from this entity")
 
         if cast(Decimal, entity.treasury_balance_mrusdt) < amount:
@@ -490,20 +541,20 @@ class SovereignEntitiesService:
     # ==============================
 
     async def _is_representative(self, entity_id: int, user_id: int) -> bool:
-        reps = await self.repo.get_representatives(entity_id)
-        return any(r.user_id == user_id for r in reps)
+        return await self.membership.get_member(
+            entity_type=ENTITY_TYPE, entity_id=entity_id, user_id=user_id,
+        ) is not None
 
     async def _is_authorized_representative(
         self,
         entity_id: int,
         user_id: int,
-        allowed_roles: List[EntityRole]
+        allowed_roles: List[EntityMembershipRole]
     ) -> bool:
-        reps = await self.repo.get_representatives(entity_id)
-        for r in reps:
-            if r.user_id == user_id and r.role in allowed_roles:
-                return True
-        return False
+        member = await self.membership.get_member(
+            entity_type=ENTITY_TYPE, entity_id=entity_id, user_id=user_id,
+        )
+        return member is not None and member.role in allowed_roles
 
     def _generate_slug(self, name: str) -> str:
         slug = re.sub(r'[^a-zA-Z0-9\-]', '-', name.lower())

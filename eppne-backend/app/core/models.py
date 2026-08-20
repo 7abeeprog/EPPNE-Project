@@ -46,6 +46,7 @@ class EntityMembership(Base):
     entity_id = Column(Integer, nullable=False)  # Polymorphic — بلا FK حقيقي
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     role = Column(SQLEnum(EntityMembershipRole), nullable=False)
+    signature_pub_key = Column(String(512), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

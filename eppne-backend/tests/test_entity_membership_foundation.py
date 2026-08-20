@@ -464,3 +464,119 @@ async def test_check_permission_none_true_false_states(db):
         assert bystander_check is None, "مستخدم بلا override إطلاقًا يجب أن يرجع None دائمًا"
     finally:
         await _cleanup(db, entity_ids=entity_ids, user_ids=user_ids)
+
+
+# ============================================================
+# 9) signature_pub_key — عمود nullable جديد (migration 030)، يُخزَّن
+#    ويُقرأ فعليًا، بلا تأثير على أي عضوية بلا قيمة (تبقى NULL)
+# ============================================================
+
+@pytest.mark.asyncio
+async def test_signature_pub_key_column_nullable_and_persists(db):
+    user = await _create_user(db, "em_sigkey")
+    entity_id = _entity_id()
+    user_ids, entity_ids = [user.id], [entity_id]
+
+    try:
+        svc = EntityMembershipService(db)
+        member = await svc.add_member(
+            entity_type=ENTITY_TYPE, entity_id=entity_id, user_id=user.id,
+            tenant_id=TENANT_ID, role=EntityMembershipRole.SIGNATORY,
+        )
+
+        # افتراضيًا NULL — الإضافة الحالية لا تمرر signature_pub_key
+        row = (await db.execute(
+            select(EntityMembership).where(EntityMembership.id == member.id)
+        )).scalar_one()
+        assert row.signature_pub_key is None
+
+        # تحديث مباشر (لا توجد دالة service مخصَّصة له بعد — خارج نطاق
+        # هذه الجلسة، فقط العمود نفسه) + تحقق مستقل بجلسة منفصلة
+        row.signature_pub_key = "-----BEGIN PUBLIC KEY-----TESTKEY-----END PUBLIC KEY-----"
+        await db.commit()
+
+        async with AsyncSessionLocal() as independent_db:
+            persisted = (await independent_db.execute(
+                select(EntityMembership).where(EntityMembership.id == member.id)
+            )).scalar_one()
+            assert persisted.signature_pub_key == (
+                "-----BEGIN PUBLIC KEY-----TESTKEY-----END PUBLIC KEY-----"
+            )
+    finally:
+        await _cleanup(db, entity_ids=entity_ids, user_ids=user_ids)
+
+
+# ============================================================
+# 10) remove_member — إصلاح الفجوة السلوكية: يجب أن يحذف أيضًا أي
+#     entity_permission_overrides مرتبطة، بحيث إعادة إضافة نفس العضو
+#     لاحقًا لا ترث override قديم بلا منح جديد صريح
+# ============================================================
+
+@pytest.mark.asyncio
+async def test_remove_member_also_deletes_related_overrides(db):
+    granter = await _create_user(db, "em_rm_ov_by")
+    target = await _create_user(db, "em_rm_ov_target")
+    entity_id = _entity_id()
+    user_ids = [granter.id, target.id]
+    entity_ids = [entity_id]
+
+    try:
+        svc = EntityMembershipService(db)
+        await svc.add_member(
+            entity_type=ENTITY_TYPE, entity_id=entity_id, user_id=target.id,
+            tenant_id=TENANT_ID, role=EntityMembershipRole.REPRESENTATIVE,
+        )
+        await svc.grant_permission(
+            entity_type=ENTITY_TYPE, entity_id=entity_id, user_id=target.id,
+            tenant_id=TENANT_ID, permission="can_sign_contracts",
+            granted_by=granter.id, reason="regression test — pre-removal grant",
+        )
+
+        await svc.remove_member(
+            entity_type=ENTITY_TYPE, entity_id=entity_id, user_id=target.id,
+        )
+
+        # تحقق مستقل بجلسة منفصلة تمامًا: صفر overrides متبقية لهذا العضو
+        async with AsyncSessionLocal() as independent_db:
+            override_rows = (await independent_db.execute(
+                select(EntityPermissionOverride).where(
+                    and_(
+                        EntityPermissionOverride.entity_type == ENTITY_TYPE,
+                        EntityPermissionOverride.entity_id == entity_id,
+                        EntityPermissionOverride.user_id == target.id,
+                    )
+                )
+            )).scalars().all()
+            assert len(override_rows) == 0, (
+                "remove_member يجب أن يحذف overrides المرتبطة — بدون هذا "
+                "الإصلاح كان الصف القديم يبقى موجودًا"
+            )
+
+            # سجل الـaudit (GRANT السابق) يبقى كما هو — لا يُحذَف، فقط الـoverride
+            audit_rows = (await independent_db.execute(
+                select(PermissionAuditLog).where(
+                    and_(
+                        PermissionAuditLog.entity_type == ENTITY_TYPE,
+                        PermissionAuditLog.entity_id == entity_id,
+                        PermissionAuditLog.target_user_id == target.id,
+                    )
+                )
+            )).scalars().all()
+            assert len(audit_rows) == 1
+            assert audit_rows[0].action == AuditAction.GRANT
+
+        # إعادة إضافة نفس العضو لاحقًا — لا يجب أن يرث الـoverride القديم
+        await svc.add_member(
+            entity_type=ENTITY_TYPE, entity_id=entity_id, user_id=target.id,
+            tenant_id=TENANT_ID, role=EntityMembershipRole.REPRESENTATIVE,
+        )
+        after_re_add = await svc.check_permission(
+            entity_type=ENTITY_TYPE, entity_id=entity_id, user_id=target.id,
+            permission="can_sign_contracts",
+        )
+        assert after_re_add is None, (
+            "بعد إعادة الإضافة، لازم None (لا override إطلاقًا) — لا True موروث "
+            "من المنح القديم قبل الإزالة"
+        )
+    finally:
+        await _cleanup(db, entity_ids=entity_ids, user_ids=user_ids)

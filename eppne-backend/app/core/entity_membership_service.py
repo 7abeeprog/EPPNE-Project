@@ -40,10 +40,11 @@ class EntityMembershipService:
     async def add_member(
         self, *, entity_type: str, entity_id: int, user_id: int,
         tenant_id: int, role: EntityMembershipRole,
+        signature_pub_key: Optional[str] = None,
     ) -> EntityMembership:
         return await self.repo.add_member(
             entity_type=entity_type, entity_id=entity_id, user_id=user_id,
-            tenant_id=tenant_id, role=role,
+            tenant_id=tenant_id, role=role, signature_pub_key=signature_pub_key,
         )
 
     async def change_role(
@@ -61,6 +62,11 @@ class EntityMembershipService:
         await self.repo.remove_member(
             entity_type=entity_type, entity_id=entity_id, user_id=user_id,
         )
+
+    async def get_member(
+        self, *, entity_type: str, entity_id: int, user_id: int,
+    ) -> Optional[EntityMembership]:
+        return await self.repo.get_member(entity_type=entity_type, entity_id=entity_id, user_id=user_id)
 
     async def get_members(
         self, *, entity_type: str, entity_id: int,

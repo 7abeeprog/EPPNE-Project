@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload, joinedload
 from typing import Optional, List, Dict, Any, cast
 from datetime import datetime
 from app.domains.sovereign_entities.models import (
-    SovereignEntity, EntityRepresentative, EntityPage, EntityPageTemplate,
+    SovereignEntity, EntityPage, EntityPageTemplate,
     PageComponent, EntityDocument, KYBStatus, SovereignEntityType
 )
 from app.core.errors import NotFoundError
@@ -118,66 +118,6 @@ class SovereignEntitiesRepository:
                 delete(SovereignEntity)
                 .where(and_(SovereignEntity.id == entity_id, SovereignEntity.tenant_id == tenant_id))
             )
-        await self.db.commit()
-
-    # ========== Representatives ==========
-    async def add_representative(self, **kwargs) -> EntityRepresentative:
-        rep = EntityRepresentative(**kwargs)
-        self.db.add(rep)
-        await self.db.commit()
-        await self.db.refresh(rep)
-        return rep
-
-    async def get_representatives(self, entity_id: int) -> List[EntityRepresentative]:
-        result = await self.db.execute(
-            select(EntityRepresentative).where(
-                and_(
-                    EntityRepresentative.entity_id == entity_id,
-                    EntityRepresentative.is_active == True
-                )
-            )
-        )
-        return list(result.scalars().all())
-
-    async def get_representatives_by_user(self, user_id: int, tenant_id: int) -> List[EntityRepresentative]:
-        result = await self.db.execute(
-            select(EntityRepresentative)
-            .join(SovereignEntity, SovereignEntity.id == EntityRepresentative.entity_id)
-            .where(
-                and_(
-                    EntityRepresentative.user_id == user_id,
-                    EntityRepresentative.is_active == True,
-                    SovereignEntity.tenant_id == tenant_id,
-                    SovereignEntity.is_deleted == False
-                )
-            )
-        )
-        return list(result.scalars().all())
-
-    async def get_representative(self, entity_id: int, user_id: int, tenant_id: int) -> Optional[EntityRepresentative]:
-        result = await self.db.execute(
-            select(EntityRepresentative)
-            .join(SovereignEntity, SovereignEntity.id == EntityRepresentative.entity_id)
-            .where(
-                and_(
-                    EntityRepresentative.entity_id == entity_id,
-                    EntityRepresentative.user_id == user_id,
-                    EntityRepresentative.is_active == True,
-                    SovereignEntity.tenant_id == tenant_id
-                )
-            )
-        )
-        return result.scalar_one_or_none()
-
-    async def remove_representative(self, entity_id: int, user_id: int) -> None:
-        await self.db.execute(
-            delete(EntityRepresentative).where(
-                and_(
-                    EntityRepresentative.entity_id == entity_id,
-                    EntityRepresentative.user_id == user_id
-                )
-            )
-        )
         await self.db.commit()
 
     # ========== KYB Documents ==========

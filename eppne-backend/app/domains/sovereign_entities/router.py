@@ -30,7 +30,7 @@ async def create_entity(
     entity = await service.create_entity(user_id, entity_data)
     await service.add_representative(cast(int, entity.id), user_id, {
         "user_id": user_id,
-        "role": EntityRole.OWNER,
+        "role": EntityMembershipRole.OWNER,
         "can_sign_contracts": True
     })
     return entity

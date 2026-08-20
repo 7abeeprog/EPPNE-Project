@@ -36,13 +36,6 @@ class KYBStatus(str, enum.Enum):
     SUSPENDED = "SUSPENDED"
 
 
-class EntityRole(str, enum.Enum):
-    OWNER = "OWNER"                  # المالك/المؤسس
-    EXECUTIVE_DIRECTOR = "EXECUTIVE_DIRECTOR"  # المدير التنفيذي
-    SIGNATORY = "SIGNATORY"          # مفوض بالتوقيع
-    REPRESENTATIVE = "REPRESENTATIVE" # ممثل عام
-
-
 # ========== 1. جدول الكيان الرئيسي ==========
 class SovereignEntity(Base):
     __tablename__ = "sovereign_entities_v2"
@@ -100,29 +93,6 @@ class SovereignEntity(Base):
     __table_args__ = (
         Index("ix_entity_type_status", "entity_type", "kyb_status"),
         Index("ix_entity_parent", "parent_id"),
-    )
-
-
-# ========== 2. ممثلو الكيان (الموظفون المفوضون) ==========
-class EntityRepresentative(Base):
-    __tablename__ = "entity_representatives"
-
-    id = Column(Integer, primary_key=True, index=True)
-    entity_id = Column(Integer, ForeignKey("sovereign_entities_v2.id"), nullable=False, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-
-    role = Column(SQLEnum(EntityRole), nullable=False)          # دوره في الكيان
-    is_active = Column(Boolean, default=True)
-
-    # صلاحيات التوقيع الإلكتروني
-    can_sign_contracts = Column(Boolean, default=False)
-    signature_pub_key = Column(String(512), nullable=True)      # مفتاح التوقيع
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
-    __table_args__ = (
-        Index("ix_entity_rep_unique", "entity_id", "user_id", unique=True),
     )
 
 
