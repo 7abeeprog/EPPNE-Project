@@ -458,6 +458,27 @@ async def create_node_quiz(
     service = AcademyService(db, tenant_id)
     return await service.create_quiz(node_id, data.model_dump())
 
+@router.get("/nodes/{node_id}/quiz", response_model=QuizPublicResponse)
+async def get_node_quiz(
+    node_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AcademyService(db, tenant_id)
+    return await service.get_node_quiz(node_id)
+
+@router.post("/quizzes/{quiz_id}/submit", response_model=QuizSubmissionResponse)
+async def submit_quiz(
+    quiz_id: int,
+    data: QuizSubmit,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AcademyService(db, tenant_id)
+    return await service.submit_quiz(cast(int, current_user.id), quiz_id, data.answers)
+
 # ============================================================
 # 🚀 File Upload (مع BackgroundTasks)
 # ============================================================

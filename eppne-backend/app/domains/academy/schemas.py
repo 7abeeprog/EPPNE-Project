@@ -218,6 +218,33 @@ class QuizResult(BaseModel):
     total_questions: int
     certificate_issued: bool
 
+class QuizQuestionPublic(BaseModel):
+    id: int
+    type: str
+    text: str
+    options: Optional[List[str]] = None
+    points: int = 1
+
+class QuizPublicResponse(BaseModel):
+    id: int
+    node_id: int
+    title: str
+    passing_score: Decimal
+    max_attempts: int
+    time_limit_minutes: Optional[int] = None
+    questions: List[QuizQuestionPublic]
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+class QuizSubmissionResponse(BaseModel):
+    id: int
+    quiz_id: int
+    user_id: int
+    score: Optional[float] = None
+    status: str
+    submitted_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
 # ==========================================
 # Enrollment & Progress (مع tenant_id)
 # ==========================================

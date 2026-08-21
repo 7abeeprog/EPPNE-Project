@@ -11,7 +11,7 @@ import hashlib
 
 from app.domains.academy.models import (
     AcademyTenant, OrganizationEntity, Instructor, Bootcamp, Track, Course,
-    CourseUnit, KnowledgeNode, NodeMaterial, Quiz, Enrollment, SpiritualCertificate,
+    CourseUnit, KnowledgeNode, NodeMaterial, Quiz, QuizSubmission, Enrollment, SpiritualCertificate,
     SovereignBadge, LiveSession, LiveAttendance, StudentDigitalTwin, ClassroomCameraAnalysis,
     CertificateIssuanceLog, CourseAnalytics, AcademyTask, TaskSubmission, AcademyCohort,
     PaymentInstallment
@@ -447,6 +447,25 @@ class AcademyRepository:
     async def get_quiz_by_node(self, node_id: int) -> Optional[Quiz]:
         result = await self.db.execute(select(Quiz).where(Quiz.node_id == node_id))
         return result.scalar_one_or_none()
+
+    async def get_quiz(self, quiz_id: int) -> Optional[Quiz]:
+        result = await self.db.execute(select(Quiz).where(Quiz.id == quiz_id))
+        return result.scalar_one_or_none()
+
+    async def create_quiz_submission(self, **kwargs) -> QuizSubmission:
+        submission = QuizSubmission(**kwargs)
+        self.db.add(submission)
+        await self.db.commit()
+        await self.db.refresh(submission)
+        return submission
+
+    async def count_quiz_attempts(self, quiz_id: int, user_id: int) -> int:
+        result = await self.db.execute(
+            select(func.count()).select_from(QuizSubmission).where(
+                and_(QuizSubmission.quiz_id == quiz_id, QuizSubmission.user_id == user_id)
+            )
+        )
+        return result.scalar() or 0
 
     # ============================================================
     # 8. Enrollment

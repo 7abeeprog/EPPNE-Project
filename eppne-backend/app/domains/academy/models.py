@@ -238,6 +238,22 @@ class Quiz(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+class QuizSubmission(Base):
+    __tablename__ = "quiz_submissions"
+    __table_args__ = (
+        Index("ix_quiz_submission_quiz_user", "quiz_id", "user_id"),
+        Index("ix_quiz_submission_tenant", "tenant_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    quiz_id = Column(Integer, ForeignKey("node_quizzes.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    answers = Column(JSONB, nullable=False)
+    score = Column(Numeric(5, 2), nullable=True)
+    status = Column(String(50), default="SUBMITTED")
+    submitted_at = Column(DateTime(timezone=True), server_default=func.now())
+
 # ============================================
 # 7. الاشتراكات (مع tenant_id)
 # ============================================

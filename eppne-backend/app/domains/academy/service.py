@@ -16,7 +16,7 @@ from app.domains.identity.repository import UserRepository
 from app.core.errors import PermissionDeniedError, NotFoundError, InsufficientBalanceError
 from app.core.storage import minio_client, ensure_bucket_exists
 from app.core.ai_engine import analyze_and_recommend_courses
-from app.domains.academy.models import Course, Enrollment
+from app.domains.academy.models import Course, Enrollment, Quiz, QuizSubmission
 from app.domains.identity.models import User
 
 
@@ -241,6 +241,62 @@ class AcademyService:
         quiz = await self.repo.create_quiz(node_id=node_id, data=data)
         await self.repo._invalidate_cache(f"quiz_{node_id}")
         return quiz
+
+    async def get_node_quiz(self, node_id: int) -> Quiz:
+        node = await self.repo.get_node(node_id)
+        if not node:
+            raise NotFoundError("الدرس غير موجود")
+        course = await self.repo.get_course(cast(int, node.course_id), self.tenant_id)
+        if not course:
+            raise NotFoundError("الدرس غير موجود")
+        quiz = await self.repo.get_quiz_by_node(node_id)
+        if not quiz:
+            raise NotFoundError("لا يوجد اختبار لهذا الدرس")
+        return quiz
+
+    async def submit_quiz(self, user_id: int, quiz_id: int, answers: Dict[int, str]) -> QuizSubmission:
+        quiz = await self.repo.get_quiz(quiz_id)
+        if not quiz:
+            raise NotFoundError("الاختبار غير موجود")
+        node = await self.repo.get_node(cast(int, quiz.node_id))
+        if not node:
+            raise NotFoundError("الاختبار غير موجود")
+        course = await self.repo.get_course(cast(int, node.course_id), self.tenant_id)
+        if not course:
+            raise NotFoundError("الاختبار غير موجود")
+
+        enrollment = await self.repo.get_enrollment(user_id, cast(int, course.id), self.tenant_id)
+        if not enrollment or cast(str, enrollment.status) != "ACTIVE":
+            raise PermissionDeniedError("يجب أن تكون مسجلاً فعليًا في هذا الكورس للتسليم")
+
+        attempts = await self.repo.count_quiz_attempts(quiz_id, user_id)
+        if attempts >= cast(int, quiz.max_attempts):
+            raise PermissionDeniedError("تجاوزت الحد الأقصى لمحاولات هذا الاختبار")
+
+        questions = cast(list, quiz.questions)
+        total_points = sum(q.get("points", 1) for q in questions)
+        earned = 0
+        has_short_answer = False
+        for q in questions:
+            if q.get("type") in ("MCQ", "TRUE_FALSE"):
+                if str(answers.get(q["id"])) == str(q.get("correct_answer")):
+                    earned += q.get("points", 1)
+            elif q.get("type") == "SHORT_ANSWER":
+                has_short_answer = True
+            # SHORT_ANSWER: 0 نقطة تلقائيًا (قرار مُعتمَد صراحة — تصحيح جزئي فوري)
+        score = (earned / total_points * 100) if total_points else 0.0
+        status = "PARTIALLY_GRADED" if has_short_answer else "GRADED"
+
+        submission = await self.repo.create_quiz_submission(
+            quiz_id=quiz_id,
+            user_id=user_id,
+            tenant_id=self.tenant_id,
+            answers=answers,
+            score=score,
+            status=status,
+        )
+        await self.repo._invalidate_cache(f"quiz_submissions_{quiz_id}")
+        return submission
 
     # ============================================================
     # 11. Enrollment & Progress
