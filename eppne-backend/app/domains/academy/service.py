@@ -45,6 +45,10 @@ class AcademyService:
             print(f"⚠️ [Background Upload] Failed to upload {object_name}: {str(e)}")
             return False
 
+    async def _is_enrolled(self, user_id: int, course_id: int) -> bool:
+        enrollment = await self.repo.get_enrollment(user_id, course_id, self.tenant_id)
+        return bool(enrollment and cast(str, enrollment.status) == "ACTIVE")
+
     # ============================================================
     # 1. Tenants & Org Entities
     # ============================================================
@@ -175,8 +179,13 @@ class AcademyService:
         await self.repo._invalidate_cache(f"course_nodes_{data['course_id']}")
         return node
 
-    async def get_course_nodes(self, course_id: int, skip: int = 0, limit: int = 100):
-        return await self.repo.get_course_nodes(course_id, self.tenant_id, skip, limit)
+    async def get_course_nodes(self, course_id: int, user_id: int, skip: int = 0, limit: int = 100):
+        result = await self.repo.get_course_nodes(course_id, self.tenant_id, skip, limit)
+        if not await self._is_enrolled(user_id, course_id):
+            for node in result.data:
+                if not node.is_free_preview:
+                    node.content_url = None
+        return result
 
     async def update_knowledge_node(self, node_id: int, title: str):
         node = await self.repo.update_node(node_id, self.tenant_id, title)
@@ -220,13 +229,15 @@ class AcademyService:
         await self.repo._invalidate_cache(f"node_materials_{node_id}")
         return material
 
-    async def get_node_materials(self, node_id: int):
+    async def get_node_materials(self, node_id: int, user_id: int):
         node = await self.repo.get_node(node_id)
         if not node:
             raise NotFoundError("الدرس غير موجود")
         course = await self.repo.get_course(cast(int, node.course_id), self.tenant_id)
         if not course:
             raise NotFoundError("الدرس غير موجود")
+        if not cast(bool, node.is_free_preview) and not await self._is_enrolled(user_id, cast(int, course.id)):
+            raise PermissionDeniedError("يجب التسجيل في هذا الكورس للوصول لهذا المحتوى")
         return await self.repo.get_node_materials(node_id)
 
     # ============================================================
@@ -243,13 +254,15 @@ class AcademyService:
         await self.repo._invalidate_cache(f"quiz_{node_id}")
         return quiz
 
-    async def get_node_quiz(self, node_id: int) -> Quiz:
+    async def get_node_quiz(self, node_id: int, user_id: int) -> Quiz:
         node = await self.repo.get_node(node_id)
         if not node:
             raise NotFoundError("الدرس غير موجود")
         course = await self.repo.get_course(cast(int, node.course_id), self.tenant_id)
         if not course:
             raise NotFoundError("الدرس غير موجود")
+        if not cast(bool, node.is_free_preview) and not await self._is_enrolled(user_id, cast(int, course.id)):
+            raise PermissionDeniedError("يجب التسجيل في هذا الكورس للوصول لهذا المحتوى")
         quiz = await self.repo.get_quiz_by_node(node_id)
         if not quiz:
             raise NotFoundError("لا يوجد اختبار لهذا الدرس")

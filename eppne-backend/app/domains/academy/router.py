@@ -393,7 +393,7 @@ async def get_course_nodes(
 ):
     tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
-    result = await service.get_course_nodes(course_id, skip=skip, limit=limit)
+    result = await service.get_course_nodes(course_id, cast(int, current_user.id), skip=skip, limit=limit)
     return result.data
 
 @router.put("/nodes/{node_id}", response_model=KnowledgeNodeResponse)
@@ -456,7 +456,7 @@ async def get_materials(
 ):
     tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
-    return await service.get_node_materials(node_id)
+    return await service.get_node_materials(node_id, cast(int, current_user.id))
 
 @router.post("/nodes/{node_id}/quiz", response_model=QuizResponse, status_code=201)
 async def create_node_quiz(
@@ -477,7 +477,7 @@ async def get_node_quiz(
 ):
     tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
-    return await service.get_node_quiz(node_id)
+    return await service.get_node_quiz(node_id, cast(int, current_user.id))
 
 @router.post("/quizzes/{quiz_id}/submit", response_model=QuizSubmissionResponse)
 async def submit_quiz(
