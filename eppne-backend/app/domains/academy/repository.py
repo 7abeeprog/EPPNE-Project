@@ -759,6 +759,8 @@ class AcademyRepository:
                 )
             )
         )
+        # total_overdue = 0 دائمًا بقرار مقصود (PaymentInstallment مجمَّد، انظر التعليق فوق
+        # الموديل في models.py) — ليس نسيانًا. سيُربَط بخدمة الأقساط المشتركة عند بنائها.
         total_overdue = float(overdue_result.scalar() or 0)
         return {"total_paid": total_paid, "total_overdue": total_overdue}
 
