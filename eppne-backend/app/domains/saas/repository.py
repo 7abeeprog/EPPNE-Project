@@ -119,6 +119,17 @@ class SaaSRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_trial_subscriptions(self, tenant_id: int) -> List[TenantSubscription]:
+        result = await self.db.execute(
+            select(TenantSubscription).where(
+                and_(
+                    TenantSubscription.tenant_id == tenant_id,
+                    TenantSubscription.status == "TRIAL",
+                )
+            )
+        )
+        return list(result.scalars().all())
+
     async def get_active_subscription(
         self,
         tenant_id: int,

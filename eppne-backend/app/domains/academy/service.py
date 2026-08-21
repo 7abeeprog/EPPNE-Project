@@ -13,7 +13,8 @@ from sqlalchemy import select, and_
 from app.domains.academy.repository import AcademyRepository
 from app.domains.finance.service import FinanceService
 from app.domains.identity.repository import UserRepository
-from app.core.errors import PermissionDeniedError, NotFoundError, InsufficientBalanceError
+from app.core.errors import PermissionDeniedError, NotFoundError, InsufficientBalanceError, ValidationError
+from app.domains.academy.schemas import CANCELLATION_REASONS
 from app.core.storage import minio_client, ensure_bucket_exists
 from app.core.ai_engine import analyze_and_recommend_courses
 from app.domains.academy.models import Course, Enrollment, Quiz, QuizSubmission
@@ -390,6 +391,56 @@ class AcademyService:
         updated = await self.repo.update_progress(user_id, course_id, self.tenant_id, progress)
         await self.repo._invalidate_cache(f"enrollment_{user_id}_{course_id}")
         return updated
+
+    async def cancel_enrollment(self, user_id: int, enrollment_id: int, reason: str, note: Optional[str]):
+        if reason not in CANCELLATION_REASONS:
+            raise ValidationError("سبب إلغاء غير صالح")
+        if reason == "OTHER" and not (note and note.strip()):
+            raise ValidationError("النص الحر إلزامي عند اختيار سبب 'آخر'")
+
+        enrollment = await self.repo.get_enrollment_by_id(enrollment_id, user_id, self.tenant_id)
+        if not enrollment:
+            raise NotFoundError("التسجيل غير موجود")
+        if cast(str, enrollment.status) == "CANCELLED":
+            raise PermissionDeniedError("هذا التسجيل ملغى بالفعل")
+
+        course = await self.repo.get_course(cast(int, enrollment.course_id), self.tenant_id)
+        if not course:
+            raise NotFoundError("الكورس غير موجود")
+
+        days_elapsed = (datetime.now(timezone.utc) - cast(datetime, enrollment.created_at)).days
+        progress = float(cast(Decimal, enrollment.progress_percentage) or 0)
+        window_open = days_elapsed < 7 and progress < 7
+        refund_status = "FULL" if window_open else "NONE"
+        refund_amount = enrollment.paid_amount if window_open else 0
+
+        self._revoke_affiliate_commission_hook(enrollment)
+
+        if window_open and cast(bool, course.is_foundational):
+            await self._cancel_related_free_trials(self.tenant_id)
+
+        updated = await self.repo.cancel_enrollment(
+            enrollment_id, self.tenant_id,
+            cancellation_reason=reason,
+            cancellation_note=note,
+            refund_status=refund_status,
+            refund_amount=refund_amount,
+        )
+        await self.repo._invalidate_cache(f"user_enrollments_{user_id}")
+        return updated
+
+    def _revoke_affiliate_commission_hook(self, enrollment) -> None:
+        # TODO: نظام العمولة الموحَّد لم يُبنَ بعد (three-competing-affiliate-commission-systems
+        # لا يزال 🔴 مفتوحًا في PROGRESS_LOG.md). عند بناؤه: إبطال صلاحية العمولة المفتوحة
+        # عند تسجيل هذا الطالب (enrollment). صفر منطق فعلي هنا بقرار منتجي مقصود.
+        pass
+
+    async def _cancel_related_free_trials(self, tenant_id: int) -> None:
+        from app.domains.saas.service import SaaSControlService
+        saas_service = SaaSControlService(self.db, tenant_id)
+        trials = await saas_service.repo.get_trial_subscriptions(tenant_id)
+        for sub in trials:
+            await saas_service.cancel_subscription(cast(int, sub.id))
 
     # ============================================================
     # 12. Tasks

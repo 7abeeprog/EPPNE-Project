@@ -164,6 +164,7 @@ class Course(Base):
     is_free = Column(Boolean, default=False)
     is_published = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
+    is_foundational = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -287,7 +288,13 @@ class Enrollment(Base):
     progress_percentage = Column(Numeric(5, 2), default=0)
     is_completed = Column(Boolean, default=False)
     last_accessed = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    
+
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    cancellation_reason = Column(String(50), nullable=True)
+    cancellation_note = Column(Text, nullable=True)
+    refund_status = Column(String(20), nullable=True)
+    refund_amount = Column(Numeric(30, 8), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

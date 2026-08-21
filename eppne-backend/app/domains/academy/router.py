@@ -308,6 +308,17 @@ async def update_enrollment_progress(
         raise HTTPException(status_code=404, detail="غير مسجل في هذا الكورس")
     return enrollment
 
+@router.post("/enrollments/{enrollment_id}/cancel", response_model=EnrollmentResponse)
+async def cancel_enrollment(
+    enrollment_id: int,
+    data: EnrollmentCancelRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AcademyService(db, tenant_id)
+    return await service.cancel_enrollment(cast(int, current_user.id), enrollment_id, data.reason, data.note)
+
 # ============================================================
 # Course Units & Nodes
 # ============================================================

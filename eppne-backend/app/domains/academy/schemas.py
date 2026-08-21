@@ -123,6 +123,7 @@ class CourseCreate(BaseModel):
     currency: str = "MR_USDT"
     level: str = "BEGINNER"
     is_free: bool = False
+    is_foundational: bool = False
 
 class CourseUpdate(BaseModel):
     title: Optional[str] = None
@@ -132,6 +133,7 @@ class CourseUpdate(BaseModel):
     is_free: Optional[bool] = None
     is_published: Optional[bool] = None
     is_active: Optional[bool] = None
+    is_foundational: Optional[bool] = None
 
 class CourseResponse(CourseCreate):
     id: int
@@ -254,6 +256,12 @@ class EnrollmentCreate(BaseModel):
     payment_ref: Optional[str] = None
     affiliate_code: Optional[str] = None
 
+CANCELLATION_REASONS = [
+    "CONTENT_MISMATCH", "QUALITY_ISSUE", "TECHNICAL_ISSUE", "FOUND_ALTERNATIVE",
+    "TOO_ADVANCED", "TOO_BASIC", "TIME_CONSTRAINT", "CHANGED_MIND",
+    "ACCIDENTAL_PURCHASE", "PRICE_CONCERN", "OTHER",
+]
+
 class EnrollmentResponse(BaseModel):
     id: int
     user_id: int
@@ -266,11 +274,20 @@ class EnrollmentResponse(BaseModel):
     progress_percentage: float
     is_completed: bool
     last_accessed: Optional[datetime]
+    cancelled_at: Optional[datetime] = None
+    cancellation_reason: Optional[str] = None
+    cancellation_note: Optional[str] = None
+    refund_status: Optional[str] = None
+    refund_amount: Optional[Decimal] = None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
 class ProgressUpdate(BaseModel):
     progress_percentage: float = Field(..., ge=0, le=100)
+
+class EnrollmentCancelRequest(BaseModel):
+    reason: str
+    note: Optional[str] = None
 
 # ==========================================
 # Certificates & Badges

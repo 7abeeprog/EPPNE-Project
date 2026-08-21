@@ -518,6 +518,35 @@ class AcademyRepository:
             await self.db.refresh(enrollment)
         return enrollment
 
+    async def get_enrollment_by_id(self, enrollment_id: int, user_id: int, tenant_id: int) -> Optional[Enrollment]:
+        result = await self.db.execute(
+            select(Enrollment).where(
+                and_(
+                    Enrollment.id == enrollment_id,
+                    Enrollment.user_id == user_id,
+                    Enrollment.tenant_id == tenant_id,
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def cancel_enrollment(self, enrollment_id: int, tenant_id: int, **fields) -> Optional[Enrollment]:
+        result = await self.db.execute(
+            select(Enrollment).where(
+                and_(Enrollment.id == enrollment_id, Enrollment.tenant_id == tenant_id)
+            )
+        )
+        enrollment = result.scalar_one_or_none()
+        if not enrollment:
+            return None
+        for key, value in fields.items():
+            setattr(enrollment, key, value)
+        setattr(enrollment, "status", "CANCELLED")
+        setattr(enrollment, "cancelled_at", datetime.now(timezone.utc))
+        await self.db.commit()
+        await self.db.refresh(enrollment)
+        return enrollment
+
     # ============================================================
     # 9. Tasks & Submissions
     # ============================================================
