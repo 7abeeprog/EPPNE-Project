@@ -395,6 +395,8 @@ class ProjectService:
         project = await self.repo.get_project(project_id, tenant_id)
         if not project:
             raise NotFoundError("Project not found")
+        if cast(int, project.owner_id) != author_id:
+            raise PermissionDeniedError("Not authorized to add update to this project")
 
         sanitized_title = self.sanitize_html(title)
         sanitized_content = self.sanitize_html(content)
