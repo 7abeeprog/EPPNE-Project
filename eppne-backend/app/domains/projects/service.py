@@ -33,7 +33,6 @@ class ProjectService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = ProjectRepository(db)
-        self.finance = FinanceService(db)
         self.commerce_repo = CommerceRepository(db)
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
@@ -179,8 +178,9 @@ class ProjectService:
             ) or data.equipment_estimated_value or Decimal('0')
 
             if data.contribution_type == ContributionType.MONETARY:
+                finance = FinanceService(self.db, tenant_id)
                 try:
-                    await self.finance.transfer(
+                    await finance.transfer(
                         sender_id=contributor_id,
                         receiver_email="system@eppne.com",
                         currency=project.currency,  # type: ignore
