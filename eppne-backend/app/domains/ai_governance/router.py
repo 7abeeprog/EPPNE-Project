@@ -5,7 +5,7 @@ from typing import Optional, cast
 from datetime import datetime, timedelta
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user, get_current_superuser, get_current_tenant
+from app.api.deps import get_current_active_user, get_current_superuser
 from app.domains.identity.models import User
 from app.domains.ai_governance.service import AIGovernanceService
 from app.domains.ai_governance.schemas import (
@@ -17,7 +17,6 @@ from app.domains.ai_governance.schemas import (
     AgentAuditLogResponse,
     AgentQuotaRemainingResponse,
 )
-from app.domains.academy.models import AcademyTenant
 from app.core.rate_limiter import rate_limit
 
 router = APIRouter(prefix="/ai-governance", tags=["AI Agent Governance"])
@@ -29,11 +28,11 @@ async def set_agent_quota(
     agent_id: int,
     data: AgentQuotaCreate,
     request: Request,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIGovernanceService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIGovernanceService(db, tenant_id)
     quota = await service.set_quota(
         admin_id=cast(int, current_user.id),
         agent_id=agent_id,
@@ -46,11 +45,11 @@ async def set_agent_quota(
 @router.get("/agents/{agent_id}/quotas", response_model=list[AgentQuotaResponse])
 async def get_agent_quotas(
     agent_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIGovernanceService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIGovernanceService(db, tenant_id)
     if not await service._check_agent_ownership(agent_id, cast(int, current_user.id)):
         if not getattr(current_user, "system_role", "") in ["SUPER_ADMIN", "EXECUTIVE_DIRECTOR"]:
             raise HTTPException(status_code=403, detail="Access denied to this agent's quotas")
@@ -60,11 +59,11 @@ async def get_agent_quotas(
 @router.get("/agents/{agent_id}/quotas/remaining", response_model=AgentQuotaRemainingResponse)
 async def get_agent_remaining_quotas(
     agent_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIGovernanceService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIGovernanceService(db, tenant_id)
     if not await service._check_agent_ownership(agent_id, cast(int, current_user.id)):
         if not getattr(current_user, "system_role", "") in ["SUPER_ADMIN", "EXECUTIVE_DIRECTOR"]:
             raise HTTPException(status_code=403, detail="Access denied")
@@ -77,11 +76,11 @@ async def get_agent_remaining_quotas(
 async def reset_agent_quotas(
     agent_id: int,
     request: Request,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIGovernanceService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIGovernanceService(db, tenant_id)
     await service.reset_quotas(
         agent_id=agent_id,
         admin_id=cast(int, current_user.id),
@@ -96,11 +95,11 @@ async def update_rate_limit(
     agent_id: int,
     data: AgentRateLimitUpdate,
     request: Request,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIGovernanceService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIGovernanceService(db, tenant_id)
     limits = await service.update_rate_limits(
         agent_id=agent_id,
         admin_id=cast(int, current_user.id),
@@ -113,11 +112,11 @@ async def update_rate_limit(
 @router.get("/agents/{agent_id}/rate-limit", response_model=Optional[AgentRateLimitResponse])
 async def get_rate_limit(
     agent_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIGovernanceService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIGovernanceService(db, tenant_id)
     if not await service._check_agent_ownership(agent_id, cast(int, current_user.id)):
         if not getattr(current_user, "system_role", "") in ["SUPER_ADMIN", "EXECUTIVE_DIRECTOR"]:
             raise HTTPException(status_code=403, detail="Access denied")
@@ -132,11 +131,11 @@ async def get_agent_audit_logs(
     agent_id: int,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIGovernanceService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIGovernanceService(db, tenant_id)
     result = await service.get_audit_logs(
         agent_id=agent_id,
         skip=skip,
@@ -149,11 +148,11 @@ async def get_agent_audit_logs(
 async def get_usage_summary(
     agent_id: int,
     period: str = Query("MONTHLY", description="DAILY, WEEKLY, MONTHLY, YEARLY"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIGovernanceService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIGovernanceService(db, tenant_id)
     now = datetime.utcnow()
     period_map = {
         "DAILY": 1,
@@ -182,11 +181,12 @@ async def check_and_consume(
     request_tokens: int = 0,
     completion_tokens: int = 0,
     idempotency_key: Optional[str] = None,
-    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     from decimal import Decimal
-    service = AIGovernanceService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIGovernanceService(db, tenant_id)
     try:
         result = await service.check_and_consume(
             agent_id=agent_id,
