@@ -142,6 +142,9 @@ class CommerceService:
                 if not product or not cast(bool, product.is_published):  # type: ignore
                     raise NotFoundError(f"المنتج {variant.product_id} غير منشور")
 
+                if cast(int, product.store_id) != cast(int, store.id):
+                    raise NotFoundError(f"المتغير {cart_item.variant_id} غير موجود")
+
                 if cast(int, variant.stock_quantity) < cart_item.quantity:
                     raise ValidationError(
                         f"الكمية المطلوبة من {variant.sku} غير متوفرة. المتاح: {variant.stock_quantity}"
@@ -238,6 +241,10 @@ class CommerceService:
         user = await user_repo.get_by_id(user_id, self.tenant_id)
         if not user:
             raise NotFoundError("المستخدم غير موجود")
+
+        sponsor = await user_repo.get_by_id(sponsor_id, self.tenant_id)
+        if not sponsor:
+            raise PermissionDeniedError("كود الداعي غير صالح")
 
         sponsor_tree = await self.repo.get_affiliate_tree(sponsor_id, self.tenant_id)
         depth = sponsor_tree.network_depth + 1 if sponsor_tree else 1
@@ -433,7 +440,7 @@ class CommerceService:
             raise NotFoundError("الطلب غير موجود")
 
         if order.customer_id != user_id:
-            pass
+            raise PermissionDeniedError("ليس لديك صلاحية لهذا الطلب")
 
         payment_methods = ["AGENT", "VISA", "CASH_ON_DELIVERY"]
         statuses = {}
