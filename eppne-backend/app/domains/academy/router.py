@@ -68,12 +68,14 @@ async def create_tenant(
 @router.get("/tenants/by-domain", response_model=TenantResponse)
 async def get_tenant_by_domain(
     domain: str,
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(rate_limit)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     repo = AcademyRepository(db)
     tenant = await repo.get_tenant_by_domain(domain)
-    if not tenant:
+    if not tenant or cast(int, tenant.id) != tenant_id:
         raise HTTPException(status_code=404, detail="Tenant not found")
     return tenant
 
@@ -90,12 +92,12 @@ async def create_org_entity(
 
 @router.get("/entities", response_model=list[OrganizationEntityResponse])
 async def list_org_entities(
-    tenant_id: int,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     repo = AcademyRepository(db)
     return await repo.get_org_entities(tenant_id, skip=skip, limit=limit)
 
@@ -120,8 +122,9 @@ async def list_bootcamps(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     repo = AcademyRepository(db)
-    return await repo.get_bootcamps(org_entity_id=org_entity_id, skip=skip, limit=limit)
+    return await repo.get_bootcamps(tenant_id, org_entity_id=org_entity_id, skip=skip, limit=limit)
 
 @router.post("/tracks", response_model=TrackResponse, status_code=201)
 async def create_track(
@@ -142,8 +145,10 @@ async def list_tracks(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     repo = AcademyRepository(db)
     return await repo.get_tracks(
+        tenant_id,
         org_entity_id=org_entity_id,
         bootcamp_id=bootcamp_id,
         skip=skip,
@@ -171,8 +176,9 @@ async def list_cohorts(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     repo = AcademyRepository(db)
-    return await repo.get_cohorts(org_entity_id, skip=skip, limit=limit)
+    return await repo.get_cohorts(tenant_id, org_entity_id, skip=skip, limit=limit)
 
 # ============================================================
 # Courses Management

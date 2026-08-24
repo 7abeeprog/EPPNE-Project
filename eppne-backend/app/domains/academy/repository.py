@@ -159,9 +159,13 @@ class AcademyRepository:
         return bootcamp
 
     async def get_bootcamps(
-        self, org_entity_id: Optional[int] = None, skip: int = 0, limit: int = 100
+        self, tenant_id: int, org_entity_id: Optional[int] = None, skip: int = 0, limit: int = 100
     ) -> List[Bootcamp]:
-        query = select(Bootcamp)
+        query = (
+            select(Bootcamp)
+            .join(OrganizationEntity, OrganizationEntity.id == Bootcamp.org_entity_id)
+            .where(OrganizationEntity.tenant_id == tenant_id)
+        )
         if org_entity_id is not None:
             query = query.where(Bootcamp.org_entity_id == org_entity_id)
         query = query.order_by(Bootcamp.created_at.desc())
@@ -178,12 +182,17 @@ class AcademyRepository:
 
     async def get_tracks(
         self,
+        tenant_id: int,
         org_entity_id: Optional[int] = None,
         bootcamp_id: Optional[int] = None,
         skip: int = 0,
         limit: int = 100
     ) -> List[Track]:
-        query = select(Track)
+        query = (
+            select(Track)
+            .join(OrganizationEntity, OrganizationEntity.id == Track.org_entity_id)
+            .where(OrganizationEntity.tenant_id == tenant_id)
+        )
         if bootcamp_id is not None:
             query = query.where(Track.bootcamp_id == bootcamp_id)
         elif org_entity_id is not None:
@@ -205,9 +214,15 @@ class AcademyRepository:
         return cohort
 
     async def get_cohorts(
-        self, org_entity_id: int, skip: int = 0, limit: int = 100
+        self, tenant_id: int, org_entity_id: int, skip: int = 0, limit: int = 100
     ) -> List[AcademyCohort]:
-        query = select(AcademyCohort).where(AcademyCohort.org_entity_id == org_entity_id)
+        query = (
+            select(AcademyCohort)
+            .join(OrganizationEntity, OrganizationEntity.id == AcademyCohort.org_entity_id)
+            .where(
+                and_(AcademyCohort.org_entity_id == org_entity_id, OrganizationEntity.tenant_id == tenant_id)
+            )
+        )
         query = await self._paginate_query(query, skip, limit)
         result = await self.db.execute(query)
         return list(result.scalars().all())
