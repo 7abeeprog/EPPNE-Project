@@ -5,7 +5,7 @@ from typing import Optional, cast, List
 import uuid
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user, get_current_tenant, get_current_superuser
+from app.api.deps import get_current_active_user, get_current_superuser
 from app.domains.identity.models import User
 from app.domains.ai_agents.service import AIAgentsService
 from app.domains.ai_agents.schemas import (
@@ -16,7 +16,6 @@ from app.domains.ai_agents.schemas import (
     AgentStatusUpdate,
     AgentStatusResponse
 )
-from app.domains.academy.models import AcademyTenant
 from app.core.rate_limiter import rate_limit
 
 router = APIRouter(prefix="/ai", tags=["Sovereign AI Agents"])
@@ -30,11 +29,11 @@ router = APIRouter(prefix="/ai", tags=["Sovereign AI Agents"])
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_agent(
     data: AIAgentCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIAgentsService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIAgentsService(db, tenant_id)
     agent = await service.create_agent(
         owner_id=cast(int, current_user.id),
         data=data.model_dump()
@@ -48,11 +47,11 @@ async def list_agents(
     status: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIAgentsService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIAgentsService(db, tenant_id)
     result = await service.list_agents(
         owner_id=cast(int, current_user.id),
         role=role,
@@ -66,11 +65,11 @@ async def list_agents(
 @router.get("/agents/{agent_id}", response_model=AIAgentResponse)
 async def get_agent(
     agent_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIAgentsService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIAgentsService(db, tenant_id)
     agent = await service.get_agent_by_owner(
         agent_id=agent_id,
         owner_id=cast(int, current_user.id)
@@ -87,11 +86,11 @@ async def execute_agent_action(
     action_type: str,
     payload: dict,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIAgentsService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIAgentsService(db, tenant_id)
     result = await service.execute_agent_action(
         agent_id=agent_id,
         action_type=action_type,
@@ -107,11 +106,11 @@ async def execute_agent_action(
 async def update_agent_status(
     agent_id: int,
     status_data: AgentStatusUpdate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIAgentsService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIAgentsService(db, tenant_id)
     agent = await service.update_agent_status(
         agent_id=agent_id,
         status=status_data.status.value if hasattr(status_data.status, 'value') else str(status_data.status),
@@ -127,11 +126,11 @@ async def update_agent_status(
 async def delete_agent(
     agent_id: int,
     soft: bool = True,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIAgentsService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIAgentsService(db, tenant_id)
     agent = await service.get_agent(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -148,11 +147,11 @@ async def delete_agent(
 
 @router.get("/approvals/pending", response_model=List[ApprovalResponse])
 async def get_pending_approvals(
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIAgentsService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIAgentsService(db, tenant_id)
     approvals = await service.get_pending_approvals(
         human_approver_id=cast(int, current_user.id)
     )
@@ -164,11 +163,11 @@ async def get_pending_approvals(
 async def resolve_approval(
     approval_id: int,
     resolution: ApprovalResolution,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIAgentsService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIAgentsService(db, tenant_id)
     approval = await service.resolve_approval(
         approval_id=approval_id,
         human_approver_id=cast(int, current_user.id),
@@ -189,11 +188,11 @@ async def list_approvals(
     status: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIAgentsService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIAgentsService(db, tenant_id)
     result = await service.list_approvals(
         agent_id=agent_id,
         status=status,
@@ -206,11 +205,11 @@ async def list_approvals(
 @router.get("/approvals/{approval_id}", response_model=ApprovalResponse)
 async def get_approval(
     approval_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIAgentsService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIAgentsService(db, tenant_id)
     approval = await service.get_approval(approval_id)
     if not approval:
         raise HTTPException(status_code=404, detail="Approval not found.")
@@ -225,11 +224,11 @@ async def get_approval(
 async def get_agent_analytics(
     agent_id: int,
     days: int = 30,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIAgentsService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIAgentsService(db, tenant_id)
     analytics = await service.get_agent_analytics(
         agent_id=agent_id,
         days=days
@@ -240,11 +239,11 @@ async def get_agent_analytics(
 @router.get("/agents/{agent_id}/status", response_model=AgentStatusResponse)
 async def get_agent_status(
     agent_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIAgentsService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIAgentsService(db, tenant_id)
     status_info = await service.get_agent_status(agent_id)
     return status_info
 
@@ -255,10 +254,10 @@ async def get_agent_status(
 
 @router.get("/usage")
 async def get_ai_usage(
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    service = AIAgentsService(db, cast(int, tenant.id))
+    tenant_id = cast(int, current_user.tenant_id)
+    service = AIAgentsService(db, tenant_id)
     usage = await service.get_ai_usage()
     return usage
