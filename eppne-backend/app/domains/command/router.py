@@ -72,7 +72,7 @@ async def get_my_brand(
 @rate_limit(max_requests=10, window_seconds=60)
 async def update_my_brand(
     data: BrandSettingsUpdate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
     """تحديث إعدادات البراند الخاصة بالمستأجر الحالي"""
