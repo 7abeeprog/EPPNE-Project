@@ -43,9 +43,10 @@ async def list_entities(
     kyb_status: Optional[KYBStatus] = None,
     skip: int = 0,
     limit: int = 50,
-    tenant_id: int = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     result = await service.list_entities(entity_type, kyb_status, skip, limit)
     items = [SovereignEntityResponse.model_validate(item) for item in result["items"]]
@@ -72,9 +73,10 @@ async def get_my_entities(
 @router.get("/{entity_id}", response_model=SovereignEntityResponse)
 async def get_entity(
     entity_id: int,
-    tenant_id: int = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     entity = await service.get_entity(entity_id)
     return entity
@@ -338,9 +340,10 @@ async def create_page_template(
 
 @router.get("/templates", response_model=List[PageTemplateResponse])
 async def list_templates(
-    tenant_id: int = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     templates = await service.list_templates()
     return templates
@@ -348,9 +351,10 @@ async def list_templates(
 
 @router.get("/components", response_model=List[PageComponentResponse])
 async def list_components(
-    tenant_id: int = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SovereignEntitiesService(db, tenant_id)
     components = await service.list_components()
     return components

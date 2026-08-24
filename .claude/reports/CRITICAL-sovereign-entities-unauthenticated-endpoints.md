@@ -6,6 +6,34 @@
 
 ---
 
+## ✅ تحديث [2026-08-24] — تم الإصلاح. + تصعيد خطورة اتكشف واتقفل في نفس الجلسة
+
+**الإصلاح:** الأربعة endpoints بقوا محميين بـ`current_user: User = Depends(get_current_active_user)` إجباري + `tenant_id = cast(int, current_user.tenant_id)` (بدل `Depends(get_current_tenant)` المعتمد على هيدر `X-Tenant-ID`). تفاصيل كاملة: `.claude/reports/sovereign-entities-idor-fix-session-log.md`.
+
+**🔴🔴🔴 اكتشاف حرج أثناء التحقق قبل الإصلاح: الخطورة كانت أسوأ مما وثَّقه هذا التقرير أصلًا.** القسم 2 تحت (بند "مستوى المصادقة الحقيقي المطلوب") كان صحيحًا وقت كتابته (2026-08-13) — لكن جلسة منفصلة تمامًا بتاريخ **2026-08-20** (`.claude/reports/require-sector-removal-subscription-fix-session-log.md`) أزالت `require_sector` (الغطاء الوحيد اللي كان بيوفر حد أدنى من المصادقة للأربعة endpoints دول) **بالكامل من `main.py`** — قرار معماري سليم وغير متعلق بهذا الملف، لكن أثره الجانبي لم يُقيَّم وقتها. **النتيجة: من 2026-08-20 حتى 2026-08-24، كانت الأربعة endpoints بلا أي حاجز مصادقة إطلاقًا — لأي زائر مجهول تمامًا، مش بس SUPER_ADMIN/EXECUTIVE_DIRECTOR كما كان موثَّقًا هنا.**
+
+**تحقق حي مباشر (2026-08-24، قبل الإصلاح، بلا Authorization header إطلاقًا):**
+```
+GET /api/sovereign-entities/    → 500  (وصل فعليًا لمنطق التطبيق، كراش SimpleTenant المعروف)
+GET /api/sovereign-entities/2   → 500  (نفس الشيء)
+GET /api/sovereign-entities/me  → 401  (عنصر تباين: endpoint محمي صح بنفس الملف يرفض نفس الطلب المجهول)
+```
+التسريب الفعلي كان لسه "كامنًا" (500 من كراش `SimpleTenant`)، لكن التصعيد حقيقي: أي حد يصلح الكراش سطحيًا (زي ما القسم 5 تحت حذَّر) كان هيفتح الباب لأي زائر مجهول على الإطلاق، مش لحساب SUPER_ADMIN مخترَق فقط.
+
+**بعد الإصلاح (2026-08-24، نفس الطلبات المجهولة):**
+```
+GET /api/sovereign-entities/          → 401
+GET /api/sovereign-entities/2         → 401
+GET /api/sovereign-entities/templates → 401
+GET /api/sovereign-entities/components → 401
+```
+
+**تحقق حي كامل لعزل التينانت (توكنات SUPER_ADMIN حقيقية، تينانتين مختلفين، هيدر `X-Tenant-ID` مزوَّر في الاتجاهين):** `list_entities`/`get_entity` — 9 سيناريوهات حاسمة، الهيدر بلا أي تأثير في الاتجاهين. `list_templates`/`list_components` — محجوبين فعليًا عن أي وصول عبر الـHTTP path الحقيقي بسبب باج ترتيب routes منفصل تمامًا (موثَّق كبند Backlog جديد)؛ العزل اتحقق منه على مستوى `service` مباشرة فقط، بموافقة صريحة. التفاصيل الكاملة (كل السيناريوهات + الأرقام) في `sovereign-entities-idor-fix-session-log.md`.
+
+---
+
+---
+
 ## 1) الأربعة endpoints بالضبط (file:line، `eppne-backend/app/domains/sovereign_entities/router.py`)
 
 | # | Endpoint | التوقيع | السطر |
