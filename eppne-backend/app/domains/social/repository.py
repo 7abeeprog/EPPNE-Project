@@ -28,10 +28,10 @@ class SocialRepository:
         result = await self.db.execute(select(Post).where(Post.id == post_id, Post.is_deleted == False))
         return result.scalar_one_or_none()
 
-    async def get_global_feed(self, skip: int, limit: int) -> List[Post]:
+    async def get_global_feed(self, tenant_id: int, skip: int, limit: int) -> List[Post]:
         result = await self.db.execute(
             select(Post)
-            .where(Post.is_deleted == False)
+            .where(Post.is_deleted == False, Post.tenant_id == tenant_id)
             .order_by(Post.created_at.desc())
             .offset(skip)
             .limit(limit)
@@ -59,11 +59,17 @@ class SocialRepository:
         self.db.add(group)
         await self.db.commit()
         await self.db.refresh(group)
-        await self.add_group_member(group.id, group.creator_id, role="ADMIN")
+        await self.add_group_member(group.id, group.creator_id, group.tenant_id, role="ADMIN")
         return group
 
-    async def add_group_member(self, group_id: int, user_id: int, role: str = "MEMBER") -> GroupMember:
-        member = GroupMember(group_id=group_id, user_id=user_id, role=role)
+    async def get_group(self, group_id: int, tenant_id: int) -> Optional[SocialGroup]:
+        result = await self.db.execute(
+            select(SocialGroup).where(SocialGroup.id == group_id, SocialGroup.tenant_id == tenant_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def add_group_member(self, group_id: int, user_id: int, tenant_id: int, role: str = "MEMBER") -> GroupMember:
+        member = GroupMember(group_id=group_id, user_id=user_id, tenant_id=tenant_id, role=role)
         self.db.add(member)
         await self.db.commit()
         await self.db.refresh(member)
@@ -81,8 +87,8 @@ class SocialRepository:
         result = await self.db.execute(select(SocialSmartContract).where(SocialSmartContract.id == contract_id))
         return result.scalar_one_or_none()
 
-    async def add_signature(self, contract_id: int, signer_id: int, signature_hash: str) -> ContractSignature:
-        sig = ContractSignature(contract_id=contract_id, signer_id=signer_id, digital_signature_hash=signature_hash)
+    async def add_signature(self, contract_id: int, signer_id: int, tenant_id: int, signature_hash: str) -> ContractSignature:
+        sig = ContractSignature(contract_id=contract_id, signer_id=signer_id, tenant_id=tenant_id, digital_signature_hash=signature_hash)
         self.db.add(sig)
         await self.db.commit()
         return sig
@@ -105,16 +111,38 @@ class SocialRepository:
         await self.db.refresh(profile)
         return profile
 
-    async def create_connection(self, user_a_id: int, user_b_id: int, connection_type: str) -> UserConnection:
-        conn = UserConnection(user_a_id=user_a_id, user_b_id=user_b_id, connection_type=connection_type)
+    async def create_connection(
+        self,
+        tenant_id: int,
+        user_a_id: int,
+        user_b_id: int,
+        connection_type: str,
+        status: str = "PENDING",
+        idempotency_key: Optional[str] = None
+    ) -> UserConnection:
+        conn = UserConnection(
+            tenant_id=tenant_id,
+            user_a_id=user_a_id,
+            user_b_id=user_b_id,
+            connection_type=connection_type,
+            status=status,
+            idempotency_key=idempotency_key
+        )
         self.db.add(conn)
         await self.db.commit()
         await self.db.refresh(conn)
         return conn
 
-    async def get_user_connections(self, user_id: int) -> List[UserConnection]:
+    async def get_connection(self, connection_id: int) -> Optional[UserConnection]:
+        result = await self.db.execute(select(UserConnection).where(UserConnection.id == connection_id))
+        return result.scalar_one_or_none()
+
+    async def get_user_connections(self, user_id: int, tenant_id: int) -> List[UserConnection]:
         result = await self.db.execute(
-            select(UserConnection).where(or_(UserConnection.user_a_id == user_id, UserConnection.user_b_id == user_id))
+            select(UserConnection).where(
+                or_(UserConnection.user_a_id == user_id, UserConnection.user_b_id == user_id),
+                UserConnection.tenant_id == tenant_id
+            )
         )
         return list(result.scalars().all())
 
@@ -173,6 +201,10 @@ class SocialRepository:
         await self.db.refresh(gift)
         return gift
 
+    async def get_digital_gift(self, gift_id: int) -> Optional[DigitalGift]:
+        result = await self.db.execute(select(DigitalGift).where(DigitalGift.id == gift_id))
+        return result.scalar_one_or_none()
+
     async def create_physical_gift_request(self, **kwargs) -> PhysicalGiftRequest:
         gift = PhysicalGiftRequest(**kwargs)
         self.db.add(gift)
@@ -225,6 +257,10 @@ class SocialRepository:
         await self.db.flush()
         await self.db.refresh(sub)
         return sub
+
+    async def get_group_subscription(self, subscription_id: int) -> Optional[GroupSubscription]:
+        result = await self.db.execute(select(GroupSubscription).where(GroupSubscription.id == subscription_id))
+        return result.scalar_one_or_none()
 
     async def get_active_subscription_for_group(self, group_id: int, tenant_id: int) -> Optional[GroupSubscription]:
         result = await self.db.execute(

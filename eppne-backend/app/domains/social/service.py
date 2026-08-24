@@ -60,7 +60,7 @@ class SocialService:
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "social"):
         saas_service = SaaSSubscriptionService(self.db, tenant_id)
-        has_access = await saas_service.can_access_service(tenant_id, feature)
+        has_access = await saas_service.can_access_service(feature)
         if not has_access:
             raise PermissionDeniedError(f"Social feature '{feature}' is not included in your current plan.")
         return None, {}
@@ -93,7 +93,7 @@ class SocialService:
 
     async def get_feed(self, tenant_id: int, skip: int = 0, limit: int = 20) -> List[Post]:
         await self._check_saas_limits(tenant_id, "social")
-        return await self.repo.get_global_feed(skip, limit)
+        return await self.repo.get_global_feed(tenant_id, skip, limit)
 
     # ============================================================
     # 2. الإعجابات – مع Idempotency محسّن
@@ -160,8 +160,7 @@ class SocialService:
             name=data["name"],
             description=data.get("description"),
             privacy=data.get("privacy", "PUBLIC"),
-            linked_project_id=data.get("linked_project_id"),
-            idempotency_key=idempotency_key
+            linked_project_id=data.get("linked_project_id")
         )
 
         await audit_log(  # type: ignore[call-arg]
@@ -203,7 +202,7 @@ class SocialService:
         if not group:
             raise NotFoundError("Group not found")
 
-        await self.repo.add_group_member(group_id, user_id, role="MEMBER")
+        await self.repo.add_group_member(group_id, user_id, tenant_id, role="MEMBER")
         result_dict = {"status": "success", "message": "Joined group"}
 
         if idempotency_key:
@@ -269,7 +268,7 @@ class SocialService:
         contract = await self.repo.get_contract(contract_id)
         if not contract or contract.tenant_id != tenant_id:  # type: ignore
             raise NotFoundError("Contract not found")
-        await self.repo.add_signature(contract_id, user_id, signature_hash)
+        await self.repo.add_signature(contract_id, user_id, tenant_id, signature_hash)
         return {"status": "success", "message": "Contract signed"}
 
     # ============================================================
@@ -389,7 +388,7 @@ class SocialService:
 
     async def get_my_connections(self, user_id: int, tenant_id: int) -> List[UserConnection]:
         await self._check_saas_limits(tenant_id, "social")
-        return await self.repo.get_user_connections(user_id)
+        return await self.repo.get_user_connections(user_id, tenant_id)
 
     # ============================================================
     # 8. المناسبات والتذكيرات (Occasions & Reminders)
@@ -484,12 +483,14 @@ class SocialService:
                         return gift
                 raise ValidationError("Idempotency record exists but gift not found.")
 
+        receiver_email = await self._get_user_email(receiver_id, tenant_id)
+
         finance = FinanceService(self.db, tenant_id)
         async with self.db.begin_nested():
             if gift_value > 0:
                 await finance.transfer(
                     sender_id=sender_id,
-                    receiver_email=await self._get_user_email(receiver_id, tenant_id),
+                    receiver_email=receiver_email,
                     currency="MR_USDT",
                     amount=gift_value,
                     notes=f"Digital gift from user {sender_id}",
@@ -544,10 +545,12 @@ class SocialService:
             if cached is not None:
                 request_id = cached.get("request_id")
                 if request_id:
-                    gift_request = await self.repo.get_physical_gift_request(request_id)
+                    gift_request = await self.repo.get_physical_gift_request(request_id, tenant_id)
                     if gift_request:
                         return gift_request
                 raise ValidationError("Idempotency record exists but gift request not found.")
+
+        await self._get_user_email(receiver_id, tenant_id)  # raises NotFoundError if receiver is outside your tenant
 
         finance = FinanceService(self.db, tenant_id)
         async with self.db.begin_nested():
@@ -618,6 +621,12 @@ class SocialService:
                         return sub
                 raise ValidationError("Idempotency record exists but subscription not found.")
 
+        group_result = await self.db.execute(
+            select(SocialGroup).where(SocialGroup.id == group_id, SocialGroup.tenant_id == tenant_id)
+        )
+        if group_result.scalar_one_or_none() is None:
+            raise NotFoundError("Group not found")
+
         plan = await self.repo.get_subscription_plan(plan_id, tenant_id)
         if not plan:
             raise NotFoundError("Plan not found")
@@ -676,4 +685,6 @@ class SocialService:
         from app.domains.identity.repository import UserRepository
         user_repo = UserRepository(self.db)
         user = await user_repo.get_by_id(user_id, tenant_id)
-        return cast(str, user.email) if user else f"user_{user_id}@eppne.com"
+        if not user:
+            raise NotFoundError("Receiver not found in your tenant")
+        return cast(str, user.email)

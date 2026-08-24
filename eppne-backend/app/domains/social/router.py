@@ -316,13 +316,13 @@ async def request_physical_gift(
 @rate_limit(max_requests=5, window_seconds=60)
 async def create_subscription_plan(
     data: GroupSubscriptionPlanCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = SocialService(db)
     plan = await service.create_group_subscription_plan(
-        tenant_id=cast(int, tenant.id),  # ✅ cast
+        tenant_id=tenant_id,
         data=data.model_dump()
     )
     return plan
