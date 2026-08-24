@@ -143,12 +143,14 @@ class SaaSControlService:
         if subscription.status in ["EXPIRED", "CANCELLED"]:
             raise ValidationError("الاشتراك ملغي بالفعل")
 
-        return await self.repo.update_subscription(
+        result = await self.repo.update_subscription(
             subscription_id,
             self.tenant_id,
             status="CANCELLED",
             auto_renew=False,
         )
+        await self.db.commit()
+        return result
 
     async def process_auto_renewals(self, tenant_id: Optional[int] = None) -> List[dict]:
         """معالجة التجديد التلقائي للاشتراكات المنتهية (تُنفذ يومياً)."""
