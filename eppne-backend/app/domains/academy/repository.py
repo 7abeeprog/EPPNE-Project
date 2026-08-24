@@ -96,6 +96,12 @@ class AcademyRepository:
         await self.db.refresh(tenant)
         return tenant
 
+    async def get_tenant_by_id(self, tenant_id: int) -> Optional[AcademyTenant]:
+        result = await self.db.execute(
+            select(AcademyTenant).where(AcademyTenant.id == tenant_id)
+        )
+        return result.scalar_one_or_none()
+
     async def get_tenant_by_domain(self, domain: str) -> Optional[AcademyTenant]:
         cache_key = self._get_cache_key("tenant_domain", domain)
         cached = await self._get_cache(cache_key)

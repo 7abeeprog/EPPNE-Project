@@ -59,6 +59,7 @@ class User(Base):
     phone_verified = Column(Boolean, default=False)
 
     is_active = Column(Boolean, default=True)
+    is_system_account = Column(Boolean, default=False, nullable=False, server_default="false")
     session_version = Column(Integer, default=1)
 
     last_login_at = Column(DateTime(timezone=True), nullable=True)

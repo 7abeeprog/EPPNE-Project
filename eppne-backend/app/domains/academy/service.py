@@ -13,6 +13,7 @@ from sqlalchemy import select, and_
 from app.domains.academy.repository import AcademyRepository
 from app.domains.finance.service import FinanceService
 from app.domains.identity.repository import UserRepository
+from app.core.system_account_service import get_or_create_system_account
 from app.core.errors import PermissionDeniedError, NotFoundError, InsufficientBalanceError, ValidationError
 from app.domains.academy.schemas import CANCELLATION_REASONS
 from app.core.storage import minio_client, ensure_bucket_exists
@@ -53,9 +54,20 @@ class AcademyService:
     # 1. Tenants & Org Entities
     # ============================================================
     async def create_tenant(self, name: str, domain: str, admin_id: int, branding: Optional[dict] = None):
-        return await self.repo.create_tenant(
+        tenant = await self.repo.create_tenant(
             name=name, domain=domain, admin_id=admin_id, branding=branding or {}
         )
+        # تسخين مسبق (eager warm-up) — get_or_create_system_account نفسها
+        # كسولة idempotent وتُستدعى أيضًا من كل دومين عند أول استخدام، لكن
+        # إنشاؤها هنا فورًا يوفّر زمن أول عملية مالية لهذا التينانت.
+        # repo.create_tenant() عملت commit() خاص بها بالفعل لصف التينانت؛
+        # هذا commit منفصل مطلوب لأن get_or_create_system_account تعمل
+        # flush() فقط (بتصميم متعمَّد يخدم استدعاءها من داخل savepoints في
+        # الدومينات الأخرى) — بدونه get_db() هتعمل rollback ضمني للحساب
+        # النظامي عند إغلاق الـsession في نهاية الطلب.
+        await get_or_create_system_account(self.db, cast(int, tenant.id))
+        await self.db.commit()
+        return tenant
 
     async def create_org_entity(
         self,

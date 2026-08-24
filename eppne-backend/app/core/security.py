@@ -134,6 +134,8 @@ async def get_current_user(
 
     if not user:
         raise AuthenticationError("User not found")
+    if user.is_system_account:
+        raise AuthenticationError("User is inactive")
     if not user.is_active:
         raise AuthenticationError("User is inactive")
     if token_tenant_id is not None and user.tenant_id != token_tenant_id:

@@ -18,6 +18,7 @@ class SystemRole(str, enum.Enum):
     ADMIN = "ADMIN"
     SUPER_ADMIN = "SUPER_ADMIN"
     EXECUTIVE_DIRECTOR = "EXECUTIVE_DIRECTOR"
+    SYSTEM = "SYSTEM"
 
 class SovereignRank(str, enum.Enum):
     CITIZEN_L1 = "CITIZEN_L1"

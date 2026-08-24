@@ -105,7 +105,7 @@ class UserService:
 
     async def authenticate(self, username_or_email: str, password: str, ip: Optional[str] = None, user_agent: Optional[str] = None) -> Optional[User]:
         user = await self.user_repo.get_by_username_or_email(username_or_email, self.tenant_id)
-        if not user or not verify_password(password, user.hashed_password) or not user.is_active:
+        if not user or user.is_system_account or not verify_password(password, user.hashed_password) or not user.is_active:
             return None
 
         await self.user_repo.update(cast(int, user.id), self.tenant_id, last_login_at=func.now(), last_login_ip=ip, last_login_user_agent=user_agent)
