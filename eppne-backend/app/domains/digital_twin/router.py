@@ -5,9 +5,8 @@ from typing import Optional, List, cast
 import uuid
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user, get_current_superuser, get_current_tenant
+from app.api.deps import get_current_active_user, get_current_superuser
 from app.domains.identity.models import User
-from app.domains.academy.models import AcademyTenant
 from app.domains.digital_twin.service import DigitalTwinService
 from app.domains.digital_twin.schemas import *
 from app.core.rate_limiter import rate_limit
@@ -21,14 +20,14 @@ router = APIRouter(prefix="/digital-twin", tags=["Digital Twin & Legacy"])
 
 @router.get("/config", response_model=TwinConfigResponse)
 async def get_my_twin_config(
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = DigitalTwinService(db)
     twin = await service.get_or_create_twin(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id)
+        tenant_id=tenant_id
     )
     return twin
 
@@ -37,14 +36,14 @@ async def get_my_twin_config(
 @rate_limit(max_requests=10, window_seconds=60)
 async def update_twin_config(
     data: TwinConfigCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = DigitalTwinService(db)
     twin = await service.update_twin_config(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump()
     )
     return twin
@@ -57,15 +56,15 @@ async def interact_with_twin(
     data: TwinInteractionCreate,
     request: Request,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = DigitalTwinService(db)
     log = await service.interact_with_twin(
         visitor_id=cast(int, current_user.id),
         twin_owner_id=owner_id,
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         interaction_data=data.model_dump(),
         idempotency_key=idempotency_key or f"twin-{uuid.uuid4().hex[:12]}"
     )
@@ -80,15 +79,15 @@ async def interact_with_twin(
 @rate_limit(max_requests=5, window_seconds=60)
 async def create_time_capsule(
     data: TimeCapsuleCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = DigitalTwinService(db)
     # استخراج beneficiaries من data
     capsule = await service.setup_time_capsule(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump(exclude={"beneficiaries"}),
         beneficiaries=[b.model_dump() for b in data.beneficiaries]
     )
@@ -97,28 +96,28 @@ async def create_time_capsule(
 @router.post("/time-capsule/heartbeat")
 @rate_limit(max_requests=10, window_seconds=60)
 async def send_heartbeat(
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = DigitalTwinService(db)
     capsule = await service.send_heartbeat(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id)
+        tenant_id=tenant_id
     )
     return {"message": "Heartbeat sent", "last_heartbeat": capsule.last_heartbeat_at}  # type: ignore
 
 
 @router.get("/time-capsule", response_model=TimeCapsuleResponse)
 async def get_my_time_capsule(
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = DigitalTwinService(db)
     capsule = await service.get_time_capsule(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id)
+        tenant_id=tenant_id
     )
     if not capsule:
         raise HTTPException(status_code=404, detail="Time capsule not found")
@@ -133,14 +132,14 @@ async def get_my_time_capsule(
 @rate_limit(max_requests=3, window_seconds=60)
 async def create_digital_will(
     data: DigitalWillCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = DigitalTwinService(db)
     will = await service.create_digital_will(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump()
     )
     return will
@@ -148,14 +147,14 @@ async def create_digital_will(
 
 @router.get("/will", response_model=DigitalWillResponse)
 async def get_my_digital_will(
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = DigitalTwinService(db)
     will = await service.get_digital_will(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id)
+        tenant_id=tenant_id
     )
     if not will:
         raise HTTPException(status_code=404, detail="Digital will not found")
@@ -171,15 +170,15 @@ async def get_my_digital_will(
 async def report_death(
     data: DeathReport,
     request: Request,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = DigitalTwinService(db)
     oracle = await service.report_death(
         reporter_id=cast(int, current_user.id),
         deceased_id=data.reporter_user_id,
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         evidence_ipfs=data.evidence_ipfs_hash,
         request_ip=request.client.host if request.client else None,
         request_user_agent=request.headers.get("user-agent")
@@ -193,14 +192,14 @@ async def confirm_death(
     deceased_id: int,
     request: Request,
     confirmers: List[int] = Query(..., description="معرفات الشهود (3 على الأقل)"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = DigitalTwinService(db)
     oracle = await service.confirm_death(
         deceased_id=deceased_id,
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         confirmers=confirmers,
         request_ip=request.client.host if request.client else None,
         request_user_agent=request.headers.get("user-agent")
@@ -210,14 +209,14 @@ async def confirm_death(
 
 @router.get("/death-oracle/me", response_model=DeathOracleResponse)
 async def get_my_death_oracle(
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = DigitalTwinService(db)
     oracle = await service.get_death_oracle(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id)
+        tenant_id=tenant_id
     )
     if not oracle:
         raise HTTPException(status_code=404, detail="Death oracle not found")
@@ -232,14 +231,14 @@ async def get_my_death_oracle(
 @rate_limit(max_requests=10, window_seconds=60)
 async def add_life_milestone(
     data: LifeMilestoneCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = DigitalTwinService(db)
     milestone = await service.add_life_milestone(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump()
     )
     return milestone
@@ -247,14 +246,14 @@ async def add_life_milestone(
 
 @router.get("/milestones", response_model=List[LifeMilestoneResponse])
 async def get_my_milestones(
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = DigitalTwinService(db)
     milestones = await service.list_life_milestones(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id)
+        tenant_id=tenant_id
     )
     return milestones
 
@@ -267,14 +266,14 @@ async def get_my_milestones(
 @rate_limit(max_requests=3, window_seconds=60)
 async def reserve_pre_birth_identity(
     data: PreBirthRecordCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = DigitalTwinService(db)
     record = await service.reserve_pre_birth_identity(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump()
     )
     return record

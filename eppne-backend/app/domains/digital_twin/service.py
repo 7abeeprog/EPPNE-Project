@@ -314,6 +314,10 @@ class DigitalTwinService:
         request_user_agent: Optional[str] = None
     ) -> DeathOracleCheck:
         """الإبلاغ عن وفاة مع تسجيل تدقيق."""
+        deceased_user = await self._get_user(deceased_id, tenant_id)
+        if not deceased_user:
+            raise NotFoundError("المستخدم المُبلَّغ عن وفاته غير موجود في تينانتك")
+
         await audit_log(
             user_id=reporter_id,
             tenant_id=tenant_id,  # type: ignore
@@ -357,6 +361,10 @@ class DigitalTwinService:
         request_user_agent: Optional[str] = None
     ) -> DeathOracleCheck:
         """تأكيد الوفاة مع تسجيل تدقيق صارم."""
+        deceased_user = await self._get_user(deceased_id, tenant_id)
+        if not deceased_user:
+            raise NotFoundError("المستخدم المُراد تأكيد وفاته غير موجود في تينانتك")
+
         oracle = await self.repo.get_death_oracle(deceased_id, tenant_id)
         if not oracle or oracle.status != "DEATH_PENDING":  # type: ignore
             raise PermissionDeniedError("لا يمكن تأكيد الوفاة في هذه الحالة")
