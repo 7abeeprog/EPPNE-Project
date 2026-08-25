@@ -10,11 +10,10 @@ import json
 import asyncio
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user, get_current_tenant, get_current_superuser, get_current_user_optional
+from app.api.deps import get_current_active_user, get_current_superuser, get_current_user_optional
 from app.domains.identity.models import User
 from app.domains.communications.service import CommunicationsService
 from app.domains.communications.schemas import *
-from app.domains.academy.models import AcademyTenant
 from app.core.security import decode_token
 from app.core.rate_limiter import rate_limit
 from app.core.audit import audit_log
@@ -399,13 +398,12 @@ async def delete_permanently(
 @rate_limit(max_requests=20, window_seconds=60)
 async def create_template(
     data: CommunicationTemplateCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
     service = CommunicationsService(db)
     template = await service.create_template(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         name=data.name,
         trigger_event=data.trigger_event,
         subject_template=data.subject_template,
@@ -426,10 +424,9 @@ async def create_template(
 @router.get("/templates", response_model=List[CommunicationTemplateResponse])
 @rate_limit(max_requests=50, window_seconds=60)
 async def list_templates(
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
     service = CommunicationsService(db)
-    templates = await service.list_templates(tenant_id=cast(int, tenant.id))
+    templates = await service.list_templates(tenant_id=cast(int, current_user.tenant_id))
     return templates

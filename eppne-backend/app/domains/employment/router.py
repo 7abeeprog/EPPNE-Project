@@ -23,16 +23,13 @@ router = APIRouter(prefix="/employment", tags=["Sovereign Employment & Talent"])
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_job(
     data: JobListingCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    if not tenant:
-        raise HTTPException(status_code=403, detail="Tenant not found")
     service = EmploymentService(db)
     job = await service.create_job(
         employer_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump()
     )
     return job
@@ -43,15 +40,12 @@ async def get_open_jobs(
     employment_type: Optional[str] = Query(None, description="FULL_TIME, PART_TIME, CONTRACT"),
     skip: int = 0,
     limit: int = 50,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    if not tenant:
-        raise HTTPException(status_code=403, detail="Tenant not found")
     service = EmploymentService(db)
     jobs = await service.list_open_jobs(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         employment_type=employment_type,
         skip=skip,
         limit=limit
@@ -193,16 +187,13 @@ async def review_application(
 async def create_contract(
     data: EmploymentContractCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    if not tenant:
-        raise HTTPException(status_code=403, detail="Tenant not found")
     service = EmploymentService(db)
     contract = await service.create_contract(
         employer_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump(),
         idempotency_key=idempotency_key or data.idempotency_key
     )
