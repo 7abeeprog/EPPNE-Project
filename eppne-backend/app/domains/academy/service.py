@@ -355,10 +355,11 @@ class AcademyService:
             is_free = cast(bool, course.is_free)
 
             if payment_method == "WALLET" and amount > 0 and not is_free:
+                system_account = await get_or_create_system_account(self.db, self.tenant_id)
                 try:
                     await self.finance.transfer(
                         sender_id=user_id,
-                        receiver_email="academy@eppne.com",
+                        receiver_email=cast(str, system_account.email),
                         currency=currency,
                         amount=Decimal(str(amount)),
                         notes=f"Enrollment in course {course.id} - {course.title}",

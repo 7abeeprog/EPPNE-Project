@@ -14,6 +14,7 @@ from typing import Optional, List, Dict, Any, cast
 
 from app.domains.social.repository import SocialRepository
 from app.domains.finance.service import FinanceService
+from app.core.system_account_service import get_or_create_system_account
 from app.domains.ai_agents.service import AIAgentsService
 from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.affiliate.service import AffiliateService
@@ -553,10 +554,11 @@ class SocialService:
         await self._get_user_email(receiver_id, tenant_id)  # raises NotFoundError if receiver is outside your tenant
 
         finance = FinanceService(self.db, tenant_id)
+        system_account = await get_or_create_system_account(self.db, tenant_id)
         async with self.db.begin_nested():
             await finance.transfer(
                 sender_id=sender_id,
-                receiver_email="shop@eppne.com",
+                receiver_email=cast(str, system_account.email),
                 currency="MR_USDT",
                 amount=product_price,
                 notes=f"Physical gift order from user {sender_id}",
@@ -624,7 +626,8 @@ class SocialService:
         group_result = await self.db.execute(
             select(SocialGroup).where(SocialGroup.id == group_id, SocialGroup.tenant_id == tenant_id)
         )
-        if group_result.scalar_one_or_none() is None:
+        group = group_result.scalar_one_or_none()
+        if group is None:
             raise NotFoundError("Group not found")
 
         plan = await self.repo.get_subscription_plan(plan_id, tenant_id)
@@ -637,10 +640,14 @@ class SocialService:
             price = plan.price_monthly_mrusdt * duration_months
 
         finance = FinanceService(self.db, tenant_id)
+        # الدافع الرسمي هو منشئ المجموعة (creator_id، إجباري بالفعل على
+        # SocialGroup) — نفس نمط AcademyTenant.admin_id في pay_invoice/
+        # process_auto_renewals (§7 بند 4). المستقبِل حساب النظام المركزي.
+        system_account = await get_or_create_system_account(self.db, tenant_id)
         async with self.db.begin_nested():
             await finance.transfer(
-                sender_id=0,
-                receiver_email="saas@eppne.com",
+                sender_id=cast(int, group.creator_id),
+                receiver_email=cast(str, system_account.email),
                 currency="MR_USDT",
                 amount=cast(Decimal, price),
                 notes=f"Subscription for group {group_id}",

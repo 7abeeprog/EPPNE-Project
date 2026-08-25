@@ -20,6 +20,7 @@ from app.domains.saas.models import (
 )
 from app.domains.saas.schemas import TenantSubscriptionResponse, InvoiceResponse
 from app.domains.finance.service import FinanceService
+from app.core.system_account_service import get_or_create_system_account
 from app.core.errors import (
     PermissionDeniedError,
     NotFoundError,
@@ -36,6 +37,17 @@ class SaaSControlService:
         self.tenant_id = tenant_id
         self.repo = SaaSRepository(db)
         self.finance = FinanceService(db, tenant_id)
+
+    async def _get_tenant_admin_id(self, tenant_id: int) -> int:
+        # الدافع الرسمي لفواتير/تجديدات التينانت هو AcademyTenant.admin_id
+        # الإجباري الموجود بالفعل — راجع §7 بند 4 من مستند تصميم حساب
+        # النظام الموحَّد لكل تينانت.
+        from app.domains.academy.repository import AcademyRepository
+        academy_repo = AcademyRepository(self.db)
+        tenant = await academy_repo.get_tenant_by_id(tenant_id)
+        if not tenant:
+            raise NotFoundError("التينانت غير موجود")
+        return cast(int, tenant.admin_id)
 
     # ==========================================
     # 1. الخدمات (Services) – عامة (للمشرفين)
@@ -164,10 +176,12 @@ class SaaSControlService:
                 if not plan:
                     continue
 
+                payer_id = await self._get_tenant_admin_id(target_tenant)
+                system_account = await get_or_create_system_account(self.db, target_tenant)
                 async with self.db.begin_nested():
                     tx = await self.finance.transfer(
-                        sender_id=target_tenant,
-                        receiver_email="system@eppne.com",
+                        sender_id=payer_id,
+                        receiver_email=cast(str, system_account.email),
                         currency=plan.currency,
                         amount=plan.price_monthly,
                         idempotency_key=f"AUTO-RENEW-{sub.id}-{datetime.now(timezone.utc).strftime('%Y-%m')}",
@@ -303,11 +317,13 @@ class SaaSControlService:
         if invoice.status != "PENDING":
             raise ValidationError("الفاتورة غير قابلة للدفع")
 
+        payer_id = await self._get_tenant_admin_id(self.tenant_id)
+        system_account = await get_or_create_system_account(self.db, self.tenant_id)
         async with self.db.begin_nested():
             try:
                 tx = await self.finance.transfer(
-                    sender_id=self.tenant_id,
-                    receiver_email="system@eppne.com",
+                    sender_id=payer_id,
+                    receiver_email=cast(str, system_account.email),
                     currency=invoice.currency,
                     amount=invoice.amount,
                     idempotency_key=f"PAY-INV-{invoice.id}",

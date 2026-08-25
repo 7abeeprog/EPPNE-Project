@@ -12,6 +12,7 @@ from app.domains.commerce.repository import CommerceRepository
 from app.domains.commerce.models import StoreProfile, Product, Order, PaymentRequest, CommerceAuditLog
 from app.domains.commerce.schemas import ProductCreate, CheckoutRequest
 from app.domains.finance.service import FinanceService
+from app.core.system_account_service import get_or_create_system_account
 from app.core.errors import InsufficientBalanceError, NotFoundError, PermissionDeniedError, ValidationError
 from app.core.logging_conf import logger
 from app.core.idempotency import get_idempotency_result, store_idempotency_result
@@ -303,11 +304,12 @@ class CommerceService:
 
     async def release_commissions(self, beneficiary_id: int):
         commissions = await self.repo.get_pending_commissions(beneficiary_id, self.tenant_id)
+        system_account = await get_or_create_system_account(self.db, self.tenant_id)
         for item in commissions.data:
             comm = cast(Any, item)
             idempotency_key = f"release-{comm.id}-{uuid.uuid4().hex[:12]}"
             await self.finance.transfer(
-                sender_id=1,
+                sender_id=cast(int, system_account.id),
                 receiver_email=await self._get_user_email(beneficiary_id),
                 currency=comm.currency,
                 amount=Decimal(str(comm.amount)),

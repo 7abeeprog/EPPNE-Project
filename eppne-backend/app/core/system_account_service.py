@@ -4,7 +4,6 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import SystemRole
-from app.core.security import get_password_hash
 from app.domains.identity.models import User
 
 
@@ -23,6 +22,11 @@ async def get_or_create_system_account(db: AsyncSession, tenant_id: int) -> User
     account = result.scalar_one_or_none()
     if account:
         return account
+
+    # استيراد مؤجَّل لتجنب دورة استيراد: core.security تستورد
+    # saas.service.SaaSControlService، وبعض دومينات هذه الدالة (saas
+    # ضمنها) تستورد system_account_service على مستوى الموديول.
+    from app.core.security import get_password_hash
 
     account = User(
         tenant_id=tenant_id,

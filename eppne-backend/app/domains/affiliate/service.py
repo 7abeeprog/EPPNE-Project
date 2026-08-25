@@ -38,6 +38,7 @@ from app.domains.finance.service import FinanceService
 from app.domains.commerce.repository import CommerceRepository
 from app.domains.identity.models import User
 from app.domains.identity.repository import UserRepository
+from app.core.system_account_service import get_or_create_system_account
 from app.core.errors import (
     NotFoundError,
     PermissionDeniedError,
@@ -471,10 +472,11 @@ class AffiliateService:
         if not user_obj:
             raise NotFoundError("المستخدم غير موجود")
         receiver_email = cast(str, user_obj.email)
+        system_account = await get_or_create_system_account(self.db, self.tenant_id)
 
         async with self.db.begin_nested():
             tx = await self.finance.transfer(
-                sender_id=1,
+                sender_id=cast(int, system_account.id),
                 receiver_email=receiver_email,
                 amount=amount,
                 currency="MR_USDT",

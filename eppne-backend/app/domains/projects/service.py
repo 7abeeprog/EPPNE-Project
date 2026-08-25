@@ -11,6 +11,7 @@ from typing import Optional, List, Dict, Any, cast
 from app.domains.projects.repository import ProjectRepository
 from app.domains.projects.models import ProjectStatus, ContributionType, Project, ProjectMilestone, Contribution, ProjectUpdate
 from app.domains.finance.service import FinanceService
+from app.core.system_account_service import get_or_create_system_account
 from app.domains.commerce.repository import CommerceRepository
 from app.core.errors import NotFoundError, PermissionDeniedError, IdempotencyError
 from app.core.event_bus import EventBus
@@ -179,10 +180,11 @@ class ProjectService:
 
             if data.contribution_type == ContributionType.MONETARY:
                 finance = FinanceService(self.db, tenant_id)
+                system_account = await get_or_create_system_account(self.db, tenant_id)
                 try:
                     await finance.transfer(
                         sender_id=contributor_id,
-                        receiver_email="system@eppne.com",
+                        receiver_email=cast(str, system_account.email),
                         currency=project.currency,  # type: ignore
                         amount=data.amount_mrusdt,
                         notes=f"Proj:{project.id}",

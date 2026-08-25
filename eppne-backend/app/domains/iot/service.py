@@ -9,6 +9,7 @@ import uuid
 from app.domains.iot.repository import IoTRepository
 from app.domains.iot.models import UtilityType, SmartAsset, UtilityGrid, UtilityReading, MaintenanceLog
 from app.domains.finance.service import FinanceService
+from app.core.system_account_service import get_or_create_system_account
 from app.core.config import settings
 from app.core.redis_client import redis_client as get_redis_client
 from app.core.errors import BusinessError, NotFoundError, PermissionDeniedError, ValidationError
@@ -208,9 +209,10 @@ class IoTService:
 
             payment_idempotency = f"carbon_settle_{idempotency_key or uuid.uuid4().hex[:12]}"
             finance = FinanceService(self.db, tenant_id)
+            system_account = await get_or_create_system_account(self.db, tenant_id)
             try:
                 await finance.transfer(
-                    sender_id=1,
+                    sender_id=cast(int, system_account.id),
                     receiver_email=await self._get_user_email(owner_id, tenant_id),
                     currency="MR_USDT",
                     amount=cast(Decimal, monetary_value),
