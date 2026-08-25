@@ -45,14 +45,16 @@ async def create_invoice(
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceResponse:
     """
-    إنشاء فاتورة جديدة.
+    إنشاء فاتورة جديدة. tenant_id/user_id مصدرهما current_user حصريًا —
+    لا يمكن للعميل تحديد تينانت أو مستخدم مختلف عبر جسم الطلب.
     """
-    service = InvoicingService(db, data.tenant_id)
+    tenant_id = cast(int, current_user.tenant_id)
+    service = InvoicingService(db, tenant_id)
 
     try:
         invoice = await service.create_invoice(
-            entity_id=data.tenant_id,
-            user_id=data.user_id or 0,
+            entity_id=tenant_id,
+            user_id=cast(int, current_user.id),
             amount=data.amount,
             description=data.description or "فاتورة خدمة",
             due_date=data.due_date,

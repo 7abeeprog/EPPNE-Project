@@ -14,7 +14,7 @@ class InvoiceBase(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
     due_date: datetime = Field(..., description="تاريخ استحقاق الدفع")
     reference_id: Optional[int] = Field(None, description="معرف مرجعي (مثل order_id)")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="بيانات إضافية (JSON)")
+    invoice_metadata: Optional[Dict[str, Any]] = Field(None, description="بيانات إضافية (JSON)")
 
     @field_validator("currency")
     @classmethod
@@ -25,8 +25,6 @@ class InvoiceBase(BaseModel):
 
 
 class InvoiceCreate(InvoiceBase):
-    tenant_id: int = Field(..., description="معرف المستأجر")
-    user_id: Optional[int] = Field(0, description="معرف المستخدم (0 للفواتير النظامية)")
     idempotency_key: Optional[str] = Field(None, description="مفتاح عدم التكرار")
 
 
