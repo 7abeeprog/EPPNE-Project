@@ -1,7 +1,7 @@
 # جلسة جرد + أمان مدمجة — الدفعة 2: service_marketplace, tenders_auctions, arbitration_syndicates
 
 **بدأ التسجيل:** 2026-08-25
-**الحالة:** ✅ **الجلسة بالكامل مكتملة ومؤكَّدة حيًا:** الجرد + الفحص الأمني (§1-§9) → موافقة المستخدم الكاملة → إصلاح `arbitration_syndicates` (17/17 endpoint) + سر webhook + بنود Backlog #27-#31 (§10-§13) → مقترَح حقول `GET /services/{id}` (§14) → موافقة + تنفيذ `MarketplacePublicServiceResponse` + بند Backlog #32 (§15) → **إغلاق `service_marketplace` بالكامل من ناحية IDOR** (8 endpoints: `list_services`, `create_service`, `publish/unpublish_service`, `list_addons`, `create_addon`, `get_customization_requests`, `purchase_service`، §16). **صفر endpoint متبقٍ في `service_marketplace` أو `arbitration_syndicates` بيقرأ `tenant_id` من هيدر.** ⏳ **لم يُنفَّذ commit بعد** — بانتظار موافقتك على الـ`diff` الشامل (§16.6).
+**الحالة:** ✅ **الدفعة 2 بالكامل (الثلاثة دومينات) مغلقة من ناحية IDOR الكودي، مؤكَّدة حيًا/جزئيًا حسب توفر البوابات الوظيفية:** الجرد + الفحص الأمني (§1-§9) → موافقة المستخدم → إصلاح `arbitration_syndicates` (17/17 endpoint، تحقق حي كامل) + سر webhook + Backlog #27-#31 (§10-§13) → مقترَح + تنفيذ `MarketplacePublicServiceResponse` + Backlog #32 (§14-§15) → إغلاق `service_marketplace` (9 endpoint، تحقق حي كامل، §16) → **إغلاق `tenders_auctions` (6/6 endpoint، تحقق جزئي in-process بمعزل عن بوابة SaaS المعطوبة §28، §17)**. commit واحد شامل تم لأول 6 ملفات (`3bc821d`) بموافقة المستخدم — راجع §16.7. `tenders_auctions` لسه غير مُضاف لأي commit، بانتظار المراجعة (§17.5).
 
 ---
 
@@ -545,4 +545,63 @@ GET /marketplace/services?limit=5 (مصادَق، المسار الآخر) → �
 
 باقي ملفات `git status` الأصلية (متعدّلة/untracked من جلسات سابقة تمامًا) — لم تُلمس، لن تُضاف لأي commit من هنا.
 
-**الحالة النهائية:** ✅ **`service_marketplace` مُغلَق بالكامل من ناحية IDOR** (8/8 endpoint متأثرة مُصلَحة ومؤكَّدة حيًا حيث أمكن، التاسع `get_my_licenses` مُصلَح ميكانيكيًا احترازيًا رغم عدم قابليته للتحقق حاليًا). `GET /services/{id}` عام بتصميم مع رد مُقلَّم (19 حقل، صفر تفاصيل تقنية داخلية). ⏳ **لم يُنفَّذ commit بعد** — بانتظار موافقتك الصريحة على الـ`diff` الشامل أعلاه (يغطي `arbitration_syndicates` + سر webhook + Backlog #27-#32 + schema جديد + إغلاق `service_marketplace`).
+**الحالة النهائية:** ✅ **`service_marketplace` مُغلَق بالكامل من ناحية IDOR** (8/8 endpoint متأثرة مُصلَحة ومؤكَّدة حيًا حيث أمكن، التاسع `get_my_licenses` مُصلَح ميكانيكيًا احترازيًا رغم عدم قابليته للتحقق حاليًا). `GET /services/{id}` عام بتصميم مع رد مُقلَّم (19 حقل، صفر تفاصيل تقنية داخلية).
+
+### 16.7 الـcommit — مُنفَّذ
+
+بموافقة صريحة من المستخدم، تم commit واحد شامل (`3bc821d`) لسبعة ملفات: `arbitration_syndicates/router.py`, `service_marketplace/{router,service,schemas}.py`, `core/config.py`, `constructor-mismatch-backlog-classification.md`, وتقرير الجلسة هذا. `git log -1 --stat` أُكِّد. **`tenders_auctions` لم يكن جزءًا من هذا الـcommit** (لسه لم يُنفَّذ وقتها) — راجع §17.
+
+---
+
+## 17) إصلاح `tenders_auctions` (§7#6/#8) — إصلاح كودي احترازي، تحقق جزئي (in-process)، مكتمل
+
+### 17.1 نطاق التعديل — بتوجيه صريح من المستخدم: إصلاح كودي فقط، بلا محاولة تشغيل الميزة كاملة
+
+`eppne-backend/app/domains/tenders_auctions/router.py` — **6/6 endpoint** (`create_tender`, `submit_bid`, `evaluate_bid`, `create_auction`, `place_bid`, `close_auction`). نفس النمط الميكانيكي المعتاد بالضبط: حذف `tenant: AcademyTenant = Depends(get_current_tenant)` + استيرادَي `get_current_tenant`/`AcademyTenant`، استبدال كل `cast(int, tenant.id)` بـ`cast(int, current_user.tenant_id)`. **صفر تعديل على `service.py`** — طبقات الملكية الحقيقية الموجودة أصلًا هناك (`tender.created_by != evaluator_id` في `evaluate_bid_technically`، `auction.created_by != closer_id` في `close_auction`) بلا أي لمس، بالضبط زي ما طلبت — كانت أصلًا تقارن ضد `current_user.id` الحقيقي، المشكلة كانت محصورة في مصدر `tenant_id` بالراوتر فقط.
+
+`python -m py_compile app/domains/tenders_auctions/router.py` → `exit code 0`.
+
+### 17.2 التحقق — جزئي، in-process، بمعزل عن بوابة SaaS المعطوبة (#28) — **ليس end-to-end كامل**
+
+**لماذا جزئي:** `_check_saas_limits` (أول سطر في كل دالة `service.py`) بترفض أي استدعاء فورًا لأن `saas_service_catalog` بلا صف لـ`tenders`/`auctions` إطلاقًا (§3-أ، backlog #28) — هذا يمنع أي تحقق حقيقي عبر HTTP/uvicorn زي باقي الدفعة. **المنهجية البديلة:** سكربت Python مستقل يستورد `TendersAuctionsService` مباشرة (بلا HTTP، بلا uvicorn)، بعد `monkeypatch` **في الذاكرة فقط** لدالة `_check_saas_limits` الواحدة (استبدالها بدالة `noop` على الـinstance، صفر تعديل في أي ملف)، ليصل الاستدعاء الحقيقي (كود `service.py` الأصلي، غير مُعدَّل) لمنطق فحص الملكية الفعلي. بيانات throwaway زُرعت مباشرة عبر `repo.create_*` (بلا بوابة SaaS أصلًا في طبقة الـrepository).
+
+| Endpoint | الهجوم (بعد الإصلاح، عبر استدعاء service مباشر) | النتيجة | ملاحظة |
+|---|---|---|---|
+| **`submit_bid`** | `tenant_id=1` (مهاجم حقيقي) على مناقصة تينانت16 حقيقية | **`NotFoundError: Tender not found`** | ✅ هجوم مرفوض عند فحص التينانت |
+| **`evaluate_bid_technically`** | `tenant_id=1` على عطاء تينانت16 حقيقي | **`NotFoundError: Bid not found`** | ✅ مرفوض قبل الوصول لطبقة `created_by` أصلًا |
+| **`place_bid`** | `tenant_id=1` على مزاد تينانت16 حقيقي | **`NotFoundError: Auction not found`** | ✅ مرفوض عند فحص التينانت، **قبل** الوصول لأي منطق تاني |
+| **`close_auction`** (تينانت خاطئ) | `tenant_id=1` على مزاد تينانت16 | **`NotFoundError: Auction not found`** | ✅ مرفوض عند فحص التينانت |
+| **`close_auction`** (تينانت صح، مالك خاطئ) | `tenant_id=16` (صحيح) لكن `closer_id=772` (مش صاحب المزاد الحقيقي 774) | **`PermissionDeniedError: Only auction creator can close`** | ✅ **الطبقة الثانية الحقيقية (`current_user.id`) لسه شغالة زي ما هي، بلا أي لمس — تأكيد مباشر** |
+| **`close_auction`** (مسار شرعي كامل) | `tenant_id=16`، `closer_id=774` (المالك الحقيقي)، مزاد بلا مزايدات | **`200`، `status=CLOSED, winner_id=None`** | ✅ مسار شرعي سليم بالكامل — تأكيد بـSELECT مستقل: `sovereign_auctions.id=1: tenant_id=16 (بلا تغيير)، status='CLOSED'` |
+
+**الحكم:** فحوصات الملكية في `service.py` (غير المُعدَّلة) **بتقارن الآن ضد القيمة الصح** (تينانت المستخدم الحقيقي المُمرَّر من الراوتر بعد الإصلاح) — كل الهجمات اتردت عند نفس نقطة الفحص المتوقَّعة (`NotFoundError` على التينانت، أو `PermissionDeniedError` على الطبقة الثانية)، والمسار الشرعي (`close_auction`) اشتغل بشكل صحيح وكامل من البداية للنهاية.
+
+**ما لم يُختبَر (بوضوح، بسبب حدود النطاق المُتفَق عليها):**
+- `create_tender`/`create_auction` (تلوّث بيانات، بلا فحص ملكية) — لم يُختبَرا مباشرة، لكن نفس النمط الميكانيكي بالضبط (`cast(int, current_user.tenant_id)`) مؤكَّد شغّال في 6 حالات تانية بنفس الجلسة وجلسات سابقة (`employment.create_job` مثلًا، مؤكَّد حيًا كاملًا في الدفعة 1).
+- المسار الشرعي الكامل لـ`submit_bid`/`place_bid` (زرع بيانات ← نجاح فعلي) — **مش بسبب بوابة SaaS**، بل باج منفصل تمامًا مُكتشَف أثناء هذا التحقق (راجع §17.3).
+- التحقق عبر HTTP/uvicorn الحقيقي (المسار المُستخدَم في باقي الدفعة) — غير ممكن حاليًا بسبب #28/#29/#30 مجتمعين، بالضبط زي ما وثَّقنا سابقًا.
+
+### 17.3 اكتشاف جانبي جديد أثناء هذا التحقق — **قبل هذه الجلسة، بلا علاقة بـIDOR، لم يُلمَس**
+
+`submit_bid`/`place_bid` (`service.py:132`, `service.py:316`) يقارنان `datetime.utcnow()` (naive) مباشرة ضد `tender.submission_deadline`/`auction.start_time`/`auction.end_time` (aware — الأعمدة `DateTime(timezone=True)`) — `TypeError: can't compare offset-naive and offset-aware datetimes`. **يمنع المسار الشرعي الكامل لكل من `submit_bid`/`place_bid`** (وليس الهجوم — الهجوم بيتردّ قبل ما يوصل لهذا السطر أصلًا، لأن فحص التينانت بيسبقه). مؤكَّد حيًا (نفس الـtraceback ظهر مرتين، مرة لكل endpoint، أثناء محاولة اختبار المسار الشرعي). **لم يُضَف كبند Backlog رسمي بعد — بانتظار توجيهك** (نفس فئة الأعطال البيئية/الكودية المكتشَفة جانبيًا في باقي الدفعة، مثال `arbitration_syndicates.nominate_candidate` #32).
+
+### 17.4 تنظيف بيانات throwaway — مكتمل ومؤكَّد مستقل
+
+- `sovereign_tenders`: `id=1` (`TEST_TENDER_B_TA1`، من السكربت الأول قبل الاكتشاف §17.3)، `id=2` (`TEST_TENDER_B_TA2`) — محذوفان (الأول دُوِّر يدويًا بعد كراش السكربت، الثاني عبر `finally` في السكربت الثاني).
+- `tender_bids`: صف الهجوم لم يُكتَب أصلًا (رفض قبل `INSERT`)؛ صف البذرة (`id=1`، `enc-seed`) — محذوف.
+- `sovereign_auctions`: `id=1` (`TEST_AUCTION_B_TA2`) — محذوف.
+- `live_bids`: صفر صفوف اتكتبت طوال التحقق (كل محاولات `place_bid` اتردت قبل `INSERT`).
+- **فحص نهائي مستقل**: `SELECT count(*)` على الأربعة جداول بشروط `TEST%`/`enc%`/`BID-%` = **0** لكل واحد.
+- **لم يُلمَس أي شيء من بيانات الجلسات السابقة.**
+- **صفر migration، صفر تعديل على `service.py`/`repository.py`/`models.py`/`schemas.py`** — التعديل بالكامل في `router.py` وحده.
+
+### 17.5 `git status` / `git diff --stat` — للمراجعة قبل أي commit
+
+```
+ eppne-backend/app/domains/tenders_auctions/router.py | 21 +++++++--------------
+ 1 file changed, 7 insertions(+), 14 deletions(-)
+```
+
+باقي ملفات `git status` — نفس القائمة الأصلية من جلسات سابقة (لم تُلمس) + هذا الملف (التقرير) اللي هيتحدَّث معاها في نفس الـcommit القادم لو وافقت.
+
+**الحالة النهائية:** ✅ **`tenders_auctions` مُصلَح كوديًا بالكامل (6/6 endpoint)، تحقق جزئي in-process مكتمل** (5 من 6 سيناريوهات هجوم مؤكَّدة الرفض + مسار شرعي كامل لـ`close_auction`) — **الدفعة 2 بأكملها (service_marketplace + arbitration_syndicates + tenders_auctions) مغلقة كوديًا من ناحية IDOR الآن**. ⏳ **لم يُنفَّذ commit لهذا الملف بعد** — بانتظار موافقتك.

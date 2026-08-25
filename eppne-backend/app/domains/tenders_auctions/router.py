@@ -4,11 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, cast
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user, get_current_tenant
+from app.api.deps import get_current_active_user
 from app.domains.identity.models import User
 from app.domains.tenders_auctions.service import TendersAuctionsService
 from app.domains.tenders_auctions.schemas import *
-from app.domains.academy.models import AcademyTenant
 from app.core.rate_limiter import rate_limit
 
 router = APIRouter(prefix="/tenders-auctions", tags=["Sovereign Tenders & Auctions"])
@@ -19,13 +18,12 @@ router = APIRouter(prefix="/tenders-auctions", tags=["Sovereign Tenders & Auctio
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_tender(
     data: TenderCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = TendersAuctionsService(db)
     user_id = cast(int, current_user.id)
-    tender = await service.create_tender(user_id, cast(int, tenant.id), data.model_dump())  # ✅ cast
+    tender = await service.create_tender(user_id, cast(int, current_user.tenant_id), data.model_dump())  # ✅ cast
     return tender
 
 
@@ -34,13 +32,12 @@ async def create_tender(
 async def submit_bid(
     data: TenderBidCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = TendersAuctionsService(db)
     user_id = cast(int, current_user.id)
-    bid = await service.submit_bid(user_id, cast(int, tenant.id), data.model_dump(), idempotency_key)  # ✅ cast
+    bid = await service.submit_bid(user_id, cast(int, current_user.tenant_id), data.model_dump(), idempotency_key)  # ✅ cast
     return bid
 
 
@@ -50,13 +47,12 @@ async def evaluate_bid(
     bid_id: int,
     data: TenderBidEvaluate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = TendersAuctionsService(db)
     user_id = cast(int, current_user.id)
-    bid = await service.evaluate_bid_technically(user_id, cast(int, tenant.id), bid_id, data.technical_score, idempotency_key)  # ✅ cast
+    bid = await service.evaluate_bid_technically(user_id, cast(int, current_user.tenant_id), bid_id, data.technical_score, idempotency_key)  # ✅ cast
     return bid
 
 
@@ -65,13 +61,12 @@ async def evaluate_bid(
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_auction(
     data: AuctionCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = TendersAuctionsService(db)
     user_id = cast(int, current_user.id)
-    auction = await service.create_auction(user_id, cast(int, tenant.id), data.model_dump())  # ✅ cast
+    auction = await service.create_auction(user_id, cast(int, current_user.tenant_id), data.model_dump())  # ✅ cast
     return auction
 
 
@@ -81,13 +76,12 @@ async def place_bid(
     auction_id: int,
     data: LiveBidCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = TendersAuctionsService(db)
     user_id = cast(int, current_user.id)
-    bid = await service.place_bid(user_id, cast(int, tenant.id), auction_id, data.bid_amount_mrusdt, idempotency_key)  # ✅ cast
+    bid = await service.place_bid(user_id, cast(int, current_user.tenant_id), auction_id, data.bid_amount_mrusdt, idempotency_key)  # ✅ cast
     return bid
 
 
@@ -95,11 +89,10 @@ async def place_bid(
 @rate_limit(max_requests=5, window_seconds=60)
 async def close_auction(
     auction_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = TendersAuctionsService(db)
     user_id = cast(int, current_user.id)
-    result = await service.close_auction(auction_id, user_id, cast(int, tenant.id))  # ✅ cast
+    result = await service.close_auction(auction_id, user_id, cast(int, current_user.tenant_id))  # ✅ cast
     return result

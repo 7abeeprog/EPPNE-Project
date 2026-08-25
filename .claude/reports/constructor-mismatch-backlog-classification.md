@@ -53,8 +53,9 @@
 | 30 | `tenders-auctions-router-no-read-endpoints` [أُضيف 2026-08-25، بعد تجميد هذا الملف] | ⚪ ليس فئة باج (فجوة تصميم/تنفيذ، مش constructor mismatch) | 1 دومين (`tenders_auctions`) | `repository.py` يحتوي دوال قراءة كاملة (`list_tenders`, `get_tender`, `list_auctions`, `get_auction`, `list_bids_for_tender`, `get_live_bids_for_auction`) لكن **صفر `router` handler واحد يستدعيها** — الدومين غير قابل للاستكشاف عبر الـAPI أصلًا (يحتاج تخمين IDs تسلسلية لأي عملية). قرار منتجي/فجوة تنفيذ ناقصة، مش باج تقني عابر للدومينات. راجع نفس التقرير §2 |
 | 31 | `frontend-service-url-prefix-mismatch` [أُضيف 2026-08-25، بعد تجميد هذا الملف] | 🔴 **مركزي — بند منتشر مستقل، نفس فئة #23 (`bleach-clean-none-crash`)** | **21 من 30 دومين فرونت إند قابل للتطبيق (تأكيد `grep`+تحقق حي مباشر)** | نمط عابر لغالبية دومينات الفرونت إند بالكامل — راجع القسم المخصَّص "🔴 بند منتشر مستقل — #31" مباشرة بعد هذا الجدول. صفر إصلاح الآن، توثيق موسَّع فقط |
 | 32 | `arbitration-syndicates-nominate-candidate-wrong-kwarg` [أُضيف 2026-08-25، بعد تجميد هذا الملف] | 🟡 غير مؤكَّد الانتشار (نفس فئة `duplicate-kwarg-audit`/#2، محلي لحد ما يُفحص) | 1 مؤكَّد (`arbitration_syndicates`) | `service.py:479-486` (`nominate_candidate`) يستدعي `self.repo.create_candidate(..., candidate_user_id=user_id, ...)` لكن عمود الموديل `ElectionCandidate` الفعلي اسمه `user_id`، مش `candidate_user_id` — `TypeError` فوري (`ElectionCandidate(**kwargs)` بيرفض kwarg غير موجود كعمود)، **قبل أي `db.add()`/`commit()`** — يمنع `POST /elections/{id}/candidates` بالكامل لأي مستخدم، بصرف النظر عن التينانت. مؤكَّد حيًا (هجوم IDOR بعد إصلاح `arbitration_syndicates` وصل لنفس العطل — صفر كتابة، `SELECT` مستقل = 0) — راجع `.claude/reports/batch2-audit-security-service-marketplace-tenders-auctions-arbitration-syndicates.md` §13.3. لم يُفحَص انتشار نفس نمط `candidate_user_id`/تسمية kwarg مشابهة في دومين تاني |
+| 33 | `tenders-auctions-naive-vs-aware-datetime` [أُضيف 2026-08-25، بعد تجميد هذا الملف] | 🟢 محلي | 1 مؤكَّد (`tenders_auctions`) | `service.py:132` (`submit_bid`) و`service.py:316` (`place_bid`) يقارنان `datetime.utcnow()` (naive) مباشرة ضد أعمدة `DateTime(timezone=True)` (aware — `tender.submission_deadline`, `auction.start_time`/`end_time`) — `TypeError: can't compare offset-naive and offset-aware datetimes` فوري. **يمنع المسار الشرعي الكامل لكلا الـendpoint** (الهجوم عبر IDOR غير متأثر — بيتردّ عند فحص التينانت **قبل** الوصول لهذا السطر أصلًا). مؤكَّد حيًا أثناء التحقق الجزئي in-process لإصلاح `tenders_auctions` IDOR (نفس الـtraceback ظهر مرتين، مرة لكل endpoint) — راجع `.claude/reports/batch2-audit-security-service-marketplace-tenders-auctions-arbitration-syndicates.md` §17.3. لم يُفحَص انتشار نفس نمط `datetime.utcnow()` naive ضد عمود `timezone=True` في دومين تاني |
 
-**ملاحظة [2026-08-25، استكمال جلسة `batch2-audit-security-...`]:** البند #32 أُضيف بعد تنفيذ إصلاح `arbitration_syndicates` نفسه (اكتشاف جانبي أثناء التحقق الحي، مش جزء من الجرد الأصلي) — بتوجيه صريح من المستخدم.
+**ملاحظة [2026-08-25، استكمال جلسة `batch2-audit-security-...`]:** البندان #32 و#33 أُضيفا بعد تنفيذ إصلاحات `arbitration_syndicates`/`tenders_auctions` نفسها (اكتشافات جانبية أثناء التحقق الحي/الجزئي، مش جزء من الجرد الأصلي) — بتوجيه صريح من المستخدم.
 
 **ملاحظة [2026-08-24]:** البندان #19 و#20 أُضيفا بعد تجميد هذا الملف (2026-08-17) بتوجيه صريح من المستخدم في جلستي `projects-idor-fix`/`academy-idor-fix`، خلافًا لملاحظة السطر 5 (الملف تصنيف فقط، لا يُضاف له بند جديد عادةً) — المصدر الكامل والتفاصيل في التقارير المذكورة مباشرة، هنا فقط للتصنيف السريع.
 
@@ -134,7 +135,7 @@
 
 ---
 
-## 🟢 المجموعة ب — محلية لدومين واحد (13 بند: #5, #6, #17, #18, #19, #20, #21, #22, #25, #26, #27, #28, #29 — + #24 مُدرَج تصنيفيًا هنا لكن بأولوية استثنائية أعلى، راجع بند 0 بالمجموعة أ)
+## 🟢 المجموعة ب — محلية لدومين واحد (14 بند: #5, #6, #17, #18, #19, #20, #21, #22, #25, #26, #27, #28, #29, #33 — + #24 مُدرَج تصنيفيًا هنا لكن بأولوية استثنائية أعلى، راجع بند 0 بالمجموعة أ)
 
 هذه البنود **لا تشترك في سبب جذري مع أي بند تاني** — كل واحد مرتبط بمنطق/schema/قرار خاص بدومين واحد فقط. لا تحتاج جلسة عابرة للدومينات؛ إصلاح كل واحد منفصل تمامًا عن الباقي.
 
@@ -152,6 +153,7 @@
 - **#27 (`arbitration-syndicates-repository-missing-methods`)** [أُضيف 2026-08-25، جلسة `batch2-audit-security-...`] — 5 دوال `repository.py` مفقودة + دالتان بتوقيع أضيق، محصور في `arbitration_syndicates` وحده — صفر سبب جذري مشترك مع أي دومين تاني.
 - **#28 (`saas-service-catalog-missing-entries`)** [أُضيف 2026-08-25، جلسة `batch2-audit-security-...`] — بيانات seed ناقصة في `saas_service_catalog` لـ`tenders`/`auctions`/`service_marketplace`، محصور بدومينين اثنين فقط، وهي فجوة بيانات إعداد مش خطأ برمجي مشترك.
 - **#29 (`finance-service-hold-funds-missing`)** [أُضيف 2026-08-25، جلسة `batch2-audit-security-...`] — `FinanceService.hold_funds`/`release_held_funds` غير موجودتين، محصور في `tenders_auctions` وحده حاليًا (لم يُفحَص انتشاره).
+- **#33 (`tenders-auctions-naive-vs-aware-datetime`)** [أُضيف 2026-08-25، جلسة `batch2-audit-security-...`] — `datetime.utcnow()` naive مقارَن مباشرة ضد أعمدة `timezone=True` aware في `submit_bid`/`place_bid`، محصور في `tenders_auctions` وحده حاليًا (لم يُفحَص انتشاره).
 
 ---
 
@@ -175,7 +177,7 @@
 | السؤال | الإجابة |
 |---|---|
 | كام بند يحتاج جلسة مركزية واحدة فعلية؟ | **13 بند** (#1, #2, #7, #8, #9, #10, #11, #12, #14, #15, #16, #23, #31 — بعضها ممكن يتجمّع في نفس الجلسة زي #12+#15+#16) |
-| كام بند محلي فعلاً، صفر حاجة لجلسة عابرة؟ | **14 بند** (#5, #6, #17, #18, #19, #20, #21, #22, #24, #25, #26, #27, #28, #29 — #24 محلي تصنيفيًا لكن بأولوية استثنائية أعلى، راجع بند 0 بالمجموعة أ) |
+| كام بند محلي فعلاً، صفر حاجة لجلسة عابرة؟ | **15 بند** (#5, #6, #17, #18, #19, #20, #21, #22, #24, #25, #26, #27, #28, #29, #33 — #24 محلي تصنيفيًا لكن بأولوية استثنائية أعلى، راجع بند 0 بالمجموعة أ) |
 | كام بند يحتاج جرد سريع الأول قبل تحديد نوعه؟ | **بندان** (#13 — لكن عمليًا يُعالَج ضمن جلسة #14؛ #32 محلي لحد ما يُفحص انتشاره) |
 | كام بند إداري بس؟ | **3 بنود** (#3, #4, #30) |
 | إيه أعلى أولوية مطلقة دلوقتي (أمنية/مالية)؟ | **#11 ثم #9** (بالترتيب ده تحديدًا — عكس الترتيب ممنوع لأنه بيفتح ثغرة هوية حقيقية) |
