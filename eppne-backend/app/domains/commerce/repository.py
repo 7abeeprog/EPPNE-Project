@@ -161,6 +161,12 @@ class CommerceRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_order_tenant_id(self, order_id: int) -> int | None:
+        # بلا فلتر tenant_id عمدًا — يُستخدَم فقط لتحديد التينانت الصحيح
+        # للطلب من webhook خارجي (visa_webhook) قبل بناء أي خدمة مقيَّدة بتينانت.
+        result = await self.db.execute(select(Order.tenant_id).where(Order.id == order_id))
+        return result.scalar_one_or_none()
+
     async def update_order_status(self, order_id: int, tenant_id: int, status: str) -> Order:
         await self.db.execute(
             update(Order)

@@ -208,6 +208,7 @@
 > | `affiliate.withdraw_commissions` | `affiliate/service.py:477` | `sender_id=1` | نفس الأثر بالضبط |
 > | `iot.settle_carbon_credits` | `iot/service.py:213` | `sender_id=1` | نفس الأثر بالضبط |
 > | `social.subscribe_group_to_plan` | `social/service.py:633` | `sender_id=0` | `user_id=0` غير موجود أصلًا (PK يبدأ من 1) → على الأرجح `IntegrityError` قاطع (فشل وظيفي، مش تسريب مالي — فئة فرعية أقل خطورة) |
+> | `commerce.handle_visa_webhook` | `commerce/service.py:432` (`_create_audit_log(user_id=0, ...)`) | `user_id=0` | نفس فئة `social` (فشل وظيفي `ForeignKeyViolationError`، مش تسريب مالي — دي مجرد سطر تدقيق، لا تحويل) — لكن **مؤكَّد حيًا 2026-08-25** إنه بيظهر كاستجابة API مضلِّلة (`400`) **رغم نجاح تحديث `orders`/`payment_requests` الفعلي في DB قبله** (كل تحديث بيعمل `commit()` مستقل قبل استدعاء الـaudit log). يوسّع نطاق الباج المعروف لدومين رابع (`commerce` كان موجود بالفعل أعلاه بـ`sender_id=1`، دي حالة تانية منفصلة `user_id=0` في نفس الدومين)، لا يغيّر تصنيفه. تفاصيل: `.claude/reports/commerce-visa-webhook-fix-session-log.md` §9. |
 >
 > **(بند ذو صلة، موثَّق مسبقًا وليس جديدًا هنا):** `saas.pay_invoice`/`process_auto_renewals` بتمرر `self.tenant_id`/`target_tenant` (مش `0`/`1` هاردكودد، لكن نفس فئة "قيمة مش `user_id` حقيقي") — راجع `.claude/reports/saas-idor-fix-session-log.md`.
 >

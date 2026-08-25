@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 from app.domains.commerce.repository import CommerceRepository
 from app.domains.commerce.models import StoreProfile, Product, Order, PaymentRequest, CommerceAuditLog
-from app.domains.commerce.schemas import ProductCreate, CheckoutRequest
+from app.domains.commerce.schemas import ProductCreate, CheckoutRequest, VisaWebhookPayload
 from app.domains.finance.service import FinanceService
 from app.core.system_account_service import get_or_create_system_account
 from app.core.errors import InsufficientBalanceError, NotFoundError, PermissionDeniedError, ValidationError
@@ -405,13 +405,16 @@ class CommerceService:
         )
         return order
 
+    @staticmethod
+    async def resolve_order_tenant_id(db: AsyncSession, order_id: int) -> Optional[int]:
+        return await CommerceRepository(db).get_order_tenant_id(order_id)
+
     async def handle_visa_webhook(
         self,
-        payload: dict,
-        signature: Optional[str] = None,
+        payload: VisaWebhookPayload,
         idempotency_key: Optional[str] = None
     ) -> Order:
-        order_id = cast(int, payload.get("order_id"))
+        order_id = payload.order_id
         order = await self.repo.get_order(order_id, self.tenant_id)
         if not order:
             raise NotFoundError("الطلب غير موجود")
@@ -420,19 +423,22 @@ class CommerceService:
         if not pr:
             raise NotFoundError("لا يوجد طلب دفع فيزا لهذا الطلب")
 
-        status = payload.get("status")
-        if status == "SUCCESS":
-            await self.repo.update_payment_request(cast(int, pr.id), self.tenant_id, status="PAID", paid_at=func.now(), gateway_response=payload)
+        if payload.gateway_reference != pr.gateway_transaction_id:
+            raise PermissionDeniedError("مرجع البوابة غير مطابق لطلب الدفع")
+
+        gateway_response = payload.model_dump()
+        if payload.status == "SUCCESS":
+            await self.repo.update_payment_request(cast(int, pr.id), self.tenant_id, status="PAID", paid_at=func.now(), gateway_response=gateway_response)
             order = await self.repo.update_order_status(order_id, self.tenant_id, "PAID")
         else:
-            await self.repo.update_payment_request(cast(int, pr.id), self.tenant_id, status="FAILED", gateway_response=payload)
+            await self.repo.update_payment_request(cast(int, pr.id), self.tenant_id, status="FAILED", gateway_response=gateway_response)
             raise PermissionDeniedError("فشلت عملية الدفع عبر الفيزا")
 
         await self._create_audit_log(
             user_id=0,
             order_id=order_id,
             action="VISA_WEBHOOK_PROCESSED",
-            details={"status": status, "idempotency_key": idempotency_key}
+            details={"status": payload.status, "idempotency_key": idempotency_key}
         )
         return order
 

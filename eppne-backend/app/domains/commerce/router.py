@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List, cast
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user, get_current_superuser, require_subscription, get_current_tenant
+from app.api.deps import get_current_active_user, get_current_superuser, require_subscription
 from app.domains.identity.models import User
 from app.domains.academy.models import AcademyTenant
 
@@ -192,15 +192,20 @@ async def confirm_agent_payment(
 
 @router.post("/payment/visa/webhook")
 async def visa_webhook(
-    payload: dict,
-    signature: str = Header(...),
+    payload: VisaWebhookPayload,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant_id: int = Depends(get_current_tenant),
+    # 🔒 حماية مؤقتة: لا يوجد تكامل Visa حقيقي (توقيع HMAC) بعد — الاستدعاء
+    # مقيَّد بصلاحية superuser لحد ما يُبنى تحقق توقيع حقيقي عند توفر تكامل فعلي.
+    current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = await CommerceService.resolve_order_tenant_id(db, payload.order_id)
+    if tenant_id is None:
+        raise HTTPException(404, "الطلب غير موجود")
+
     service = CommerceService(db, tenant_id)
     try:
-        order = await service.handle_visa_webhook(payload, signature, idempotency_key)
+        order = await service.handle_visa_webhook(payload, idempotency_key)
         return {"status": "success", "order_id": order.id}
     except Exception as e:
         raise HTTPException(400, str(e))
