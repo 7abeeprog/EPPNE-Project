@@ -109,17 +109,17 @@ class ServiceMarketplaceService:
     ) -> List[MarketplaceService]:
         return await self.repo.list_services(tenant_id, service_type, featured, skip, limit)
 
-    async def publish_service(self, service_id: int, user_id: int) -> MarketplaceService:
-        """نشر الخدمة (تفعيلها) – للمشرفين."""
+    async def publish_service(self, service_id: int, tenant_id: int) -> MarketplaceService:
+        """نشر الخدمة (تفعيلها) – للمشرفين، ضمن نطاق تينانتهم فقط."""
         service = await self.repo.get_service(service_id)
-        if not service:
+        if not service or cast(int, service.tenant_id) != tenant_id:
             raise NotFoundError("Service not found")
         return await self.repo.update_service(service_id, is_active=True)
 
-    async def unpublish_service(self, service_id: int, user_id: int) -> MarketplaceService:
-        """إلغاء نشر الخدمة (تعطيلها) – للمشرفين."""
+    async def unpublish_service(self, service_id: int, tenant_id: int) -> MarketplaceService:
+        """إلغاء نشر الخدمة (تعطيلها) – للمشرفين، ضمن نطاق تينانتهم فقط."""
         service = await self.repo.get_service(service_id)
-        if not service:
+        if not service or cast(int, service.tenant_id) != tenant_id:
             raise NotFoundError("Service not found")
         return await self.repo.update_service(service_id, is_active=False)
 
@@ -461,8 +461,15 @@ class ServiceMarketplaceService:
 
         return request_obj
 
-    async def get_customization_requests(self, license_id: int, tenant_id: int) -> List[CustomizationRequest]:
-        """جلب طلبات التخصيص لترخيص معين مع التأكد من tenant_id."""
+    async def get_customization_requests(self, license_id: int, user_id: int, tenant_id: int) -> List[CustomizationRequest]:
+        """جلب طلبات التخصيص لترخيص معين مع التأكد من tenant_id وملكية الترخيص."""
+        license_obj = await self.repo.get_license(license_id)
+        if (
+            not license_obj
+            or cast(int, license_obj.tenant_id) != tenant_id
+            or cast(int, license_obj.buyer_user_id) != user_id
+        ):
+            raise PermissionDeniedError("Not authorized")
         return await self.repo.list_customization_requests(license_id, tenant_id)
 
     # ============================================================

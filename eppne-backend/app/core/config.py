@@ -115,6 +115,19 @@ class Settings(BaseSettings):
         return v
 
     # ============================================================
+    # 5b. سر الـwebhook الداخلي (CI/CD → service_marketplace deployment webhook)
+    # ============================================================
+    INTERNAL_WEBHOOK_SECRET: SecretStr = Field(
+        default=SecretStr("CHANGE_ME_INTERNAL_WEBHOOK_SECRET"),
+        min_length=16,
+        description=(
+            "سر ثابت يتحقق منه POST /marketplace/webhook/deployment/{license_id} "
+            "(x-api-key header) — يستخدمه CI/CD لتحديث حالة نشر الخدمات. "
+            "MUST be changed in production."
+        )
+    )
+
+    # ============================================================
     # 6. المستخدم السوبر (إلزامي في الإنتاج)
     # ============================================================
     FIRST_SUPERUSER_EMAIL: str = Field(
@@ -241,6 +254,10 @@ class Settings(BaseSettings):
             if self.FIRST_SUPERUSER_PASSWORD.get_secret_value() == "ChangeMe@123":
                 raise ValueError("❌ FIRST_SUPERUSER_PASSWORD must be changed in production! (Default is not allowed)")
 
+            # التأكد من أن سر الـwebhook الداخلي غير افتراضي
+            if self.INTERNAL_WEBHOOK_SECRET.get_secret_value() == "CHANGE_ME_INTERNAL_WEBHOOK_SECRET":
+                raise ValueError("❌ INTERNAL_WEBHOOK_SECRET must be changed in production! (Default value is not allowed)")
+
             # التأكد من أن PUBLIC_REGISTRATION_TENANT_ID اتعيّن صراحةً (مش الافتراضي الضمني)
             if os.getenv("PUBLIC_REGISTRATION_TENANT_ID") is None:
                 raise ValueError(
@@ -266,6 +283,11 @@ class Settings(BaseSettings):
                 logger.warning(
                     "⚠️  [DEV] Using default FIRST_SUPERUSER_PASSWORD. "
                     "It is recommended to set a unique password in .env file."
+                )
+            if self.INTERNAL_WEBHOOK_SECRET.get_secret_value() == "CHANGE_ME_INTERNAL_WEBHOOK_SECRET":
+                logger.warning(
+                    "⚠️  [DEV] Using default INTERNAL_WEBHOOK_SECRET. "
+                    "It is recommended to set a unique secret in .env file."
                 )
             if os.getenv("PUBLIC_REGISTRATION_TENANT_ID") is None:
                 logger.warning(

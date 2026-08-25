@@ -6,12 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, cast
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user, get_current_tenant, get_current_superuser
+from app.api.deps import get_current_active_user, get_current_superuser
 from app.domains.identity.models import User
 from app.domains.service_marketplace.service import ServiceMarketplaceService
 from app.domains.service_marketplace.schemas import *
-from app.domains.academy.models import AcademyTenant
 from app.core.rate_limiter import rate_limit
+from app.core.config import settings
 
 router = APIRouter(prefix="/marketplace", tags=["Service Marketplace - One-Click Apps"])
 
@@ -23,15 +23,15 @@ async def list_services(
     featured: Optional[bool] = None,
     skip: int = 0,
     limit: int = 50,
-    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ServiceMarketplaceService(db)
-    services = await service.list_services(cast(int, tenant.id), service_type, featured, skip, limit)
+    services = await service.list_services(cast(int, current_user.tenant_id), service_type, featured, skip, limit)
     return services
 
 
-@router.get("/services/{service_id}", response_model=MarketplaceServiceResponse)
+@router.get("/services/{service_id}", response_model=MarketplacePublicServiceResponse)
 async def get_service(
     service_id: int,
     db: AsyncSession = Depends(get_db)
@@ -45,13 +45,12 @@ async def get_service(
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_service(
     data: MarketplaceServiceCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
     service = ServiceMarketplaceService(db)
     user_id = cast(int, current_user.id)
-    new_service = await service.create_service(user_id, cast(int, tenant.id), data.model_dump())
+    new_service = await service.create_service(user_id, cast(int, current_user.tenant_id), data.model_dump())
     return new_service
 
 
@@ -63,8 +62,7 @@ async def publish_service(
     db: AsyncSession = Depends(get_db)
 ):
     service = ServiceMarketplaceService(db)
-    user_id = cast(int, current_user.id)
-    updated = await service.publish_service(service_id, user_id)
+    updated = await service.publish_service(service_id, cast(int, current_user.tenant_id))
     return updated
 
 
@@ -76,8 +74,7 @@ async def unpublish_service(
     db: AsyncSession = Depends(get_db)
 ):
     service = ServiceMarketplaceService(db)
-    user_id = cast(int, current_user.id)
-    updated = await service.unpublish_service(service_id, user_id)
+    updated = await service.unpublish_service(service_id, cast(int, current_user.tenant_id))
     return updated
 
 
@@ -88,13 +85,12 @@ async def purchase_service(
     data: ServiceLicensePurchase,
     background_tasks: BackgroundTasks,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ServiceMarketplaceService(db)
     user_id = cast(int, current_user.id)
-    license_obj = await service.purchase_service(user_id, cast(int, tenant.id), data.model_dump(), idempotency_key)
+    license_obj = await service.purchase_service(user_id, cast(int, current_user.tenant_id), data.model_dump(), idempotency_key)
     return license_obj
 
 
@@ -102,12 +98,11 @@ async def purchase_service(
 async def get_my_licenses(
     skip: int = 0,
     limit: int = 50,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ServiceMarketplaceService(db)
-    licenses = await service.get_my_licenses(cast(int, tenant.id), skip, limit)
+    licenses = await service.get_my_licenses(cast(int, current_user.tenant_id), skip, limit)
     return licenses
 
 
@@ -140,11 +135,11 @@ async def renew_license(
 @router.get("/addons", response_model=List[ServiceAddonResponse])
 async def list_addons(
     compatible_with: Optional[str] = None,
-    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ServiceMarketplaceService(db)
-    addons = await service.list_addons(cast(int, tenant.id), compatible_with)
+    addons = await service.list_addons(cast(int, current_user.tenant_id), compatible_with)
     return addons
 
 
@@ -152,13 +147,12 @@ async def list_addons(
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_addon(
     data: ServiceAddonCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
     service = ServiceMarketplaceService(db)
     user_id = cast(int, current_user.id)
-    addon = await service.create_addon(user_id, cast(int, tenant.id), data.model_dump())
+    addon = await service.create_addon(user_id, cast(int, current_user.tenant_id), data.model_dump())
     return addon
 
 
@@ -195,12 +189,13 @@ async def request_customization(
 @router.get("/licenses/{license_id}/customizations", response_model=List[CustomizationRequestResponse])
 async def get_customization_requests(
     license_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ServiceMarketplaceService(db)
-    requests = await service.get_customization_requests(license_id, cast(int, tenant.id))
+    requests = await service.get_customization_requests(
+        license_id, cast(int, current_user.id), cast(int, current_user.tenant_id)
+    )
     return requests
 
 
@@ -212,7 +207,7 @@ async def deployment_webhook(
     x_api_key: str = Header(..., description="Internal API Key for CI/CD"),
     db: AsyncSession = Depends(get_db)
 ):
-    if x_api_key != "eppne_internal_secret":
+    if x_api_key != settings.INTERNAL_WEBHOOK_SECRET.get_secret_value():
         raise HTTPException(status_code=403, detail="Invalid API Key")
 
     service = ServiceMarketplaceService(db)

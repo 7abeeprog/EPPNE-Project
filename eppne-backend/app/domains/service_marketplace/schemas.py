@@ -41,6 +41,35 @@ class MarketplaceServiceResponse(MarketplaceServiceCreate):
     model_config = ConfigDict(from_attributes=True)
 
 
+class MarketplacePublicServiceResponse(BaseModel):
+    """
+    رد عام لـ GET /services/{id} (بلا مصادقة) — نسخة مُقلَّمة من
+    MarketplaceServiceResponse تستبعد الحقول التقنية/الداخلية الحساسة
+    (database_schema, api_blueprint, frontend_template_url, default_config,
+    tenant_id, created_by) بقرار من §14 بجلسة batch2-audit-security.
+    """
+    id: int = Field(description="معرف الخدمة")
+    name: str = Field(description="اسم الخدمة")
+    description: Optional[str] = Field(default=None, description="وصف الخدمة")
+    service_type: ServiceType = Field(description="نوع الخدمة")
+    thumbnail_url: Optional[str] = Field(default=None, description="رابط الصورة المصغرة")
+    demo_url: Optional[str] = Field(default=None, description="رابط العرض التوضيحي")
+    documentation_url: Optional[str] = Field(default=None, description="رابط التوثيق")
+    requires_modules: List[str] = Field(default=[], description="الوحدات المطلوبة")
+    min_sovereign_rank: Optional[str] = Field(default=None, description="الرتبة السيادية الدنيا")
+    base_price_mrusdt: Decimal = Field(default=Decimal('0.0'), description="السعر الأساسي")
+    subscription_price_basic_mrusdt: Decimal = Field(default=Decimal('0.0'), description="سعر الاشتراك الأساسي")
+    subscription_price_pro_mrusdt: Decimal = Field(default=Decimal('0.0'), description="سعر الاشتراك الاحترافي")
+    subscription_price_enterprise_mrusdt: Decimal = Field(default=Decimal('0.0'), description="سعر الاشتراك المؤسسي")
+    available_addons: List[int] = Field(default=[], description="معرفات الإضافات المتاحة")
+    is_featured: bool = Field(default=False, description="هل الخدمة مميزة")
+    version: str = Field(description="الإصدار الحالي")
+    is_active: bool = Field(description="نشطة")
+    created_at: datetime = Field(description="تاريخ الإنشاء")
+    updated_at: datetime = Field(description="تاريخ التحديث")
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ========== Service Version ==========
 class ServiceVersionCreate(BaseModel):
     version: str = Field(description="رقم الإصدار")
