@@ -109,6 +109,7 @@ class ManufacturingRepository:
     async def update_batch_status(
         self,
         batch_id: int,
+        tenant_id: int,
         status: ProductionStatus,
         produced_quantity: Optional[int] = None,
         notes: Optional[str] = None
@@ -118,9 +119,16 @@ class ManufacturingRepository:
             values["produced_quantity"] = produced_quantity
         if notes is not None:
             values["quality_control_notes"] = notes
-        await self.db.execute(update(ProductionBatch).where(ProductionBatch.id == batch_id).values(**values))  # type: ignore
+        await self.db.execute(
+            update(ProductionBatch)
+            .where(ProductionBatch.id == batch_id)
+            .where(ProductionBatch.product_blueprint_id.in_(
+                select(ProductBlueprint.id).where(ProductBlueprint.tenant_id == tenant_id)  # type: ignore
+            ))
+            .values(**values)  # type: ignore
+        )
         await self.db.flush()
-        return await self.get_batch(batch_id, 1)  # tenant_id سيتم تمريره من Service
+        return await self.get_batch(batch_id, tenant_id)
 
     # ============================================================
     # المنتجات الذكية (Smart Product Items)
@@ -282,9 +290,21 @@ class ManufacturingRepository:
         )
         return list(result.scalars().all())  # ✅ تحويل إلى List
 
-    async def schedule_maintenance(self, log_id: int, scheduled_at: datetime) -> PredictiveMaintenanceLog:
+    async def get_predictive_log(self, log_id: int, tenant_id: int) -> Optional[PredictiveMaintenanceLog]:
+        result = await self.db.execute(
+            select(PredictiveMaintenanceLog).where(
+                PredictiveMaintenanceLog.id == log_id,  # type: ignore
+                PredictiveMaintenanceLog.tenant_id == tenant_id  # type: ignore
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def schedule_maintenance(self, log_id: int, tenant_id: int, scheduled_at: datetime) -> PredictiveMaintenanceLog:
         await self.db.execute(
-            update(PredictiveMaintenanceLog).where(PredictiveMaintenanceLog.id == log_id).values(  # type: ignore
+            update(PredictiveMaintenanceLog).where(
+                PredictiveMaintenanceLog.id == log_id,  # type: ignore
+                PredictiveMaintenanceLog.tenant_id == tenant_id  # type: ignore
+            ).values(
                 status="SCHEDULED", maintenance_scheduled_at=scheduled_at
             )
         )
@@ -322,8 +342,8 @@ class ManufacturingRepository:
         )
         return list(result.scalars().all())  # ✅ تحويل إلى List
 
-    async def update_spare_part_stock(self, part_id: int, quantity_delta: int) -> SparePart:
-        part = await self.get_spare_part(part_id, 1)  # tenant_id سيتم تمريره من Service
+    async def update_spare_part_stock(self, part_id: int, tenant_id: int, quantity_delta: int) -> SparePart:
+        part = await self.get_spare_part(part_id, tenant_id)
         if part:
             part.stock_quantity += quantity_delta  # type: ignore
             if quantity_delta > 0:

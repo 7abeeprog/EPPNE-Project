@@ -5,11 +5,10 @@ from typing import Optional, List, cast
 from datetime import datetime
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user, get_current_tenant, get_current_superuser
+from app.api.deps import get_current_active_user, get_current_superuser
 from app.domains.identity.models import User
 from app.domains.manufacturing.service import ManufacturingService
 from app.domains.manufacturing.schemas import *
-from app.domains.academy.models import AcademyTenant
 from app.core.rate_limiter import rate_limit
 
 router = APIRouter(prefix="/manufacturing", tags=["Sovereign Manufacturing"])
@@ -23,14 +22,13 @@ router = APIRouter(prefix="/manufacturing", tags=["Sovereign Manufacturing"])
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_facility(
     data: ManufacturingFacilityCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     facility = await service.create_facility(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump()
     )
     return facility
@@ -41,13 +39,12 @@ async def create_facility(
 async def list_facilities(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     facilities = await service.list_facilities(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         skip=skip,
         limit=limit
     )
@@ -58,14 +55,13 @@ async def list_facilities(
 @rate_limit(max_requests=30, window_seconds=60)
 async def get_facility(
     facility_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     facility = await service.get_facility(
         facility_id=facility_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=cast(int, current_user.tenant_id)
     )
     return facility
 
@@ -79,14 +75,13 @@ async def get_facility(
 async def add_production_line(
     facility_id: int,
     data: ProductionLineCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     line = await service.add_production_line(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         facility_id=facility_id,
         data=data.model_dump()
     )
@@ -101,14 +96,13 @@ async def add_production_line(
 @rate_limit(max_requests=15, window_seconds=60)
 async def create_blueprint(
     data: ProductBlueprintCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     bp = await service.create_blueprint(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump()
     )
     return bp
@@ -122,14 +116,13 @@ async def create_blueprint(
 @rate_limit(max_requests=15, window_seconds=60)
 async def create_batch(
     data: ProductionBatchCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     batch = await service.create_batch(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump()
     )
     return batch
@@ -140,14 +133,13 @@ async def create_batch(
 async def start_production(
     batch_id: int,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     result = await service.start_production(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         batch_id=batch_id,
         idempotency_key=idempotency_key
     )
@@ -162,14 +154,13 @@ async def start_production(
 @rate_limit(max_requests=15, window_seconds=60)
 async def register_raw_material(
     data: RawMaterialBatchCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     batch = await service.register_raw_material_batch(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump()
     )
     return batch
@@ -180,13 +171,12 @@ async def register_raw_material(
 async def list_raw_materials(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     materials = await service.list_raw_materials(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         skip=skip,
         limit=limit
     )
@@ -199,14 +189,13 @@ async def consume_raw_material(
     batch_id: int,
     data: MaterialConsumptionCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     log = await service.consume_raw_material(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         batch_id=batch_id,
         raw_material_batch_id=data.raw_material_batch_id,
         quantity=data.quantity_used_kg,
@@ -225,7 +214,6 @@ async def create_digital_twin(
     product_item_id: int,
     batch_id: int,
     production_line_id: Optional[int] = None,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -234,7 +222,7 @@ async def create_digital_twin(
         product_item_id=product_item_id,
         batch_id=batch_id,
         production_line_id=production_line_id,
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         user_id=cast(int, current_user.id)
     )
     return twin
@@ -244,14 +232,13 @@ async def create_digital_twin(
 @rate_limit(max_requests=30, window_seconds=60)
 async def get_digital_twin(
     product_item_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     twin = await service.get_digital_twin(
         product_item_id=product_item_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=cast(int, current_user.tenant_id)
     )
     if not twin:
         raise HTTPException(status_code=404, detail="Digital twin not found")
@@ -266,14 +253,13 @@ async def get_digital_twin(
 @rate_limit(max_requests=10, window_seconds=60)
 async def issue_quality_certificate(
     data: QualityCertificateCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     cert = await service.issue_quality_certificate(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump()
     )
     return cert
@@ -284,7 +270,6 @@ async def issue_quality_certificate(
 async def get_entity_certificates(
     entity_type: str,
     entity_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -292,7 +277,7 @@ async def get_entity_certificates(
     certs = await service.get_entity_certificates(
         entity_type=entity_type,
         entity_id=entity_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=cast(int, current_user.tenant_id)
     )
     return certs
 
@@ -305,14 +290,13 @@ async def get_entity_certificates(
 @rate_limit(max_requests=30, window_seconds=60)
 async def analyze_maintenance(
     data: PredictiveMaintenanceLogCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     log = await service.analyze_and_schedule_maintenance(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         production_line_id=data.production_line_id,
         sensor_data=data.sensor_data
     )
@@ -323,14 +307,13 @@ async def analyze_maintenance(
 @rate_limit(max_requests=30, window_seconds=60)
 async def get_pending_maintenance(
     line_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     logs = await service.get_pending_maintenance(
         production_line_id=line_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=cast(int, current_user.tenant_id)
     )
     return logs
 
@@ -340,13 +323,13 @@ async def get_pending_maintenance(
 async def schedule_maintenance(
     log_id: int,
     scheduled_at: datetime,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     log = await service.schedule_maintenance(
         log_id=log_id,
+        tenant_id=cast(int, current_user.tenant_id),
         scheduled_at=scheduled_at
     )
     return {"message": "Maintenance scheduled", "scheduled_at": log.maintenance_scheduled_at}
@@ -360,14 +343,13 @@ async def schedule_maintenance(
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_spare_part(
     data: SparePartCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     part = await service.create_spare_part(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump()
     )
     return part
@@ -378,7 +360,6 @@ async def create_spare_part(
 async def restock_spare_part(
     part_id: int,
     data: SparePartRestock,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -387,7 +368,7 @@ async def restock_spare_part(
         part_id=part_id,
         quantity_added=data.quantity_added,
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id)
+        tenant_id=cast(int, current_user.tenant_id)
     )
     return part
 
@@ -397,13 +378,12 @@ async def restock_spare_part(
 async def list_spare_parts(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = ManufacturingService(db)
     parts = await service.list_spare_parts(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         skip=skip,
         limit=limit
     )

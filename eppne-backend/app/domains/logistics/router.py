@@ -7,11 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List, cast
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user, get_current_tenant, get_current_superuser
+from app.api.deps import get_current_active_user
 from app.domains.identity.models import User
 from app.domains.logistics.service import LogisticsService
 from app.domains.logistics.schemas import *
-from app.domains.academy.models import AcademyTenant
 from app.core.rate_limiter import rate_limit
 
 router = APIRouter(prefix="/logistics", tags=["Sovereign Logistics & Warehousing"])
@@ -25,14 +24,13 @@ router = APIRouter(prefix="/logistics", tags=["Sovereign Logistics & Warehousing
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_warehouse(
     data: WarehouseCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     warehouse = await service.create_warehouse(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump()
     )
     return warehouse
@@ -45,13 +43,12 @@ async def list_warehouses(
     is_active: Optional[bool] = Query(None, description="هل المخزن نشط؟"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     warehouses = await service.list_warehouses(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         warehouse_type=warehouse_type,
         is_active=is_active,
         skip=skip,
@@ -64,14 +61,13 @@ async def list_warehouses(
 @rate_limit(max_requests=50, window_seconds=60)
 async def get_warehouse(
     warehouse_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     warehouse = await service.get_warehouse(
         warehouse_id=warehouse_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=cast(int, current_user.tenant_id)
     )
     if not warehouse:
         raise HTTPException(status_code=404, detail="Warehouse not found")
@@ -83,14 +79,13 @@ async def get_warehouse(
 async def update_warehouse(
     warehouse_id: int,
     data: WarehouseUpdate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     warehouse = await service.update_warehouse(
         warehouse_id=warehouse_id,
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump(exclude_unset=True)
     )
     return warehouse
@@ -100,14 +95,13 @@ async def update_warehouse(
 @rate_limit(max_requests=5, window_seconds=60)
 async def delete_warehouse(
     warehouse_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     await service.delete_warehouse(
         warehouse_id=warehouse_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=cast(int, current_user.tenant_id)
     )
     return {"message": "Warehouse deleted"}
 
@@ -117,13 +111,12 @@ async def delete_warehouse(
 async def create_warehouse_zone(
     warehouse_id: int,
     data: WarehouseZoneCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     zone = await service.create_warehouse_zone(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         warehouse_id=warehouse_id,
         data=data.model_dump()
     )
@@ -139,14 +132,13 @@ async def create_warehouse_zone(
 async def receive_inventory(
     data: InventoryReceive,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     transaction = await service.receive_inventory(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
@@ -158,14 +150,13 @@ async def receive_inventory(
 async def issue_inventory(
     data: InventoryIssue,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     transaction = await service.issue_inventory(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
@@ -178,14 +169,13 @@ async def adjust_inventory(
     inventory_item_id: int,
     data: InventoryAdjust,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     transaction = await service.adjust_inventory(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         inventory_item_id=inventory_item_id,
         new_quantity=data.new_quantity,
         note=data.note,
@@ -202,13 +192,12 @@ async def list_inventory(
     product_category: Optional[str] = Query(None, description="تصنيف المنتج"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     items = await service.list_inventory(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         warehouse_id=warehouse_id,
         status=status,
         product_category=product_category,
@@ -222,13 +211,12 @@ async def list_inventory(
 @rate_limit(max_requests=20, window_seconds=60)
 async def get_low_stock(
     warehouse_id: Optional[int] = Query(None, description="معرف المخزن"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     items = await service.get_low_stock_items(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         warehouse_id=warehouse_id
     )
     return items
@@ -237,12 +225,11 @@ async def get_low_stock(
 @router.get("/inventory/expired", response_model=List[InventoryItemResponse])
 @rate_limit(max_requests=20, window_seconds=60)
 async def get_expired(
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
-    items = await service.get_expired_items(tenant_id=cast(int, tenant.id))
+    items = await service.get_expired_items(tenant_id=cast(int, current_user.tenant_id))
     return items
 
 
@@ -250,14 +237,13 @@ async def get_expired(
 @rate_limit(max_requests=50, window_seconds=60)
 async def get_inventory_item(
     item_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     item = await service.get_inventory_item(
         inventory_item_id=item_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=cast(int, current_user.tenant_id)
     )
     if not item:
         raise HTTPException(status_code=404, detail="Inventory item not found")
@@ -270,13 +256,12 @@ async def get_inventory_transactions(
     item_id: int,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     transactions = await service.get_inventory_transactions(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         inventory_item_id=item_id,
         skip=skip,
         limit=limit
@@ -292,14 +277,13 @@ async def get_inventory_transactions(
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_equipment(
     data: EquipmentCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     equipment = await service.create_equipment(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump()
     )
     return equipment
@@ -313,13 +297,12 @@ async def list_equipment(
     warehouse_id: Optional[int] = Query(None, description="معرف المخزن"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     equipment = await service.list_equipment(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         equipment_type=equipment_type,
         status=status,
         warehouse_id=warehouse_id,
@@ -333,14 +316,13 @@ async def list_equipment(
 @rate_limit(max_requests=50, window_seconds=60)
 async def get_equipment(
     equipment_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     equip = await service.get_equipment(
         equipment_id=equipment_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=cast(int, current_user.tenant_id)
     )
     if not equip:
         raise HTTPException(status_code=404, detail="Equipment not found")
@@ -352,14 +334,13 @@ async def get_equipment(
 async def update_equipment(
     equipment_id: int,
     data: EquipmentUpdate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     updated = await service.update_equipment(
         equipment_id=equipment_id,
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump(exclude_unset=True)
     )
     return updated
@@ -370,13 +351,12 @@ async def update_equipment(
 async def create_maintenance(
     equipment_id: int,
     data: EquipmentMaintenanceCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     maintenance = await service.create_equipment_maintenance(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         equipment_id=equipment_id,
         data=data.model_dump()
     )
@@ -393,14 +373,13 @@ async def generate_forecast(
     product_id: int = Query(..., description="معرف المنتج"),
     period: str = Query("MONTHLY", description="فترة التنبؤ"),
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     forecast = await service.generate_forecast(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         product_id=product_id,
         period=period,
         idempotency_key=idempotency_key
@@ -415,13 +394,12 @@ async def list_forecasts(
     period: Optional[str] = Query(None, description="فترة التنبؤ"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
     forecasts = await service.list_forecasts(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         product_id=product_id,
         period=period,
         skip=skip,
@@ -437,10 +415,9 @@ async def list_forecasts(
 @router.get("/stats", response_model=LogisticsStatsResponse)
 @rate_limit(max_requests=20, window_seconds=60)
 async def get_logistics_stats(
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LogisticsService(db)
-    stats = await service.get_logistics_stats(tenant_id=cast(int, tenant.id))
+    stats = await service.get_logistics_stats(tenant_id=cast(int, current_user.tenant_id))
     return stats

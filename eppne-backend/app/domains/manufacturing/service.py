@@ -104,6 +104,7 @@ class ManufacturingService:
         async with self.db.begin_nested():
             facility = await self.repo.create_facility(
                 tenant_id=tenant_id,
+                entity_id=data["entity_id"],
                 manager_id=user_id,
                 name=sanitized_name,
                 facility_type=data["facility_type"],
@@ -352,6 +353,7 @@ class ManufacturingService:
             await self.repo.bulk_create_items(items)
             await self.repo.update_batch_status(
                 cast(int, batch.id),
+                tenant_id,
                 ProductionStatus.QC_TESTING,
                 produced_quantity=len(items),
                 notes="Production completed, awaiting QC"
@@ -699,6 +701,7 @@ class ManufacturingService:
             if ai_prediction.get("failure_probability", 0) > 0.8:
                 log = await self.repo.schedule_maintenance(
                     cast(int, log.id),
+                    tenant_id,
                     datetime.utcnow() + timedelta(days=2)
                 )
                 await self.event_bus.publish("manufacturing.maintenance.urgent", {
@@ -732,8 +735,13 @@ class ManufacturingService:
     async def get_pending_maintenance(self, production_line_id: int, tenant_id: int) -> List[PredictiveMaintenanceLog]:
         return await self.repo.get_pending_maintenance(production_line_id, tenant_id)
 
-    async def schedule_maintenance(self, log_id: int, scheduled_at: datetime) -> PredictiveMaintenanceLog:
-        return await self.repo.schedule_maintenance(log_id, scheduled_at)
+    async def schedule_maintenance(self, log_id: int, tenant_id: int, scheduled_at: datetime) -> PredictiveMaintenanceLog:
+        log = await self.repo.get_predictive_log(log_id, tenant_id)
+        if not log:
+            raise NotFoundError("Maintenance log not found")
+        result = await self.repo.schedule_maintenance(log_id, tenant_id, scheduled_at)
+        await self.db.commit()
+        return result
 
     # ============================================================
     # 11. قطع الغيار (Spare Parts)
@@ -790,7 +798,7 @@ class ManufacturingService:
             raise NotFoundError("Spare part not found")
 
         async with self.db.begin_nested():
-            updated = await self.repo.update_spare_part_stock(part_id, quantity_added)
+            updated = await self.repo.update_spare_part_stock(part_id, tenant_id, quantity_added)
 
         await self.db.commit()
 
