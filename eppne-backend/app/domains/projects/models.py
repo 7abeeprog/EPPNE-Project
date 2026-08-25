@@ -1,8 +1,9 @@
 # app/domains/projects/models.py
 from sqlalchemy import (
     Column, Integer, String, ForeignKey, Text, Boolean,
-    Numeric, DateTime, Enum as SQLEnum, UniqueConstraint, Index
+    Numeric, DateTime, Float, Enum as SQLEnum, UniqueConstraint, Index
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -61,9 +62,27 @@ class Project(Base):
     carbon_impact_scope = Column(SQLEnum(CarbonImpactScope), nullable=True)
 
     country = Column(String(100), nullable=True)
+    city = Column(String(100), nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    address = Column(Text, nullable=True)
     funding_goal_mrusdt = Column(Numeric(30, 8), nullable=False)
     current_funding_mrusdt = Column(Numeric(30, 8), default=0)
+    min_investment_mrusdt = Column(Numeric(30, 8), default=0)
     currency = Column(String(20), default="MR_USDT")
+    expected_roi_percentage = Column(Numeric(10, 4), nullable=True)
+    expected_irr_percentage = Column(Numeric(10, 4), nullable=True)
+    payback_period_years = Column(Integer, nullable=True)
+    projected_cash_flows = Column(JSONB, nullable=True)
+    estimated_carbon_emissions_tonnes = Column(Numeric(20, 4), nullable=True)
+    estimated_carbon_offset_tonnes = Column(Numeric(20, 4), nullable=True)
+    allow_in_kind_contributions = Column(Boolean, default=True)
+    allow_fractional_ownership = Column(Boolean, default=False)
+    shares_total = Column(Numeric(30, 8), nullable=True)
+    share_price_mrusdt = Column(Numeric(30, 8), nullable=True)
+    cover_image_url = Column(String(500), nullable=True)
+    gallery_urls = Column(JSONB, default=list)
+    documents_urls = Column(JSONB, default=list)
     is_published = Column(Boolean, default=False)
 
     # العلاقات
@@ -113,6 +132,19 @@ class Contribution(Base):
     contribution_type = Column(SQLEnum(ContributionType), nullable=False)
     equivalent_value_mrusdt = Column(Numeric(30, 8), nullable=False)
     amount_mrusdt = Column(Numeric(30, 8), nullable=True)
+    # land / facility
+    land_area_sqm = Column(Numeric(20, 4), nullable=True)
+    land_address = Column(Text, nullable=True)
+    land_title_deed_hash = Column(String(255), nullable=True)
+    # labor hours
+    labor_hours = Column(Numeric(10, 2), nullable=True)
+    labor_description = Column(Text, nullable=True)
+    # equipment
+    equipment_description = Column(Text, nullable=True)
+    equipment_estimated_value = Column(Numeric(30, 8), nullable=True)
+    # consulting
+    consulting_hours = Column(Numeric(10, 2), nullable=True)
+    consulting_expertise = Column(String(255), nullable=True)
     status = Column(String(50), default="PENDING")
 
     # 🔥 Idempotency Key (لمنع التكرار)
@@ -137,6 +169,7 @@ class ProjectUpdate(Base):
 
     title = Column(String(255), nullable=False)
     content = Column(Text, nullable=False)
+    media_urls = Column(JSONB, default=list)
 
     project = relationship("Project", back_populates="updates")
     author = relationship("User", foreign_keys=[author_id])

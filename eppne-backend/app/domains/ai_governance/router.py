@@ -198,7 +198,7 @@ async def check_and_consume(
             request_tokens=request_tokens,
             completion_tokens=completion_tokens
         )
-        return {"allowed": result["allowed"], "idempotent": result.get("idempotent", False)}
+        return {"allowed": result}
     except Exception as e:
         retry_after = getattr(e, "retry_after", None)
         return {"allowed": False, "error": str(e), "retry_after": retry_after}

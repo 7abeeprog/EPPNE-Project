@@ -348,7 +348,6 @@ class CommerceService:
 
         pr_data = {
             "order_id": order_id,
-            "tenant_id": self.tenant_id,
             "payment_method": payment_method,
             "amount": order.total_amount_mrusdt,
             "currency": "MR_USDT",

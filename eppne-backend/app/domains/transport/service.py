@@ -14,6 +14,7 @@ from typing import Optional, Dict, Any, List, cast
 
 from app.domains.transport.repository import TransportRepository
 from app.domains.finance.service import FinanceService
+from app.domains.invoicing.service import InvoicingService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.ai_agents.service import AIAgentsService
@@ -62,7 +63,7 @@ class TransportService:
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "transport"):
         saas_service = SaaSSubscriptionService(self.db, tenant_id)
-        has_access = await saas_service.can_access_service(tenant_id, feature)
+        has_access = await saas_service.can_access_service(feature)
         if not has_access:
             raise PermissionDeniedError("Transport feature is not included in your current plan.")
         return None, {}
@@ -326,6 +327,7 @@ class TransportService:
         driver = await self._get_user_by_id(cast(int, trip.driver_id), tenant_id)  # type: ignore
 
         finance = FinanceService(self.db, tenant_id)
+        invoicing = InvoicingService(self.db, tenant_id)
         async with self.db.begin_nested():
             try:
                 tx_hash = await finance.transfer(
@@ -349,14 +351,6 @@ class TransportService:
                 fare_paid_mrusdt=cast(Decimal, fare),
                 status="CONFIRMED",
                 idempotency_key=idempotency_key
-            )
-
-            await finance.create_invoice(  # type: ignore[attr-defined]
-                entity_id=tenant_id,
-                user_id=passenger_id,
-                amount=cast(Decimal, fare),
-                description=f"Trip booking #{trip.id} - {trip.route_id}",
-                due_date=datetime.utcnow() + timedelta(days=3)
             )
 
             await self._register_affiliate_commission(passenger_id, tenant_id, cast(Decimal, fare))
@@ -383,6 +377,17 @@ class TransportService:
             )
 
         await self.db.commit()
+
+        try:
+            await invoicing.create_invoice(
+                entity_id=tenant_id,
+                user_id=passenger_id,
+                amount=cast(Decimal, fare),
+                description=f"Trip booking #{trip.id} - {trip.route_id}",
+                due_date=datetime.utcnow() + timedelta(days=3)
+            )
+        except Exception as e:
+            logger.error(f"Invoice creation failed for trip booking {booking.id}: {e}")
 
         # تخزين معرف الحجز فقط
         if idempotency_key:
@@ -507,6 +512,7 @@ class TransportService:
         driver = await self._get_user_by_id(cast(int, trip.driver_id), tenant_id)  # type: ignore
 
         finance = FinanceService(self.db, tenant_id)
+        invoicing = InvoicingService(self.db, tenant_id)
         async with self.db.begin_nested():
             try:
                 tx_hash = await finance.transfer(
@@ -526,14 +532,6 @@ class TransportService:
                 )
             )
 
-            await finance.create_invoice(  # type: ignore[attr-defined]
-                entity_id=tenant_id,
-                user_id=payer_id,
-                amount=cast(Decimal, task.delivery_fee_mrusdt),  # type: ignore
-                description=f"Delivery task #{task.id}",
-                due_date=datetime.utcnow() + timedelta(days=3)
-            )
-
             await self._register_affiliate_commission(payer_id, tenant_id, cast(Decimal, task.delivery_fee_mrusdt))  # type: ignore
 
             await audit_log(  # type: ignore[call-arg]
@@ -551,6 +549,17 @@ class TransportService:
             })
 
         await self.db.commit()
+
+        try:
+            await invoicing.create_invoice(
+                entity_id=tenant_id,
+                user_id=payer_id,
+                amount=cast(Decimal, task.delivery_fee_mrusdt),  # type: ignore
+                description=f"Delivery task #{task.id}",
+                due_date=datetime.utcnow() + timedelta(days=3)
+            )
+        except Exception as e:
+            logger.error(f"Invoice creation failed for delivery task {task.id}: {e}")
 
         # تخزين معرف المهمة فقط
         if idempotency_key:

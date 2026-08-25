@@ -47,7 +47,7 @@ async def create_invoice(
     """
     إنشاء فاتورة جديدة.
     """
-    service = InvoicingService(db)
+    service = InvoicingService(db, data.tenant_id)
 
     try:
         invoice = await service.create_invoice(
@@ -87,10 +87,9 @@ async def get_invoice(
     """
     جلب تفاصيل فاتورة محددة.
     """
-    service = InvoicingService(db)
-
     try:
         tenant_id = None if getattr(current_user, "system_role", "USER") in ["SUPER_ADMIN", "EXECUTIVE_DIRECTOR"] else cast(int, current_user.tenant_id)
+        service = InvoicingService(db, tenant_id)
         invoice = await service.get_invoice(invoice_id, tenant_id)
 
         return InvoiceResponse.model_validate(invoice)
@@ -122,8 +121,6 @@ async def list_invoices(
     """
     جلب قائمة الفواتير مع خيارات التصفية.
     """
-    service = InvoicingService(db)
-
     if tenant_id is None:
         if getattr(current_user, "system_role", "USER") in ["SUPER_ADMIN", "EXECUTIVE_DIRECTOR"]:
             tenant_id = None
@@ -133,6 +130,8 @@ async def list_invoices(
         if getattr(current_user, "system_role", "USER") not in ["SUPER_ADMIN", "EXECUTIVE_DIRECTOR"]:
             if tenant_id != cast(int, current_user.tenant_id):
                 raise HTTPException(status_code=403, detail="Access denied to this tenant")
+
+    service = InvoicingService(db, tenant_id)
 
     if tenant_id is None:
         from sqlalchemy import select
@@ -148,7 +147,6 @@ async def list_invoices(
         invoices = list(result.scalars().all())
     else:
         invoices = await service.list_invoices(
-            tenant_id=tenant_id,
             user_id=user_id,
             status=status,
             invoice_type=invoice_type.value if invoice_type else None,
@@ -182,7 +180,7 @@ async def update_invoice_status(
     """
     تحديث حالة الفاتورة.
     """
-    service = InvoicingService(db)
+    service = InvoicingService(db, cast(int, current_user.tenant_id))
 
     try:
         invoice = await service.update_invoice_status(
@@ -221,7 +219,7 @@ async def mark_invoice_as_paid(
     """
     تحديد الفاتورة كمدفوعة.
     """
-    service = InvoicingService(db)
+    service = InvoicingService(db, cast(int, current_user.tenant_id))
 
     try:
         invoice = await service.mark_as_paid(
@@ -259,7 +257,7 @@ async def cancel_invoice(
     """
     إلغاء الفاتورة.
     """
-    service = InvoicingService(db)
+    service = InvoicingService(db, cast(int, current_user.tenant_id))
 
     try:
         invoice = await service.cancel_invoice(
@@ -294,8 +292,6 @@ async def get_invoice_stats(
     """
     جلب إحصائيات الفواتير.
     """
-    service = InvoicingService(db)
-
     if tenant_id is None:
         tenant_id = cast(int, current_user.tenant_id)
     else:
@@ -303,8 +299,10 @@ async def get_invoice_stats(
             if tenant_id != cast(int, current_user.tenant_id):
                 raise HTTPException(status_code=403, detail="Access denied to this tenant")
 
+    service = InvoicingService(db, tenant_id)
+
     try:
-        stats = await service.get_invoice_stats(tenant_id)
+        stats = await service.get_invoice_stats()
         return InvoiceStatsResponse(**stats)
 
     except Exception as e:

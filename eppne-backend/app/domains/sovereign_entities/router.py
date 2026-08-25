@@ -26,7 +26,6 @@ async def create_entity(
     service = SovereignEntitiesService(db, tenant_id)
     user_id = cast(int, current_user.id)
     entity_data = data.model_dump()
-    entity_data["tenant_id"] = tenant_id
     entity = await service.create_entity(user_id, entity_data)
     await service.add_representative(cast(int, entity.id), user_id, {
         "user_id": user_id,

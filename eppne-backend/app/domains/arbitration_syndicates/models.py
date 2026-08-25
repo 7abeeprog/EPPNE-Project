@@ -51,6 +51,7 @@ class ArbitrationCase(Base):
 
     final_verdict = Column(Text, nullable=True)
     enforcement_tx_hash = Column(String(100), nullable=True)  # هاش تنفيذ الحكم
+    idempotency_key = Column(String(255), unique=True, nullable=True, index=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

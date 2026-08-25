@@ -3,9 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func, and_
 from decimal import Decimal
 from typing import List, Optional, cast
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
-from app.domains.ai_governance.models import AgentQuota, AgentUsageLog, AgentRateLimit, AgentAuditLog
+from app.domains.ai_governance.models import AgentQuota, AgentUsageLog, AgentRateLimit, AgentAuditLog, UsagePeriod
 from app.domains.ai_governance.schemas import AgentAuditLogResponse
 from app.domains.ai_agents.models import AIAgent
 from app.core.pagination import PaginatedResponse
@@ -17,6 +17,13 @@ class AIGovernanceRepository:
         self.db = db
 
     # ========== Quotas (مع tenant_id) ==========
+    _PERIOD_TO_TIMEDELTA = {
+        UsagePeriod.DAILY: timedelta(days=1),
+        UsagePeriod.WEEKLY: timedelta(days=7),
+        UsagePeriod.MONTHLY: timedelta(days=30),
+        UsagePeriod.YEARLY: timedelta(days=365),
+    }
+
     async def create_or_update_quota(self, tenant_id: int, agent_id: int, **kwargs) -> AgentQuota:
         result = await self.db.execute(
             select(AgentQuota).where(
@@ -24,11 +31,15 @@ class AIGovernanceRepository:
             )
         )
         quota = result.scalar_one_or_none()
-        
+
         if quota:
             for key, value in kwargs.items():
                 setattr(quota, key, value)
         else:
+            if "reset_at" not in kwargs:
+                period = kwargs.get("period")
+                delta = self._PERIOD_TO_TIMEDELTA.get(period, timedelta(days=30))
+                kwargs["reset_at"] = datetime.now(timezone.utc) + delta
             quota = AgentQuota(tenant_id=tenant_id, agent_id=agent_id, **kwargs)
             self.db.add(quota)
 

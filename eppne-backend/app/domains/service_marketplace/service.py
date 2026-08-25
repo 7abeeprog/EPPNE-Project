@@ -67,7 +67,7 @@ class ServiceMarketplaceService:
     async def _check_saas_limits(self, tenant_id: int):
         """التحقق من صلاحية Service Marketplace في خطة الاشتراك."""
         saas_service = SaaSSubscriptionService(self.db, tenant_id)
-        has_access = await saas_service.can_access_service(tenant_id, "service_marketplace")
+        has_access = await saas_service.can_access_service("service_marketplace")
         if not has_access:
             raise PermissionDeniedError("Service Marketplace feature is not included in your current plan.")
         return None, {}

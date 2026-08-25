@@ -19,6 +19,12 @@ class AIGovernanceService:
         self.tenant_id = tenant_id
         self.repo = AIGovernanceRepository(db)
 
+    async def _check_agent_ownership(self, agent_id: int, user_id: int) -> bool:
+        agent = await self.repo.get_agent(agent_id, self.tenant_id)
+        if not agent:
+            return False
+        return cast(int, agent.owner_id) == user_id
+
     # ============================================================
     # 1. إدارة الحصص (Quotas)
     # ============================================================

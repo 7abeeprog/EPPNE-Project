@@ -56,7 +56,7 @@ class TendersAuctionsService:
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "tenders_auctions"):
         saas_service = SaaSSubscriptionService(self.db, tenant_id)
-        has_access = await saas_service.can_access_service(tenant_id, feature)
+        has_access = await saas_service.can_access_service(feature)
         if not has_access:
             raise PermissionDeniedError("Tenders & Auctions feature is not included in your current plan.")
         return None, {}
