@@ -5,7 +5,7 @@ from typing import Optional, List, cast
 from datetime import datetime
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user, get_current_superuser
+from app.api.deps import get_current_active_user, get_current_superuser, require_admin_or_above
 from app.domains.identity.models import User
 from app.domains.saas.service import SaaSControlService
 from app.domains.saas.schemas import *
@@ -106,7 +106,7 @@ async def get_my_subscriptions(
 @rate_limit(max_requests=5, window_seconds=60)
 async def subscribe_to_plan(
     plan_id: int = Path(..., description="معرف الخطة"),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_admin_or_above),
     db: AsyncSession = Depends(get_db),
 ):
     tenant_id = cast(int, current_user.tenant_id)
@@ -118,7 +118,7 @@ async def subscribe_to_plan(
 @router.put("/subscriptions/{subscription_id}/cancel", response_model=TenantSubscriptionResponse)
 async def cancel_subscription(
     subscription_id: int = Path(..., description="معرف الاشتراك"),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_admin_or_above),
     db: AsyncSession = Depends(get_db),
 ):
     tenant_id = cast(int, current_user.tenant_id)
@@ -195,7 +195,7 @@ async def get_invoice(
 @rate_limit(max_requests=5, window_seconds=60)
 async def pay_invoice(
     invoice_id: int = Path(..., description="معرف الفاتورة"),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_admin_or_above),
     db: AsyncSession = Depends(get_db),
 ):
     tenant_id = cast(int, current_user.tenant_id)

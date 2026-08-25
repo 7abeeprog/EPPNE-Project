@@ -5,7 +5,7 @@ from typing import Optional, List, cast
 from datetime import datetime
 
 from app.core.database import get_db
-from app.api.deps import get_current_active_user, get_current_superuser
+from app.api.deps import get_current_active_user, get_current_superuser, require_admin_or_above
 from app.domains.identity.models import User
 from app.domains.command.service import CommandService
 from app.domains.command.schemas import *
@@ -128,7 +128,7 @@ async def list_alerts(
 @rate_limit(max_requests=10, window_seconds=60)
 async def acknowledge_alert(
     alert_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_admin_or_above),
     db: AsyncSession = Depends(get_db)
 ):
     """تأكيد استلام تنبيه"""
@@ -145,7 +145,7 @@ async def acknowledge_alert(
 @rate_limit(max_requests=10, window_seconds=60)
 async def resolve_alert(
     alert_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_admin_or_above),
     db: AsyncSession = Depends(get_db)
 ):
     """حل تنبيه"""
@@ -203,7 +203,7 @@ async def list_reports(
 @rate_limit(max_requests=20, window_seconds=60)
 async def get_report(
     report_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_admin_or_above),
     db: AsyncSession = Depends(get_db)
 ):
     """جلب تفاصيل تقرير معين"""
@@ -221,7 +221,7 @@ async def get_report(
 @rate_limit(max_requests=10, window_seconds=60)
 async def delete_report(
     report_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_admin_or_above),
     db: AsyncSession = Depends(get_db)
 ):
     """حذف تقرير"""
@@ -274,7 +274,7 @@ async def generate_recommendations(
 @rate_limit(max_requests=5, window_seconds=60)
 async def apply_recommendation(
     rec_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_admin_or_above),
     db: AsyncSession = Depends(get_db)
 ):
     """تطبيق توصية ذكاء اصطناعي"""
