@@ -3,6 +3,7 @@
 مسارات (Endpoints) قطاع الدعوات وخدمة العملاء – النسخة الذهبية
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks, Header, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List, cast
 import uuid
@@ -27,19 +28,22 @@ router = APIRouter(prefix="/invitations", tags=["Sovereign CRM & Invitations"])
 async def create_invitation(
     data: InvitationCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     invitation = await service.create_invitation(
         sender_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump(),
         idempotency_key=idempotency_key,
         analyze_target=True
     )
-    invite_url = f"https://{tenant.domain}/invite/{invitation.id}"
+    tenant_result = await db.execute(select(AcademyTenant).where(AcademyTenant.id == tenant_id))
+    tenant_obj = tenant_result.scalar_one_or_none()
+    domain = tenant_obj.domain if tenant_obj else "eppne.com"
+    invite_url = f"https://{domain}/invite/{invitation.id}"
     return {
         **invitation.__dict__,
         "invitation_url": invite_url
@@ -53,13 +57,13 @@ async def list_invitations(
     campaign_type: Optional[CampaignType] = Query(None, description="نوع الحملة"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     invitations = await service.list_invitations(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         status=status,
         campaign_type=campaign_type,
         skip=skip,
@@ -74,14 +78,14 @@ async def get_invitation(
     request: Request,
     invitation_id: int,
     background_tasks: BackgroundTasks,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     invitation = await service.get_invitation(
         invitation_id=invitation_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=tenant_id
     )
     if not invitation:
         raise HTTPException(status_code=404, detail="Invitation not found")
@@ -89,7 +93,7 @@ async def get_invitation(
     background_tasks.add_task(
         service.track_behavior,
         invitation_id,
-        cast(int, tenant.id),
+        tenant_id,
         {
             "ip_address": request.client.host if request.client else None,
             "user_agent": request.headers.get("user-agent"),
@@ -106,14 +110,14 @@ async def get_invitation(
 async def update_invitation(
     invitation_id: int,
     data: InvitationUpdate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     updated = await service.update_invitation(
         invitation_id=invitation_id,
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         user_id=cast(int, current_user.id),
         data=data.model_dump(exclude_unset=True)
     )
@@ -124,14 +128,14 @@ async def update_invitation(
 @rate_limit(max_requests=10, window_seconds=60)
 async def delete_invitation(
     invitation_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     await service.delete_invitation(
         invitation_id=invitation_id,
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         user_id=cast(int, current_user.id)
     )
     return {"message": "Invitation deleted"}
@@ -188,14 +192,14 @@ async def chat_with_ai(
 @rate_limit(max_requests=30, window_seconds=60)
 async def get_invitation_tracking(
     invitation_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     tracking = await service.get_invitation_tracking(
         invitation_id=invitation_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=tenant_id
     )
     return tracking
 
@@ -204,14 +208,14 @@ async def get_invitation_tracking(
 @rate_limit(max_requests=30, window_seconds=60)
 async def get_invitation_conversations(
     invitation_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     conversations = await service.get_invitation_conversations(
         invitation_id=invitation_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=tenant_id
     )
     return conversations
 
@@ -220,14 +224,14 @@ async def get_invitation_conversations(
 @rate_limit(max_requests=20, window_seconds=60)
 async def get_client_insight(
     invitation_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     insight = await service.get_client_insight(
         invitation_id=invitation_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=tenant_id
     )
     if not insight:
         raise HTTPException(status_code=404, detail="Insight not found")
@@ -237,13 +241,13 @@ async def get_client_insight(
 @router.get("/stats", response_model=InvitationStatsResponse)
 @rate_limit(max_requests=20, window_seconds=60)
 async def get_invitation_stats(
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     stats = await service.get_stats(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         user_id=cast(int, current_user.id)
     )
     return stats
@@ -258,14 +262,14 @@ async def get_invitation_stats(
 async def create_lead(
     data: LeadCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     lead = await service.create_lead(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
@@ -279,13 +283,13 @@ async def list_leads(
     source: Optional[LeadSource] = Query(None, description="مصدر العميل المحتمل"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     leads = await service.list_leads(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         status=status,
         source=source,
         skip=skip,
@@ -298,14 +302,14 @@ async def list_leads(
 @rate_limit(max_requests=50, window_seconds=60)
 async def get_lead(
     lead_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     lead = await service.get_lead(
         lead_id=lead_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=tenant_id
     )
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -317,14 +321,14 @@ async def get_lead(
 async def update_lead(
     lead_id: int,
     data: LeadUpdate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     updated = await service.update_lead(
         lead_id=lead_id,
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump(exclude_unset=True)
     )
     return updated
@@ -334,14 +338,14 @@ async def update_lead(
 @rate_limit(max_requests=10, window_seconds=60)
 async def delete_lead(
     lead_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     await service.delete_lead(
         lead_id=lead_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=tenant_id
     )
     return {"message": "Lead deleted"}
 
@@ -352,15 +356,15 @@ async def create_interaction(
     lead_id: int,
     data: InteractionCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     interaction = await service.create_interaction(
         lead_id=lead_id,
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
@@ -372,14 +376,14 @@ async def create_interaction(
 async def get_lead_interactions(
     lead_id: int,
     limit: int = Query(50, ge=1, le=200),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     interactions = await service.get_lead_interactions(
         lead_id=lead_id,
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         limit=limit
     )
     return interactions
@@ -394,14 +398,14 @@ async def get_lead_interactions(
 async def create_campaign(
     data: CampaignCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     campaign = await service.create_campaign(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
@@ -415,13 +419,13 @@ async def list_campaigns(
     campaign_type: Optional[CampaignType] = Query(None, description="نوع الحملة"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     campaigns = await service.list_campaigns(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         status=status,
         campaign_type=campaign_type,
         skip=skip,
@@ -434,14 +438,14 @@ async def list_campaigns(
 @rate_limit(max_requests=50, window_seconds=60)
 async def get_campaign(
     campaign_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     campaign = await service.get_campaign(
         campaign_id=campaign_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=tenant_id
     )
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
@@ -453,14 +457,14 @@ async def get_campaign(
 async def update_campaign(
     campaign_id: int,
     data: CampaignUpdate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     campaign = await service.update_campaign(
         campaign_id=campaign_id,
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         user_id=cast(int, current_user.id),
         data=data.model_dump(exclude_unset=True)
     )
@@ -471,14 +475,14 @@ async def update_campaign(
 @rate_limit(max_requests=10, window_seconds=60)
 async def delete_campaign(
     campaign_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     await service.delete_campaign(
         campaign_id=campaign_id,
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         user_id=cast(int, current_user.id)
     )
     return {"message": "Campaign deleted"}
@@ -488,14 +492,14 @@ async def delete_campaign(
 @rate_limit(max_requests=5, window_seconds=60)
 async def launch_campaign(
     campaign_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     campaign = await service.launch_campaign(
         campaign_id=campaign_id,
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         user_id=cast(int, current_user.id)
     )
     return campaign
@@ -510,14 +514,14 @@ async def launch_campaign(
 async def create_ticket(
     data: TicketCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     ticket = await service.create_ticket(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump(),
         lead_id=data.lead_id,
         idempotency_key=idempotency_key
@@ -532,13 +536,13 @@ async def list_tickets(
     assigned_to: Optional[int] = Query(None, description="معرف المسؤول المعين"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     tickets = await service.list_tickets(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         status=status,
         assigned_to=assigned_to,
         skip=skip,
@@ -551,14 +555,14 @@ async def list_tickets(
 @rate_limit(max_requests=50, window_seconds=60)
 async def get_ticket(
     ticket_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     ticket = await service.get_ticket(
         ticket_id=ticket_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=tenant_id
     )
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
@@ -570,14 +574,14 @@ async def get_ticket(
 async def update_ticket(
     ticket_id: int,
     data: TicketUpdate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     updated = await service.update_ticket(
         ticket_id=ticket_id,
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump(exclude_unset=True)
     )
     return updated
@@ -589,15 +593,15 @@ async def add_ticket_comment(
     ticket_id: int,
     data: TicketCommentCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     comment = await service.add_ticket_comment(
         ticket_id=ticket_id,
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
@@ -608,14 +612,14 @@ async def add_ticket_comment(
 @rate_limit(max_requests=30, window_seconds=60)
 async def get_ticket_comments(
     ticket_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InvitationsService(db)
     comments = await service.get_ticket_comments(
         ticket_id=ticket_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=tenant_id
     )
     return comments
 
