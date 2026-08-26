@@ -32,7 +32,6 @@ from app.domains.identity.models import User
 # ==========================================
 from app.domains.academy.router import router as academy_router
 from app.domains.affiliate.router import router as affiliate_router
-from app.domains.agritech.router import router as agritech_router
 from app.domains.ai_agents.router import router as ai_agents_router
 from app.domains.ai_governance.router import router as ai_governance_router
 from app.domains.arbitration_syndicates.router import router as arbitration_syndicates_router
@@ -267,7 +266,6 @@ async def performance_middleware(request: Request, call_next):
 routers_config = [
     (academy_router, "/academy", ["Academy"], "academy"),
     (affiliate_router, "/affiliate", ["Affiliate"], "affiliate"),
-    (agritech_router, "/agritech", ["Agritech"], "agritech"),
     (ai_agents_router, "/ai-agents", ["AI Agents"], "ai"),
     (ai_governance_router, "/ai-governance", ["AI Governance"], "ai"),
     (arbitration_syndicates_router, "/arbitration", ["Arbitration Syndicates"], "arbitration"),
