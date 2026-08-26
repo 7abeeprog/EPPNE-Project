@@ -68,8 +68,8 @@ class RealEstateRepository:
         result = await self.db.execute(select(PropertyUnit).where(PropertyUnit.id == unit_id))
         return result.scalar_one_or_none()
 
-    async def list_units(self, development_id: Optional[int] = None, for_sale: bool = False, skip=0, limit=100):
-        query = select(PropertyUnit).where(PropertyUnit.is_deleted == False)
+    async def list_units(self, tenant_id: int, development_id: Optional[int] = None, for_sale: bool = False, skip=0, limit=100):
+        query = select(PropertyUnit).where(PropertyUnit.tenant_id == tenant_id, PropertyUnit.is_deleted == False)
         if development_id:
             query = query.where(PropertyUnit.development_id == development_id)
         if for_sale:

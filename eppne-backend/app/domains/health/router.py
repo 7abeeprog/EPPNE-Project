@@ -232,13 +232,12 @@ async def list_facilities(
     category: Optional[str] = Query(None, description="تصنيف المنشأة"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = HealthService(db)
     facilities = await service.list_facilities(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         category=category,
         skip=skip,
         limit=limit
@@ -250,14 +249,13 @@ async def list_facilities(
 @rate_limit(max_requests=30, window_seconds=60)
 async def get_facility(
     facility_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = HealthService(db)
     facility = await service.get_facility(
         facility_id=facility_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=cast(int, current_user.tenant_id)
     )
     if not facility:
         raise HTTPException(status_code=404, detail="المنشأة غير موجودة")

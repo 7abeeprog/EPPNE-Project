@@ -45,13 +45,12 @@ async def list_policies(
     is_active: Optional[bool] = Query(None, description="هل البوليصة نشطة؟"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = InsuranceService(db)
     policies = await service.list_policies(
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         policy_type=policy_type,
         is_active=is_active,
         skip=skip,
@@ -64,14 +63,13 @@ async def list_policies(
 @rate_limit(max_requests=30, window_seconds=60)
 async def get_policy(
     policy_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = InsuranceService(db)
     policy = await service.get_policy(
         policy_id=policy_id,
-        tenant_id=cast(int, tenant.id)
+        tenant_id=cast(int, current_user.tenant_id)
     )
     if not policy:
         raise HTTPException(status_code=404, detail="Policy not found")

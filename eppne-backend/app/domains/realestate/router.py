@@ -54,7 +54,7 @@ async def revalue_land(
 ):
     service = RealEstateService(db)
     admin_id = cast(int, current_user.id)
-    land = await service.revalue_land(land_id, new_value, admin_id)
+    land = await service.revalue_land(land_id, new_value, admin_id, tenant_id=cast(int, current_user.tenant_id))
     return land
 
 # ========== Developments ==========
@@ -73,10 +73,11 @@ async def create_development(
 @router.get("/developments/{dev_id}", response_model=DevelopmentResponse)
 async def get_development(
     dev_id: int,
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = RealEstateService(db)
-    return await service.get_development(dev_id)
+    return await service.get_development(dev_id, tenant_id=cast(int, current_user.tenant_id))
 
 # ========== Property Units ==========
 @router.post("/units", response_model=PropertyUnitResponse, status_code=201)
@@ -99,10 +100,11 @@ async def list_units_for_sale(
     development_id: Optional[int] = None,
     skip: int = 0,
     limit: int = 50,
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = RealEstateService(db)
-    units = await service.list_units_for_sale(development_id, skip, limit)
+    units = await service.list_units_for_sale(cast(int, current_user.tenant_id), development_id, skip, limit)
     return units
 
 @router.post("/units/{unit_id}/buy", response_model=OwnershipResponse)

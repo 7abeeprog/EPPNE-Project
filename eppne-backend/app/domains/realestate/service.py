@@ -116,12 +116,15 @@ class RealEstateService:
         self,
         land_id: int,
         new_value: Decimal,
-        admin_id: int
+        admin_id: int,
+        tenant_id: int
     ) -> LandAsset:
         """إعادة تقييم الأرض (للمشرفين فقط)."""
         land = await self.repo.get_land_asset(land_id)
         if not land:
             raise NotFoundError("Land asset not found")
+        if land.tenant_id != tenant_id:  # type: ignore
+            raise PermissionDeniedError("ليس لديك صلاحية تعديل قيمة هذه الأرض")
         return await self.repo.update_land_value(land_id, new_value)
 
     # ============================================================
@@ -136,11 +139,13 @@ class RealEstateService:
         await self._check_saas_limits(tenant_id, "real_estate_development")
         return await self.repo.create_development(tenant_id=tenant_id, **data)
 
-    async def get_development(self, dev_id: int) -> RealEstateDevelopment:
+    async def get_development(self, dev_id: int, tenant_id: int) -> RealEstateDevelopment:
         """جلب مشروع تطويري."""
         dev = await self.repo.get_development(dev_id)
         if not dev:
             raise NotFoundError("Development not found")
+        if dev.tenant_id != tenant_id:  # type: ignore
+            raise PermissionDeniedError("ليس لديك صلاحية الاطلاع على هذا المشروع")
         return dev
 
     # ============================================================
@@ -157,12 +162,14 @@ class RealEstateService:
 
     async def list_units_for_sale(
         self,
+        tenant_id: int,
         development_id: Optional[int] = None,
         skip: int = 0,
         limit: int = 50
     ) -> list[PropertyUnit]:
         """قائمة الوحدات المتاحة للبيع."""
         result = await self.repo.list_units(
+            tenant_id=tenant_id,
             development_id=development_id,
             for_sale=True,
             skip=skip,
