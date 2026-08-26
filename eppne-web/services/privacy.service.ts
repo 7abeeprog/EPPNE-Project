@@ -15,11 +15,11 @@ export const PrivacyService = {
     // ==========================================
     /**
      * جلب إعدادات الخصوصية للمستخدم الحالي
-     * GET /privacy/privacy/settings
+     * GET /privacy/settings
      */
     getPrivacySettings: async (): Promise<PrivacySettingResponse> => {
         try {
-            const { data } = await apiClient.get<PrivacySettingResponse>("/privacy/privacy/settings", {
+            const { data } = await apiClient.get<PrivacySettingResponse>("/privacy/settings", {
                 withCredentials: true,
             });
             return data;
@@ -30,11 +30,11 @@ export const PrivacyService = {
 
     /**
      * تحديث إعدادات الخصوصية للمستخدم الحالي
-     * PUT /privacy/privacy/settings
+     * PUT /privacy/settings
      */
     updatePrivacySettings: async (data: PrivacySettingUpdate): Promise<PrivacySettingResponse> => {
         try {
-            const { data: result } = await apiClient.put<PrivacySettingResponse>("/privacy/privacy/settings", data, {
+            const { data: result } = await apiClient.put<PrivacySettingResponse>("/privacy/settings", data, {
                 withCredentials: true,
             });
             return result;
@@ -48,11 +48,11 @@ export const PrivacyService = {
     // ==========================================
     /**
      * تسجيل موافقة المستخدم على معالجة البيانات
-     * POST /privacy/privacy/consent/log
+     * POST /privacy/consent/log
      */
     logConsent: async (type: string, granted: boolean): Promise<void> => {
         try {
-            await apiClient.post("/privacy/privacy/consent/log", undefined, {
+            await apiClient.post("/privacy/consent/log", undefined, {
                 params: { type, granted },
                 withCredentials: true,
             });
@@ -66,12 +66,12 @@ export const PrivacyService = {
     // ==========================================
     /**
      * إنشاء طلب محو بيانات جديد
-     * POST /privacy/privacy/erasure/request
+     * POST /privacy/erasure/request
      */
     createErasureRequest: async (data: DataErasureRequestCreate): Promise<DataErasureRequestResponse> => {
         try {
             const { data: result } = await apiClient.post<DataErasureRequestResponse>(
-                "/privacy/privacy/erasure/request",
+                "/privacy/erasure/request",
                 data,
                 { withCredentials: true }
             );
@@ -83,7 +83,7 @@ export const PrivacyService = {
 
     /**
      * جلب طلبات محو البيانات الخاصة بي (مع Pagination)
-     * GET /privacy/privacy/erasure/requests
+     * GET /privacy/erasure/requests
      */
     listMyErasureRequests: async (
         params?: {
@@ -94,7 +94,7 @@ export const PrivacyService = {
     ): Promise<PaginatedErasureRequestResponse> => {
         try {
             const { data } = await apiClient.get<PaginatedErasureRequestResponse>(
-                "/privacy/privacy/erasure/requests",
+                "/privacy/erasure/requests",
                 { params, withCredentials: true }
             );
             return data;
@@ -108,14 +108,14 @@ export const PrivacyService = {
     // ==========================================
     /**
      * جلب طلبات المحو المعلقة (للمشرفين فقط)
-     * GET /privacy/privacy/admin/erasure/pending
+     * GET /privacy/admin/erasure/pending
      */
     getPendingErasureRequests: async (
         params?: { offset?: number; size?: number }
     ): Promise<PaginatedErasureRequestResponse> => {
         try {
             const { data } = await apiClient.get<PaginatedErasureRequestResponse>(
-                "/privacy/privacy/admin/erasure/pending",
+                "/privacy/admin/erasure/pending",
                 { params, withCredentials: true }
             );
             return data;
@@ -126,7 +126,7 @@ export const PrivacyService = {
 
     /**
      * معالجة طلب محو بيانات (للمشرفين فقط)
-     * POST /privacy/privacy/admin/erasure/{request_id}/process
+     * POST /privacy/admin/erasure/{request_id}/process
      */
     processErasureRequest: async (
         requestId: number,
@@ -135,7 +135,7 @@ export const PrivacyService = {
         try {
             const id = Number(requestId);
             if (isNaN(id)) throw new Error("معرف الطلب غير صحيح");
-            await apiClient.post(`/privacy/privacy/admin/erasure/${id}/process`, undefined, {
+            await apiClient.post(`/privacy/admin/erasure/${id}/process`, undefined, {
                 params,
                 withCredentials: true,
             });

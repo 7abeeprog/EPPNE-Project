@@ -15,11 +15,11 @@ type AffiliateStatsResponse = components['schemas']['AffiliateStatsResponse'];
 export const AffiliateService = {
   /**
    * جلب ملف الداعي السيادي
-   * GET /affiliate/affiliate/profile
+   * GET /affiliate/profile
    */
   getProfile: async (): Promise<AffiliateProfileResponse> => {
     try {
-      const { data } = await apiClient.get<AffiliateProfileResponse>("/affiliate/affiliate/profile", {
+      const { data } = await apiClient.get<AffiliateProfileResponse>("/affiliate/profile", {
         withCredentials: true,
       });
       return data;
@@ -30,11 +30,11 @@ export const AffiliateService = {
 
   /**
    * تحديث ملف الداعي
-   * PUT /affiliate/affiliate/profile
+   * PUT /affiliate/profile
    */
   updateProfile: async (data: AffiliateProfileUpdate): Promise<AffiliateProfileResponse> => {
     try {
-      const { data: result } = await apiClient.put<AffiliateProfileResponse>("/affiliate/affiliate/profile", data, {
+      const { data: result } = await apiClient.put<AffiliateProfileResponse>("/affiliate/profile", data, {
         withCredentials: true,
       });
       return result;
@@ -45,11 +45,11 @@ export const AffiliateService = {
 
   /**
    * جلب روابط الدعوة الخاصة بالمستخدم
-   * GET /affiliate/affiliate/links
+   * GET /affiliate/links
    */
   getLinks: async (params?: { skip?: number; limit?: number }): Promise<PaginatedResponse> => {
     try {
-      const { data } = await apiClient.get<PaginatedResponse>("/affiliate/affiliate/links", {
+      const { data } = await apiClient.get<PaginatedResponse>("/affiliate/links", {
         params,
         withCredentials: true,
       });
@@ -61,11 +61,11 @@ export const AffiliateService = {
 
   /**
    * إنشاء رابط دعوة مخصص
-   * POST /affiliate/affiliate/links
+   * POST /affiliate/links
    */
   createLink: async (data: AffiliateLinkCreate): Promise<AffiliateLinkResponse> => {
     try {
-      const { data: result } = await apiClient.post<AffiliateLinkResponse>("/affiliate/affiliate/links", data, {
+      const { data: result } = await apiClient.post<AffiliateLinkResponse>("/affiliate/links", data, {
         withCredentials: true,
       });
       return result;
@@ -76,11 +76,11 @@ export const AffiliateService = {
 
   /**
    * جلب سجل العمولات حسب الحالة
-   * GET /affiliate/affiliate/commissions
+   * GET /affiliate/commissions
    */
   getCommissions: async (params?: { status?: string | null; skip?: number; limit?: number }): Promise<PaginatedResponse> => {
     try {
-      const { data } = await apiClient.get<PaginatedResponse>("/affiliate/affiliate/commissions", {
+      const { data } = await apiClient.get<PaginatedResponse>("/affiliate/commissions", {
         params,
         withCredentials: true,
       });
@@ -92,11 +92,11 @@ export const AffiliateService = {
 
   /**
    * إفراج العمولات المعلقة (تحويلها إلى العمليات الحسابية)
-   * POST /affiliate/affiliate/commissions/release
+   * POST /affiliate/commissions/release
    */
   releaseCommissions: async (): Promise<void> => {
     try {
-      await apiClient.post("/affiliate/affiliate/commissions/release", undefined, {
+      await apiClient.post("/affiliate/commissions/release", undefined, {
         withCredentials: true,
       });
     } catch (error) {
@@ -106,11 +106,11 @@ export const AffiliateService = {
 
   /**
    * طلب سحب العمولات المستحقة إلى المحفظة
-   * POST /affiliate/affiliate/withdraw
+   * POST /affiliate/withdraw
    */
   withdraw: async (data: WithdrawRequest): Promise<WithdrawResponse> => {
     try {
-      const { data: result } = await apiClient.post<WithdrawResponse>("/affiliate/affiliate/withdraw", data, {
+      const { data: result } = await apiClient.post<WithdrawResponse>("/affiliate/withdraw", data, {
         withCredentials: true,
       });
       return result;
@@ -121,11 +121,11 @@ export const AffiliateService = {
 
   /**
    * جلب إحصائيات الأداء (النقرات، التحويلات، الأرباح)
-   * GET /affiliate/affiliate/stats
+   * GET /affiliate/stats
    */
   getStats: async (): Promise<AffiliateStatsResponse> => {
     try {
-      const { data } = await apiClient.get<AffiliateStatsResponse>("/affiliate/affiliate/stats", {
+      const { data } = await apiClient.get<AffiliateStatsResponse>("/affiliate/stats", {
         withCredentials: true,
       });
       return data;
@@ -136,11 +136,11 @@ export const AffiliateService = {
 
   /**
    * جلب شجرة الإحالة الخاصة بالمستخدم
-   * GET /affiliate/affiliate/tree
+   * GET /affiliate/tree
    */
   getReferralTree: async (params?: { max_depth?: number }): Promise<any[]> => {
     try {
-      const { data } = await apiClient.get<any[]>("/affiliate/affiliate/tree", {
+      const { data } = await apiClient.get<any[]>("/affiliate/tree", {
         params,
         withCredentials: true,
       });
@@ -152,7 +152,7 @@ export const AffiliateService = {
 
   /**
    * تتبع نقرات روابط الدعوة (مسار عام للمستخدمين غير المسجلين)
-   * GET /affiliate/affiliate/track/{referral_code}
+   * GET /affiliate/track/{referral_code}
    */
   trackReferralClick: async (
     referralCode: string,
@@ -165,7 +165,7 @@ export const AffiliateService = {
     }
   ): Promise<void> => {
     try {
-      await apiClient.get(`/affiliate/affiliate/track/${referralCode}`, {
+      await apiClient.get(`/affiliate/track/${referralCode}`, {
         params,
       });
     } catch (error) {

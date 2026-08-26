@@ -22,7 +22,7 @@ type VoteCast = components['schemas']['VoteCast'];
 export const ArbitrationSyndicatesService = {
   /**
    * جلب قائمة القضايا الخاصة بي
-   * GET /arbitration/arbitration-syndicates/cases/me
+   * GET /arbitration-syndicates/cases/me
    * تدعم X-Tenant-ID
    */
   getMyCases: async (headers?: { 'X-Tenant-ID'?: number }): Promise<ArbitrationCaseResponse[]> => {
@@ -31,7 +31,7 @@ export const ArbitrationSyndicatesService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<ArbitrationCaseResponse[]>("/arbitration/arbitration-syndicates/cases/me", {
+      const { data } = await apiClient.get<ArbitrationCaseResponse[]>("/arbitration-syndicates/cases/me", {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -43,7 +43,7 @@ export const ArbitrationSyndicatesService = {
 
   /**
    * إنشاء قضية تحكيم جديدة (نزاع)
-   * POST /arbitration/arbitration-syndicates/cases
+   * POST /arbitration-syndicates/cases
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   createDispute: async (
@@ -60,7 +60,7 @@ export const ArbitrationSyndicatesService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<ArbitrationCaseResponse>(
-        "/arbitration/arbitration-syndicates/cases",
+        "/arbitration-syndicates/cases",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -72,7 +72,7 @@ export const ArbitrationSyndicatesService = {
 
   /**
    * التصويت كعضو في هيئة المحلفين على قضية
-   * POST /arbitration/arbitration-syndicates/cases/{case_id}/jury-vote
+   * POST /arbitration-syndicates/cases/{case_id}/jury-vote
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   castJuryVote: async (
@@ -92,7 +92,7 @@ export const ArbitrationSyndicatesService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<Record<string, any>>(
-        `/arbitration/arbitration-syndicates/cases/${id}/jury-vote`,
+        `/arbitration-syndicates/cases/${id}/jury-vote`,
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -104,7 +104,7 @@ export const ArbitrationSyndicatesService = {
 
   /**
    * إصدار حكم في قضية (للمحكمين أو المشرفين)
-   * POST /arbitration/arbitration-syndicates/cases/{case_id}/verdict
+   * POST /arbitration-syndicates/cases/{case_id}/verdict
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   issueVerdict: async (
@@ -123,7 +123,7 @@ export const ArbitrationSyndicatesService = {
       if (idempotencyKey) {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
-      await apiClient.post(`/arbitration/arbitration-syndicates/cases/${id}/verdict`, data, {
+      await apiClient.post(`/arbitration-syndicates/cases/${id}/verdict`, data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -134,7 +134,7 @@ export const ArbitrationSyndicatesService = {
 
   /**
    * جلب قائمة النقابات
-   * GET /arbitration/arbitration-syndicates/syndicates
+   * GET /arbitration-syndicates/syndicates
    * تدعم X-Tenant-ID
    */
   listSyndicates: async (headers?: { 'X-Tenant-ID'?: number }): Promise<SyndicateResponse[]> => {
@@ -143,7 +143,7 @@ export const ArbitrationSyndicatesService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<SyndicateResponse[]>("/arbitration/arbitration-syndicates/syndicates", {
+      const { data } = await apiClient.get<SyndicateResponse[]>("/arbitration-syndicates/syndicates", {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -155,7 +155,7 @@ export const ArbitrationSyndicatesService = {
 
   /**
    * إنشاء نقابة جديدة
-   * POST /arbitration/arbitration-syndicates/syndicates
+   * POST /arbitration-syndicates/syndicates
    * تدعم X-Tenant-ID
    */
   createSyndicate: async (data: SyndicateCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<SyndicateResponse> => {
@@ -165,7 +165,7 @@ export const ArbitrationSyndicatesService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<SyndicateResponse>(
-        "/arbitration/arbitration-syndicates/syndicates",
+        "/arbitration-syndicates/syndicates",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -177,7 +177,7 @@ export const ArbitrationSyndicatesService = {
 
   /**
    * الانضمام إلى نقابة
-   * POST /arbitration/arbitration-syndicates/syndicates/{syndicate_id}/join
+   * POST /arbitration-syndicates/syndicates/{syndicate_id}/join
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   joinSyndicate: async (
@@ -196,7 +196,7 @@ export const ArbitrationSyndicatesService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<SyndicateMembershipResponse>(
-        `/arbitration/arbitration-syndicates/syndicates/${id}/join`,
+        `/arbitration-syndicates/syndicates/${id}/join`,
         undefined,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -208,7 +208,7 @@ export const ArbitrationSyndicatesService = {
 
   /**
    * جلب تراخيصي المهنية
-   * GET /arbitration/arbitration-syndicates/licenses/me
+   * GET /arbitration-syndicates/licenses/me
    * تدعم X-Tenant-ID
    */
   getMyLicenses: async (headers?: { 'X-Tenant-ID'?: number }): Promise<ProfessionalLicenseResponse[]> => {
@@ -218,7 +218,7 @@ export const ArbitrationSyndicatesService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data } = await apiClient.get<ProfessionalLicenseResponse[]>(
-        "/arbitration/arbitration-syndicates/licenses/me",
+        "/arbitration-syndicates/licenses/me",
         { headers: reqHeaders, withCredentials: true }
       );
       return data;
@@ -229,7 +229,7 @@ export const ArbitrationSyndicatesService = {
 
   /**
    * إصدار ترخيص مهني جديد
-   * POST /arbitration/arbitration-syndicates/licenses
+   * POST /arbitration-syndicates/licenses
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   issueLicense: async (
@@ -246,7 +246,7 @@ export const ArbitrationSyndicatesService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<ProfessionalLicenseResponse>(
-        "/arbitration/arbitration-syndicates/licenses",
+        "/arbitration-syndicates/licenses",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -258,7 +258,7 @@ export const ArbitrationSyndicatesService = {
 
   /**
    * إنشاء انتخابات جديدة
-   * POST /arbitration/arbitration-syndicates/elections
+   * POST /arbitration-syndicates/elections
    * تدعم X-Tenant-ID
    */
   createElection: async (data: ElectionCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<ElectionResponse> => {
@@ -268,7 +268,7 @@ export const ArbitrationSyndicatesService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<ElectionResponse>(
-        "/arbitration/arbitration-syndicates/elections",
+        "/arbitration-syndicates/elections",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -280,7 +280,7 @@ export const ArbitrationSyndicatesService = {
 
   /**
    * ترشيح مرشح في انتخابات
-   * POST /arbitration/arbitration-syndicates/elections/{election_id}/candidates
+   * POST /arbitration-syndicates/elections/{election_id}/candidates
    * تدعم X-Tenant-ID
    */
   nominateCandidate: async (
@@ -296,7 +296,7 @@ export const ArbitrationSyndicatesService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<CandidateResponse>(
-        `/arbitration/arbitration-syndicates/elections/${id}/candidates`,
+        `/arbitration-syndicates/elections/${id}/candidates`,
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -308,7 +308,7 @@ export const ArbitrationSyndicatesService = {
 
   /**
    * التصويت في انتخابات
-   * POST /arbitration/arbitration-syndicates/elections/{election_id}/vote
+   * POST /arbitration-syndicates/elections/{election_id}/vote
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   voteInElection: async (
@@ -327,7 +327,7 @@ export const ArbitrationSyndicatesService = {
       if (idempotencyKey) {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
-      await apiClient.post(`/arbitration/arbitration-syndicates/elections/${id}/vote`, data, {
+      await apiClient.post(`/arbitration-syndicates/elections/${id}/vote`, data, {
         headers: reqHeaders,
         withCredentials: true,
       });

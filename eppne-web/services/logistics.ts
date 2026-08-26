@@ -28,7 +28,7 @@ type LogisticsStatsResponse = components['schemas']['LogisticsStatsResponse'];
 export const LogisticsService = {
   /**
    * إنشاء مستودع جديد
-   * POST /logistics/logistics/warehouses
+   * POST /logistics/warehouses
    * تدعم X-Tenant-ID
    */
   createWarehouse: async (data: WarehouseCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<WarehouseResponse> => {
@@ -37,7 +37,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<WarehouseResponse>("/logistics/logistics/warehouses", data, {
+      const { data: result } = await apiClient.post<WarehouseResponse>("/logistics/warehouses", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -49,7 +49,7 @@ export const LogisticsService = {
 
   /**
    * جلب قائمة المستودعات مع التصفية
-   * GET /logistics/logistics/warehouses
+   * GET /logistics/warehouses
    * تدعم X-Tenant-ID
    */
   listWarehouses: async (
@@ -66,7 +66,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<WarehouseResponse[]>("/logistics/logistics/warehouses", {
+      const { data } = await apiClient.get<WarehouseResponse[]>("/logistics/warehouses", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -79,7 +79,7 @@ export const LogisticsService = {
 
   /**
    * جلب تفاصيل مستودع محدد
-   * GET /logistics/logistics/warehouses/{warehouse_id}
+   * GET /logistics/warehouses/{warehouse_id}
    * تدعم X-Tenant-ID
    */
   getWarehouse: async (warehouseId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<WarehouseResponse> => {
@@ -90,7 +90,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<WarehouseResponse>(`/logistics/logistics/warehouses/${id}`, {
+      const { data } = await apiClient.get<WarehouseResponse>(`/logistics/warehouses/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -102,7 +102,7 @@ export const LogisticsService = {
 
   /**
    * تحديث مستودع
-   * PUT /logistics/logistics/warehouses/{warehouse_id}
+   * PUT /logistics/warehouses/{warehouse_id}
    * تدعم X-Tenant-ID
    */
   updateWarehouse: async (
@@ -117,7 +117,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.put<WarehouseResponse>(`/logistics/logistics/warehouses/${id}`, data, {
+      const { data: result } = await apiClient.put<WarehouseResponse>(`/logistics/warehouses/${id}`, data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -129,7 +129,7 @@ export const LogisticsService = {
 
   /**
    * حذف مستودع
-   * DELETE /logistics/logistics/warehouses/{warehouse_id}
+   * DELETE /logistics/warehouses/{warehouse_id}
    * تدعم X-Tenant-ID
    */
   deleteWarehouse: async (warehouseId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<void> => {
@@ -140,7 +140,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      await apiClient.delete(`/logistics/logistics/warehouses/${id}`, {
+      await apiClient.delete(`/logistics/warehouses/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -151,7 +151,7 @@ export const LogisticsService = {
 
   /**
    * إنشاء منطقة داخل مستودع
-   * POST /logistics/logistics/warehouses/{warehouse_id}/zones
+   * POST /logistics/warehouses/{warehouse_id}/zones
    * تدعم X-Tenant-ID
    */
   createWarehouseZone: async (
@@ -167,7 +167,7 @@ export const LogisticsService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<WarehouseZoneResponse>(
-        `/logistics/logistics/warehouses/${id}/zones`,
+        `/logistics/warehouses/${id}/zones`,
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -179,7 +179,7 @@ export const LogisticsService = {
 
   /**
    * استلام مخزون
-   * POST /logistics/logistics/inventory/receive
+   * POST /logistics/inventory/receive
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   receiveInventory: async (
@@ -196,7 +196,7 @@ export const LogisticsService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<InventoryTransactionResponse>(
-        "/logistics/logistics/inventory/receive",
+        "/logistics/inventory/receive",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -208,7 +208,7 @@ export const LogisticsService = {
 
   /**
    * صرف مخزون
-   * POST /logistics/logistics/inventory/issue
+   * POST /logistics/inventory/issue
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   issueInventory: async (
@@ -225,7 +225,7 @@ export const LogisticsService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<InventoryTransactionResponse>(
-        "/logistics/logistics/inventory/issue",
+        "/logistics/inventory/issue",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -237,7 +237,7 @@ export const LogisticsService = {
 
   /**
    * تعديل المخزون (جرد)
-   * POST /logistics/logistics/inventory/adjust/{inventory_item_id}
+   * POST /logistics/inventory/adjust/{inventory_item_id}
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   adjustInventory: async (
@@ -257,7 +257,7 @@ export const LogisticsService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<InventoryTransactionResponse>(
-        `/logistics/logistics/inventory/adjust/${id}`,
+        `/logistics/inventory/adjust/${id}`,
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -269,7 +269,7 @@ export const LogisticsService = {
 
   /**
    * جلب قائمة المخزون مع التصفية
-   * GET /logistics/logistics/inventory
+   * GET /logistics/inventory
    * تدعم X-Tenant-ID
    */
   listInventory: async (
@@ -287,7 +287,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<InventoryItemResponse[]>("/logistics/logistics/inventory", {
+      const { data } = await apiClient.get<InventoryItemResponse[]>("/logistics/inventory", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -300,7 +300,7 @@ export const LogisticsService = {
 
   /**
    * جلب المخزون المنخفض
-   * GET /logistics/logistics/inventory/low-stock
+   * GET /logistics/inventory/low-stock
    * تدعم X-Tenant-ID
    */
   getLowStock: async (params?: { warehouse_id?: number | null }, headers?: { 'X-Tenant-ID'?: number }): Promise<InventoryItemResponse[]> => {
@@ -309,7 +309,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<InventoryItemResponse[]>("/logistics/logistics/inventory/low-stock", {
+      const { data } = await apiClient.get<InventoryItemResponse[]>("/logistics/inventory/low-stock", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -322,7 +322,7 @@ export const LogisticsService = {
 
   /**
    * جلب المخزون منتهي الصلاحية
-   * GET /logistics/logistics/inventory/expired
+   * GET /logistics/inventory/expired
    * تدعم X-Tenant-ID
    */
   getExpired: async (headers?: { 'X-Tenant-ID'?: number }): Promise<InventoryItemResponse[]> => {
@@ -331,7 +331,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<InventoryItemResponse[]>("/logistics/logistics/inventory/expired", {
+      const { data } = await apiClient.get<InventoryItemResponse[]>("/logistics/inventory/expired", {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -343,7 +343,7 @@ export const LogisticsService = {
 
   /**
    * جلب تفاصيل صنف مخزون محدد
-   * GET /logistics/logistics/inventory/{item_id}
+   * GET /logistics/inventory/{item_id}
    * تدعم X-Tenant-ID
    */
   getInventoryItem: async (itemId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<InventoryItemResponse> => {
@@ -354,7 +354,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<InventoryItemResponse>(`/logistics/logistics/inventory/${id}`, {
+      const { data } = await apiClient.get<InventoryItemResponse>(`/logistics/inventory/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -366,7 +366,7 @@ export const LogisticsService = {
 
   /**
    * جلب معاملات صنف مخزون محدد
-   * GET /logistics/logistics/inventory/{item_id}/transactions
+   * GET /logistics/inventory/{item_id}/transactions
    * تدعم X-Tenant-ID
    */
   getInventoryTransactions: async (
@@ -381,7 +381,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<InventoryTransactionResponse[]>(`/logistics/logistics/inventory/${id}/transactions`, {
+      const { data } = await apiClient.get<InventoryTransactionResponse[]>(`/logistics/inventory/${id}/transactions`, {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -394,7 +394,7 @@ export const LogisticsService = {
 
   /**
    * إنشاء معدات جديدة
-   * POST /logistics/logistics/equipment
+   * POST /logistics/equipment
    * تدعم X-Tenant-ID
    */
   createEquipment: async (data: EquipmentCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<EquipmentResponse> => {
@@ -403,7 +403,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<EquipmentResponse>("/logistics/logistics/equipment", data, {
+      const { data: result } = await apiClient.post<EquipmentResponse>("/logistics/equipment", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -415,7 +415,7 @@ export const LogisticsService = {
 
   /**
    * جلب قائمة المعدات مع التصفية
-   * GET /logistics/logistics/equipment
+   * GET /logistics/equipment
    * تدعم X-Tenant-ID
    */
   listEquipment: async (
@@ -433,7 +433,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<EquipmentResponse[]>("/logistics/logistics/equipment", {
+      const { data } = await apiClient.get<EquipmentResponse[]>("/logistics/equipment", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -446,7 +446,7 @@ export const LogisticsService = {
 
   /**
    * جلب تفاصيل معدات محددة
-   * GET /logistics/logistics/equipment/{equipment_id}
+   * GET /logistics/equipment/{equipment_id}
    * تدعم X-Tenant-ID
    */
   getEquipment: async (equipmentId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<EquipmentResponse> => {
@@ -457,7 +457,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<EquipmentResponse>(`/logistics/logistics/equipment/${id}`, {
+      const { data } = await apiClient.get<EquipmentResponse>(`/logistics/equipment/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -469,7 +469,7 @@ export const LogisticsService = {
 
   /**
    * تحديث معدات
-   * PUT /logistics/logistics/equipment/{equipment_id}
+   * PUT /logistics/equipment/{equipment_id}
    * تدعم X-Tenant-ID
    */
   updateEquipment: async (
@@ -484,7 +484,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.put<EquipmentResponse>(`/logistics/logistics/equipment/${id}`, data, {
+      const { data: result } = await apiClient.put<EquipmentResponse>(`/logistics/equipment/${id}`, data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -496,7 +496,7 @@ export const LogisticsService = {
 
   /**
    * إنشاء طلب صيانة لمعدات
-   * POST /logistics/logistics/equipment/{equipment_id}/maintenance
+   * POST /logistics/equipment/{equipment_id}/maintenance
    * تدعم X-Tenant-ID
    */
   createMaintenance: async (
@@ -512,7 +512,7 @@ export const LogisticsService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<EquipmentMaintenanceResponse>(
-        `/logistics/logistics/equipment/${id}/maintenance`,
+        `/logistics/equipment/${id}/maintenance`,
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -524,7 +524,7 @@ export const LogisticsService = {
 
   /**
    * إنشاء توقع للمخزون
-   * POST /logistics/logistics/forecast
+   * POST /logistics/forecast
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   generateForecast: async (
@@ -542,7 +542,7 @@ export const LogisticsService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<InventoryForecastResponse>(
-        "/logistics/logistics/forecast",
+        "/logistics/forecast",
         undefined,
         {
           params: { product_id: productId, period: period || 'MONTHLY' },
@@ -558,7 +558,7 @@ export const LogisticsService = {
 
   /**
    * جلب قائمة التوقعات
-   * GET /logistics/logistics/forecast
+   * GET /logistics/forecast
    * تدعم X-Tenant-ID
    */
   listForecasts: async (
@@ -575,7 +575,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<InventoryForecastResponse[]>("/logistics/logistics/forecast", {
+      const { data } = await apiClient.get<InventoryForecastResponse[]>("/logistics/forecast", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -588,7 +588,7 @@ export const LogisticsService = {
 
   /**
    * جلب إحصائيات الخدمات اللوجستية
-   * GET /logistics/logistics/stats
+   * GET /logistics/stats
    * تدعم X-Tenant-ID
    */
   getLogisticsStats: async (headers?: { 'X-Tenant-ID'?: number }): Promise<LogisticsStatsResponse> => {
@@ -597,7 +597,7 @@ export const LogisticsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<LogisticsStatsResponse>("/logistics/logistics/stats", {
+      const { data } = await apiClient.get<LogisticsStatsResponse>("/logistics/stats", {
         headers: reqHeaders,
         withCredentials: true,
       });

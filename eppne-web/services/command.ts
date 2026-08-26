@@ -24,12 +24,12 @@ export const CommandService = {
   // ==========================================
   /**
    * جلب لوحة التحكم
-   * GET /command/command/dashboard
+   * GET /command/dashboard
    * تدعم X-Tenant-ID
    */
   getDashboard: async (headers?: { 'X-Tenant-ID'?: number }): Promise<DashboardResponse> => {
     try {
-      const { data } = await apiClient.get<DashboardResponse>("/command/command/dashboard", {
+      const { data } = await apiClient.get<DashboardResponse>("/command/dashboard", {
         headers,
         withCredentials: true,
       });
@@ -44,12 +44,12 @@ export const CommandService = {
   // ==========================================
   /**
    * إنشاء علامة تجارية جديدة
-   * POST /command/command/brands
+   * POST /command/brands
    * تدعم X-Tenant-ID
    */
   createBrand: async (data: BrandSettingsCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<BrandSettingsResponse> => {
     try {
-      const { data: result } = await apiClient.post<BrandSettingsResponse>("/command/command/brands", data, {
+      const { data: result } = await apiClient.post<BrandSettingsResponse>("/command/brands", data, {
         headers,
         withCredentials: true,
       });
@@ -61,12 +61,12 @@ export const CommandService = {
 
   /**
    * جلب العلامة التجارية الخاصة بي
-   * GET /command/command/brands/me
+   * GET /command/brands/me
    * تدعم X-Tenant-ID
    */
   getMyBrand: async (headers?: { 'X-Tenant-ID'?: number }): Promise<BrandSettingsResponse> => {
     try {
-      const { data } = await apiClient.get<BrandSettingsResponse>("/command/command/brands/me", {
+      const { data } = await apiClient.get<BrandSettingsResponse>("/command/brands/me", {
         headers,
         withCredentials: true,
       });
@@ -78,12 +78,12 @@ export const CommandService = {
 
   /**
    * تحديث العلامة التجارية الخاصة بي
-   * PUT /command/command/brands/me
+   * PUT /command/brands/me
    * تدعم X-Tenant-ID
    */
   updateMyBrand: async (data: BrandSettingsUpdate, headers?: { 'X-Tenant-ID'?: number }): Promise<BrandSettingsResponse> => {
     try {
-      const { data: result } = await apiClient.put<BrandSettingsResponse>("/command/command/brands/me", data, {
+      const { data: result } = await apiClient.put<BrandSettingsResponse>("/command/brands/me", data, {
         headers,
         withCredentials: true,
       });
@@ -98,7 +98,7 @@ export const CommandService = {
   // ==========================================
   /**
    * جلب قائمة التنبيهات مع التصفية
-   * GET /command/command/alerts
+   * GET /command/alerts
    * تدعم X-Tenant-ID
    */
   listAlerts: async (
@@ -110,7 +110,7 @@ export const CommandService = {
     headers?: { 'X-Tenant-ID'?: number }
   ): Promise<SystemAlertResponse[]> => {
     try {
-      const { data } = await apiClient.get<SystemAlertResponse[]>("/command/command/alerts", {
+      const { data } = await apiClient.get<SystemAlertResponse[]>("/command/alerts", {
         params,
         headers,
         withCredentials: true,
@@ -123,12 +123,12 @@ export const CommandService = {
 
   /**
    * إنشاء تنبيه جديد
-   * POST /command/command/alerts
+   * POST /command/alerts
    * تدعم X-Tenant-ID
    */
   createAlert: async (data: SystemAlertCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<SystemAlertResponse> => {
     try {
-      const { data: result } = await apiClient.post<SystemAlertResponse>("/command/command/alerts", data, {
+      const { data: result } = await apiClient.post<SystemAlertResponse>("/command/alerts", data, {
         headers,
         withCredentials: true,
       });
@@ -140,7 +140,7 @@ export const CommandService = {
 
   /**
    * تأكيد استلام التنبيه
-   * POST /command/command/alerts/{alert_id}/acknowledge
+   * POST /command/alerts/{alert_id}/acknowledge
    * تدعم X-Tenant-ID
    */
   acknowledgeAlert: async (alertId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<SystemAlertResponse> => {
@@ -148,7 +148,7 @@ export const CommandService = {
       const id = Number(alertId);
       if (isNaN(id)) throw new Error("معرف التنبيه غير صحيح");
       const { data: result } = await apiClient.post<SystemAlertResponse>(
-        `/command/command/alerts/${id}/acknowledge`,
+        `/command/alerts/${id}/acknowledge`,
         undefined,
         { headers, withCredentials: true }
       );
@@ -160,7 +160,7 @@ export const CommandService = {
 
   /**
    * حل التنبيه
-   * POST /command/command/alerts/{alert_id}/resolve
+   * POST /command/alerts/{alert_id}/resolve
    * تدعم X-Tenant-ID
    */
   resolveAlert: async (alertId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<SystemAlertResponse> => {
@@ -168,7 +168,7 @@ export const CommandService = {
       const id = Number(alertId);
       if (isNaN(id)) throw new Error("معرف التنبيه غير صحيح");
       const { data: result } = await apiClient.post<SystemAlertResponse>(
-        `/command/command/alerts/${id}/resolve`,
+        `/command/alerts/${id}/resolve`,
         undefined,
         { headers, withCredentials: true }
       );
@@ -183,7 +183,7 @@ export const CommandService = {
   // ==========================================
   /**
    * جلب قائمة التقارير مع التصفية
-   * GET /command/command/reports
+   * GET /command/reports
    * تدعم X-Tenant-ID
    */
   listReports: async (
@@ -195,7 +195,7 @@ export const CommandService = {
     headers?: { 'X-Tenant-ID'?: number }
   ): Promise<CommandReportResponse[]> => {
     try {
-      const { data } = await apiClient.get<CommandReportResponse[]>("/command/command/reports", {
+      const { data } = await apiClient.get<CommandReportResponse[]>("/command/reports", {
         params,
         headers,
         withCredentials: true,
@@ -208,12 +208,12 @@ export const CommandService = {
 
   /**
    * إنشاء تقرير جديد
-   * POST /command/command/reports
+   * POST /command/reports
    * تدعم X-Tenant-ID
    */
   generateReport: async (data: CommandReportCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<CommandReportResponse> => {
     try {
-      const { data: result } = await apiClient.post<CommandReportResponse>("/command/command/reports", data, {
+      const { data: result } = await apiClient.post<CommandReportResponse>("/command/reports", data, {
         headers,
         withCredentials: true,
       });
@@ -228,7 +228,7 @@ export const CommandService = {
   // ==========================================
   /**
    * جلب قائمة التوصيات
-   * GET /command/command/recommendations
+   * GET /command/recommendations
    * تدعم X-Tenant-ID
    */
   listRecommendations: async (
@@ -239,7 +239,7 @@ export const CommandService = {
     headers?: { 'X-Tenant-ID'?: number }
   ): Promise<AIRecommendationResponse[]> => {
     try {
-      const { data } = await apiClient.get<AIRecommendationResponse[]>("/command/command/recommendations", {
+      const { data } = await apiClient.get<AIRecommendationResponse[]>("/command/recommendations", {
         params,
         headers,
         withCredentials: true,
@@ -252,13 +252,13 @@ export const CommandService = {
 
   /**
    * توليد توصيات جديدة
-   * POST /command/command/recommendations/generate
+   * POST /command/recommendations/generate
    * تدعم X-Tenant-ID
    */
   generateRecommendations: async (headers?: { 'X-Tenant-ID'?: number }): Promise<AIRecommendationResponse[]> => {
     try {
       const { data } = await apiClient.post<AIRecommendationResponse[]>(
-        "/command/command/recommendations/generate",
+        "/command/recommendations/generate",
         undefined,
         { headers, withCredentials: true }
       );
@@ -270,7 +270,7 @@ export const CommandService = {
 
   /**
    * تطبيق توصية محددة
-   * POST /command/command/recommendations/{rec_id}/apply
+   * POST /command/recommendations/{rec_id}/apply
    * تدعم X-Tenant-ID
    */
   applyRecommendation: async (recId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<AIRecommendationResponse> => {
@@ -278,7 +278,7 @@ export const CommandService = {
       const id = Number(recId);
       if (isNaN(id)) throw new Error("معرف التوصية غير صحيح");
       const { data: result } = await apiClient.post<AIRecommendationResponse>(
-        `/command/command/recommendations/${id}/apply`,
+        `/command/recommendations/${id}/apply`,
         undefined,
         { headers, withCredentials: true }
       );
@@ -293,12 +293,12 @@ export const CommandService = {
   // ==========================================
   /**
    * جلب صحة النظام
-   * GET /command/command/system/health
+   * GET /command/system/health
    * تدعم X-Tenant-ID
    */
   getSystemHealth: async (headers?: { 'X-Tenant-ID'?: number }): Promise<any> => {
     try {
-      const { data } = await apiClient.get<any>("/command/command/system/health", {
+      const { data } = await apiClient.get<any>("/command/system/health", {
         headers,
         withCredentials: true,
       });
@@ -313,12 +313,12 @@ export const CommandService = {
   // ==========================================
   /**
    * تسجيل مقياس جديد
-   * POST /command/command/metrics
+   * POST /command/metrics
    * تدعم X-Tenant-ID
    */
   recordMetric: async (data: PlatformMetricCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<PlatformMetricResponse> => {
     try {
-      const { data: result } = await apiClient.post<PlatformMetricResponse>("/command/command/metrics", data, {
+      const { data: result } = await apiClient.post<PlatformMetricResponse>("/command/metrics", data, {
         headers,
         withCredentials: true,
       });

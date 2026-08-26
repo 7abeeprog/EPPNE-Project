@@ -21,11 +21,11 @@ export const CommerceService = {
   // ==========================================
   /**
    * إنشاء متجر جديد
-   * POST /commerce/commerce/stores
+   * POST /commerce/stores
    */
   createStore: async (data: StoreCreate): Promise<StoreResponse> => {
     try {
-      const { data: result } = await apiClient.post<StoreResponse>("/commerce/commerce/stores", data, {
+      const { data: result } = await apiClient.post<StoreResponse>("/commerce/stores", data, {
         withCredentials: true,
       });
       return result;
@@ -39,11 +39,11 @@ export const CommerceService = {
   // ==========================================
   /**
    * جلب قائمة المنتجات
-   * GET /commerce/commerce/products
+   * GET /commerce/products
    */
   listProducts: async (params: { store_id: number; skip?: number; limit?: number }): Promise<ProductResponse[]> => {
     try {
-      const { data } = await apiClient.get<ProductResponse[]>("/commerce/commerce/products", {
+      const { data } = await apiClient.get<ProductResponse[]>("/commerce/products", {
         params,
         withCredentials: true,
       });
@@ -55,11 +55,11 @@ export const CommerceService = {
 
   /**
    * إنشاء منتج جديد
-   * POST /commerce/commerce/products
+   * POST /commerce/products
    */
   createProduct: async (data: ProductCreate): Promise<ProductResponse> => {
     try {
-      const { data: result } = await apiClient.post<ProductResponse>("/commerce/commerce/products", data, {
+      const { data: result } = await apiClient.post<ProductResponse>("/commerce/products", data, {
         withCredentials: true,
       });
       return result;
@@ -73,11 +73,11 @@ export const CommerceService = {
   // ==========================================
   /**
    * إتمام عملية الشراء (Checkout)
-   * POST /commerce/commerce/checkout
+   * POST /commerce/checkout
    */
   checkout: async (data: CheckoutRequest): Promise<OrderResponse> => {
     try {
-      const { data: result } = await apiClient.post<OrderResponse>("/commerce/commerce/checkout", data, {
+      const { data: result } = await apiClient.post<OrderResponse>("/commerce/checkout", data, {
         withCredentials: true,
       });
       return result;
@@ -88,11 +88,11 @@ export const CommerceService = {
 
   /**
    * جلب طلباتي
-   * GET /commerce/commerce/orders/me
+   * GET /commerce/orders/me
    */
   getMyOrders: async (): Promise<OrderResponse[]> => {
     try {
-      const { data } = await apiClient.get<OrderResponse[]>("/commerce/commerce/orders/me", {
+      const { data } = await apiClient.get<OrderResponse[]>("/commerce/orders/me", {
         withCredentials: true,
       });
       return data;
@@ -106,12 +106,12 @@ export const CommerceService = {
   // ==========================================
   /**
    * تعيين الراعي (Sponsor)
-   * POST /commerce/commerce/affiliate/link
+   * POST /commerce/affiliate/link
    */
   setAffiliateSponsor: async (sponsorCode: string): Promise<AffiliateTreeResponse> => {
     try {
       const { data: result } = await apiClient.post<AffiliateTreeResponse>(
-        "/commerce/commerce/affiliate/link",
+        "/commerce/affiliate/link",
         undefined,
         {
           params: { sponsor_code: sponsorCode },
@@ -126,11 +126,11 @@ export const CommerceService = {
 
   /**
    * جلب عمولاتي
-   * GET /commerce/commerce/affiliate/commissions
+   * GET /commerce/affiliate/commissions
    */
   getMyCommissions: async (): Promise<CommissionResponse[]> => {
     try {
-      const { data } = await apiClient.get<CommissionResponse[]>("/commerce/commerce/affiliate/commissions", {
+      const { data } = await apiClient.get<CommissionResponse[]>("/commerce/affiliate/commissions", {
         withCredentials: true,
       });
       return data;
@@ -141,11 +141,11 @@ export const CommerceService = {
 
   /**
    * تحرير العمولات المستحقة
-   * POST /commerce/commerce/affiliate/commissions/release
+   * POST /commerce/affiliate/commissions/release
    */
   releaseMyCommissions: async (): Promise<void> => {
     try {
-      await apiClient.post("/commerce/commerce/affiliate/commissions/release", undefined, {
+      await apiClient.post("/commerce/affiliate/commissions/release", undefined, {
         withCredentials: true,
       });
     } catch (error) {
@@ -158,11 +158,11 @@ export const CommerceService = {
   // ==========================================
   /**
    * إنشاء طلب دفع
-   * POST /commerce/commerce/payment-request
+   * POST /commerce/payment-request
    */
   createPaymentRequest: async (data: PaymentRequestCreate): Promise<PaymentRequestResponse> => {
     try {
-      const { data: result } = await apiClient.post<PaymentRequestResponse>("/commerce/commerce/payment-request", data, {
+      const { data: result } = await apiClient.post<PaymentRequestResponse>("/commerce/payment-request", data, {
         withCredentials: true,
       });
       return result;
@@ -173,11 +173,11 @@ export const CommerceService = {
 
   /**
    * تأكيد الدفع عبر الوكيل
-   * POST /commerce/commerce/payment/agent/confirm
+   * POST /commerce/payment/agent/confirm
    */
   confirmAgentPayment: async (data: AgentConfirmPayment): Promise<OrderResponse> => {
     try {
-      const { data: result } = await apiClient.post<OrderResponse>("/commerce/commerce/payment/agent/confirm", data, {
+      const { data: result } = await apiClient.post<OrderResponse>("/commerce/payment/agent/confirm", data, {
         withCredentials: true,
       });
       return result;
@@ -188,11 +188,11 @@ export const CommerceService = {
 
   /**
    * Webhook من بوابة الفيزا (خارجي، لا يحتاج توكن)
-   * POST /commerce/commerce/payment/visa/webhook
+   * POST /commerce/payment/visa/webhook
    */
   visaWebhook: async (payload: any, signature: string): Promise<void> => {
     try {
-      await apiClient.post("/commerce/commerce/payment/visa/webhook", payload, {
+      await apiClient.post("/commerce/payment/visa/webhook", payload, {
         headers: { signature },
       });
     } catch (error) {
@@ -202,11 +202,11 @@ export const CommerceService = {
 
   /**
    * جلب حالة الدفع لطلب معين
-   * GET /commerce/commerce/payment/status/{order_id}
+   * GET /commerce/payment/status/{order_id}
    */
   getPaymentStatus: async (orderId: number): Promise<any> => {
     try {
-      const { data } = await apiClient.get(`/commerce/commerce/payment/status/${orderId}`, {
+      const { data } = await apiClient.get(`/commerce/payment/status/${orderId}`, {
         withCredentials: true,
       });
       return data;

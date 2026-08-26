@@ -25,7 +25,7 @@ type DeliveryProof = components['schemas']['DeliveryProof'];
 export const TransportService = {
   /**
    * إنشاء مركز نقل جديد
-   * POST /transport/transport/hubs
+   * POST /transport/hubs
    * تدعم X-Tenant-ID
    */
   createHub: async (data: TransportHubCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<TransportHubResponse> => {
@@ -34,7 +34,7 @@ export const TransportService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<TransportHubResponse>("/transport/transport/hubs", data, {
+      const { data: result } = await apiClient.post<TransportHubResponse>("/transport/hubs", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -46,7 +46,7 @@ export const TransportService = {
 
   /**
    * جلب قائمة المراكز مع التصفية
-   * GET /transport/transport/hubs
+   * GET /transport/hubs
    * تدعم X-Tenant-ID
    */
   listHubs: async (params?: { hub_type?: string | null; skip?: number; limit?: number }, headers?: { 'X-Tenant-ID'?: number }): Promise<TransportHubResponse[]> => {
@@ -55,7 +55,7 @@ export const TransportService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<TransportHubResponse[]>("/transport/transport/hubs", {
+      const { data } = await apiClient.get<TransportHubResponse[]>("/transport/hubs", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -68,7 +68,7 @@ export const TransportService = {
 
   /**
    * إنشاء أسطول جديد
-   * POST /transport/transport/fleets
+   * POST /transport/fleets
    * تدعم X-Tenant-ID
    */
   createFleet: async (data: FleetCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<FleetResponse> => {
@@ -77,7 +77,7 @@ export const TransportService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<FleetResponse>("/transport/transport/fleets", data, {
+      const { data: result } = await apiClient.post<FleetResponse>("/transport/fleets", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -89,7 +89,7 @@ export const TransportService = {
 
   /**
    * إنشاء مركبة جديدة
-   * POST /transport/transport/vehicles
+   * POST /transport/vehicles
    * تدعم X-Tenant-ID
    */
   createVehicle: async (data: VehicleCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<VehicleResponse> => {
@@ -98,7 +98,7 @@ export const TransportService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<VehicleResponse>("/transport/transport/vehicles", data, {
+      const { data: result } = await apiClient.post<VehicleResponse>("/transport/vehicles", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -110,7 +110,7 @@ export const TransportService = {
 
   /**
    * تحديث موقع المركبة
-   * PATCH /transport/transport/vehicles/{vehicle_id}/location
+   * PATCH /transport/vehicles/{vehicle_id}/location
    * تدعم X-Tenant-ID
    */
   updateVehicleLocation: async (
@@ -125,7 +125,7 @@ export const TransportService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      await apiClient.patch(`/transport/transport/vehicles/${id}/location`, location, {
+      await apiClient.patch(`/transport/vehicles/${id}/location`, location, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -136,7 +136,7 @@ export const TransportService = {
 
   /**
    * جلب المركبات المتاحة
-   * GET /transport/transport/vehicles/available
+   * GET /transport/vehicles/available
    * تدعم X-Tenant-ID
    */
   getAvailableVehicles: async (params?: { fleet_id?: number | null }, headers?: { 'X-Tenant-ID'?: number }): Promise<VehicleResponse[]> => {
@@ -145,7 +145,7 @@ export const TransportService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<VehicleResponse[]>("/transport/transport/vehicles/available", {
+      const { data } = await apiClient.get<VehicleResponse[]>("/transport/vehicles/available", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -158,7 +158,7 @@ export const TransportService = {
 
   /**
    * إنشاء مسار جديد
-   * POST /transport/transport/routes
+   * POST /transport/routes
    * تدعم X-Tenant-ID
    */
   createRoute: async (data: RouteCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<RouteResponse> => {
@@ -167,7 +167,7 @@ export const TransportService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<RouteResponse>("/transport/transport/routes", data, {
+      const { data: result } = await apiClient.post<RouteResponse>("/transport/routes", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -179,7 +179,7 @@ export const TransportService = {
 
   /**
    * إنشاء رحلة جديدة
-   * POST /transport/transport/trips
+   * POST /transport/trips
    * تدعم X-Tenant-ID
    */
   createTrip: async (data: TripCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<TripResponse> => {
@@ -188,7 +188,7 @@ export const TransportService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<TripResponse>("/transport/transport/trips", data, {
+      const { data: result } = await apiClient.post<TripResponse>("/transport/trips", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -200,7 +200,7 @@ export const TransportService = {
 
   /**
    * بدء الرحلة
-   * PATCH /transport/transport/trips/{trip_id}/start
+   * PATCH /transport/trips/{trip_id}/start
    * تدعم X-Tenant-ID
    */
   startTrip: async (tripId: number, data: TripStartRequest, headers?: { 'X-Tenant-ID'?: number }): Promise<TripResponse> => {
@@ -211,7 +211,7 @@ export const TransportService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.patch<TripResponse>(`/transport/transport/trips/${id}/start`, data, {
+      const { data: result } = await apiClient.patch<TripResponse>(`/transport/trips/${id}/start`, data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -223,7 +223,7 @@ export const TransportService = {
 
   /**
    * إكمال الرحلة
-   * PATCH /transport/transport/trips/{trip_id}/complete
+   * PATCH /transport/trips/{trip_id}/complete
    * تدعم X-Tenant-ID
    */
   completeTrip: async (tripId: number, data: TripCompleteRequest, headers?: { 'X-Tenant-ID'?: number }): Promise<TripResponse> => {
@@ -234,7 +234,7 @@ export const TransportService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.patch<TripResponse>(`/transport/transport/trips/${id}/complete`, data, {
+      const { data: result } = await apiClient.patch<TripResponse>(`/transport/trips/${id}/complete`, data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -246,7 +246,7 @@ export const TransportService = {
 
   /**
    * جلب رحلاتي
-   * GET /transport/transport/trips/my
+   * GET /transport/trips/my
    * تدعم X-Tenant-ID
    */
   getMyTrips: async (
@@ -258,7 +258,7 @@ export const TransportService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<TripResponse[]>("/transport/transport/trips/my", {
+      const { data } = await apiClient.get<TripResponse[]>("/transport/trips/my", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -271,7 +271,7 @@ export const TransportService = {
 
   /**
    * حجز رحلة
-   * POST /transport/transport/bookings
+   * POST /transport/bookings
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   bookTrip: async (
@@ -287,7 +287,7 @@ export const TransportService = {
       if (idempotencyKey) {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
-      const { data: result } = await apiClient.post<TripBookingResponse>("/transport/transport/bookings", data, {
+      const { data: result } = await apiClient.post<TripBookingResponse>("/transport/bookings", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -299,7 +299,7 @@ export const TransportService = {
 
   /**
    * جلب حجوزاتي
-   * GET /transport/transport/bookings/my
+   * GET /transport/bookings/my
    * تدعم X-Tenant-ID
    */
   getMyBookings: async (headers?: { 'X-Tenant-ID'?: number }): Promise<TripBookingResponse[]> => {
@@ -308,7 +308,7 @@ export const TransportService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<TripBookingResponse[]>("/transport/transport/bookings/my", {
+      const { data } = await apiClient.get<TripBookingResponse[]>("/transport/bookings/my", {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -320,7 +320,7 @@ export const TransportService = {
 
   /**
    * إنشاء مهمة توصيل جديدة
-   * POST /transport/transport/deliveries
+   * POST /transport/deliveries
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   createDelivery: async (
@@ -336,7 +336,7 @@ export const TransportService = {
       if (idempotencyKey) {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
-      const { data: result } = await apiClient.post<DeliveryTaskResponse>("/transport/transport/deliveries", data, {
+      const { data: result } = await apiClient.post<DeliveryTaskResponse>("/transport/deliveries", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -348,7 +348,7 @@ export const TransportService = {
 
   /**
    * دفع تكلفة التوصيل
-   * POST /transport/transport/deliveries/{task_id}/pay
+   * POST /transport/deliveries/{task_id}/pay
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   payDelivery: async (
@@ -367,7 +367,7 @@ export const TransportService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<DeliveryTaskResponse>(
-        `/transport/transport/deliveries/${id}/pay`,
+        `/transport/deliveries/${id}/pay`,
         undefined,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -379,7 +379,7 @@ export const TransportService = {
 
   /**
    * إكمال مهمة التوصيل
-   * POST /transport/transport/deliveries/{task_id}/complete
+   * POST /transport/deliveries/{task_id}/complete
    * تدعم X-Tenant-ID
    */
   completeDelivery: async (taskId: number, data: DeliveryProof, headers?: { 'X-Tenant-ID'?: number }): Promise<DeliveryTaskResponse> => {
@@ -391,7 +391,7 @@ export const TransportService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<DeliveryTaskResponse>(
-        `/transport/transport/deliveries/${id}/complete`,
+        `/transport/deliveries/${id}/complete`,
         data,
         { headers: reqHeaders, withCredentials: true }
       );

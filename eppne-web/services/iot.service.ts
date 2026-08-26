@@ -21,11 +21,11 @@ export const IoTService = {
   // ==========================================
   /**
    * إنشاء أصل ذكي جديد
-   * POST /iot/iot/assets
+   * POST /iot/assets
    */
   createAsset: async (data: SmartAssetCreate): Promise<SmartAssetResponse> => {
     try {
-      const { data: result } = await apiClient.post<SmartAssetResponse>("/iot/iot/assets", data, {
+      const { data: result } = await apiClient.post<SmartAssetResponse>("/iot/assets", data, {
         withCredentials: true,
       });
       return result;
@@ -36,11 +36,11 @@ export const IoTService = {
 
   /**
    * جلب قائمة أصولي الذكية
-   * GET /iot/iot/assets
+   * GET /iot/assets
    */
   listMyAssets: async (params?: { skip?: number; limit?: number }): Promise<SmartAssetResponse[]> => {
     try {
-      const { data } = await apiClient.get<SmartAssetResponse[]>("/iot/iot/assets", {
+      const { data } = await apiClient.get<SmartAssetResponse[]>("/iot/assets", {
         params,
         withCredentials: true,
       });
@@ -52,13 +52,13 @@ export const IoTService = {
 
   /**
    * جلب تفاصيل أصل ذكي محدد
-   * GET /iot/iot/assets/{asset_id}
+   * GET /iot/assets/{asset_id}
    */
   getAsset: async (assetId: number): Promise<SmartAssetResponse> => {
     try {
       const id = Number(assetId);
       if (isNaN(id)) throw new Error("معرف الأصل غير صحيح");
-      const { data } = await apiClient.get<SmartAssetResponse>(`/iot/iot/assets/${id}`, {
+      const { data } = await apiClient.get<SmartAssetResponse>(`/iot/assets/${id}`, {
         withCredentials: true,
       });
       return data;
@@ -69,13 +69,13 @@ export const IoTService = {
 
   /**
    * تحديث أصل ذكي
-   * PATCH /iot/iot/assets/{asset_id}
+   * PATCH /iot/assets/{asset_id}
    */
   updateAsset: async (assetId: number, data: SmartAssetUpdate): Promise<SmartAssetResponse> => {
     try {
       const id = Number(assetId);
       if (isNaN(id)) throw new Error("معرف الأصل غير صحيح");
-      const { data: result } = await apiClient.patch<SmartAssetResponse>(`/iot/iot/assets/${id}`, data, {
+      const { data: result } = await apiClient.patch<SmartAssetResponse>(`/iot/assets/${id}`, data, {
         withCredentials: true,
       });
       return result;
@@ -89,11 +89,11 @@ export const IoTService = {
   // ==========================================
   /**
    * إنشاء شبكة مرافق جديدة
-   * POST /iot/iot/grids
+   * POST /iot/grids
    */
   createGrid: async (data: UtilityGridCreate): Promise<UtilityGridResponse> => {
     try {
-      const { data: result } = await apiClient.post<UtilityGridResponse>("/iot/iot/grids", data, {
+      const { data: result } = await apiClient.post<UtilityGridResponse>("/iot/grids", data, {
         withCredentials: true,
       });
       return result;
@@ -104,11 +104,11 @@ export const IoTService = {
 
   /**
    * جلب قائمة الشبكات
-   * GET /iot/iot/grids
+   * GET /iot/grids
    */
   listGrids: async (params?: { grid_type?: string | null; skip?: number; limit?: number }): Promise<UtilityGridResponse[]> => {
     try {
-      const { data } = await apiClient.get<UtilityGridResponse[]>("/iot/iot/grids", {
+      const { data } = await apiClient.get<UtilityGridResponse[]>("/iot/grids", {
         params,
         withCredentials: true,
       });
@@ -123,13 +123,13 @@ export const IoTService = {
   // ==========================================
   /**
    * استقبال قراءة من جهاز IoT
-   * POST /iot/iot/readings
+   * POST /iot/readings
    * يُفضل تمرير `idempotency_key` في query لمنع تكرار الإرسال
    */
   ingestReading: async (data: UtilityReadingCreate, idempotencyKey?: string): Promise<Record<string, any>> => {
     try {
       const key = idempotencyKey || generateIdempotencyKey();
-      const { data: result } = await apiClient.post<Record<string, any>>("/iot/iot/readings", data, {
+      const { data: result } = await apiClient.post<Record<string, any>>("/iot/readings", data, {
         params: { idempotency_key: key },
         withCredentials: true,
       });
@@ -141,11 +141,11 @@ export const IoTService = {
 
   /**
    * جلب القراءات
-   * GET /iot/iot/readings
+   * GET /iot/readings
    */
   getReadings: async (params?: { asset_id?: number | null; grid_id?: number | null; limit?: number }): Promise<UtilityReadingResponse[]> => {
     try {
-      const { data } = await apiClient.get<UtilityReadingResponse[]>("/iot/iot/readings", {
+      const { data } = await apiClient.get<UtilityReadingResponse[]>("/iot/readings", {
         params,
         withCredentials: true,
       });
@@ -160,11 +160,11 @@ export const IoTService = {
   // ==========================================
   /**
    * تسوية الكربون
-   * POST /iot/iot/carbon/settle
+   * POST /iot/carbon/settle
    */
   settleCarbon: async (data: CarbonSettlementRequest): Promise<void> => {
     try {
-      await apiClient.post("/iot/iot/carbon/settle", data, {
+      await apiClient.post("/iot/carbon/settle", data, {
         withCredentials: true,
       });
     } catch (error) {
@@ -177,11 +177,11 @@ export const IoTService = {
   // ==========================================
   /**
    * تسجيل طلب صيانة
-   * POST /iot/iot/maintenance
+   * POST /iot/maintenance
    */
   reportMaintenance: async (data: MaintenanceLogCreate): Promise<MaintenanceLogResponse> => {
     try {
-      const { data: result } = await apiClient.post<MaintenanceLogResponse>("/iot/iot/maintenance", data, {
+      const { data: result } = await apiClient.post<MaintenanceLogResponse>("/iot/maintenance", data, {
         withCredentials: true,
       });
       return result;
@@ -192,13 +192,13 @@ export const IoTService = {
 
   /**
    * حل طلب صيانة (تسجيل الإنجاز)
-   * POST /iot/iot/maintenance/{log_id}/resolve
+   * POST /iot/maintenance/{log_id}/resolve
    */
   resolveMaintenance: async (logId: number): Promise<MaintenanceLogResponse> => {
     try {
       const id = Number(logId);
       if (isNaN(id)) throw new Error("معرف طلب الصيانة غير صحيح");
-      const { data: result } = await apiClient.post<MaintenanceLogResponse>(`/iot/iot/maintenance/${id}/resolve`, undefined, {
+      const { data: result } = await apiClient.post<MaintenanceLogResponse>(`/iot/maintenance/${id}/resolve`, undefined, {
         withCredentials: true,
       });
       return result;

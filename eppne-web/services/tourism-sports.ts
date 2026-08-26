@@ -25,7 +25,7 @@ type TournamentResponse = components['schemas']['TournamentResponse'];
 export const TourismSportsService = {
   /**
    * جلب قائمة الوجهات
-   * GET /tourism-sports/tourism-sports/destinations
+   * GET /tourism-sports/destinations
    * تدعم X-Tenant-ID
    */
   listDestinations: async (params?: { destination_type?: string | null }, headers?: { 'X-Tenant-ID'?: number }): Promise<DestinationResponse[]> => {
@@ -34,7 +34,7 @@ export const TourismSportsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<DestinationResponse[]>("/tourism-sports/tourism-sports/destinations", {
+      const { data } = await apiClient.get<DestinationResponse[]>("/tourism-sports/destinations", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -47,7 +47,7 @@ export const TourismSportsService = {
 
   /**
    * إنشاء وجهة جديدة
-   * POST /tourism-sports/tourism-sports/destinations
+   * POST /tourism-sports/destinations
    * تدعم X-Tenant-ID
    */
   createDestination: async (data: DestinationCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<DestinationResponse> => {
@@ -56,7 +56,7 @@ export const TourismSportsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<DestinationResponse>("/tourism-sports/tourism-sports/destinations", data, {
+      const { data: result } = await apiClient.post<DestinationResponse>("/tourism-sports/destinations", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -68,7 +68,7 @@ export const TourismSportsService = {
 
   /**
    * إنشاء برنامج سياحي جديد
-   * POST /tourism-sports/tourism-sports/programs
+   * POST /tourism-sports/programs
    * تدعم X-Tenant-ID
    */
   createProgram: async (data: TourismProgramCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<TourismProgramResponse> => {
@@ -77,7 +77,7 @@ export const TourismSportsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<TourismProgramResponse>("/tourism-sports/tourism-sports/programs", data, {
+      const { data: result } = await apiClient.post<TourismProgramResponse>("/tourism-sports/programs", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -89,7 +89,7 @@ export const TourismSportsService = {
 
   /**
    * حجز برنامج سياحي
-   * POST /tourism-sports/tourism-sports/programs/{program_id}/book
+   * POST /tourism-sports/programs/{program_id}/book
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   bookProgram: async (
@@ -108,7 +108,7 @@ export const TourismSportsService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<ProgramBookingResponse>(
-        `/tourism-sports/tourism-sports/programs/${id}/book`,
+        `/tourism-sports/programs/${id}/book`,
         undefined,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -120,7 +120,7 @@ export const TourismSportsService = {
 
   /**
    * إنشاء فعالية جديدة
-   * POST /tourism-sports/tourism-sports/events
+   * POST /tourism-sports/events
    * تدعم X-Tenant-ID
    */
   createEvent: async (data: EventCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<EventResponse> => {
@@ -129,7 +129,7 @@ export const TourismSportsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<EventResponse>("/tourism-sports/tourism-sports/events", data, {
+      const { data: result } = await apiClient.post<EventResponse>("/tourism-sports/events", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -141,7 +141,7 @@ export const TourismSportsService = {
 
   /**
    * شراء تذكرة
-   * POST /tourism-sports/tourism-sports/tickets/purchase
+   * POST /tourism-sports/tickets/purchase
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   buyTicket: async (
@@ -158,7 +158,7 @@ export const TourismSportsService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<TicketResponse>(
-        "/tourism-sports/tourism-sports/tickets/purchase",
+        "/tourism-sports/tickets/purchase",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -170,7 +170,7 @@ export const TourismSportsService = {
 
   /**
    * إنشاء منظمة رياضية جديدة
-   * POST /tourism-sports/tourism-sports/sports/organizations
+   * POST /tourism-sports/sports/organizations
    * تدعم X-Tenant-ID
    */
   createSportsOrg: async (data: SportsOrgCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<SportsOrgResponse> => {
@@ -180,7 +180,7 @@ export const TourismSportsService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<SportsOrgResponse>(
-        "/tourism-sports/tourism-sports/sports/organizations",
+        "/tourism-sports/sports/organizations",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -192,12 +192,12 @@ export const TourismSportsService = {
 
   /**
    * إنشاء ملف لاعب جديد
-   * POST /tourism-sports/tourism-sports/sports/players/profile
+   * POST /tourism-sports/sports/players/profile
    */
   createPlayerProfile: async (data: PlayerProfileCreate): Promise<PlayerProfileResponse> => {
     try {
       const { data: result } = await apiClient.post<PlayerProfileResponse>(
-        "/tourism-sports/tourism-sports/sports/players/profile",
+        "/tourism-sports/sports/players/profile",
         data,
         { withCredentials: true }
       );
@@ -209,7 +209,7 @@ export const TourismSportsService = {
 
   /**
    * تقديم عرض انتقال لاعب
-   * POST /tourism-sports/tourism-sports/sports/transfers/bid
+   * POST /tourism-sports/sports/transfers/bid
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   placeTransferBid: async (
@@ -226,7 +226,7 @@ export const TourismSportsService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<TransferBidResponse>(
-        "/tourism-sports/tourism-sports/sports/transfers/bid",
+        "/tourism-sports/sports/transfers/bid",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -238,7 +238,7 @@ export const TourismSportsService = {
 
   /**
    * إنشاء بطولة جديدة
-   * POST /tourism-sports/tourism-sports/sports/tournaments
+   * POST /tourism-sports/sports/tournaments
    * تدعم X-Tenant-ID
    */
   createTournament: async (data: TournamentCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<TournamentResponse> => {
@@ -248,7 +248,7 @@ export const TourismSportsService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<TournamentResponse>(
-        "/tourism-sports/tourism-sports/sports/tournaments",
+        "/tourism-sports/sports/tournaments",
         data,
         { headers: reqHeaders, withCredentials: true }
       );

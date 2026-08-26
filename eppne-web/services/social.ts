@@ -31,11 +31,11 @@ export const SocialService = {
   // ==========================================
   /**
    * إنشاء منشور جديد
-   * POST /social/social/posts
+   * POST /social/posts
    */
   createPost: async (data: PostCreate): Promise<PostResponse> => {
     try {
-      const { data: result } = await apiClient.post<PostResponse>("/social/social/posts", data, {
+      const { data: result } = await apiClient.post<PostResponse>("/social/posts", data, {
         withCredentials: true,
       });
       return result;
@@ -46,11 +46,11 @@ export const SocialService = {
 
   /**
    * جلب الخلاصة (Feed)
-   * GET /social/social/feed
+   * GET /social/feed
    */
   getFeed: async (params?: { skip?: number; limit?: number }): Promise<PostResponse[]> => {
     try {
-      const { data } = await apiClient.get<PostResponse[]>("/social/social/feed", {
+      const { data } = await apiClient.get<PostResponse[]>("/social/feed", {
         params,
         withCredentials: true,
       });
@@ -62,11 +62,11 @@ export const SocialService = {
 
   /**
    * الإعجاب بمنشور
-   * POST /social/social/posts/{post_id}/like
+   * POST /social/posts/{post_id}/like
    */
   likePost: async (postId: number): Promise<void> => {
     try {
-      await apiClient.post(`/social/social/posts/${postId}/like`, undefined, {
+      await apiClient.post(`/social/posts/${postId}/like`, undefined, {
         withCredentials: true,
       });
     } catch (error) {
@@ -76,11 +76,11 @@ export const SocialService = {
 
   /**
    * مشاركة منشور
-   * POST /social/social/posts/{post_id}/share
+   * POST /social/posts/{post_id}/share
    */
   sharePost: async (postId: number): Promise<void> => {
     try {
-      await apiClient.post(`/social/social/posts/${postId}/share`, undefined, {
+      await apiClient.post(`/social/posts/${postId}/share`, undefined, {
         withCredentials: true,
       });
     } catch (error) {
@@ -93,11 +93,11 @@ export const SocialService = {
   // ==========================================
   /**
    * إنشاء مجموعة جديدة
-   * POST /social/social/groups
+   * POST /social/groups
    */
   createGroup: async (data: SocialGroupCreate): Promise<SocialGroupResponse> => {
     try {
-      const { data: result } = await apiClient.post<SocialGroupResponse>("/social/social/groups", data, {
+      const { data: result } = await apiClient.post<SocialGroupResponse>("/social/groups", data, {
         withCredentials: true,
       });
       return result;
@@ -108,11 +108,11 @@ export const SocialService = {
 
   /**
    * الانضمام إلى مجموعة
-   * POST /social/social/groups/{group_id}/join
+   * POST /social/groups/{group_id}/join
    */
   joinGroup: async (groupId: number): Promise<void> => {
     try {
-      await apiClient.post(`/social/social/groups/${groupId}/join`, undefined, {
+      await apiClient.post(`/social/groups/${groupId}/join`, undefined, {
         withCredentials: true,
       });
     } catch (error) {
@@ -125,11 +125,11 @@ export const SocialService = {
   // ==========================================
   /**
    * إنشاء عقد اجتماعي جديد
-   * POST /social/social/contracts
+   * POST /social/contracts
    */
   createContract: async (data: SocialContractCreate): Promise<SocialContractResponse> => {
     try {
-      const { data: result } = await apiClient.post<SocialContractResponse>("/social/social/contracts", data, {
+      const { data: result } = await apiClient.post<SocialContractResponse>("/social/contracts", data, {
         withCredentials: true,
       });
       return result;
@@ -140,11 +140,11 @@ export const SocialService = {
 
   /**
    * توقيع عقد اجتماعي
-   * POST /social/social/contracts/{contract_id}/sign
+   * POST /social/contracts/{contract_id}/sign
    */
   signContract: async (contractId: number, data: ContractSignRequest): Promise<void> => {
     try {
-      await apiClient.post(`/social/social/contracts/${contractId}/sign`, data, {
+      await apiClient.post(`/social/contracts/${contractId}/sign`, data, {
         withCredentials: true,
       });
     } catch (error) {
@@ -157,11 +157,11 @@ export const SocialService = {
   // ==========================================
   /**
    * إعداد ملف التوفيق
-   * POST /social/social/match/profile
+   * POST /social/match/profile
    */
   setupMatchProfile: async (data: AIMatchProfileCreate): Promise<AIMatchProfileResponse> => {
     try {
-      const { data: result } = await apiClient.post<AIMatchProfileResponse>("/social/social/match/profile", data, {
+      const { data: result } = await apiClient.post<AIMatchProfileResponse>("/social/match/profile", data, {
         withCredentials: true,
       });
       return result;
@@ -172,11 +172,11 @@ export const SocialService = {
 
   /**
    * جلب اقتراحات التوفيق
-   * GET /social/social/match/suggestions
+   * GET /social/match/suggestions
    */
   getMatchSuggestions: async (params?: { limit?: number }): Promise<any[]> => {
     try {
-      const { data } = await apiClient.get<any[]>("/social/social/match/suggestions", {
+      const { data } = await apiClient.get<any[]>("/social/match/suggestions", {
         params,
         withCredentials: true,
       });
@@ -191,11 +191,11 @@ export const SocialService = {
   // ==========================================
   /**
    * طلب اتصال
-   * POST /social/social/connections/request
+   * POST /social/connections/request
    */
   requestConnection: async (data: ConnectionRequest): Promise<ConnectionResponse> => {
     try {
-      const { data: result } = await apiClient.post<ConnectionResponse>("/social/social/connections/request", data, {
+      const { data: result } = await apiClient.post<ConnectionResponse>("/social/connections/request", data, {
         withCredentials: true,
       });
       return result;
@@ -206,11 +206,11 @@ export const SocialService = {
 
   /**
    * جلب اتصالاتي
-   * GET /social/social/connections
+   * GET /social/connections
    */
   getMyConnections: async (): Promise<ConnectionResponse[]> => {
     try {
-      const { data } = await apiClient.get<ConnectionResponse[]>("/social/social/connections", {
+      const { data } = await apiClient.get<ConnectionResponse[]>("/social/connections", {
         withCredentials: true,
       });
       return data;
@@ -224,11 +224,11 @@ export const SocialService = {
   // ==========================================
   /**
    * إنشاء مناسبة جديدة
-   * POST /social/social/occasions
+   * POST /social/occasions
    */
   createOccasion: async (data: UserOccasionCreate): Promise<UserOccasionResponse> => {
     try {
-      const { data: result } = await apiClient.post<UserOccasionResponse>("/social/social/occasions", data, {
+      const { data: result } = await apiClient.post<UserOccasionResponse>("/social/occasions", data, {
         withCredentials: true,
       });
       return result;
@@ -239,11 +239,11 @@ export const SocialService = {
 
   /**
    * جلب المناسبات القادمة
-   * GET /social/social/occasions/upcoming
+   * GET /social/occasions/upcoming
    */
   getUpcomingOccasions: async (params?: { days_ahead?: number }): Promise<UserOccasionResponse[]> => {
     try {
-      const { data } = await apiClient.get<UserOccasionResponse[]>("/social/social/occasions/upcoming", {
+      const { data } = await apiClient.get<UserOccasionResponse[]>("/social/occasions/upcoming", {
         params,
         withCredentials: true,
       });
@@ -258,11 +258,11 @@ export const SocialService = {
   // ==========================================
   /**
    * إرسال هدية رقمية
-   * POST /social/social/gifts/digital
+   * POST /social/gifts/digital
    */
   sendDigitalGift: async (data: DigitalGiftCreate): Promise<DigitalGiftResponse> => {
     try {
-      const { data: result } = await apiClient.post<DigitalGiftResponse>("/social/social/gifts/digital", data, {
+      const { data: result } = await apiClient.post<DigitalGiftResponse>("/social/gifts/digital", data, {
         withCredentials: true,
       });
       return result;
@@ -273,11 +273,11 @@ export const SocialService = {
 
   /**
    * طلب هدية مادية
-   * POST /social/social/gifts/physical
+   * POST /social/gifts/physical
    */
   requestPhysicalGift: async (data: PhysicalGiftCreate): Promise<PhysicalGiftResponse> => {
     try {
-      const { data: result } = await apiClient.post<PhysicalGiftResponse>("/social/social/gifts/physical", data, {
+      const { data: result } = await apiClient.post<PhysicalGiftResponse>("/social/gifts/physical", data, {
         withCredentials: true,
       });
       return result;
@@ -291,12 +291,12 @@ export const SocialService = {
   // ==========================================
   /**
    * إنشاء خطة اشتراك جديدة
-   * POST /social/social/groups/subscriptions/plans
+   * POST /social/groups/subscriptions/plans
    */
   createSubscriptionPlan: async (data: GroupSubscriptionPlanCreate): Promise<GroupSubscriptionPlanResponse> => {
     try {
       const { data: result } = await apiClient.post<GroupSubscriptionPlanResponse>(
-        "/social/social/groups/subscriptions/plans",
+        "/social/groups/subscriptions/plans",
         data,
         { withCredentials: true }
       );
@@ -308,12 +308,12 @@ export const SocialService = {
 
   /**
    * اشتراك مجموعة في خطة
-   * POST /social/social/groups/{group_id}/subscribe
+   * POST /social/groups/{group_id}/subscribe
    */
   subscribeGroup: async (groupId: number, data: GroupSubscriptionCreate): Promise<GroupSubscriptionResponse> => {
     try {
       const { data: result } = await apiClient.post<GroupSubscriptionResponse>(
-        `/social/social/groups/${groupId}/subscribe`,
+        `/social/groups/${groupId}/subscribe`,
         data,
         { withCredentials: true }
       );
@@ -325,11 +325,11 @@ export const SocialService = {
 
   /**
    * جلب ميزات المجموعة
-   * GET /social/social/groups/{group_id}/features
+   * GET /social/groups/{group_id}/features
    */
   getGroupFeatures: async (groupId: number): Promise<string[]> => {
     try {
-      const { data } = await apiClient.get<string[]>(`/social/social/groups/${groupId}/features`, {
+      const { data } = await apiClient.get<string[]>(`/social/groups/${groupId}/features`, {
         withCredentials: true,
       });
       return data;

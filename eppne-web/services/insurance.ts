@@ -20,7 +20,7 @@ type EmployeeInsuranceProfileResponse = components['schemas']['EmployeeInsurance
 export const InsuranceService = {
   /**
    * إنشاء سياسة تأمين جديدة
-   * POST /insurance/insurance/policies
+   * POST /insurance/policies
    * تدعم X-Tenant-ID
    */
   createPolicy: async (data: InsurancePolicyCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<InsurancePolicyResponse> => {
@@ -29,7 +29,7 @@ export const InsuranceService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<InsurancePolicyResponse>("/insurance/insurance/policies", data, {
+      const { data: result } = await apiClient.post<InsurancePolicyResponse>("/insurance/policies", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -41,7 +41,7 @@ export const InsuranceService = {
 
   /**
    * جلب قائمة سياسات التأمين مع التصفية
-   * GET /insurance/insurance/policies
+   * GET /insurance/policies
    * تدعم X-Tenant-ID
    */
   listPolicies: async (
@@ -58,7 +58,7 @@ export const InsuranceService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<InsurancePolicyResponse[]>("/insurance/insurance/policies", {
+      const { data } = await apiClient.get<InsurancePolicyResponse[]>("/insurance/policies", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -71,7 +71,7 @@ export const InsuranceService = {
 
   /**
    * جلب تفاصيل سياسة تأمين محددة
-   * GET /insurance/insurance/policies/{policy_id}
+   * GET /insurance/policies/{policy_id}
    * تدعم X-Tenant-ID
    */
   getPolicy: async (policyId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<InsurancePolicyResponse> => {
@@ -82,7 +82,7 @@ export const InsuranceService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<InsurancePolicyResponse>(`/insurance/insurance/policies/${id}`, {
+      const { data } = await apiClient.get<InsurancePolicyResponse>(`/insurance/policies/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -94,7 +94,7 @@ export const InsuranceService = {
 
   /**
    * الاشتراك في سياسة تأمين
-   * POST /insurance/insurance/subscriptions
+   * POST /insurance/subscriptions
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   subscribe: async (
@@ -111,7 +111,7 @@ export const InsuranceService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<InsuranceSubscriptionResponse>(
-        "/insurance/insurance/subscriptions",
+        "/insurance/subscriptions",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -123,7 +123,7 @@ export const InsuranceService = {
 
   /**
    * جلب اشتراكات التأمين الخاصة بي
-   * GET /insurance/insurance/subscriptions/me
+   * GET /insurance/subscriptions/me
    * تدعم X-Tenant-ID
    */
   getMySubscriptions: async (
@@ -139,7 +139,7 @@ export const InsuranceService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<InsuranceSubscriptionResponse[]>("/insurance/insurance/subscriptions/me", {
+      const { data } = await apiClient.get<InsuranceSubscriptionResponse[]>("/insurance/subscriptions/me", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -152,7 +152,7 @@ export const InsuranceService = {
 
   /**
    * تجديد اشتراك تأمين
-   * POST /insurance/insurance/subscriptions/{subscription_id}/renew
+   * POST /insurance/subscriptions/{subscription_id}/renew
    * تدعم X-Tenant-ID
    */
   renewSubscription: async (
@@ -167,7 +167,7 @@ export const InsuranceService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<InsuranceSubscriptionResponse>(
-        `/insurance/insurance/subscriptions/${id}/renew`,
+        `/insurance/subscriptions/${id}/renew`,
         undefined,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -179,7 +179,7 @@ export const InsuranceService = {
 
   /**
    * تقديم مطالبة تأمين
-   * POST /insurance/insurance/claims
+   * POST /insurance/claims
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   submitClaim: async (
@@ -196,7 +196,7 @@ export const InsuranceService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<InsuranceClaimResponse>(
-        "/insurance/insurance/claims",
+        "/insurance/claims",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -208,7 +208,7 @@ export const InsuranceService = {
 
   /**
    * جلب مطالباتي
-   * GET /insurance/insurance/claims/me
+   * GET /insurance/claims/me
    * تدعم X-Tenant-ID
    */
   getMyClaims: async (
@@ -220,7 +220,7 @@ export const InsuranceService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<InsuranceClaimResponse[]>("/insurance/insurance/claims/me", {
+      const { data } = await apiClient.get<InsuranceClaimResponse[]>("/insurance/claims/me", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -233,7 +233,7 @@ export const InsuranceService = {
 
   /**
    * مراجعة مطالبة تأمين (للمشرفين)
-   * PUT /insurance/insurance/claims/{claim_id}/review
+   * PUT /insurance/claims/{claim_id}/review
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   reviewClaim: async (
@@ -257,7 +257,7 @@ export const InsuranceService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.put<InsuranceClaimResponse>(
-        `/insurance/insurance/claims/${id}/review`,
+        `/insurance/claims/${id}/review`,
         undefined,
         { params, headers: reqHeaders, withCredentials: true }
       );
@@ -269,7 +269,7 @@ export const InsuranceService = {
 
   /**
    * إنشاء سجل معاش جديد
-   * POST /insurance/insurance/pensions
+   * POST /insurance/pensions
    * تدعم X-Tenant-ID
    */
   createPension: async (data: PensionRecordCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<PensionRecordResponse> => {
@@ -278,7 +278,7 @@ export const InsuranceService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<PensionRecordResponse>("/insurance/insurance/pensions", data, {
+      const { data: result } = await apiClient.post<PensionRecordResponse>("/insurance/pensions", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -290,7 +290,7 @@ export const InsuranceService = {
 
   /**
    * جلب معاشاتي
-   * GET /insurance/insurance/pensions/me
+   * GET /insurance/pensions/me
    * تدعم X-Tenant-ID
    */
   getMyPensions: async (headers?: { 'X-Tenant-ID'?: number }): Promise<PensionRecordResponse[]> => {
@@ -299,7 +299,7 @@ export const InsuranceService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<PensionRecordResponse[]>("/insurance/insurance/pensions/me", {
+      const { data } = await apiClient.get<PensionRecordResponse[]>("/insurance/pensions/me", {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -311,7 +311,7 @@ export const InsuranceService = {
 
   /**
    * إنشاء ملف تأمين موظف جديد
-   * POST /insurance/insurance/employee-profiles
+   * POST /insurance/employee-profiles
    * تدعم X-Tenant-ID
    */
   createEmployeeProfile: async (
@@ -324,7 +324,7 @@ export const InsuranceService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<EmployeeInsuranceProfileResponse>(
-        "/insurance/insurance/employee-profiles",
+        "/insurance/employee-profiles",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -336,7 +336,7 @@ export const InsuranceService = {
 
   /**
    * جلب ملف التأمين الخاص بي كموظف
-   * GET /insurance/insurance/employee-profiles/me
+   * GET /insurance/employee-profiles/me
    * تدعم X-Tenant-ID
    */
   getMyEmployeeProfile: async (headers?: { 'X-Tenant-ID'?: number }): Promise<EmployeeInsuranceProfileResponse> => {
@@ -346,7 +346,7 @@ export const InsuranceService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data } = await apiClient.get<EmployeeInsuranceProfileResponse>(
-        "/insurance/insurance/employee-profiles/me",
+        "/insurance/employee-profiles/me",
         { headers: reqHeaders, withCredentials: true }
       );
       return data;
@@ -357,7 +357,7 @@ export const InsuranceService = {
 
   /**
    * صرف المعاشات (للمشرفين)
-   * POST /insurance/insurance/admin/disburse-pensions
+   * POST /insurance/admin/disburse-pensions
    * تدعم X-Tenant-ID
    */
   disbursePensions: async (headers?: { 'X-Tenant-ID'?: number }): Promise<void> => {
@@ -366,7 +366,7 @@ export const InsuranceService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      await apiClient.post("/insurance/insurance/admin/disburse-pensions", undefined, {
+      await apiClient.post("/insurance/admin/disburse-pensions", undefined, {
         headers: reqHeaders,
         withCredentials: true,
       });

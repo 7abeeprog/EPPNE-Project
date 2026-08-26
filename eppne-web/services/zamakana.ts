@@ -22,7 +22,7 @@ type HumanFeedbackResponse = components['schemas']['HumanFeedbackResponse'];
 export const ZamakanaService = {
   /**
    * جلب قائمة العقد المعرفية حسب النوع
-   * GET /zamakana/zamakana/nodes
+   * GET /zamakana/nodes
    * تدعم X-Tenant-ID
    */
   listNodes: async (params?: { node_type?: string | null; skip?: number; limit?: number }, headers?: { 'X-Tenant-ID'?: number }): Promise<ZamakanaNodeResponse[]> => {
@@ -31,7 +31,7 @@ export const ZamakanaService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<ZamakanaNodeResponse[]>("/zamakana/zamakana/nodes", {
+      const { data } = await apiClient.get<ZamakanaNodeResponse[]>("/zamakana/nodes", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -44,7 +44,7 @@ export const ZamakanaService = {
 
   /**
    * إنشاء عقدة معرفية جديدة (حقبة، ابتكار، شخص، حدث)
-   * POST /zamakana/zamakana/nodes
+   * POST /zamakana/nodes
    * تدعم X-Tenant-ID
    */
   createNode: async (data: ZamakanaNodeCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<ZamakanaNodeResponse> => {
@@ -53,7 +53,7 @@ export const ZamakanaService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<ZamakanaNodeResponse>("/zamakana/zamakana/nodes", data, {
+      const { data: result } = await apiClient.post<ZamakanaNodeResponse>("/zamakana/nodes", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -65,7 +65,7 @@ export const ZamakanaService = {
 
   /**
    * جلب عقدة معرفية محددة
-   * GET /zamakana/zamakana/nodes/{node_id}
+   * GET /zamakana/nodes/{node_id}
    * تدعم X-Tenant-ID
    */
   getNode: async (nodeId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<ZamakanaNodeResponse> => {
@@ -76,7 +76,7 @@ export const ZamakanaService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<ZamakanaNodeResponse>(`/zamakana/zamakana/nodes/${id}`, {
+      const { data } = await apiClient.get<ZamakanaNodeResponse>(`/zamakana/nodes/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -88,7 +88,7 @@ export const ZamakanaService = {
 
   /**
    * تحديث عقدة معرفية (يتطلب أن يكون المستخدم هو منشئها)
-   * PUT /zamakana/zamakana/nodes/{node_id}
+   * PUT /zamakana/nodes/{node_id}
    * تدعم X-Tenant-ID
    */
   updateNode: async (nodeId: number, data: ZamakanaNodeCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<ZamakanaNodeResponse> => {
@@ -99,7 +99,7 @@ export const ZamakanaService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.put<ZamakanaNodeResponse>(`/zamakana/zamakana/nodes/${id}`, data, {
+      const { data: result } = await apiClient.put<ZamakanaNodeResponse>(`/zamakana/nodes/${id}`, data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -111,7 +111,7 @@ export const ZamakanaService = {
 
   /**
    * حذف عقدة معرفية (يتطلب أن يكون المستخدم هو منشئها)
-   * DELETE /zamakana/zamakana/nodes/{node_id}
+   * DELETE /zamakana/nodes/{node_id}
    * تدعم X-Tenant-ID
    */
   deleteNode: async (nodeId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<void> => {
@@ -122,7 +122,7 @@ export const ZamakanaService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      await apiClient.delete(`/zamakana/zamakana/nodes/${id}`, {
+      await apiClient.delete(`/zamakana/nodes/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -133,7 +133,7 @@ export const ZamakanaService = {
 
   /**
    * ربط عقدتين (تأثير سببي أو تأثير الفراشة)
-   * POST /zamakana/zamakana/edges
+   * POST /zamakana/edges
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   createEdge: async (
@@ -149,7 +149,7 @@ export const ZamakanaService = {
       if (idempotencyKey) {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
-      const { data: result } = await apiClient.post<ZamakanaEdgeResponse>("/zamakana/zamakana/edges", data, {
+      const { data: result } = await apiClient.post<ZamakanaEdgeResponse>("/zamakana/edges", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -161,7 +161,7 @@ export const ZamakanaService = {
 
   /**
    * استرجاع شبكة المعرفة (جميع العقد والحواف) للتصور
-   * GET /zamakana/zamakana/graph
+   * GET /zamakana/graph
    * تدعم X-Tenant-ID
    */
   getKnowledgeGraph: async (params?: { node_type?: string | null; limit?: number }, headers?: { 'X-Tenant-ID'?: number }): Promise<Record<string, any>> => {
@@ -170,7 +170,7 @@ export const ZamakanaService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<Record<string, any>>("/zamakana/zamakana/graph", {
+      const { data } = await apiClient.get<Record<string, any>>("/zamakana/graph", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -183,7 +183,7 @@ export const ZamakanaService = {
 
   /**
    * إنشاء حملة كوكبية لجمع ساعات تطوعية
-   * POST /zamakana/zamakana/campaigns
+   * POST /zamakana/campaigns
    * تدعم X-Tenant-ID
    */
   createCampaign: async (data: PlanetaryCampaignCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<PlanetaryCampaignResponse> => {
@@ -192,7 +192,7 @@ export const ZamakanaService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<PlanetaryCampaignResponse>("/zamakana/zamakana/campaigns", data, {
+      const { data: result } = await apiClient.post<PlanetaryCampaignResponse>("/zamakana/campaigns", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -204,7 +204,7 @@ export const ZamakanaService = {
 
   /**
    * قائمة الحملات الكوكبية
-   * GET /zamakana/zamakana/campaigns
+   * GET /zamakana/campaigns
    * تدعم X-Tenant-ID
    */
   listCampaigns: async (params?: { status?: string | null; skip?: number; limit?: number }, headers?: { 'X-Tenant-ID'?: number }): Promise<PlanetaryCampaignResponse[]> => {
@@ -213,7 +213,7 @@ export const ZamakanaService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<PlanetaryCampaignResponse[]>("/zamakana/zamakana/campaigns", {
+      const { data } = await apiClient.get<PlanetaryCampaignResponse[]>("/zamakana/campaigns", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -226,7 +226,7 @@ export const ZamakanaService = {
 
   /**
    * جلب حملة كوكبية محددة
-   * GET /zamakana/zamakana/campaigns/{campaign_id}
+   * GET /zamakana/campaigns/{campaign_id}
    * تدعم X-Tenant-ID
    */
   getCampaign: async (campaignId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<PlanetaryCampaignResponse> => {
@@ -237,7 +237,7 @@ export const ZamakanaService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<PlanetaryCampaignResponse>(`/zamakana/zamakana/campaigns/${id}`, {
+      const { data } = await apiClient.get<PlanetaryCampaignResponse>(`/zamakana/campaigns/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -249,7 +249,7 @@ export const ZamakanaService = {
 
   /**
    * التعهد بساعات تطوعية لحملة معينة
-   * POST /zamakana/zamakana/pledges
+   * POST /zamakana/pledges
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   pledgeTime: async (
@@ -265,7 +265,7 @@ export const ZamakanaService = {
       if (idempotencyKey) {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
-      const { data: result } = await apiClient.post<TimePledgeResponse>("/zamakana/zamakana/pledges", data, {
+      const { data: result } = await apiClient.post<TimePledgeResponse>("/zamakana/pledges", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -277,7 +277,7 @@ export const ZamakanaService = {
 
   /**
    * إثبات إنجاز الساعات المتعهد بها (رفع إثبات)
-   * POST /zamakana/zamakana/pledges/{pledge_id}/fulfill
+   * POST /zamakana/pledges/{pledge_id}/fulfill
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   fulfillPledge: async (
@@ -297,7 +297,7 @@ export const ZamakanaService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<TimePledgeResponse>(
-        `/zamakana/zamakana/pledges/${id}/fulfill`,
+        `/zamakana/pledges/${id}/fulfill`,
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -309,7 +309,7 @@ export const ZamakanaService = {
 
   /**
    * قائمة التعهدات الخاصة بحملة معينة
-   * GET /zamakana/zamakana/campaigns/{campaign_id}/pledges
+   * GET /zamakana/campaigns/{campaign_id}/pledges
    * تدعم X-Tenant-ID
    */
   getCampaignPledges: async (campaignId: number, params?: { status?: string | null }, headers?: { 'X-Tenant-ID'?: number }): Promise<TimePledgeResponse[]> => {
@@ -320,7 +320,7 @@ export const ZamakanaService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<TimePledgeResponse[]>(`/zamakana/zamakana/campaigns/${id}/pledges`, {
+      const { data } = await apiClient.get<TimePledgeResponse[]>(`/zamakana/campaigns/${id}/pledges`, {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -333,7 +333,7 @@ export const ZamakanaService = {
 
   /**
    * إنشاء سيناريو مستقبلي جديد
-   * POST /zamakana/zamakana/scenarios
+   * POST /zamakana/scenarios
    * تدعم X-Tenant-ID
    */
   createScenario: async (data: FutureScenarioCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<FutureScenarioResponse> => {
@@ -342,7 +342,7 @@ export const ZamakanaService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<FutureScenarioResponse>("/zamakana/zamakana/scenarios", data, {
+      const { data: result } = await apiClient.post<FutureScenarioResponse>("/zamakana/scenarios", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -354,7 +354,7 @@ export const ZamakanaService = {
 
   /**
    * قائمة السيناريوهات المستقبلية
-   * GET /zamakana/zamakana/scenarios
+   * GET /zamakana/scenarios
    * تدعم X-Tenant-ID
    */
   listScenarios: async (params?: { status?: string | null; skip?: number; limit?: number }, headers?: { 'X-Tenant-ID'?: number }): Promise<FutureScenarioResponse[]> => {
@@ -363,7 +363,7 @@ export const ZamakanaService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<FutureScenarioResponse[]>("/zamakana/zamakana/scenarios", {
+      const { data } = await apiClient.get<FutureScenarioResponse[]>("/zamakana/scenarios", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -376,7 +376,7 @@ export const ZamakanaService = {
 
   /**
    * جلب سيناريو مستقبلي محدد
-   * GET /zamakana/zamakana/scenarios/{scenario_id}
+   * GET /zamakana/scenarios/{scenario_id}
    * تدعم X-Tenant-ID
    */
   getScenario: async (scenarioId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<FutureScenarioResponse> => {
@@ -387,7 +387,7 @@ export const ZamakanaService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<FutureScenarioResponse>(`/zamakana/zamakana/scenarios/${id}`, {
+      const { data } = await apiClient.get<FutureScenarioResponse>(`/zamakana/scenarios/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -399,7 +399,7 @@ export const ZamakanaService = {
 
   /**
    * طلب تحليل الذكاء الاصطناعي للسيناريو
-   * POST /zamakana/zamakana/scenarios/{scenario_id}/analyze
+   * POST /zamakana/scenarios/{scenario_id}/analyze
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   analyzeScenario: async (
@@ -418,7 +418,7 @@ export const ZamakanaService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<FutureScenarioResponse>(
-        `/zamakana/zamakana/scenarios/${id}/analyze`,
+        `/zamakana/scenarios/${id}/analyze`,
         undefined,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -430,7 +430,7 @@ export const ZamakanaService = {
 
   /**
    * إضافة مراجعة بشرية على تقرير AI للسيناريو
-   * POST /zamakana/zamakana/scenarios/{scenario_id}/feedback
+   * POST /zamakana/scenarios/{scenario_id}/feedback
    * تدعم X-Tenant-ID
    */
   addFeedback: async (
@@ -446,7 +446,7 @@ export const ZamakanaService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<HumanFeedbackResponse>(
-        `/zamakana/zamakana/scenarios/${id}/feedback`,
+        `/zamakana/scenarios/${id}/feedback`,
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -458,7 +458,7 @@ export const ZamakanaService = {
 
   /**
    * اعتماد السيناريو بعد المراجعة البشرية
-   * POST /zamakana/zamakana/scenarios/{scenario_id}/confirm
+   * POST /zamakana/scenarios/{scenario_id}/confirm
    * تدعم X-Tenant-ID
    */
   confirmScenario: async (scenarioId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<FutureScenarioResponse> => {
@@ -470,7 +470,7 @@ export const ZamakanaService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<FutureScenarioResponse>(
-        `/zamakana/zamakana/scenarios/${id}/confirm`,
+        `/zamakana/scenarios/${id}/confirm`,
         undefined,
         { headers: reqHeaders, withCredentials: true }
       );

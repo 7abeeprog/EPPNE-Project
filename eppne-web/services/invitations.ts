@@ -38,7 +38,7 @@ type InvitationTrackingCreate = components['schemas']['InvitationTrackingCreate'
 export const InvitationsService = {
   /**
    * جلب قائمة الدعوات الخاصة بالمستأجر الحالي
-   * GET /invitations/invitations/
+   * GET /invitations/
    * تدعم X-Tenant-ID
    */
   listInvitations: async (
@@ -55,7 +55,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<InvitationResponse[]>("/invitations/invitations/", {
+      const { data } = await apiClient.get<InvitationResponse[]>("/invitations/", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -68,7 +68,7 @@ export const InvitationsService = {
 
   /**
    * إنشاء دعوة جديدة مع تحليل الذكاء الاصطناعي للهدف
-   * POST /invitations/invitations/
+   * POST /invitations/
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   createInvitation: async (
@@ -84,7 +84,7 @@ export const InvitationsService = {
       if (idempotencyKey) {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
-      const { data: result } = await apiClient.post<InvitationResponse>("/invitations/invitations/", data, {
+      const { data: result } = await apiClient.post<InvitationResponse>("/invitations/", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -96,7 +96,7 @@ export const InvitationsService = {
 
   /**
    * جلب تفاصيل دعوة محددة مع تتبع الزيارة
-   * GET /invitations/invitations/{invitation_id}
+   * GET /invitations/{invitation_id}
    * تدعم X-Tenant-ID
    */
   getInvitation: async (invitationId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<InvitationResponse> => {
@@ -107,7 +107,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<InvitationResponse>(`/invitations/invitations/${id}`, {
+      const { data } = await apiClient.get<InvitationResponse>(`/invitations/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -119,7 +119,7 @@ export const InvitationsService = {
 
   /**
    * تحديث دعوة موجودة (يتطلب أن يكون المستخدم هو منشئها)
-   * PUT /invitations/invitations/{invitation_id}
+   * PUT /invitations/{invitation_id}
    * تدعم X-Tenant-ID
    */
   updateInvitation: async (
@@ -134,7 +134,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.put<InvitationResponse>(`/invitations/invitations/${id}`, data, {
+      const { data: result } = await apiClient.put<InvitationResponse>(`/invitations/${id}`, data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -146,7 +146,7 @@ export const InvitationsService = {
 
   /**
    * حذف دعوة (يتطلب أن يكون المستخدم هو منشئها)
-   * DELETE /invitations/invitations/{invitation_id}
+   * DELETE /invitations/{invitation_id}
    * تدعم X-Tenant-ID
    */
   deleteInvitation: async (invitationId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<void> => {
@@ -157,7 +157,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      await apiClient.delete(`/invitations/invitations/${id}`, {
+      await apiClient.delete(`/invitations/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -168,7 +168,7 @@ export const InvitationsService = {
 
   /**
    * قبول الدعوة (تحويل العميل إلى Lead)
-   * POST /invitations/invitations/{invitation_id}/accept
+   * POST /invitations/{invitation_id}/accept
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   acceptInvitation: async (
@@ -188,7 +188,7 @@ export const InvitationsService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<InvitationAcceptResponse>(
-        `/invitations/invitations/${id}/accept`,
+        `/invitations/${id}/accept`,
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -200,7 +200,7 @@ export const InvitationsService = {
 
   /**
    * محادثة مع وكيل الذكاء الاصطناعي (مدعوم بـ AI Governance)
-   * POST /invitations/invitations/{invitation_id}/chat
+   * POST /invitations/{invitation_id}/chat
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   chatWithAI: async (
@@ -220,7 +220,7 @@ export const InvitationsService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<ConversationResponse>(
-        `/invitations/invitations/${id}/chat`,
+        `/invitations/${id}/chat`,
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -232,7 +232,7 @@ export const InvitationsService = {
 
   /**
    * جلب بيانات تتبع سلوك المدعو
-   * GET /invitations/invitations/{invitation_id}/tracking
+   * GET /invitations/{invitation_id}/tracking
    * تدعم X-Tenant-ID
    */
   getInvitationTracking: async (invitationId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<InvitationTrackingResponse[]> => {
@@ -243,7 +243,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<InvitationTrackingResponse[]>(`/invitations/invitations/${id}/tracking`, {
+      const { data } = await apiClient.get<InvitationTrackingResponse[]>(`/invitations/${id}/tracking`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -255,7 +255,7 @@ export const InvitationsService = {
 
   /**
    * جلب محادثات العميل مع وكيل الذكاء الاصطناعي
-   * GET /invitations/invitations/{invitation_id}/conversations
+   * GET /invitations/{invitation_id}/conversations
    * تدعم X-Tenant-ID
    */
   getInvitationConversations: async (invitationId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<ConversationResponse[]> => {
@@ -266,7 +266,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<ConversationResponse[]>(`/invitations/invitations/${id}/conversations`, {
+      const { data } = await apiClient.get<ConversationResponse[]>(`/invitations/${id}/conversations`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -278,7 +278,7 @@ export const InvitationsService = {
 
   /**
    * جلب تحليلات الذكاء الاصطناعي للعميل المستهدف
-   * GET /invitations/invitations/{invitation_id}/insight
+   * GET /invitations/{invitation_id}/insight
    * تدعم X-Tenant-ID
    */
   getClientInsight: async (invitationId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<ClientInsightResponse> => {
@@ -289,7 +289,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<ClientInsightResponse>(`/invitations/invitations/${id}/insight`, {
+      const { data } = await apiClient.get<ClientInsightResponse>(`/invitations/${id}/insight`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -301,7 +301,7 @@ export const InvitationsService = {
 
   /**
    * إحصائيات الدعوات والحملات والعملاء
-   * GET /invitations/invitations/stats
+   * GET /invitations/stats
    * تدعم X-Tenant-ID
    */
   getInvitationStats: async (headers?: { 'X-Tenant-ID'?: number }): Promise<InvitationStatsResponse> => {
@@ -310,7 +310,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<InvitationStatsResponse>("/invitations/invitations/stats", {
+      const { data } = await apiClient.get<InvitationStatsResponse>("/invitations/stats", {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -322,7 +322,7 @@ export const InvitationsService = {
 
   /**
    * قائمة العملاء المحتملين مع التصفية حسب الحالة والمصدر
-   * GET /invitations/invitations/leads
+   * GET /invitations/leads
    * تدعم X-Tenant-ID
    */
   listLeads: async (
@@ -339,7 +339,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<LeadResponse[]>("/invitations/invitations/leads", {
+      const { data } = await apiClient.get<LeadResponse[]>("/invitations/leads", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -352,7 +352,7 @@ export const InvitationsService = {
 
   /**
    * إضافة عميل محتمل جديد (يدوياً أو من مصدر خارجي)
-   * POST /invitations/invitations/leads
+   * POST /invitations/leads
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   createLead: async (
@@ -368,7 +368,7 @@ export const InvitationsService = {
       if (idempotencyKey) {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
-      const { data: result } = await apiClient.post<LeadResponse>("/invitations/invitations/leads", data, {
+      const { data: result } = await apiClient.post<LeadResponse>("/invitations/leads", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -380,7 +380,7 @@ export const InvitationsService = {
 
   /**
    * جلب تفاصيل عميل محتمل مع جميع التفاعلات
-   * GET /invitations/invitations/leads/{lead_id}
+   * GET /invitations/leads/{lead_id}
    * تدعم X-Tenant-ID
    */
   getLead: async (leadId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<LeadResponse> => {
@@ -391,7 +391,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<LeadResponse>(`/invitations/invitations/leads/${id}`, {
+      const { data } = await apiClient.get<LeadResponse>(`/invitations/leads/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -403,7 +403,7 @@ export const InvitationsService = {
 
   /**
    * تحديث بيانات العميل المحتمل أو حالته
-   * PUT /invitations/invitations/leads/{lead_id}
+   * PUT /invitations/leads/{lead_id}
    * تدعم X-Tenant-ID
    */
   updateLead: async (
@@ -418,7 +418,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.put<LeadResponse>(`/invitations/invitations/leads/${id}`, data, {
+      const { data: result } = await apiClient.put<LeadResponse>(`/invitations/leads/${id}`, data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -430,7 +430,7 @@ export const InvitationsService = {
 
   /**
    * حذف عميل محتمل (حذف منطقي)
-   * DELETE /invitations/invitations/leads/{lead_id}
+   * DELETE /invitations/leads/{lead_id}
    * تدعم X-Tenant-ID
    */
   deleteLead: async (leadId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<void> => {
@@ -441,7 +441,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      await apiClient.delete(`/invitations/invitations/leads/${id}`, {
+      await apiClient.delete(`/invitations/leads/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -452,7 +452,7 @@ export const InvitationsService = {
 
   /**
    * جلب جميع تفاعلات العميل (مرتبة تنازلياً حسب التاريخ)
-   * GET /invitations/invitations/leads/{lead_id}/interactions
+   * GET /invitations/leads/{lead_id}/interactions
    * تدعم X-Tenant-ID
    */
   getLeadInteractions: async (leadId: number, params?: { limit?: number }, headers?: { 'X-Tenant-ID'?: number }): Promise<InteractionResponse[]> => {
@@ -463,7 +463,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<InteractionResponse[]>(`/invitations/invitations/leads/${id}/interactions`, {
+      const { data } = await apiClient.get<InteractionResponse[]>(`/invitations/leads/${id}/interactions`, {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -476,7 +476,7 @@ export const InvitationsService = {
 
   /**
    * تسجيل تفاعل جديد مع العميل (مكالمة، بريد، اجتماع، إلخ)
-   * POST /invitations/invitations/leads/{lead_id}/interactions
+   * POST /invitations/leads/{lead_id}/interactions
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   createInteraction: async (
@@ -496,7 +496,7 @@ export const InvitationsService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<InteractionResponse>(
-        `/invitations/invitations/leads/${id}/interactions`,
+        `/invitations/leads/${id}/interactions`,
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -508,7 +508,7 @@ export const InvitationsService = {
 
   /**
    * قائمة الحملات التسويقية مع التصفية حسب الحالة والنوع
-   * GET /invitations/invitations/campaigns
+   * GET /invitations/campaigns
    * تدعم X-Tenant-ID
    */
   listCampaigns: async (
@@ -525,7 +525,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<CampaignResponse[]>("/invitations/invitations/campaigns", {
+      const { data } = await apiClient.get<CampaignResponse[]>("/invitations/campaigns", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -538,7 +538,7 @@ export const InvitationsService = {
 
   /**
    * إنشاء حملة تسويقية جديدة (مع دفع الميزانية المطلوبة)
-   * POST /invitations/invitations/campaigns
+   * POST /invitations/campaigns
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   createCampaign: async (
@@ -554,7 +554,7 @@ export const InvitationsService = {
       if (idempotencyKey) {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
-      const { data: result } = await apiClient.post<CampaignResponse>("/invitations/invitations/campaigns", data, {
+      const { data: result } = await apiClient.post<CampaignResponse>("/invitations/campaigns", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -566,7 +566,7 @@ export const InvitationsService = {
 
   /**
    * جلب تفاصيل حملة تسويقية محددة مع إحصائيات الأداء
-   * GET /invitations/invitations/campaigns/{campaign_id}
+   * GET /invitations/campaigns/{campaign_id}
    * تدعم X-Tenant-ID
    */
   getCampaign: async (campaignId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<CampaignResponse> => {
@@ -577,7 +577,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<CampaignResponse>(`/invitations/invitations/campaigns/${id}`, {
+      const { data } = await apiClient.get<CampaignResponse>(`/invitations/campaigns/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -589,7 +589,7 @@ export const InvitationsService = {
 
   /**
    * تحديث حملة تسويقية (يتطلب أن يكون المستخدم هو منشئها)
-   * PUT /invitations/invitations/campaigns/{campaign_id}
+   * PUT /invitations/campaigns/{campaign_id}
    * تدعم X-Tenant-ID
    */
   updateCampaign: async (
@@ -604,7 +604,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.put<CampaignResponse>(`/invitations/invitations/campaigns/${id}`, data, {
+      const { data: result } = await apiClient.put<CampaignResponse>(`/invitations/campaigns/${id}`, data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -616,7 +616,7 @@ export const InvitationsService = {
 
   /**
    * حذف حملة تسويقية (يتطلب أن يكون المستخدم هو منشئها)
-   * DELETE /invitations/invitations/campaigns/{campaign_id}
+   * DELETE /invitations/campaigns/{campaign_id}
    * تدعم X-Tenant-ID
    */
   deleteCampaign: async (campaignId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<void> => {
@@ -627,7 +627,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      await apiClient.delete(`/invitations/invitations/campaigns/${id}`, {
+      await apiClient.delete(`/invitations/campaigns/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -638,7 +638,7 @@ export const InvitationsService = {
 
   /**
    * إطلاق حملة (تغيير الحالة إلى ACTIVE)
-   * POST /invitations/invitations/campaigns/{campaign_id}/launch
+   * POST /invitations/campaigns/{campaign_id}/launch
    * تدعم X-Tenant-ID
    */
   launchCampaign: async (campaignId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<CampaignResponse> => {
@@ -650,7 +650,7 @@ export const InvitationsService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<CampaignResponse>(
-        `/invitations/invitations/campaigns/${id}/launch`,
+        `/invitations/campaigns/${id}/launch`,
         undefined,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -662,7 +662,7 @@ export const InvitationsService = {
 
   /**
    * قائمة تذاكر الدعم مع التصفية حسب الحالة والمسؤول
-   * GET /invitations/invitations/tickets
+   * GET /invitations/tickets
    * تدعم X-Tenant-ID
    */
   listTickets: async (
@@ -679,7 +679,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<TicketResponse[]>("/invitations/invitations/tickets", {
+      const { data } = await apiClient.get<TicketResponse[]>("/invitations/tickets", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -692,7 +692,7 @@ export const InvitationsService = {
 
   /**
    * إنشاء تذكرة دعم جديدة
-   * POST /invitations/invitations/tickets
+   * POST /invitations/tickets
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   createTicket: async (
@@ -708,7 +708,7 @@ export const InvitationsService = {
       if (idempotencyKey) {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
-      const { data: result } = await apiClient.post<TicketResponse>("/invitations/invitations/tickets", data, {
+      const { data: result } = await apiClient.post<TicketResponse>("/invitations/tickets", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -720,7 +720,7 @@ export const InvitationsService = {
 
   /**
    * جلب تفاصيل تذكرة دعم مع جميع التعليقات
-   * GET /invitations/invitations/tickets/{ticket_id}
+   * GET /invitations/tickets/{ticket_id}
    * تدعم X-Tenant-ID
    */
   getTicket: async (ticketId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<TicketResponse> => {
@@ -731,7 +731,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<TicketResponse>(`/invitations/invitations/tickets/${id}`, {
+      const { data } = await apiClient.get<TicketResponse>(`/invitations/tickets/${id}`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -743,7 +743,7 @@ export const InvitationsService = {
 
   /**
    * تحديث تذكرة دعم (تغيير الحالة، الأولوية، المسؤول)
-   * PUT /invitations/invitations/tickets/{ticket_id}
+   * PUT /invitations/tickets/{ticket_id}
    * تدعم X-Tenant-ID
    */
   updateTicket: async (
@@ -758,7 +758,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.put<TicketResponse>(`/invitations/invitations/tickets/${id}`, data, {
+      const { data: result } = await apiClient.put<TicketResponse>(`/invitations/tickets/${id}`, data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -770,7 +770,7 @@ export const InvitationsService = {
 
   /**
    * جلب جميع تعليقات التذكرة
-   * GET /invitations/invitations/tickets/{ticket_id}/comments
+   * GET /invitations/tickets/{ticket_id}/comments
    * تدعم X-Tenant-ID
    */
   getTicketComments: async (ticketId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<TicketCommentResponse[]> => {
@@ -781,7 +781,7 @@ export const InvitationsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<TicketCommentResponse[]>(`/invitations/invitations/tickets/${id}/comments`, {
+      const { data } = await apiClient.get<TicketCommentResponse[]>(`/invitations/tickets/${id}/comments`, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -793,7 +793,7 @@ export const InvitationsService = {
 
   /**
    * إضافة تعليق على تذكرة (داخلي أو خارجي)
-   * POST /invitations/invitations/tickets/{ticket_id}/comments
+   * POST /invitations/tickets/{ticket_id}/comments
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   addTicketComment: async (
@@ -813,7 +813,7 @@ export const InvitationsService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<TicketCommentResponse>(
-        `/invitations/invitations/tickets/${id}/comments`,
+        `/invitations/tickets/${id}/comments`,
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -825,7 +825,7 @@ export const InvitationsService = {
 
   /**
    * تتبع سلوك الزائر على صفحة الدعوة (يُستدعى من frontend عبر AJAX)
-   * POST /invitations/invitations/tracking
+   * POST /invitations/tracking
    * تدعم X-Tenant-ID
    */
   trackInvitation: async (data: InvitationTrackingCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<InvitationTrackingResponse> => {
@@ -835,7 +835,7 @@ export const InvitationsService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<InvitationTrackingResponse>(
-        "/invitations/invitations/tracking",
+        "/invitations/tracking",
         data,
         { headers: reqHeaders, withCredentials: true }
       );

@@ -17,7 +17,7 @@ export const TranslationService = {
   // ==========================================
   /**
    * ترجمة نص فردي
-   * POST /translation/translation/translate
+   * POST /translation/translate
    * تدعم X-Tenant-ID
    */
   translate: async (data: TranslateRequest, headers?: { 'X-Tenant-ID'?: number }): Promise<TranslateResponse> => {
@@ -26,7 +26,7 @@ export const TranslationService = {
       if (!finalData.idempotency_key) {
         finalData.idempotency_key = generateIdempotencyKey();
       }
-      const { data: result } = await apiClient.post<TranslateResponse>("/translation/translation/translate", finalData, {
+      const { data: result } = await apiClient.post<TranslateResponse>("/translation/translate", finalData, {
         headers,
         withCredentials: true,
       });
@@ -41,12 +41,12 @@ export const TranslationService = {
   // ==========================================
   /**
    * ترجمة نصوص متعددة دفعة واحدة
-   * POST /translation/translation/batch-translate
+   * POST /translation/batch-translate
    * تدعم X-Tenant-ID
    */
   batchTranslate: async (data: BatchTranslateRequest, headers?: { 'X-Tenant-ID'?: number }): Promise<string[]> => {
     try {
-      const { data: result } = await apiClient.post<string[]>("/translation/translation/batch-translate", data, {
+      const { data: result } = await apiClient.post<string[]>("/translation/batch-translate", data, {
         headers,
         withCredentials: true,
       });
@@ -61,12 +61,12 @@ export const TranslationService = {
   // ==========================================
   /**
    * ترجمة محادثة (مع سياق)
-   * POST /translation/translation/chat-translate
+   * POST /translation/chat-translate
    * تدعم X-Tenant-ID
    */
   chatTranslate: async (data: ChatTranslateRequest, headers?: { 'X-Tenant-ID'?: number }): Promise<ChatTranslateResponse> => {
     try {
-      const { data: result } = await apiClient.post<ChatTranslateResponse>("/translation/translation/chat-translate", data, {
+      const { data: result } = await apiClient.post<ChatTranslateResponse>("/translation/chat-translate", data, {
         headers,
         withCredentials: true,
       });
@@ -81,11 +81,11 @@ export const TranslationService = {
   // ==========================================
   /**
    * جلب قائمة اللغات المدعومة
-   * GET /translation/translation/languages
+   * GET /translation/languages
    */
   getSupportedLanguages: async (): Promise<SupportedLanguageResponse[]> => {
     try {
-      const { data } = await apiClient.get<SupportedLanguageResponse[]>("/translation/translation/languages");
+      const { data } = await apiClient.get<SupportedLanguageResponse[]>("/translation/languages");
       return data;
     } catch (error) {
       throw handleError(error, "فشل جلب اللغات المدعومة");

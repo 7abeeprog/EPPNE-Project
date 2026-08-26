@@ -20,11 +20,11 @@ export const SaaSService = {
   // ==========================================
   /**
    * جلب جميع الخدمات المتاحة (للمشرفين فقط)
-   * GET /saas/saas/services
+   * GET /saas/services
    */
   listServices: async (): Promise<ServiceCatalogResponse[]> => {
     try {
-      const { data } = await apiClient.get<ServiceCatalogResponse[]>("/saas/saas/services", {
+      const { data } = await apiClient.get<ServiceCatalogResponse[]>("/saas/services", {
         withCredentials: true,
       });
       return data;
@@ -35,11 +35,11 @@ export const SaaSService = {
 
   /**
    * إنشاء خدمة جديدة (للمشرفين فقط)
-   * POST /saas/saas/services
+   * POST /saas/services
    */
   createService: async (data: ServiceCatalogCreate): Promise<ServiceCatalogResponse> => {
     try {
-      const { data: result } = await apiClient.post<ServiceCatalogResponse>("/saas/saas/services", data, {
+      const { data: result } = await apiClient.post<ServiceCatalogResponse>("/saas/services", data, {
         withCredentials: true,
       });
       return result;
@@ -50,13 +50,13 @@ export const SaaSService = {
 
   /**
    * جلب تفاصيل خدمة محددة
-   * GET /saas/saas/services/{service_id}
+   * GET /saas/services/{service_id}
    */
   getService: async (serviceId: number): Promise<ServiceCatalogResponse> => {
     try {
       const id = Number(serviceId);
       if (isNaN(id)) throw new Error("معرف الخدمة غير صحيح");
-      const { data } = await apiClient.get<ServiceCatalogResponse>(`/saas/saas/services/${id}`, {
+      const { data } = await apiClient.get<ServiceCatalogResponse>(`/saas/services/${id}`, {
         withCredentials: true,
       });
       return data;
@@ -67,13 +67,13 @@ export const SaaSService = {
 
   /**
    * جلب خطط خدمة معينة
-   * GET /saas/saas/services/{service_id}/plans
+   * GET /saas/services/{service_id}/plans
    */
   listServicePlans: async (serviceId: number): Promise<ServicePlanResponse[]> => {
     try {
       const id = Number(serviceId);
       if (isNaN(id)) throw new Error("معرف الخدمة غير صحيح");
-      const { data } = await apiClient.get<ServicePlanResponse[]>(`/saas/saas/services/${id}/plans`, {
+      const { data } = await apiClient.get<ServicePlanResponse[]>(`/saas/services/${id}/plans`, {
         withCredentials: true,
       });
       return data;
@@ -87,11 +87,11 @@ export const SaaSService = {
   // ==========================================
   /**
    * إنشاء خطة تسعير جديدة (للمشرفين فقط)
-   * POST /saas/saas/plans
+   * POST /saas/plans
    */
   createPlan: async (data: ServicePlanCreate): Promise<ServicePlanResponse> => {
     try {
-      const { data: result } = await apiClient.post<ServicePlanResponse>("/saas/saas/plans", data, {
+      const { data: result } = await apiClient.post<ServicePlanResponse>("/saas/plans", data, {
         withCredentials: true,
       });
       return result;
@@ -105,12 +105,12 @@ export const SaaSService = {
   // ==========================================
   /**
    * جلب اشتراكاتي (مع Pagination)
-   * GET /saas/saas/subscriptions
+   * GET /saas/subscriptions
    */
   getMySubscriptions: async (params?: { skip?: number; limit?: number }): Promise<PaginatedResponse_TenantSubscriptionResponse_> => {
     try {
       const { data } = await apiClient.get<PaginatedResponse_TenantSubscriptionResponse_>(
-        "/saas/saas/subscriptions",
+        "/saas/subscriptions",
         { params, withCredentials: true }
       );
       return data;
@@ -121,14 +121,14 @@ export const SaaSService = {
 
   /**
    * الاشتراك في خطة جديدة
-   * POST /saas/saas/subscriptions/{plan_id}
+   * POST /saas/subscriptions/{plan_id}
    */
   subscribeToPlan: async (planId: number): Promise<TenantSubscriptionResponse> => {
     try {
       const id = Number(planId);
       if (isNaN(id)) throw new Error("معرف الخطة غير صحيح");
       const { data: result } = await apiClient.post<TenantSubscriptionResponse>(
-        `/saas/saas/subscriptions/${id}`,
+        `/saas/subscriptions/${id}`,
         undefined,
         { withCredentials: true }
       );
@@ -140,14 +140,14 @@ export const SaaSService = {
 
   /**
    * إلغاء الاشتراك (إيقاف التجديد التلقائي)
-   * PUT /saas/saas/subscriptions/{subscription_id}/cancel
+   * PUT /saas/subscriptions/{subscription_id}/cancel
    */
   cancelSubscription: async (subscriptionId: number): Promise<TenantSubscriptionResponse> => {
     try {
       const id = Number(subscriptionId);
       if (isNaN(id)) throw new Error("معرف الاشتراك غير صحيح");
       const { data: result } = await apiClient.put<TenantSubscriptionResponse>(
-        `/saas/saas/subscriptions/${id}/cancel`,
+        `/saas/subscriptions/${id}/cancel`,
         undefined,
         { withCredentials: true }
       );
@@ -159,13 +159,13 @@ export const SaaSService = {
 
   /**
    * جلب حالة الاشتراك
-   * GET /saas/saas/subscriptions/{subscription_id}/status
+   * GET /saas/subscriptions/{subscription_id}/status
    */
   getSubscriptionStatus: async (subscriptionId: number): Promise<any> => {
     try {
       const id = Number(subscriptionId);
       if (isNaN(id)) throw new Error("معرف الاشتراك غير صحيح");
-      const { data } = await apiClient.get<any>(`/saas/saas/subscriptions/${id}/status`, {
+      const { data } = await apiClient.get<any>(`/saas/subscriptions/${id}/status`, {
         withCredentials: true,
       });
       return data;
@@ -179,11 +179,11 @@ export const SaaSService = {
   // ==========================================
   /**
    * عرض جميع الخدمات مع حالة الوصول للمستأجر الحالي
-   * GET /saas/saas/access
+   * GET /saas/access
    */
   getServicesAccess: async (): Promise<ServiceAccessStatus[]> => {
     try {
-      const { data } = await apiClient.get<ServiceAccessStatus[]>("/saas/saas/access", {
+      const { data } = await apiClient.get<ServiceAccessStatus[]>("/saas/access", {
         withCredentials: true,
       });
       return data;
@@ -194,11 +194,11 @@ export const SaaSService = {
 
   /**
    * التحقق من صلاحية خدمة محددة
-   * GET /saas/saas/access/{service_code}
+   * GET /saas/access/{service_code}
    */
   checkServiceAccess: async (serviceCode: string): Promise<CheckAccessResponse> => {
     try {
-      const { data } = await apiClient.get<CheckAccessResponse>(`/saas/saas/access/${serviceCode}`, {
+      const { data } = await apiClient.get<CheckAccessResponse>(`/saas/access/${serviceCode}`, {
         withCredentials: true,
       });
       return data;
@@ -212,13 +212,13 @@ export const SaaSService = {
   // ==========================================
   /**
    * جلب فواتيري (مع Pagination)
-   * GET /saas/saas/invoices
+   * GET /saas/invoices
    */
   getMyInvoices: async (
     params?: { skip?: number; limit?: number; status?: string | null }
   ): Promise<PaginatedResponse_InvoiceResponse_> => {
     try {
-      const { data } = await apiClient.get<PaginatedResponse_InvoiceResponse_>("/saas/saas/invoices", {
+      const { data } = await apiClient.get<PaginatedResponse_InvoiceResponse_>("/saas/invoices", {
         params,
         withCredentials: true,
       });
@@ -230,13 +230,13 @@ export const SaaSService = {
 
   /**
    * جلب تفاصيل فاتورة محددة
-   * GET /saas/saas/invoices/{invoice_id}
+   * GET /saas/invoices/{invoice_id}
    */
   getInvoice: async (invoiceId: number): Promise<InvoiceResponse> => {
     try {
       const id = Number(invoiceId);
       if (isNaN(id)) throw new Error("معرف الفاتورة غير صحيح");
-      const { data } = await apiClient.get<InvoiceResponse>(`/saas/saas/invoices/${id}`, {
+      const { data } = await apiClient.get<InvoiceResponse>(`/saas/invoices/${id}`, {
         withCredentials: true,
       });
       return data;
@@ -247,13 +247,13 @@ export const SaaSService = {
 
   /**
    * دفع فاتورة مستحقة باستخدام المحفظة السيادية
-   * POST /saas/saas/invoices/{invoice_id}/pay
+   * POST /saas/invoices/{invoice_id}/pay
    */
   payInvoice: async (invoiceId: number): Promise<InvoiceResponse> => {
     try {
       const id = Number(invoiceId);
       if (isNaN(id)) throw new Error("معرف الفاتورة غير صحيح");
-      const { data: result } = await apiClient.post<InvoiceResponse>(`/saas/saas/invoices/${id}/pay`, undefined, {
+      const { data: result } = await apiClient.post<InvoiceResponse>(`/saas/invoices/${id}/pay`, undefined, {
         withCredentials: true,
       });
       return result;
@@ -267,11 +267,11 @@ export const SaaSService = {
   // ==========================================
   /**
    * جلب جميع رايات الميزات للمستأجر (للمشرفين فقط)
-   * GET /saas/saas/feature-flags
+   * GET /saas/feature-flags
    */
   listFeatureFlags: async (): Promise<any> => {
     try {
-      const { data } = await apiClient.get<any>("/saas/saas/feature-flags", {
+      const { data } = await apiClient.get<any>("/saas/feature-flags", {
         withCredentials: true,
       });
       return data;
@@ -282,11 +282,11 @@ export const SaaSService = {
 
   /**
    * تفعيل/تعطيل ميزة محددة (للمشرفين فقط)
-   * POST /saas/saas/feature-flags/{service_code}/{feature_key}
+   * POST /saas/feature-flags/{service_code}/{feature_key}
    */
   toggleFeatureFlag: async (serviceCode: string, featureKey: string, enabled: boolean): Promise<void> => {
     try {
-      await apiClient.post(`/saas/saas/feature-flags/${serviceCode}/${featureKey}`, undefined, {
+      await apiClient.post(`/saas/feature-flags/${serviceCode}/${featureKey}`, undefined, {
         params: { enabled },
         withCredentials: true,
       });
@@ -300,13 +300,13 @@ export const SaaSService = {
   // ==========================================
   /**
    * جلب اشتراكات مستأجر محدد (للمشرفين فقط)
-   * GET /saas/saas/admin/tenant/{tenant_id}/subscriptions
+   * GET /saas/admin/tenant/{tenant_id}/subscriptions
    */
   getTenantSubscriptionsAdmin: async (tenantId: number): Promise<any> => {
     try {
       const id = Number(tenantId);
       if (isNaN(id)) throw new Error("معرف المستأجر غير صحيح");
-      const { data } = await apiClient.get<any>(`/saas/saas/admin/tenant/${id}/subscriptions`, {
+      const { data } = await apiClient.get<any>(`/saas/admin/tenant/${id}/subscriptions`, {
         withCredentials: true,
       });
       return data;
@@ -317,11 +317,11 @@ export const SaaSService = {
 
   /**
    * لوحة تحكم SaaS (للمشرفين فقط)
-   * GET /saas/saas/admin/dashboard
+   * GET /saas/admin/dashboard
    */
   getSaaSDashboard: async (): Promise<any> => {
     try {
-      const { data } = await apiClient.get<any>("/saas/saas/admin/dashboard", {
+      const { data } = await apiClient.get<any>("/saas/admin/dashboard", {
         withCredentials: true,
       });
       return data;
@@ -332,11 +332,11 @@ export const SaaSService = {
 
   /**
    * تشغيل تجديد الاشتراكات التلقائية يدوياً (للمشرفين فقط)
-   * POST /saas/saas/admin/trigger-renewals
+   * POST /saas/admin/trigger-renewals
    */
   triggerRenewals: async (): Promise<void> => {
     try {
-      await apiClient.post("/saas/saas/admin/trigger-renewals", undefined, {
+      await apiClient.post("/saas/admin/trigger-renewals", undefined, {
         withCredentials: true,
       });
     } catch (error) {

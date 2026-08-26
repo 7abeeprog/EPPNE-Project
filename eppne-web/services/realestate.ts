@@ -24,7 +24,7 @@ type SmartContractResponse = components['schemas']['SmartContractResponse'];
 export const RealEstateService = {
   /**
    * إنشاء أصل أرضي جديد
-   * POST /realestate/realestate/lands
+   * POST /realestate/lands
    * تدعم X-Tenant-ID
    */
   createLandAsset: async (data: LandAssetCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<LandAssetResponse> => {
@@ -33,7 +33,7 @@ export const RealEstateService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<LandAssetResponse>("/realestate/realestate/lands", data, {
+      const { data: result } = await apiClient.post<LandAssetResponse>("/realestate/lands", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -45,7 +45,7 @@ export const RealEstateService = {
 
   /**
    * جلب أراضيي
-   * GET /realestate/realestate/lands/me
+   * GET /realestate/lands/me
    * تدعم X-Tenant-ID
    */
   getMyLands: async (params?: { skip?: number; limit?: number }, headers?: { 'X-Tenant-ID'?: number }): Promise<LandAssetResponse[]> => {
@@ -54,7 +54,7 @@ export const RealEstateService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<LandAssetResponse[]>("/realestate/realestate/lands/me", {
+      const { data } = await apiClient.get<LandAssetResponse[]>("/realestate/lands/me", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -67,14 +67,14 @@ export const RealEstateService = {
 
   /**
    * إعادة تقييم أرض
-   * PATCH /realestate/realestate/lands/{land_id}/revalue
+   * PATCH /realestate/lands/{land_id}/revalue
    */
   revalueLand: async (landId: number, newValue: number | string): Promise<LandAssetResponse> => {
     try {
       const id = Number(landId);
       if (isNaN(id)) throw new Error("معرف الأرض غير صحيح");
       const { data: result } = await apiClient.patch<LandAssetResponse>(
-        `/realestate/realestate/lands/${id}/revalue`,
+        `/realestate/lands/${id}/revalue`,
         undefined,
         { params: { new_value: newValue }, withCredentials: true }
       );
@@ -86,7 +86,7 @@ export const RealEstateService = {
 
   /**
    * إنشاء تطوير عقاري جديد
-   * POST /realestate/realestate/developments
+   * POST /realestate/developments
    * تدعم X-Tenant-ID
    */
   createDevelopment: async (data: DevelopmentCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<DevelopmentResponse> => {
@@ -95,7 +95,7 @@ export const RealEstateService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<DevelopmentResponse>("/realestate/realestate/developments", data, {
+      const { data: result } = await apiClient.post<DevelopmentResponse>("/realestate/developments", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -107,13 +107,13 @@ export const RealEstateService = {
 
   /**
    * جلب تفاصيل تطوير عقاري
-   * GET /realestate/realestate/developments/{dev_id}
+   * GET /realestate/developments/{dev_id}
    */
   getDevelopment: async (devId: number): Promise<DevelopmentResponse> => {
     try {
       const id = Number(devId);
       if (isNaN(id)) throw new Error("معرف التطوير غير صحيح");
-      const { data } = await apiClient.get<DevelopmentResponse>(`/realestate/realestate/developments/${id}`, {
+      const { data } = await apiClient.get<DevelopmentResponse>(`/realestate/developments/${id}`, {
         withCredentials: true,
       });
       return data;
@@ -124,7 +124,7 @@ export const RealEstateService = {
 
   /**
    * إنشاء وحدة عقارية جديدة
-   * POST /realestate/realestate/units
+   * POST /realestate/units
    * تدعم X-Tenant-ID
    */
   createPropertyUnit: async (data: PropertyUnitCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<PropertyUnitResponse> => {
@@ -133,7 +133,7 @@ export const RealEstateService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<PropertyUnitResponse>("/realestate/realestate/units", data, {
+      const { data: result } = await apiClient.post<PropertyUnitResponse>("/realestate/units", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -145,11 +145,11 @@ export const RealEstateService = {
 
   /**
    * جلب الوحدات المتاحة للبيع
-   * GET /realestate/realestate/units/for-sale
+   * GET /realestate/units/for-sale
    */
   listUnitsForSale: async (params?: { development_id?: number | null; skip?: number; limit?: number }): Promise<PropertyUnitResponse[]> => {
     try {
-      const { data } = await apiClient.get<PropertyUnitResponse[]>("/realestate/realestate/units/for-sale", {
+      const { data } = await apiClient.get<PropertyUnitResponse[]>("/realestate/units/for-sale", {
         params,
         withCredentials: true,
       });
@@ -161,7 +161,7 @@ export const RealEstateService = {
 
   /**
    * شراء حصة جزئية من وحدة عقارية
-   * POST /realestate/realestate/units/{unit_id}/buy
+   * POST /realestate/units/{unit_id}/buy
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   buyFraction: async (
@@ -180,7 +180,7 @@ export const RealEstateService = {
       if (idempotencyKey) {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
-      const { data: result } = await apiClient.post<OwnershipResponse>(`/realestate/realestate/units/${id}/buy`, data, {
+      const { data: result } = await apiClient.post<OwnershipResponse>(`/realestate/units/${id}/buy`, data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -192,11 +192,11 @@ export const RealEstateService = {
 
   /**
    * جلب ملكياتي العقارية
-   * GET /realestate/realestate/my-ownerships
+   * GET /realestate/my-ownerships
    */
   getMyOwnerships: async (): Promise<OwnershipResponse[]> => {
     try {
-      const { data } = await apiClient.get<OwnershipResponse[]>("/realestate/realestate/my-ownerships", {
+      const { data } = await apiClient.get<OwnershipResponse[]>("/realestate/my-ownerships", {
         withCredentials: true,
       });
       return data;
@@ -207,7 +207,7 @@ export const RealEstateService = {
 
   /**
    * إنشاء عقد إيجار جديد
-   * POST /realestate/realestate/rentals
+   * POST /realestate/rentals
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   createRentalContract: async (
@@ -223,7 +223,7 @@ export const RealEstateService = {
       if (idempotencyKey) {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
-      const { data: result } = await apiClient.post<RentalContractResponse>("/realestate/realestate/rentals", data, {
+      const { data: result } = await apiClient.post<RentalContractResponse>("/realestate/rentals", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -235,7 +235,7 @@ export const RealEstateService = {
 
   /**
    * إنشاء مخطط رئيسي جديد
-   * POST /realestate/realestate/master-plans
+   * POST /realestate/master-plans
    * تدعم X-Tenant-ID
    */
   createMasterPlan: async (data: MasterPlanCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<MasterPlanResponse> => {
@@ -244,7 +244,7 @@ export const RealEstateService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<MasterPlanResponse>("/realestate/realestate/master-plans", data, {
+      const { data: result } = await apiClient.post<MasterPlanResponse>("/realestate/master-plans", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -256,7 +256,7 @@ export const RealEstateService = {
 
   /**
    * تجزئة أصل عقاري
-   * POST /realestate/realestate/tokenize/{unit_id}
+   * POST /realestate/tokenize/{unit_id}
    * تدعم X-Tenant-ID
    */
   tokenizeAsset: async (
@@ -271,7 +271,7 @@ export const RealEstateService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<TokenizationResponse>(`/realestate/realestate/tokenize/${id}`, data, {
+      const { data: result } = await apiClient.post<TokenizationResponse>(`/realestate/tokenize/${id}`, data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -283,7 +283,7 @@ export const RealEstateService = {
 
   /**
    * نشر عقد ذكي جديد
-   * POST /realestate/realestate/smart-contracts
+   * POST /realestate/smart-contracts
    * تدعم X-Tenant-ID
    */
   deploySmartContract: async (data: SmartContractCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<SmartContractResponse> => {
@@ -293,7 +293,7 @@ export const RealEstateService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<SmartContractResponse>(
-        "/realestate/realestate/smart-contracts",
+        "/realestate/smart-contracts",
         data,
         { headers: reqHeaders, withCredentials: true }
       );

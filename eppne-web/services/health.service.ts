@@ -21,11 +21,11 @@ type HealthFacilityResponse = components['schemas']['HealthFacilityResponse'];
 export const HealthService = {
   /**
    * جلب الملف الطبي للمستخدم الحالي
-   * GET /health/health/profile/me
+   * GET /health/profile/me
    */
   getMyMedicalProfile: async (): Promise<MedicalProfileResponse> => {
     try {
-      const { data } = await apiClient.get<MedicalProfileResponse>("/health/health/profile/me", {
+      const { data } = await apiClient.get<MedicalProfileResponse>("/health/profile/me", {
         withCredentials: true,
       });
       return data;
@@ -36,11 +36,11 @@ export const HealthService = {
 
   /**
    * تحديث الملف الطبي للمستخدم الحالي
-   * PUT /health/health/profile/me
+   * PUT /health/profile/me
    */
   updateMyMedicalProfile: async (data: MedicalProfileCreate): Promise<MedicalProfileResponse> => {
     try {
-      const { data: result } = await apiClient.put<MedicalProfileResponse>("/health/health/profile/me", data, {
+      const { data: result } = await apiClient.put<MedicalProfileResponse>("/health/profile/me", data, {
         withCredentials: true,
       });
       return result;
@@ -51,11 +51,11 @@ export const HealthService = {
 
   /**
    * تسجيل بيانات حيوية جديدة
-   * POST /health/health/biometric/log
+   * POST /health/biometric/log
    */
   logBiometricData: async (data: BiometricLogCreate): Promise<Record<string, any>> => {
     try {
-      const { data: result } = await apiClient.post<Record<string, any>>("/health/health/biometric/log", data, {
+      const { data: result } = await apiClient.post<Record<string, any>>("/health/biometric/log", data, {
         withCredentials: true,
       });
       return result;
@@ -66,11 +66,11 @@ export const HealthService = {
 
   /**
    * جلب سجل البيانات الحيوية
-   * GET /health/health/biometric/history
+   * GET /health/biometric/history
    */
   getBiometricHistory: async (params?: { limit?: number }): Promise<BiometricLogResponse[]> => {
     try {
-      const { data } = await apiClient.get<BiometricLogResponse[]>("/health/health/biometric/history", {
+      const { data } = await apiClient.get<BiometricLogResponse[]>("/health/biometric/history", {
         params,
         withCredentials: true,
       });
@@ -82,11 +82,11 @@ export const HealthService = {
 
   /**
    * جلب التنبؤات الصحية بالذكاء الاصطناعي
-   * GET /health/health/ai/prognosis
+   * GET /health/ai/prognosis
    */
   getAIPrognosis: async (): Promise<AIHealthPrognosisResponse[]> => {
     try {
-      const { data } = await apiClient.get<AIHealthPrognosisResponse[]>("/health/health/ai/prognosis", {
+      const { data } = await apiClient.get<AIHealthPrognosisResponse[]>("/health/ai/prognosis", {
         withCredentials: true,
       });
       return data;
@@ -97,11 +97,11 @@ export const HealthService = {
 
   /**
    * جلب مواعيدي الطبية
-   * GET /health/health/appointments
+   * GET /health/appointments
    */
   getMyAppointments: async (params?: { status_filter?: string | null }): Promise<MedicalAppointmentResponse[]> => {
     try {
-      const { data } = await apiClient.get<MedicalAppointmentResponse[]>("/health/health/appointments", {
+      const { data } = await apiClient.get<MedicalAppointmentResponse[]>("/health/appointments", {
         params,
         withCredentials: true,
       });
@@ -113,7 +113,7 @@ export const HealthService = {
 
   /**
    * حجز موعد طبي (مع دعم Idempotency ومنع التكرار)
-   * POST /health/health/appointments
+   * POST /health/appointments
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   bookAppointment: async (
@@ -130,7 +130,7 @@ export const HealthService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<MedicalAppointmentResponse>(
-        "/health/health/appointments",
+        "/health/appointments",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -142,14 +142,14 @@ export const HealthService = {
 
   /**
    * إلغاء موعد طبي
-   * PATCH /health/health/appointments/{appointment_id}/cancel
+   * PATCH /health/appointments/{appointment_id}/cancel
    */
   cancelAppointment: async (appointmentId: number): Promise<MedicalAppointmentResponse> => {
     try {
       const id = Number(appointmentId);
       if (isNaN(id)) throw new Error("معرف الموعد غير صحيح");
       const { data: result } = await apiClient.patch<MedicalAppointmentResponse>(
-        `/health/health/appointments/${id}/cancel`,
+        `/health/appointments/${id}/cancel`,
         undefined,
         { withCredentials: true }
       );
@@ -161,11 +161,11 @@ export const HealthService = {
 
   /**
    * إنشاء وصفة طبية جديدة
-   * POST /health/health/prescriptions
+   * POST /health/prescriptions
    */
   createPrescription: async (data: PrescriptionCreate): Promise<PrescriptionResponse> => {
     try {
-      const { data: result } = await apiClient.post<PrescriptionResponse>("/health/health/prescriptions", data, {
+      const { data: result } = await apiClient.post<PrescriptionResponse>("/health/prescriptions", data, {
         withCredentials: true,
       });
       return result;
@@ -176,7 +176,7 @@ export const HealthService = {
 
   /**
    * استدعاء الطوارئ (مع دعم Idempotency ومنع التكرار)
-   * POST /health/health/emergency
+   * POST /health/emergency
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   callEmergency: async (
@@ -193,7 +193,7 @@ export const HealthService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<EmergencyDispatchResponse>(
-        "/health/health/emergency",
+        "/health/emergency",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -205,13 +205,13 @@ export const HealthService = {
 
   /**
    * جلب حالة بلاغ الطوارئ
-   * GET /health/health/emergency/{dispatch_id}
+   * GET /health/emergency/{dispatch_id}
    */
   getEmergencyStatus: async (dispatchId: number): Promise<EmergencyDispatchResponse> => {
     try {
       const id = Number(dispatchId);
       if (isNaN(id)) throw new Error("معرف بلاغ الطوارئ غير صحيح");
-      const { data } = await apiClient.get<EmergencyDispatchResponse>(`/health/health/emergency/${id}`, {
+      const { data } = await apiClient.get<EmergencyDispatchResponse>(`/health/emergency/${id}`, {
         withCredentials: true,
       });
       return data;
@@ -222,7 +222,7 @@ export const HealthService = {
 
   /**
    * جلب قائمة المرافق الصحية مع التصفية
-   * GET /health/health/facilities
+   * GET /health/facilities
    */
   listFacilities: async (params?: {
     category?: string | null;
@@ -230,7 +230,7 @@ export const HealthService = {
     limit?: number;
   }): Promise<HealthFacilityResponse[]> => {
     try {
-      const { data } = await apiClient.get<HealthFacilityResponse[]>("/health/health/facilities", {
+      const { data } = await apiClient.get<HealthFacilityResponse[]>("/health/facilities", {
         params,
         withCredentials: true,
       });
@@ -242,11 +242,11 @@ export const HealthService = {
 
   /**
    * إنشاء مرفق صحي جديد
-   * POST /health/health/facilities
+   * POST /health/facilities
    */
   createFacility: async (data: HealthFacilityCreate): Promise<HealthFacilityResponse> => {
     try {
-      const { data: result } = await apiClient.post<HealthFacilityResponse>("/health/health/facilities", data, {
+      const { data: result } = await apiClient.post<HealthFacilityResponse>("/health/facilities", data, {
         withCredentials: true,
       });
       return result;

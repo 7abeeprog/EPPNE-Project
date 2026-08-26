@@ -28,7 +28,7 @@ type SparePartRestock = components['schemas']['SparePartRestock'];
 export const ManufacturingService = {
   /**
    * إنشاء مرفق تصنيع جديد
-   * POST /manufacturing/manufacturing/facilities
+   * POST /manufacturing/facilities
    * تدعم X-Tenant-ID
    */
   createFacility: async (data: ManufacturingFacilityCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<ManufacturingFacilityResponse> => {
@@ -38,7 +38,7 @@ export const ManufacturingService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<ManufacturingFacilityResponse>(
-        "/manufacturing/manufacturing/facilities",
+        "/manufacturing/facilities",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -50,14 +50,14 @@ export const ManufacturingService = {
 
   /**
    * إضافة خط إنتاج داخل مرفق
-   * POST /manufacturing/manufacturing/facilities/{facility_id}/lines
+   * POST /manufacturing/facilities/{facility_id}/lines
    */
   addProductionLine: async (facilityId: number, data: ProductionLineCreate): Promise<ProductionLineResponse> => {
     try {
       const id = Number(facilityId);
       if (isNaN(id)) throw new Error("معرف المرفق غير صحيح");
       const { data: result } = await apiClient.post<ProductionLineResponse>(
-        `/manufacturing/manufacturing/facilities/${id}/lines`,
+        `/manufacturing/facilities/${id}/lines`,
         data,
         { withCredentials: true }
       );
@@ -69,7 +69,7 @@ export const ManufacturingService = {
 
   /**
    * إنشاء مخطط منتج جديد
-   * POST /manufacturing/manufacturing/blueprints
+   * POST /manufacturing/blueprints
    * تدعم X-Tenant-ID
    */
   createBlueprint: async (data: ProductBlueprintCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<ProductBlueprintResponse> => {
@@ -79,7 +79,7 @@ export const ManufacturingService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<ProductBlueprintResponse>(
-        "/manufacturing/manufacturing/blueprints",
+        "/manufacturing/blueprints",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -91,7 +91,7 @@ export const ManufacturingService = {
 
   /**
    * إنشاء دفعة إنتاج جديدة
-   * POST /manufacturing/manufacturing/batches
+   * POST /manufacturing/batches
    * تدعم X-Tenant-ID
    */
   createBatch: async (data: ProductionBatchCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<ProductionBatchResponse> => {
@@ -101,7 +101,7 @@ export const ManufacturingService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<ProductionBatchResponse>(
-        "/manufacturing/manufacturing/batches",
+        "/manufacturing/batches",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -113,7 +113,7 @@ export const ManufacturingService = {
 
   /**
    * بدء الإنتاج (تشغيل الدفعة)
-   * POST /manufacturing/manufacturing/batches/{batch_id}/start
+   * POST /manufacturing/batches/{batch_id}/start
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   startProduction: async (
@@ -132,7 +132,7 @@ export const ManufacturingService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<StartProductionResponse>(
-        `/manufacturing/manufacturing/batches/${id}/start`,
+        `/manufacturing/batches/${id}/start`,
         undefined,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -144,7 +144,7 @@ export const ManufacturingService = {
 
   /**
    * جلب قائمة المواد الخام
-   * GET /manufacturing/manufacturing/raw-materials
+   * GET /manufacturing/raw-materials
    * تدعم X-Tenant-ID
    */
   listRawMaterials: async (params?: { skip?: number; limit?: number }, headers?: { 'X-Tenant-ID'?: number }): Promise<RawMaterialBatchResponse[]> => {
@@ -153,7 +153,7 @@ export const ManufacturingService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<RawMaterialBatchResponse[]>("/manufacturing/manufacturing/raw-materials", {
+      const { data } = await apiClient.get<RawMaterialBatchResponse[]>("/manufacturing/raw-materials", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -166,7 +166,7 @@ export const ManufacturingService = {
 
   /**
    * تسجيل دفعة مواد خام جديدة
-   * POST /manufacturing/manufacturing/raw-materials
+   * POST /manufacturing/raw-materials
    * تدعم X-Tenant-ID
    */
   registerRawMaterial: async (data: RawMaterialBatchCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<RawMaterialBatchResponse> => {
@@ -176,7 +176,7 @@ export const ManufacturingService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<RawMaterialBatchResponse>(
-        "/manufacturing/manufacturing/raw-materials",
+        "/manufacturing/raw-materials",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -188,7 +188,7 @@ export const ManufacturingService = {
 
   /**
    * استهلاك مادة خام في دفعة إنتاج
-   * POST /manufacturing/manufacturing/batches/{batch_id}/consume-material
+   * POST /manufacturing/batches/{batch_id}/consume-material
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   consumeRawMaterial: async (
@@ -208,7 +208,7 @@ export const ManufacturingService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       await apiClient.post(
-        `/manufacturing/manufacturing/batches/${id}/consume-material`,
+        `/manufacturing/batches/${id}/consume-material`,
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -219,7 +219,7 @@ export const ManufacturingService = {
 
   /**
    * إنشاء توأم رقمي لمنتج
-   * POST /manufacturing/manufacturing/product-items/{product_item_id}/digital-twin
+   * POST /manufacturing/product-items/{product_item_id}/digital-twin
    */
   createDigitalTwin: async (
     productItemId: number,
@@ -229,7 +229,7 @@ export const ManufacturingService = {
       const id = Number(productItemId);
       if (isNaN(id)) throw new Error("معرف المنتج غير صحيح");
       const { data: result } = await apiClient.post<ProductDigitalTwinResponse>(
-        `/manufacturing/manufacturing/product-items/${id}/digital-twin`,
+        `/manufacturing/product-items/${id}/digital-twin`,
         undefined,
         { params, withCredentials: true }
       );
@@ -241,14 +241,14 @@ export const ManufacturingService = {
 
   /**
    * جلب التوأم الرقمي لمنتج
-   * GET /manufacturing/manufacturing/product-items/{product_item_id}/digital-twin
+   * GET /manufacturing/product-items/{product_item_id}/digital-twin
    */
   getDigitalTwin: async (productItemId: number): Promise<ProductDigitalTwinResponse> => {
     try {
       const id = Number(productItemId);
       if (isNaN(id)) throw new Error("معرف المنتج غير صحيح");
       const { data } = await apiClient.get<ProductDigitalTwinResponse>(
-        `/manufacturing/manufacturing/product-items/${id}/digital-twin`,
+        `/manufacturing/product-items/${id}/digital-twin`,
         { withCredentials: true }
       );
       return data;
@@ -259,7 +259,7 @@ export const ManufacturingService = {
 
   /**
    * إصدار شهادة جودة
-   * POST /manufacturing/manufacturing/quality-certificates
+   * POST /manufacturing/quality-certificates
    * تدعم X-Tenant-ID
    */
   issueQualityCertificate: async (data: QualityCertificateCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<QualityCertificateResponse> => {
@@ -269,7 +269,7 @@ export const ManufacturingService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<QualityCertificateResponse>(
-        "/manufacturing/manufacturing/quality-certificates",
+        "/manufacturing/quality-certificates",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -281,14 +281,14 @@ export const ManufacturingService = {
 
   /**
    * جلب شهادات الجودة لكيان معين
-   * GET /manufacturing/manufacturing/quality-certificates/{entity_type}/{entity_id}
+   * GET /manufacturing/quality-certificates/{entity_type}/{entity_id}
    */
   getEntityCertificates: async (entityType: string, entityId: number): Promise<QualityCertificateResponse[]> => {
     try {
       const id = Number(entityId);
       if (isNaN(id)) throw new Error("معرف الكيان غير صحيح");
       const { data } = await apiClient.get<QualityCertificateResponse[]>(
-        `/manufacturing/manufacturing/quality-certificates/${entityType}/${id}`,
+        `/manufacturing/quality-certificates/${entityType}/${id}`,
         { withCredentials: true }
       );
       return data;
@@ -299,7 +299,7 @@ export const ManufacturingService = {
 
   /**
    * تحليل الصيانة التنبؤية
-   * POST /manufacturing/manufacturing/predictive-maintenance
+   * POST /manufacturing/predictive-maintenance
    * تدعم X-Tenant-ID
    */
   analyzeMaintenance: async (data: PredictiveMaintenanceLogCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<PredictiveMaintenanceLogResponse> => {
@@ -309,7 +309,7 @@ export const ManufacturingService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<PredictiveMaintenanceLogResponse>(
-        "/manufacturing/manufacturing/predictive-maintenance",
+        "/manufacturing/predictive-maintenance",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -321,14 +321,14 @@ export const ManufacturingService = {
 
   /**
    * جلب طلبات الصيانة المعلقة لخط إنتاج
-   * GET /manufacturing/manufacturing/production-lines/{line_id}/pending-maintenance
+   * GET /manufacturing/production-lines/{line_id}/pending-maintenance
    */
   getPendingMaintenance: async (lineId: number): Promise<PredictiveMaintenanceLogResponse[]> => {
     try {
       const id = Number(lineId);
       if (isNaN(id)) throw new Error("معرف خط الإنتاج غير صحيح");
       const { data } = await apiClient.get<PredictiveMaintenanceLogResponse[]>(
-        `/manufacturing/manufacturing/production-lines/${id}/pending-maintenance`,
+        `/manufacturing/production-lines/${id}/pending-maintenance`,
         { withCredentials: true }
       );
       return data;
@@ -339,14 +339,14 @@ export const ManufacturingService = {
 
   /**
    * جدولة صيانة
-   * POST /manufacturing/manufacturing/maintenance/{log_id}/schedule
+   * POST /manufacturing/maintenance/{log_id}/schedule
    */
   scheduleMaintenance: async (logId: number, scheduledAt: string): Promise<void> => {
     try {
       const id = Number(logId);
       if (isNaN(id)) throw new Error("معرف طلب الصيانة غير صحيح");
       await apiClient.post(
-        `/manufacturing/manufacturing/maintenance/${id}/schedule`,
+        `/manufacturing/maintenance/${id}/schedule`,
         undefined,
         { params: { scheduled_at: scheduledAt }, withCredentials: true }
       );
@@ -357,7 +357,7 @@ export const ManufacturingService = {
 
   /**
    * إنشاء قطعة غيار جديدة
-   * POST /manufacturing/manufacturing/spare-parts
+   * POST /manufacturing/spare-parts
    * تدعم X-Tenant-ID
    */
   createSparePart: async (data: SparePartCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<SparePartResponse> => {
@@ -367,7 +367,7 @@ export const ManufacturingService = {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
       const { data: result } = await apiClient.post<SparePartResponse>(
-        "/manufacturing/manufacturing/spare-parts",
+        "/manufacturing/spare-parts",
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -379,7 +379,7 @@ export const ManufacturingService = {
 
   /**
    * جلب قائمة قطع الغيار
-   * GET /manufacturing/manufacturing/spare-parts
+   * GET /manufacturing/spare-parts
    * تدعم X-Tenant-ID
    */
   listSpareParts: async (params?: { skip?: number; limit?: number }, headers?: { 'X-Tenant-ID'?: number }): Promise<SparePartResponse[]> => {
@@ -388,7 +388,7 @@ export const ManufacturingService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data } = await apiClient.get<SparePartResponse[]>("/manufacturing/manufacturing/spare-parts", {
+      const { data } = await apiClient.get<SparePartResponse[]>("/manufacturing/spare-parts", {
         params,
         headers: reqHeaders,
         withCredentials: true,
@@ -401,14 +401,14 @@ export const ManufacturingService = {
 
   /**
    * إعادة تخزين قطعة غيار
-   * POST /manufacturing/manufacturing/spare-parts/{part_id}/restock
+   * POST /manufacturing/spare-parts/{part_id}/restock
    */
   restockSparePart: async (partId: number, data: SparePartRestock): Promise<SparePartResponse> => {
     try {
       const id = Number(partId);
       if (isNaN(id)) throw new Error("معرف قطعة الغيار غير صحيح");
       const { data: result } = await apiClient.post<SparePartResponse>(
-        `/manufacturing/manufacturing/spare-parts/${id}/restock`,
+        `/manufacturing/spare-parts/${id}/restock`,
         data,
         { withCredentials: true }
       );

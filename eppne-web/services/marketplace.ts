@@ -20,7 +20,7 @@ export const MarketplaceService = {
   // ==========================================
   /**
    * جلب قائمة الخدمات المتاحة
-   * GET /marketplace/marketplace/services
+   * GET /marketplace/services
    * تدعم X-Tenant-ID
    */
   listServices: async (
@@ -33,7 +33,7 @@ export const MarketplaceService = {
     headers?: { 'X-Tenant-ID'?: number }
   ): Promise<MarketplaceServiceResponse[]> => {
     try {
-      const { data } = await apiClient.get<MarketplaceServiceResponse[]>("/marketplace/marketplace/services", {
+      const { data } = await apiClient.get<MarketplaceServiceResponse[]>("/marketplace/services", {
         params,
         headers,
         withCredentials: true,
@@ -46,13 +46,13 @@ export const MarketplaceService = {
 
   /**
    * إنشاء خدمة جديدة في السوق
-   * POST /marketplace/marketplace/services
+   * POST /marketplace/services
    * تدعم X-Tenant-ID
    */
   createService: async (data: MarketplaceServiceCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<MarketplaceServiceResponse> => {
     try {
       const { data: result } = await apiClient.post<MarketplaceServiceResponse>(
-        "/marketplace/marketplace/services",
+        "/marketplace/services",
         data,
         { headers, withCredentials: true }
       );
@@ -64,13 +64,13 @@ export const MarketplaceService = {
 
   /**
    * جلب تفاصيل خدمة محددة
-   * GET /marketplace/marketplace/services/{service_id}
+   * GET /marketplace/services/{service_id}
    */
   getService: async (serviceId: number): Promise<MarketplaceServiceResponse> => {
     try {
       const id = Number(serviceId);
       if (isNaN(id)) throw new Error("معرف الخدمة غير صحيح");
-      const { data } = await apiClient.get<MarketplaceServiceResponse>(`/marketplace/marketplace/services/${id}`, {
+      const { data } = await apiClient.get<MarketplaceServiceResponse>(`/marketplace/services/${id}`, {
         withCredentials: true,
       });
       return data;
@@ -81,13 +81,13 @@ export const MarketplaceService = {
 
   /**
    * نشر خدمة (تفعيلها للجمهور)
-   * PUT /marketplace/marketplace/services/{service_id}/publish
+   * PUT /marketplace/services/{service_id}/publish
    */
   publishService: async (serviceId: number): Promise<void> => {
     try {
       const id = Number(serviceId);
       if (isNaN(id)) throw new Error("معرف الخدمة غير صحيح");
-      await apiClient.put(`/marketplace/marketplace/services/${id}/publish`, undefined, {
+      await apiClient.put(`/marketplace/services/${id}/publish`, undefined, {
         withCredentials: true,
       });
     } catch (error) {
@@ -97,13 +97,13 @@ export const MarketplaceService = {
 
   /**
    * إلغاء نشر خدمة (إخفائها)
-   * PUT /marketplace/marketplace/services/{service_id}/unpublish
+   * PUT /marketplace/services/{service_id}/unpublish
    */
   unpublishService: async (serviceId: number): Promise<void> => {
     try {
       const id = Number(serviceId);
       if (isNaN(id)) throw new Error("معرف الخدمة غير صحيح");
-      await apiClient.put(`/marketplace/marketplace/services/${id}/unpublish`, undefined, {
+      await apiClient.put(`/marketplace/services/${id}/unpublish`, undefined, {
         withCredentials: true,
       });
     } catch (error) {
@@ -116,13 +116,13 @@ export const MarketplaceService = {
   // ==========================================
   /**
    * شراء خدمة (الحصول على ترخيص)
-   * POST /marketplace/marketplace/purchase
+   * POST /marketplace/purchase
    * تدعم X-Tenant-ID
    */
   purchaseService: async (data: ServiceLicensePurchase, headers?: { 'X-Tenant-ID'?: number }): Promise<ServiceLicenseResponse> => {
     try {
       const { data: result } = await apiClient.post<ServiceLicenseResponse>(
-        "/marketplace/marketplace/purchase",
+        "/marketplace/purchase",
         data,
         { headers, withCredentials: true }
       );
@@ -134,11 +134,11 @@ export const MarketplaceService = {
 
   /**
    * جلب تراخيصي
-   * GET /marketplace/marketplace/licenses/me
+   * GET /marketplace/licenses/me
    */
   getMyLicenses: async (params?: { skip?: number; limit?: number }): Promise<ServiceLicenseResponse[]> => {
     try {
-      const { data } = await apiClient.get<ServiceLicenseResponse[]>("/marketplace/marketplace/licenses/me", {
+      const { data } = await apiClient.get<ServiceLicenseResponse[]>("/marketplace/licenses/me", {
         params,
         withCredentials: true,
       });
@@ -150,13 +150,13 @@ export const MarketplaceService = {
 
   /**
    * جلب حالة النشر لترخيص معين
-   * GET /marketplace/marketplace/licenses/{license_id}/status
+   * GET /marketplace/licenses/{license_id}/status
    */
   getDeploymentStatus: async (licenseId: number): Promise<any> => {
     try {
       const id = Number(licenseId);
       if (isNaN(id)) throw new Error("معرف الترخيص غير صحيح");
-      const { data } = await apiClient.get<any>(`/marketplace/marketplace/licenses/${id}/status`, {
+      const { data } = await apiClient.get<any>(`/marketplace/licenses/${id}/status`, {
         withCredentials: true,
       });
       return data;
@@ -167,14 +167,14 @@ export const MarketplaceService = {
 
   /**
    * تجديد ترخيص
-   * POST /marketplace/marketplace/licenses/{license_id}/renew
+   * POST /marketplace/licenses/{license_id}/renew
    */
   renewLicense: async (licenseId: number): Promise<ServiceLicenseResponse> => {
     try {
       const id = Number(licenseId);
       if (isNaN(id)) throw new Error("معرف الترخيص غير صحيح");
       const { data: result } = await apiClient.post<ServiceLicenseResponse>(
-        `/marketplace/marketplace/licenses/${id}/renew`,
+        `/marketplace/licenses/${id}/renew`,
         undefined,
         { withCredentials: true }
       );
@@ -189,12 +189,12 @@ export const MarketplaceService = {
   // ==========================================
   /**
    * جلب قائمة الإضافات
-   * GET /marketplace/marketplace/addons
+   * GET /marketplace/addons
    * تدعم X-Tenant-ID
    */
   listAddons: async (params?: { compatible_with?: string | null }, headers?: { 'X-Tenant-ID'?: number }): Promise<ServiceAddonResponse[]> => {
     try {
-      const { data } = await apiClient.get<ServiceAddonResponse[]>("/marketplace/marketplace/addons", {
+      const { data } = await apiClient.get<ServiceAddonResponse[]>("/marketplace/addons", {
         params,
         headers,
         withCredentials: true,
@@ -207,13 +207,13 @@ export const MarketplaceService = {
 
   /**
    * إنشاء إضافة جديدة
-   * POST /marketplace/marketplace/addons
+   * POST /marketplace/addons
    * تدعم X-Tenant-ID
    */
   createAddon: async (data: ServiceAddonCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<ServiceAddonResponse> => {
     try {
       const { data: result } = await apiClient.post<ServiceAddonResponse>(
-        "/marketplace/marketplace/addons",
+        "/marketplace/addons",
         data,
         { headers, withCredentials: true }
       );
@@ -225,7 +225,7 @@ export const MarketplaceService = {
 
   /**
    * شراء إضافة لترخيص معين
-   * POST /marketplace/marketplace/licenses/{license_id}/addons/{addon_id}
+   * POST /marketplace/licenses/{license_id}/addons/{addon_id}
    */
   purchaseAddon: async (licenseId: number, addonId: number): Promise<ServiceLicenseResponse> => {
     try {
@@ -233,7 +233,7 @@ export const MarketplaceService = {
       const aid = Number(addonId);
       if (isNaN(lid) || isNaN(aid)) throw new Error("معرف غير صحيح");
       const { data: result } = await apiClient.post<ServiceLicenseResponse>(
-        `/marketplace/marketplace/licenses/${lid}/addons/${aid}`,
+        `/marketplace/licenses/${lid}/addons/${aid}`,
         undefined,
         { withCredentials: true }
       );
@@ -248,14 +248,14 @@ export const MarketplaceService = {
   // ==========================================
   /**
    * طلب تخصيص خدمة
-   * POST /marketplace/marketplace/licenses/{license_id}/customize
+   * POST /marketplace/licenses/{license_id}/customize
    */
   requestCustomization: async (licenseId: number, data: CustomizationRequestCreate): Promise<CustomizationRequestResponse> => {
     try {
       const id = Number(licenseId);
       if (isNaN(id)) throw new Error("معرف الترخيص غير صحيح");
       const { data: result } = await apiClient.post<CustomizationRequestResponse>(
-        `/marketplace/marketplace/licenses/${id}/customize`,
+        `/marketplace/licenses/${id}/customize`,
         data,
         { withCredentials: true }
       );
@@ -267,14 +267,14 @@ export const MarketplaceService = {
 
   /**
    * جلب طلبات التخصيص لترخيص معين
-   * GET /marketplace/marketplace/licenses/{license_id}/customizations
+   * GET /marketplace/licenses/{license_id}/customizations
    */
   getCustomizationRequests: async (licenseId: number): Promise<CustomizationRequestResponse[]> => {
     try {
       const id = Number(licenseId);
       if (isNaN(id)) throw new Error("معرف الترخيص غير صحيح");
       const { data } = await apiClient.get<CustomizationRequestResponse[]>(
-        `/marketplace/marketplace/licenses/${id}/customizations`,
+        `/marketplace/licenses/${id}/customizations`,
         { withCredentials: true }
       );
       return data;
@@ -288,7 +288,7 @@ export const MarketplaceService = {
   // ==========================================
   /**
    * Webhook لتحديث حالة النشر (يُستخدم داخلياً)
-   * POST /marketplace/marketplace/webhook/deployment/{license_id}
+   * POST /marketplace/webhook/deployment/{license_id}
    * يتطلب x-api-key في الهيدر
    */
   deploymentWebhook: async (licenseId: number, data: DeploymentStatusUpdate, apiKey: string): Promise<void> => {
@@ -296,7 +296,7 @@ export const MarketplaceService = {
       const id = Number(licenseId);
       if (isNaN(id)) throw new Error("معرف الترخيص غير صحيح");
       await apiClient.post(
-        `/marketplace/marketplace/webhook/deployment/${id}`,
+        `/marketplace/webhook/deployment/${id}`,
         data,
         {
           headers: { 'x-api-key': apiKey },

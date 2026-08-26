@@ -15,7 +15,7 @@ type LiveBidResponse = components['schemas']['LiveBidResponse'];
 export const TendersAuctionsService = {
   /**
    * إنشاء مناقصة جديدة
-   * POST /tenders/social/tenders
+   * POST /tenders-auctions/tenders
    * تدعم X-Tenant-ID
    */
   createTender: async (data: TenderCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<TenderResponse> => {
@@ -24,7 +24,7 @@ export const TendersAuctionsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      const { data: result } = await apiClient.post<TenderResponse>("/tenders/social/tenders", data, {
+      const { data: result } = await apiClient.post<TenderResponse>("/tenders-auctions/tenders", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -36,7 +36,7 @@ export const TendersAuctionsService = {
 
   /**
    * تقديم عرض في مناقصة
-   * POST /tenders/social/bids
+   * POST /tenders-auctions/bids
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   submitBid: async (
@@ -52,7 +52,7 @@ export const TendersAuctionsService = {
       if (idempotencyKey) {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
-      const { data: result } = await apiClient.post<TenderBidResponse>("/tenders/social/bids", data, {
+      const { data: result } = await apiClient.post<TenderBidResponse>("/tenders-auctions/bids", data, {
         headers: reqHeaders,
         withCredentials: true,
       });
@@ -64,7 +64,7 @@ export const TendersAuctionsService = {
 
   /**
    * تقييم عرض (لصاحب المناقصة)
-   * POST /tenders/social/bids/{bid_id}/evaluate
+   * POST /tenders-auctions/bids/{bid_id}/evaluate
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   evaluateBid: async (
@@ -84,7 +84,7 @@ export const TendersAuctionsService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<TenderBidResponse>(
-        `/tenders/social/bids/${id}/evaluate`,
+        `/tenders-auctions/bids/${id}/evaluate`,
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -96,7 +96,7 @@ export const TendersAuctionsService = {
 
   /**
    * تقديم عرض في مزاد
-   * POST /tenders/social/auctions/{auction_id}/bids
+   * POST /tenders-auctions/auctions/{auction_id}/bids
    * تدعم Idempotency-Key و X-Tenant-ID
    */
   placeBid: async (
@@ -116,7 +116,7 @@ export const TendersAuctionsService = {
         reqHeaders['Idempotency-Key'] = idempotencyKey;
       }
       const { data: result } = await apiClient.post<LiveBidResponse>(
-        `/tenders/social/auctions/${id}/bids`,
+        `/tenders-auctions/auctions/${id}/bids`,
         data,
         { headers: reqHeaders, withCredentials: true }
       );
@@ -128,7 +128,7 @@ export const TendersAuctionsService = {
 
   /**
    * إغلاق مزاد
-   * POST /tenders/social/auctions/{auction_id}/close
+   * POST /tenders-auctions/auctions/{auction_id}/close
    * تدعم X-Tenant-ID
    */
   closeAuction: async (auctionId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<void> => {
@@ -139,7 +139,7 @@ export const TendersAuctionsService = {
       if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
         reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
       }
-      await apiClient.post(`/tenders/social/auctions/${id}/close`, undefined, {
+      await apiClient.post(`/tenders-auctions/auctions/${id}/close`, undefined, {
         headers: reqHeaders,
         withCredentials: true,
       });
