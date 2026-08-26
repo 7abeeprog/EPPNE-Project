@@ -30,7 +30,6 @@ router = APIRouter(prefix="/automation", tags=["Automation Workflows"])
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_workflow(
     data: WorkflowCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -38,7 +37,7 @@ async def create_workflow(
     service = AutomationService(db)
     workflow = await service.create_workflow(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         data=data.model_dump()
     )
     return workflow

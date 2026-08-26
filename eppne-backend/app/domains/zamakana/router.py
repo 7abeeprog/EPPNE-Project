@@ -23,14 +23,13 @@ router = APIRouter(prefix="/zamakana", tags=["Zamakana - Time & Knowledge Engine
 @rate_limit(max_requests=20, window_seconds=60)
 async def create_node(
     data: ZamakanaNodeCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """إضافة عقدة معرفية جديدة (حقبة، ابتكار، شخص، حدث)."""
     service = ZamakanaService(db)
     user_id = cast(int, current_user.id)
-    node = await service.create_node(user_id, cast(int, tenant.id), data.model_dump())  # ✅ cast
+    node = await service.create_node(user_id, cast(int, current_user.tenant_id), data.model_dump())
     return node
 
 
@@ -40,24 +39,24 @@ async def list_nodes(
     node_type: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
-    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """قائمة العقد المعرفية حسب النوع."""
     service = ZamakanaService(db)
-    nodes = await service.list_nodes(cast(int, tenant.id), node_type, skip, limit)  # ✅ cast
+    nodes = await service.list_nodes(cast(int, current_user.tenant_id), node_type, skip, limit)
     return nodes
 
 
 @router.get("/nodes/{node_id}", response_model=ZamakanaNodeResponse)
 async def get_node(
     node_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """جلب عقدة معرفية محددة."""
     service = ZamakanaService(db)
-    node = await service.get_node(node_id, cast(int, tenant.id))  # ✅ cast
+    node = await service.get_node(node_id, cast(int, current_user.tenant_id))
     return node
 
 
@@ -97,14 +96,13 @@ async def delete_node(
 async def create_edge(
     data: ZamakanaEdgeCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """ربط عقدتين (تأثير سببي أو تأثير الفراشة)."""
     service = ZamakanaService(db)
     user_id = cast(int, current_user.id)
-    edge = await service.create_edge(user_id, cast(int, tenant.id), data.model_dump(), idempotency_key)  # ✅ cast
+    edge = await service.create_edge(user_id, cast(int, current_user.tenant_id), data.model_dump(), idempotency_key)
     return edge
 
 
@@ -113,12 +111,12 @@ async def create_edge(
 async def get_knowledge_graph(
     node_type: Optional[str] = None,
     limit: int = 100,
-    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """استرجاع شبكة المعرفة (جميع العقد والحواف) للتصور."""
     service = ZamakanaService(db)
-    graph = await service.get_knowledge_graph(cast(int, tenant.id), node_type, limit)  # ✅ cast
+    graph = await service.get_knowledge_graph(cast(int, current_user.tenant_id), node_type, limit)
     return graph
 
 
@@ -128,14 +126,13 @@ async def get_knowledge_graph(
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_campaign(
     data: PlanetaryCampaignCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """إنشاء حملة كوكبية لجمع ساعات تطوعية."""
     service = ZamakanaService(db)
     user_id = cast(int, current_user.id)
-    campaign = await service.create_campaign(user_id, cast(int, tenant.id), data.model_dump())  # ✅ cast
+    campaign = await service.create_campaign(user_id, cast(int, current_user.tenant_id), data.model_dump())
     return campaign
 
 
@@ -145,24 +142,24 @@ async def list_campaigns(
     status: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
-    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """قائمة الحملات الكوكبية."""
     service = ZamakanaService(db)
-    campaigns = await service.list_campaigns(cast(int, tenant.id), status, skip, limit)  # ✅ cast
+    campaigns = await service.list_campaigns(cast(int, current_user.tenant_id), status, skip, limit)
     return campaigns
 
 
 @router.get("/campaigns/{campaign_id}", response_model=PlanetaryCampaignResponse)
 async def get_campaign(
     campaign_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """جلب حملة كوكبية محددة."""
     service = ZamakanaService(db)
-    campaign = await service.get_campaign(campaign_id, cast(int, tenant.id))  # ✅ cast
+    campaign = await service.get_campaign(campaign_id, cast(int, current_user.tenant_id))
     return campaign
 
 
@@ -171,14 +168,13 @@ async def get_campaign(
 async def pledge_time(
     data: TimePledgeCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """التعهد بساعات تطوعية لحملة معينة."""
     service = ZamakanaService(db)
     user_id = cast(int, current_user.id)
-    pledge = await service.pledge_time(user_id, cast(int, tenant.id), data.model_dump(), idempotency_key)  # ✅ cast
+    pledge = await service.pledge_time(user_id, cast(int, current_user.tenant_id), data.model_dump(), idempotency_key)
     return pledge
 
 
@@ -203,12 +199,12 @@ async def fulfill_pledge(
 async def get_campaign_pledges(
     campaign_id: int,
     status: Optional[str] = None,
-    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """قائمة التعهدات الخاصة بحملة معينة."""
     service = ZamakanaService(db)
-    pledges = await service.list_pledges(campaign_id, cast(int, tenant.id), status)  # ✅ cast
+    pledges = await service.list_pledges(campaign_id, cast(int, current_user.tenant_id), status)
     return pledges
 
 
@@ -218,14 +214,13 @@ async def get_campaign_pledges(
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_scenario(
     data: FutureScenarioCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """إنشاء سيناريو مستقبلي جديد."""
     service = ZamakanaService(db)
     user_id = cast(int, current_user.id)
-    scenario = await service.create_scenario(user_id, cast(int, tenant.id), data.model_dump())  # ✅ cast
+    scenario = await service.create_scenario(user_id, cast(int, current_user.tenant_id), data.model_dump())
     return scenario
 
 
@@ -235,24 +230,24 @@ async def list_scenarios(
     status: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
-    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """قائمة السيناريوهات المستقبلية."""
     service = ZamakanaService(db)
-    scenarios = await service.list_scenarios(cast(int, tenant.id), status, skip, limit)  # ✅ cast
+    scenarios = await service.list_scenarios(cast(int, current_user.tenant_id), status, skip, limit)
     return scenarios
 
 
 @router.get("/scenarios/{scenario_id}", response_model=FutureScenarioResponse)
 async def get_scenario(
     scenario_id: int,
-    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """جلب سيناريو مستقبلي محدد."""
     service = ZamakanaService(db)
-    scenario = await service.get_scenario(scenario_id, cast(int, tenant.id))  # ✅ cast
+    scenario = await service.get_scenario(scenario_id, cast(int, current_user.tenant_id))
     return scenario
 
 
@@ -284,7 +279,6 @@ async def analyze_scenario(
 async def add_feedback(
     scenario_id: int,
     data: HumanFeedbackCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -293,7 +287,7 @@ async def add_feedback(
     user_id = cast(int, current_user.id)
     feedback = await service.add_human_feedback(
         user_id=user_id,
-        data={"scenario_id": scenario_id, "tenant_id": cast(int, tenant.id), **data.model_dump()}  # ✅ cast
+        data={"scenario_id": scenario_id, "tenant_id": cast(int, current_user.tenant_id), **data.model_dump()}
     )
     return feedback
 

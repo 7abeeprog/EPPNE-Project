@@ -15,6 +15,7 @@ from app.core.errors import PermissionDeniedError, NotFoundError, ValidationErro
 from app.core.task_queue import task_queue
 from app.core.security import is_privacy_officer, encrypt_ip
 from app.core.pagination import PaginatedResponse
+from app.domains.identity.models import User
 
 logger = logging.getLogger("eppne.privacy.service")
 
@@ -116,12 +117,12 @@ class PrivacyService:
         self,
         request_id: int,
         tenant_id: int,
-        admin_id: int,
+        admin_user: User,
         approve: bool,
         notes: Optional[str] = None
     ) -> DataErasureRequest:
         """معالجة طلب محو البيانات بمعايير عسكرية للمعاملات."""
-        if not await is_privacy_officer(admin_id):
+        if not await is_privacy_officer(admin_user):
             raise PermissionDeniedError("Only Privacy Officers can process erasure requests.")
 
         request_obj = await self.repo.get_erasure_request(request_id, tenant_id)

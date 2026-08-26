@@ -197,12 +197,11 @@ async def process_erasure_request(
 ):
     """معالجة طلب محو البيانات (للمشرفين فقط)."""
     service = PrivacyService(db)
-    admin_id = cast(int, current_user.id)
     try:
         processed = await service.process_erasure_request(
             request_id,
             cast(int, current_user.tenant_id),
-            admin_id,
+            current_user,
             approve,
             notes
         )
@@ -232,9 +231,8 @@ async def get_pending_erasure_requests(
     db: AsyncSession = Depends(get_db)
 ):
     """جلب طلبات محو البيانات المعلقة (للمشرفين فقط)."""
-    admin_id = cast(int, current_user.id)
     from app.core.security import is_privacy_officer
-    if not await is_privacy_officer(admin_id):
+    if not await is_privacy_officer(current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="غير مصرح لك بالوصول")
 
     service = PrivacyService(db)
