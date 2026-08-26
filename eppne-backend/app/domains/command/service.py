@@ -123,8 +123,10 @@ class CommandService:
         recommendations = await self.repo.list_recommendations(tenant_id, status="PENDING", limit=5)
         recent_activity = await self._get_recent_activity(tenant_id)
 
+        dashboard_dict = {c: getattr(dashboard, c) for c in dashboard.__table__.columns.keys()}
+
         return {
-            "dashboard": dashboard,
+            "dashboard": dashboard_dict,
             "stats": stats,
             "sector_stats": sector_stats,
             "alerts": alerts,

@@ -20,7 +20,7 @@ class InsurancePolicyCreate(BaseModel):
     base_premium_mrusdt: Decimal = Field(..., gt=0, description="القسط الأساسي")
     premium_cycle: PremiumCycle = Field(default=PremiumCycle.MONTHLY, description="دورة القسط")
     max_coverage_limit_mrusdt: Decimal = Field(..., gt=0, description="الحد الأقصى للتغطية")
-    terms_and_conditions: Dict[str, Any] = Field(default_factory=dict, description="الشروط والأحكام")
+    terms_and_conditions: Optional[Dict[str, Any]] = Field(default=None, description="الشروط والأحكام")
     smart_contract_address: Optional[str] = Field(
         default=None,
         pattern="^0x[a-fA-F0-9]{40}$",

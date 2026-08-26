@@ -1,5 +1,5 @@
 # app/domains/employment/schemas.py
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from decimal import Decimal
@@ -21,6 +21,11 @@ class JobListingCreate(BaseModel):
     currency: str = Field(default="MR_USDT", description="العملة")
     location: Optional[str] = Field(default=None, description="الموقع")
     employment_type: str = Field(default="FULL_TIME", description="نوع التوظيف")
+
+    @field_validator("required_skills", "required_certificate_ids", mode="before")
+    @classmethod
+    def _coerce_none_to_empty_list(cls, v):
+        return [] if v is None else v
 
 
 class JobListingResponse(JobListingCreate):

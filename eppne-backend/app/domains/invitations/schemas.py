@@ -27,9 +27,14 @@ class InvitationCreate(BaseModel):
     campaign_id: int = Field(description="معرف الحملة")
     discount_percentage: Decimal = Field(default=Decimal("0.0"), ge=0, le=100, description="نسبة الخصم")
     gift_coins_amount: Decimal = Field(default=Decimal("0.0"), ge=0, description="مبلغ الهدية")
-    gift_currency: str = Field(default="MR_USDT", description="عملة الهدية")
+    gift_currency: Optional[str] = Field(default="MR_USDT", description="عملة الهدية")
     max_uses: int = Field(default=1, ge=1, description="الحد الأقصى للاستخدام")
     expires_at: Optional[datetime] = Field(default=None, description="تاريخ الانتهاء")
+
+    @field_validator("discount_percentage", "gift_coins_amount", mode="before")
+    @classmethod
+    def _coerce_none_to_zero(cls, v):
+        return Decimal("0.0") if v is None else v
 
     @field_validator("expires_at")
     @classmethod
@@ -65,6 +70,11 @@ class InvitationResponse(InvitationCreate):
     updated_at: datetime
     invitation_url: Optional[str] = Field(default=None, description="رابط الدعوة")
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("click_count", mode="before")
+    @classmethod
+    def _coerce_click_count_none_to_zero(cls, v):
+        return 0 if v is None else v
 
 
 class InvitationAccept(BaseModel):

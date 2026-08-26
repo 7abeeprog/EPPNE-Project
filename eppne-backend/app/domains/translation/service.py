@@ -20,14 +20,14 @@ from app.domains.translation.schemas import (
 )
 from app.domains.translation.models import SupportedLanguage
 from app.core.config import settings
-from app.core.redis_client import redis_client as get_redis_client
+from app.core.redis_client import redis_client
 
 
 class TranslationService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = TranslationRepository(db)
-        self.redis = get_redis_client()
+        self.redis = redis_client
 
     # ========== طرق التخزين المؤقت ==========
     async def _get_cached_from_redis(self, tenant_id: int, text_hash: str, target_lang: str) -> Optional[str]:

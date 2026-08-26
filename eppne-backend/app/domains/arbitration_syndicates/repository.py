@@ -20,10 +20,13 @@ class ArbitrationSyndicatesRepository:
         result = await self.db.execute(select(ArbitrationCase).where(ArbitrationCase.id == case_id))
         return result.scalar_one_or_none()
 
-    async def list_user_cases(self, user_id: int):
+    async def list_user_cases(self, user_id: int, tenant_id: int):
         result = await self.db.execute(
             select(ArbitrationCase).where(
-                (ArbitrationCase.claimant_id == user_id) | (ArbitrationCase.respondent_id == user_id)
+                and_(
+                    (ArbitrationCase.claimant_id == user_id) | (ArbitrationCase.respondent_id == user_id),
+                    ArbitrationCase.tenant_id == tenant_id,
+                )
             ).order_by(ArbitrationCase.created_at.desc())
         )
         return result.scalars().all()
