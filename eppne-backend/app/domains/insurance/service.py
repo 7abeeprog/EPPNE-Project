@@ -21,11 +21,15 @@ from app.core.audit import audit_log
 from app.core.event_bus import EventBus
 from app.core.redis_client import redis_client
 from app.core.logging_conf import logger
+from app.core.entity_membership_service import EntityMembershipService
+from app.core.models import EntityMembershipRole
 from app.domains.insurance.models import (
     InsurancePolicy, InsuranceSubscription, InsuranceClaim,
     PensionRecord, EmployeeInsuranceProfile, ClaimStatus, PensionStatus
 )
 from app.domains.identity.models import User
+
+ENTITY_TYPE = "SOVEREIGN_ENTITY"  # نفس القيمة المستخدَمة في sovereign_entities/service.py
 
 
 class InsuranceService:
@@ -34,6 +38,7 @@ class InsuranceService:
         self.repo = InsuranceRepository(db)
         self.event_bus = EventBus(cast(Any, redis_client))
         self.redis = redis_client
+        self.membership = EntityMembershipService(db)
 
     # ============================================================
     # دوال مساعدة (مع Idempotency الموحّد)
@@ -428,7 +433,11 @@ class InsuranceService:
         subscription = await self.repo.get_subscription(claim.subscription_id)  # type: ignore
         policy = await self.repo.get_policy(subscription.policy_id)  # type: ignore
 
-        if cast(int, policy.issuer_entity_id) != reviewer_id:  # type: ignore
+        member = await self.membership.get_member(
+            entity_type=ENTITY_TYPE, entity_id=cast(int, policy.issuer_entity_id),  # type: ignore
+            user_id=reviewer_id,
+        )
+        if member is None or member.role not in [EntityMembershipRole.OWNER, EntityMembershipRole.EXECUTIVE_DIRECTOR]:
             raise PermissionDeniedError("Not authorized to review this claim")
 
         # AI Review

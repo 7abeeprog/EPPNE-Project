@@ -184,7 +184,7 @@ async def review_claim(
     notes: Optional[str] = Query(None, description="ملاحظات المراجعة"),
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     tenant: AcademyTenant = Depends(get_current_tenant),
-    current_user: User = Depends(get_current_superuser),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = InsuranceService(db)
