@@ -190,7 +190,8 @@ async def tokenize_asset(
         tenant_id=cast(int, tenant.id),
         unit_id=unit_id,
         total_shares=data.total_shares,
-        share_price=data.share_price_mrusdt
+        share_price=data.share_price_mrusdt,
+        initiator_id=cast(int, current_user.id)
     )
     return token
 

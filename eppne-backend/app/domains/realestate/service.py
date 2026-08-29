@@ -373,6 +373,10 @@ class RealEstateService:
             if not unit or not unit.is_available_for_rent:  # type: ignore
                 raise NotFoundError("الوحدة غير متاحة للإيجار")
 
+            owner = await self._get_land_owner_for_unit(unit, tenant_id)
+            if cast(int, owner.id) != landlord_id:
+                raise PermissionDeniedError("ليس لديك صلاحية تأجير هذه الوحدة")
+
             contract = await self.repo.create_rental_contract(
                 tenant_id=tenant_id,
                 unit_id=unit_id,
@@ -460,10 +464,19 @@ class RealEstateService:
         tenant_id: int,
         unit_id: int,
         total_shares: int,
-        share_price: Decimal
+        share_price: Decimal,
+        initiator_id: int
     ) -> AssetTokenization:
         """تجزئة الأصل إلى أسهم."""
         await self._check_saas_limits(tenant_id, "real_estate_tokenization")
+
+        unit = await self.repo.get_unit(unit_id)
+        if not unit:
+            raise NotFoundError("الوحدة غير موجودة")
+
+        owner = await self._get_land_owner_for_unit(unit, tenant_id)
+        if cast(int, owner.id) != initiator_id:
+            raise PermissionDeniedError("ليس لديك صلاحية تجزئة هذه الوحدة")
 
         existing = await self.repo.get_tokenization_by_unit(unit_id, tenant_id)
         if existing:

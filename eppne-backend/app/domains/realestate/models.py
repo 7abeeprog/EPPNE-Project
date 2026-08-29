@@ -241,7 +241,7 @@ class AssetTokenization(Base):
     is_fully_subscribed = Column(Boolean, default=False)
 
     smart_contract_address = Column(String(42), nullable=True)
-    token_symbol = Column(String(10), nullable=True)
+    token_symbol = Column(String(30), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
