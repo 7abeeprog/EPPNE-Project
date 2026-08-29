@@ -160,9 +160,7 @@ class ArbitrationSyndicatesService:
         return case
 
     async def get_user_cases(self, user_id: int, tenant_id: int) -> List[ArbitrationCase]:
-        if hasattr(self.repo, 'list_user_cases'):
-            return await self.repo.list_user_cases(user_id, tenant_id)  # type: ignore
-        return await self.repo.get_cases_by_claimant(user_id, tenant_id)  # type: ignore
+        return await self.repo.list_user_cases(user_id, tenant_id)
 
     async def get_case(self, case_id: int, tenant_id: int) -> Optional[ArbitrationCase]:
         case = await self.repo.get_case(case_id)
@@ -316,7 +314,7 @@ class ArbitrationSyndicatesService:
             if cached:
                 membership_id = cached.get("membership_id")
                 if membership_id:
-                    memberships = await self.repo.get_syndicate_memberships(syndicate_id)  # type: ignore
+                    memberships = await self.repo.get_syndicate_memberships(syndicate_id, tenant_id)
                     for m in memberships:
                         if m.id == membership_id:
                             return m

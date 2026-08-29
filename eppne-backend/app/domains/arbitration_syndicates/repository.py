@@ -75,6 +75,15 @@ class ArbitrationSyndicatesRepository:
         await self.db.refresh(membership)
         return membership
 
+    async def get_syndicate_memberships(self, syndicate_id: int, tenant_id: int) -> List[SyndicateMembership]:
+        result = await self.db.execute(
+            select(SyndicateMembership).where(
+                SyndicateMembership.syndicate_id == syndicate_id,
+                SyndicateMembership.tenant_id == tenant_id,
+            )
+        )
+        return result.scalars().all()
+
     async def get_membership(self, user_id: int, syndicate_id: int) -> Optional[SyndicateMembership]:
         result = await self.db.execute(
             select(SyndicateMembership).where(
@@ -96,6 +105,15 @@ class ArbitrationSyndicatesRepository:
         result = await self.db.execute(select(ProfessionalLicense).where(ProfessionalLicense.user_id == user_id))
         return result.scalars().all()
 
+    async def list_user_licenses(self, user_id: int, tenant_id: int) -> List[ProfessionalLicense]:
+        result = await self.db.execute(
+            select(ProfessionalLicense).where(
+                ProfessionalLicense.user_id == user_id,
+                ProfessionalLicense.tenant_id == tenant_id,
+            )
+        )
+        return result.scalars().all()
+
     # ---------- Elections ----------
     async def create_election(self, **kwargs) -> SyndicateElection:
         election = SyndicateElection(**kwargs)
@@ -108,6 +126,15 @@ class ArbitrationSyndicatesRepository:
         result = await self.db.execute(select(SyndicateElection).where(SyndicateElection.id == election_id))
         return result.scalar_one_or_none()
 
+    async def list_syndicate_elections(self, syndicate_id: int, tenant_id: int) -> List[SyndicateElection]:
+        result = await self.db.execute(
+            select(SyndicateElection).where(
+                SyndicateElection.syndicate_id == syndicate_id,
+                SyndicateElection.tenant_id == tenant_id,
+            )
+        )
+        return result.scalars().all()
+
     async def create_candidate(self, **kwargs) -> ElectionCandidate:
         candidate = ElectionCandidate(**kwargs)
         self.db.add(candidate)
@@ -115,8 +142,13 @@ class ArbitrationSyndicatesRepository:
         await self.db.refresh(candidate)
         return candidate
 
-    async def list_candidates(self, election_id: int) -> List[ElectionCandidate]:
-        result = await self.db.execute(select(ElectionCandidate).where(ElectionCandidate.election_id == election_id))
+    async def list_candidates(self, election_id: int, tenant_id: int) -> List[ElectionCandidate]:
+        result = await self.db.execute(
+            select(ElectionCandidate).where(
+                ElectionCandidate.election_id == election_id,
+                ElectionCandidate.tenant_id == tenant_id,
+            )
+        )
         return result.scalars().all()
 
     async def create_vote(self, **kwargs) -> ElectionVote:
@@ -125,6 +157,15 @@ class ArbitrationSyndicatesRepository:
         await self.db.commit()
         await self.db.refresh(vote)
         return vote
+
+    async def get_election_votes(self, election_id: int, tenant_id: int) -> List[ElectionVote]:
+        result = await self.db.execute(
+            select(ElectionVote).where(
+                ElectionVote.election_id == election_id,
+                ElectionVote.tenant_id == tenant_id,
+            )
+        )
+        return result.scalars().all()
 
     async def has_voted(self, election_id: int, voter_id: int) -> bool:
         result = await self.db.execute(
