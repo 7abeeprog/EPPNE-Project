@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { translationService } from '@/services/translation.service';
+import { TranslationService } from '@/services/translation.service';
 import { useTranslationStore } from '@/store/translation-store';
 import { LanguageSelector } from './LanguageSelector';
 import { TranslateResponse } from '@/types/translation';
@@ -11,7 +11,7 @@ export function TextTranslator() {
   const [result, setResult] = useState<TranslateResponse | null>(null);
 
   const { mutate, isPending, error } = useMutation({
-    mutationFn: translationService.translate,
+    mutationFn: TranslationService.translate,
     onSuccess: (data) => setResult(data),
     onError: (err) => console.error('Translation failed:', err),
   });

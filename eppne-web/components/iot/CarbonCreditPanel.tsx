@@ -1,13 +1,13 @@
 // components/iot/CarbonCreditPanel.tsx
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { iotService } from '@/services/iot.service';
+import { IoTService } from '@/services/iot.service';
 
 export function CarbonCreditPanel() {
   const queryClient = useQueryClient();
 
   const { data: readings = [], isLoading } = useQuery({
     queryKey: ['iot-readings'],
-    queryFn: () => iotService.getReadings({ limit: 1000 }),
+    queryFn: () => IoTService.getReadings({ limit: 1000 }),
     staleTime: 1000 * 30,
   });
 
@@ -16,7 +16,7 @@ export function CarbonCreditPanel() {
   const totalValue = totalCredits * 50;
 
   const settleMutation = useMutation({
-    mutationFn: () => iotService.settleCarbon(),
+    mutationFn: () => IoTService.settleCarbon(),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['iot-readings'] });
       queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });

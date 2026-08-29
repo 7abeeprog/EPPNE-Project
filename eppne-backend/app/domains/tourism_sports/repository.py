@@ -107,6 +107,12 @@ class TourismSportsRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_player_profile_by_id(self, profile_id: int) -> Optional[PlayerProfile]:
+        result = await self.db.execute(
+            select(PlayerProfile).where(PlayerProfile.id == profile_id)
+        )
+        return result.scalar_one_or_none()
+
     async def create_transfer(self, **kwargs) -> PlayerTransfer:
         transfer = PlayerTransfer(**kwargs)
         self.db.add(transfer)

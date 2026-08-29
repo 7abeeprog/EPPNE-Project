@@ -472,7 +472,7 @@ class InsuranceService:
                     claim_id,
                     status=ClaimStatus.PAID,
                     approved_amount_mrusdt=final_amount,
-                    payout_tx_hash=payout_tx,
+                    payout_tx_hash=cast(str, payout_tx.tx_hash),
                     investigation_notes=notes
                 )
             else:

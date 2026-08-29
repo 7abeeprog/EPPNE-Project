@@ -1,13 +1,13 @@
 // components/iot/IoTDashboardStats.tsx
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { iotService } from '@/services/iot.service';
+import { IoTService } from '@/services/iot.service';
 import { SmartAsset } from '@/types/iot';
 
 export function IoTDashboardStats() {
   const { data: assets = [], isLoading } = useQuery({
     queryKey: ['iot-assets'],
-    queryFn: () => iotService.getAssets({ limit: 1000 }),
+    queryFn: () => IoTService.getAssets({ limit: 1000 }),
     staleTime: 1000 * 60 * 2,
   });
 

@@ -1,7 +1,7 @@
 // components/iot/AssetCard.tsx
 import { SmartAsset } from '@/types/iot';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { iotService } from '@/services/iot.service';
+import { IoTService } from '@/services/iot.service';
 
 export function AssetCard({ asset }: { asset: SmartAsset }) {
   const queryClient = useQueryClient();
@@ -10,7 +10,7 @@ export function AssetCard({ asset }: { asset: SmartAsset }) {
                       asset.health_status === 'CRITICAL_FAILURE' ? 'text-red-400' : 'text-yellow-400';
 
   const toggleOnline = useMutation({
-    mutationFn: () => iotService.updateAsset(asset.id, { is_online: !asset.is_online }),
+    mutationFn: () => IoTService.updateAsset(asset.id, { is_online: !asset.is_online }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['iot-assets'] }),
   });
 

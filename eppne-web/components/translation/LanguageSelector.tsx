@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { translationService } from '@/services/translation.service';
+import { TranslationService } from '@/services/translation.service';
 import { SupportedLanguage } from '@/types/translation';
 
 interface LanguageSelectorProps {
@@ -13,7 +13,7 @@ interface LanguageSelectorProps {
 export function LanguageSelector({ value, onChange, label, showAuto = true }: LanguageSelectorProps) {
   const { data: languages = [], isLoading } = useQuery({
     queryKey: ['supported-languages'],
-    queryFn: translationService.getSupportedLanguages,
+    queryFn: TranslationService.getSupportedLanguages,
     staleTime: 1000 * 60 * 60, // ساعة كاملة (لتخفيف الضغط)
   });
 

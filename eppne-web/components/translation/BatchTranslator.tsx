@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { translationService } from '@/services/translation.service';
+import { TranslationService } from '@/services/translation.service';
 import { useTranslationStore } from '@/store/translation-store';
 import { LanguageSelector } from './LanguageSelector';
 
@@ -10,7 +10,7 @@ export function BatchTranslator() {
   const [results, setResults] = useState<string[] | null>(null);
 
   const { mutate, isPending } = useMutation({
-    mutationFn: translationService.batchTranslate,
+    mutationFn: TranslationService.batchTranslate,
     onSuccess: (data) => setResults(data),
   });
 

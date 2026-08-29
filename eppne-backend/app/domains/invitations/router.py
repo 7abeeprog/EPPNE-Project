@@ -72,172 +72,6 @@ async def list_invitations(
     return invitations
 
 
-@router.get("/{invitation_id}", response_model=InvitationResponse)
-@rate_limit(max_requests=50, window_seconds=60)
-async def get_invitation(
-    request: Request,
-    invitation_id: int,
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    tenant_id = cast(int, current_user.tenant_id)
-    service = InvitationsService(db)
-    invitation = await service.get_invitation(
-        invitation_id=invitation_id,
-        tenant_id=tenant_id
-    )
-    if not invitation:
-        raise HTTPException(status_code=404, detail="Invitation not found")
-
-    background_tasks.add_task(
-        service.track_behavior,
-        invitation_id,
-        tenant_id,
-        {
-            "ip_address": request.client.host if request.client else None,
-            "user_agent": request.headers.get("user-agent"),
-            "device_type": request.headers.get("sec-ch-ua-platform", "web"),
-            "page_visited": "/invite",
-            "actions": []
-        }
-    )
-    return invitation
-
-
-@router.put("/{invitation_id}", response_model=InvitationResponse)
-@rate_limit(max_requests=20, window_seconds=60)
-async def update_invitation(
-    invitation_id: int,
-    data: InvitationUpdate,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    tenant_id = cast(int, current_user.tenant_id)
-    service = InvitationsService(db)
-    updated = await service.update_invitation(
-        invitation_id=invitation_id,
-        tenant_id=tenant_id,
-        user_id=cast(int, current_user.id),
-        data=data.model_dump(exclude_unset=True)
-    )
-    return updated
-
-
-@router.delete("/{invitation_id}")
-@rate_limit(max_requests=10, window_seconds=60)
-async def delete_invitation(
-    invitation_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    tenant_id = cast(int, current_user.tenant_id)
-    service = InvitationsService(db)
-    await service.delete_invitation(
-        invitation_id=invitation_id,
-        tenant_id=tenant_id,
-        user_id=cast(int, current_user.id)
-    )
-    return {"message": "Invitation deleted"}
-
-
-@router.post("/{invitation_id}/accept", response_model=InvitationAcceptResponse)
-@rate_limit(max_requests=10, window_seconds=60)
-async def accept_invitation(
-    invitation_id: int,
-    data: InvitationAccept,
-    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
-    current_user: Optional[User] = Depends(get_current_user_optional),
-    db: AsyncSession = Depends(get_db)
-):
-    service = InvitationsService(db)
-    user_id = cast(int, current_user.id) if current_user else None
-    result = await service.accept_invitation(
-        invitation_id=invitation_id,
-        tenant_id=cast(int, tenant.id),
-        accept_data=data.model_dump(),
-        user_id=user_id,
-        idempotency_key=idempotency_key
-    )
-    return result
-
-
-@router.post("/{invitation_id}/chat", response_model=ConversationResponse)
-@rate_limit(max_requests=30, window_seconds=60)
-async def chat_with_ai(
-    request: Request,
-    invitation_id: int,
-    data: ConversationMessage,
-    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
-    current_user: Optional[User] = Depends(get_current_user_optional),
-    db: AsyncSession = Depends(get_db)
-):
-    service = InvitationsService(db)
-    user_id = cast(int, current_user.id) if current_user else None
-    visitor_session_id = request.headers.get("X-Session-ID", str(uuid.uuid4()))
-    response = await service.chat_with_ai(
-        invitation_id=invitation_id,
-        tenant_id=cast(int, tenant.id),
-        visitor_session_id=visitor_session_id,
-        user_message=data.message,
-        user_id=user_id,
-        idempotency_key=idempotency_key
-    )
-    return response
-
-
-@router.get("/{invitation_id}/tracking", response_model=List[InvitationTrackingResponse])
-@rate_limit(max_requests=30, window_seconds=60)
-async def get_invitation_tracking(
-    invitation_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    tenant_id = cast(int, current_user.tenant_id)
-    service = InvitationsService(db)
-    tracking = await service.get_invitation_tracking(
-        invitation_id=invitation_id,
-        tenant_id=tenant_id
-    )
-    return tracking
-
-
-@router.get("/{invitation_id}/conversations", response_model=List[ConversationResponse])
-@rate_limit(max_requests=30, window_seconds=60)
-async def get_invitation_conversations(
-    invitation_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    tenant_id = cast(int, current_user.tenant_id)
-    service = InvitationsService(db)
-    conversations = await service.get_invitation_conversations(
-        invitation_id=invitation_id,
-        tenant_id=tenant_id
-    )
-    return conversations
-
-
-@router.get("/{invitation_id}/insight", response_model=ClientInsightResponse)
-@rate_limit(max_requests=20, window_seconds=60)
-async def get_client_insight(
-    invitation_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    tenant_id = cast(int, current_user.tenant_id)
-    service = InvitationsService(db)
-    insight = await service.get_client_insight(
-        invitation_id=invitation_id,
-        tenant_id=tenant_id
-    )
-    if not insight:
-        raise HTTPException(status_code=404, detail="Insight not found")
-    return insight
-
-
 @router.get("/stats", response_model=InvitationStatsResponse)
 @rate_limit(max_requests=20, window_seconds=60)
 async def get_invitation_stats(
@@ -652,3 +486,177 @@ async def track_invitation(
         idempotency_key=idempotency_key
     )
     return tracking
+
+
+# ============================================================
+# 6. الدعوة الواحدة عبر المعرّف (Single Invitation by ID)
+# مُسجَّلة عمدًا بعد كل المسارات الثابتة أعلاه (stats/leads/campaigns/
+# tickets/tracking) — Backlog #22: كانت هذه المسارات مُسجَّلة قبلها
+# فتقع كل طلبات هذه الأقسام تحت نمط /{invitation_id} (int) أولًا
+# وتُرفض بـ422 قبل ما توصل لأي هاندلر حقيقي.
+# ============================================================
+
+@router.get("/{invitation_id}", response_model=InvitationResponse)
+@rate_limit(max_requests=50, window_seconds=60)
+async def get_invitation(
+    request: Request,
+    invitation_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = cast(int, current_user.tenant_id)
+    service = InvitationsService(db)
+    invitation = await service.get_invitation(
+        invitation_id=invitation_id,
+        tenant_id=tenant_id
+    )
+    if not invitation:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+
+    background_tasks.add_task(
+        service.track_behavior,
+        invitation_id,
+        tenant_id,
+        {
+            "ip_address": request.client.host if request.client else None,
+            "user_agent": request.headers.get("user-agent"),
+            "device_type": request.headers.get("sec-ch-ua-platform", "web"),
+            "page_visited": "/invite",
+            "actions": []
+        }
+    )
+    return invitation
+
+
+@router.put("/{invitation_id}", response_model=InvitationResponse)
+@rate_limit(max_requests=20, window_seconds=60)
+async def update_invitation(
+    invitation_id: int,
+    data: InvitationUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = cast(int, current_user.tenant_id)
+    service = InvitationsService(db)
+    updated = await service.update_invitation(
+        invitation_id=invitation_id,
+        tenant_id=tenant_id,
+        user_id=cast(int, current_user.id),
+        data=data.model_dump(exclude_unset=True)
+    )
+    return updated
+
+
+@router.delete("/{invitation_id}")
+@rate_limit(max_requests=10, window_seconds=60)
+async def delete_invitation(
+    invitation_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = cast(int, current_user.tenant_id)
+    service = InvitationsService(db)
+    await service.delete_invitation(
+        invitation_id=invitation_id,
+        tenant_id=tenant_id,
+        user_id=cast(int, current_user.id)
+    )
+    return {"message": "Invitation deleted"}
+
+
+@router.post("/{invitation_id}/accept", response_model=InvitationAcceptResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def accept_invitation(
+    invitation_id: int,
+    data: InvitationAccept,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db)
+):
+    service = InvitationsService(db)
+    user_id = cast(int, current_user.id) if current_user else None
+    result = await service.accept_invitation(
+        invitation_id=invitation_id,
+        tenant_id=cast(int, tenant.id),
+        accept_data=data.model_dump(),
+        user_id=user_id,
+        idempotency_key=idempotency_key
+    )
+    return result
+
+
+@router.post("/{invitation_id}/chat", response_model=ConversationResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def chat_with_ai(
+    request: Request,
+    invitation_id: int,
+    data: ConversationMessage,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db)
+):
+    service = InvitationsService(db)
+    user_id = cast(int, current_user.id) if current_user else None
+    visitor_session_id = request.headers.get("X-Session-ID", str(uuid.uuid4()))
+    response = await service.chat_with_ai(
+        invitation_id=invitation_id,
+        tenant_id=cast(int, tenant.id),
+        visitor_session_id=visitor_session_id,
+        user_message=data.message,
+        user_id=user_id,
+        idempotency_key=idempotency_key
+    )
+    return response
+
+
+@router.get("/{invitation_id}/tracking", response_model=List[InvitationTrackingResponse])
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_invitation_tracking(
+    invitation_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = cast(int, current_user.tenant_id)
+    service = InvitationsService(db)
+    tracking = await service.get_invitation_tracking(
+        invitation_id=invitation_id,
+        tenant_id=tenant_id
+    )
+    return tracking
+
+
+@router.get("/{invitation_id}/conversations", response_model=List[ConversationResponse])
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_invitation_conversations(
+    invitation_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = cast(int, current_user.tenant_id)
+    service = InvitationsService(db)
+    conversations = await service.get_invitation_conversations(
+        invitation_id=invitation_id,
+        tenant_id=tenant_id
+    )
+    return conversations
+
+
+@router.get("/{invitation_id}/insight", response_model=ClientInsightResponse)
+@rate_limit(max_requests=20, window_seconds=60)
+async def get_client_insight(
+    invitation_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = cast(int, current_user.tenant_id)
+    service = InvitationsService(db)
+    insight = await service.get_client_insight(
+        invitation_id=invitation_id,
+        tenant_id=tenant_id
+    )
+    if not insight:
+        raise HTTPException(status_code=404, detail="Insight not found")
+    return insight

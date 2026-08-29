@@ -481,7 +481,7 @@ class ArbitrationSyndicatesService:
         return await self.repo.create_candidate(  # type: ignore
             tenant_id=tenant_id,
             election_id=election_id,
-            candidate_user_id=user_id,
+            user_id=user_id,
             **data
         )
 

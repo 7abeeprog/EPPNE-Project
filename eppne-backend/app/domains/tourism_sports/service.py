@@ -176,7 +176,7 @@ class TourismSportsService:
                 program_id=program_id,
                 user_id=user_id,
                 ticket_nft_id=nft_id,
-                payment_tx_hash=tx_hash,
+                payment_tx_hash=cast(str, tx_hash.tx_hash),
                 idempotency_key=idempotency_key
             )
 
@@ -399,7 +399,7 @@ class TourismSportsService:
                         return transfer
                 raise ValidationError("Idempotency record exists but transfer not found.")
 
-        player = await self.repo.get_player_profile(data["player_id"])
+        player = await self.repo.get_player_profile_by_id(data["player_id"])
         if not player or player.tenant_id != tenant_id:  # type: ignore
             raise NotFoundError("Player not found")
 

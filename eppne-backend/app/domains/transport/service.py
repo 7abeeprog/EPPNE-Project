@@ -528,7 +528,7 @@ class TransportService:
 
             await self.db.execute(
                 update(DeliveryTask).where(DeliveryTask.id == task_id).values(
-                    payment_tx_hash=tx_hash
+                    payment_tx_hash=tx_hash.tx_hash
                 )
             )
 

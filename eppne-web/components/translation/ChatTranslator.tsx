@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { translationService } from '@/services/translation.service';
+import { TranslationService } from '@/services/translation.service';
 import { useTranslationStore } from '@/store/translation-store';
 import { LanguageSelector } from './LanguageSelector';
 import { ChatTranslateResponse } from '@/types/translation';
@@ -11,7 +11,7 @@ export function ChatTranslator() {
   const [history, setHistory] = useState<ChatTranslateResponse[]>([]);
 
   const { mutate, isPending } = useMutation({
-    mutationFn: translationService.chatTranslate,
+    mutationFn: TranslationService.chatTranslate,
     onSuccess: (data) => setHistory((prev) => [...prev, data]),
   });
 

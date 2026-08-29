@@ -236,7 +236,7 @@ class RealEstateService:
             # ========================================
             # استدعاء الوكيل الذكي
             # ========================================
-            await ai.execute_agent_action(agent_id=2, tenant_id=tenant_id, action_type="ANALYZE_PROJECT", payload={"unit_id": unit_id, "price": float(cost), "percentage": float(percentage), "buyer_id": buyer_id}, executor_user_id=buyer_id)  # type: ignore[call-arg]
+            await ai.execute_agent_action(agent_id=2, action_type="ANALYZE_PROJECT", payload={"unit_id": unit_id, "price": float(cost), "percentage": float(percentage), "buyer_id": buyer_id}, executor_user_id=buyer_id, idempotency_key=f"REALESTATE-FRAC-T{tenant_id}-{idempotency_key or uuid.uuid4().hex[:8]}")
 
             await self._check_ai_governance(tenant_id, buyer_id, "FRACTIONAL_PURCHASE", cost)
 
@@ -259,7 +259,7 @@ class RealEstateService:
                 ownership_percentage=percentage,
                 acquisition_date=datetime.utcnow(),
                 deed_nft_token_id=deed_nft,
-                purchase_tx_hash=tx_hash,
+                purchase_tx_hash=cast(str, tx_hash.tx_hash),
                 idempotency_key=idempotency_key
             )
 

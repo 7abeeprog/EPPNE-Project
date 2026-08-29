@@ -6,7 +6,7 @@
 # app/domains/tenders_auctions/service.py
 from sqlalchemy.ext.asyncio import AsyncSession
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import bleach
 from typing import Optional, List, Dict, Any, cast
@@ -129,7 +129,7 @@ class TendersAuctionsService:
             raise NotFoundError("Tender not found")
         if tender.status != TenderStatus.PUBLISHED:  # type: ignore
             raise PermissionDeniedError("Tender is not open for bidding")
-        if datetime.utcnow() > tender.submission_deadline:  # type: ignore
+        if datetime.now(timezone.utc) > tender.submission_deadline:  # type: ignore
             raise PermissionDeniedError("Tender submission deadline has passed")
 
         existing = await self.repo.get_bid_by_tender_and_bidder(tender.id, user_id)  # type: ignore
@@ -312,7 +312,7 @@ class TendersAuctionsService:
         if auction_status != AuctionStatus.OPEN:
             raise PermissionDeniedError("Auction is not open")
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if now < auction.start_time or now > auction.end_time:  # type: ignore
             raise PermissionDeniedError("Auction is not active at this time")
 

@@ -1,6 +1,6 @@
 # app/domains/translation/models.py (الإصدار النهائي المتكامل - مع ترقية JSONB)
 from sqlalchemy import (
-    Column, Integer, String, ForeignKey, DateTime, Text, Boolean, Index, text  # ✅ تم إضافة text
+    Column, Integer, String, ForeignKey, DateTime, Text, Boolean, Index, UniqueConstraint, text  # ✅ تم إضافة text
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
@@ -13,7 +13,7 @@ class TranslationCache(Base):
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
 
-    text_hash = Column(String(64), unique=True, index=True, nullable=False)
+    text_hash = Column(String(64), index=True, nullable=False)
     original_text = Column(Text, nullable=False)
     source_lang = Column(String(10), nullable=False, index=True)
 
@@ -26,6 +26,10 @@ class TranslationCache(Base):
     __table_args__ = (
         Index("ix_translation_cache_tenant", "tenant_id"),
         Index("ix_translation_cache_created_at", "created_at"),
+        # Backlog #45: العمود كان unique=True عالميًا بينما get_cache_by_hash() بتفلتر
+        # بـ(tenant_id, text_hash) معًا — نفس نص مشترك بين تينانتين يسبب IntegrityError
+        # حقيقي (مؤكَّد حيًا). القيد الصحيح مركّب على الاثنين معًا.
+        UniqueConstraint("tenant_id", "text_hash", name="uq_translation_cache_tenant_text_hash"),
     )
 
 
