@@ -1,10 +1,10 @@
 # جلسة: realestate-hooks-layer-nonexistent-function-imports
 
 **تاريخ البدء:** 2026-08-29
-**الحالة:** ⏸️ التحقيق الكامل لكل الـ10 ملفات (4 hooks + 6 إضافية) مكتمل
-ومؤكَّد حيًا، بما فيه اكتشاف نظامي جديد (مشكلة unwrap في خطوة 6). بانتظار
-قرار المستخدم على الجدول الموحّد النهائي (خطوة 9) قبل أي تنفيذ. صفر
-إصلاح حتى الآن.
+**الحالة:** ✅ **الجلسة مقفولة رسميًا.** المرحلة الأولى منفَّذة ومؤكَّدة
+حيًا بالكامل ومدفوعة (commit `b7b5ead`) — 6 ملفات مصلَّحة. 8 حالات (ب) +
+4 بنود backlog جديدة (3 من خطوة 11 + `created_at` mismatch) موثَّقة في
+`PROGRESS_LOG.md`. صفر تنفيذ إضافي — راجع خطوة 12 للملخص النهائي.
 
 ## السياق
 اكتُشف هذا البند أثناء جلسة `constructor-mismatch-backlog #43` (2026-08-29)
@@ -567,5 +567,67 @@ toFixed is not a function`) — **باج حقيقي كان موجود من ال�
 كـbacklog منفصل (زي حالات (ب))، ونسيب المرحلة الأولى في حالتها الحالية
 (الاستيراد + التوقيع + unwrap مصلَّحين 100%، لكن الملفين دول لسه مش
 هيعدّوا build نظيف)؟ **صفر تنفيذ إضافي حتى الرد.**
+
+**قرار المستخدم:** توثيق الـ3 اكتشافات كبنود backlog منفصلة في
+`PROGRESS_LOG.md` (بدل توسيع نطاق المرحلة الأولى) — صفر تنفيذ إضافي
+عليهم. تم تنفيذ القرار — راجع خطوة 12.
+
+---
+
+## خطوة 12: توثيق backlog في PROGRESS_LOG.md + commit + ملخص حالة الجلسة النهائي
+
+### توثيق الـ3 اكتشافات في `PROGRESS_LOG.md` (append-only، صفر تعديل على
+### إدخالات قديمة)
+
+أُضيفت 3 بنود جديدة في آخر جدول `PROGRESS_LOG.md` (بعد آخر إدخال موجود،
+بند `social-hardcoded-shop-email-not-registered`)، بنفس تنسيق الجدول
+المُتَّبع في الملف (`| — | **slug** [تاريخ] — وصف... | حالة+أولوية |
+مرجع |`)، **بدون لمس البند الأصلي** (`realestate-hooks-layer-nonexistent-function-imports`،
+سطر 338) — التزامًا بقاعدة "لا يُعدَّل أي إدخال قديم أبدًا" الموثَّقة في
+skill المشروع:
+
+1. **`realestate-masterplanexplorer-decimal-fields-returned-as-string`**
+   — 🟡 مفتوح، لم يبدأ.
+2. **`realestate-tokenizationexchange-decimal-fields-returned-as-string`**
+   — 🟡 مفتوح، لم يبدأ (نفس القرار المعلَّق في البند فوق).
+3. **`realestate-ownerships-page-current-value-field-mismatch`**
+   — 🟡 مفتوح، لم يبدأ.
+
+**توضيح القرار التصميمي المؤجَّل (كما طُلب صراحة):** البندين 1 و2
+مؤجَّلين على قرار تصميمي محدد لازم يُحسَم قبل أي تنفيذ — **إما (أ) إصلاح
+frontend-only** (لف القيم بـ`Number(...)` قبل أي `.toFixed()`/عملية
+حسابية، في كل مكان بيستهلك حقول Decimal القادمة كـstring)، **ولا (ب)
+مراجعة الـschema بالباك إند** (ليه Pydantic بيسلسل حقول `Decimal` كـ
+`string` في الـOpenAPI schema بدل `number` — وهل ده مقصود لتفادي فقدان
+دقة الأرقام العشرية، أم سهو؟ قرار ممكن يمس كل حقول Decimal في المشروع
+مش بس `realestate`). **لم يُختَر أي من الخيارين — القرار نفسه مؤجَّل،
+موثَّق فقط.** البند 3 قرار مختلف (منتجي مش تقني): هل `current_value`
+ميزة تسعير حقيقية لازم تُبنى، ولا افتراض غلط يتشال.
+
+### الـcommit
+
+`b7b5ead` — `fix(realestate-frontend): correct 6 hook/component imports
+to use RealEstateService namespace` — 8 ملفات (6 كود + `PROGRESS_LOG.md`
++ هذا التقرير)، **صفر ملفات غير مرتبطة** (تأكيد `git diff --stat` قبل
+الـcommit، ونفس التأكيد بعد الـcommit عبر `git status` — كل الملفات
+التانية المعدَّلة/untracked في الـworking tree من جلسات تانية سابقة
+فضلت كما هي بدون staging).
+
+### ملخص حالة الجلسة النهائي
+
+| الفئة | العدد | التفاصيل |
+|---|---|---|
+| ✅ **مصلَّح بالكامل، مؤكَّد حيًا عبر tsc، صفر أثر جانبي** | 6 ملفات | `useMyOwnerships.ts` (#3)، `InvestorPortfolio.tsx` (#7)، `MasterPlanExplorer.tsx` (#8 — الاستيراد بس، الباج المكتشَف منفصل)، `SmartContractDashboard.tsx` (#9 — أنظف حالة، صفر أخطاء إطلاقًا)، `useTokenization.ts` (#2b+#2c)، `TokenizationExchange.tsx` (#10+#10b) |
+| 📋 **backlog موثَّق من الأول (حالات "ب" — لا يوجد إطلاقًا في الباك إند)** | 8 حالات | #1, #1b (`useProperties.ts`)، #2, #2d (`getAssetTokenization`/`TokenizationFormData`)، #4 (`usePropertyOwnerships.ts`)، #5 (`getAvailableProperties`)، #6 (`useUpdateProperty`)، #7b (`getSmartContractStatus`) — موثَّقة في خطوات 4/7/9 من هذا التقرير، لسه صفر تنفيذ |
+| 🆕 **backlog جديد اكتُشف أثناء تنفيذ المرحلة الأولى (خطوة 11)، موثَّق الآن في `PROGRESS_LOG.md`** | 3 اكتشافات | Decimal-as-string في `MasterPlanExplorer.tsx` + `TokenizationExchange.tsx` (قرار تصميمي معلَّق: frontend `Number()` مقابل مراجعة الـschema)، و`current_value` mismatch في `ownerships/page.tsx` (قرار منتجي معلَّق) |
+| ⚠️ **حل مؤقت موثَّق (مش جذري)، الآن backlog رسمي** | 1 حالة | `response as unknown as PropertyOwnership` في `TokenizationExchange.tsx` — الجذر (`OwnershipResponse` بدون `created_at` مقابل `PropertyOwnership` اللي بتطلبه إجباري) مُضاف كبند backlog رابع (`realestate-ownershipresponse-missing-created-at-vs-frontend-type`) في `PROGRESS_LOG.md` — **الـtype assertion لازم يترجع/يتشال لما القرار يُتَّخذ، مش حل نهائي** |
+
+**إجمالي بنود الـbacklog المُضافة لـ`PROGRESS_LOG.md` في هذه الجلسة: 4**
+(الـ3 من خطوة 11 + بند `created_at` ده). كلها append-only، صفر لمس
+لإدخالات قديمة.
+
+**صفر تنفيذ إضافي متبقي في هذه الجلسة.** كل شيء بعد هذه النقطة (المرحلة
+التانية بحالات "ب"، أو أي من الاكتشافات الجديدة الـ3) يحتاج جلسة/قرار
+منفصل بموافقة صريحة جديدة.
 
 ---

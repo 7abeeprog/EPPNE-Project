@@ -449,3 +449,32 @@ FK → tenants.id` — **لا يوجد جدول باسم `tenants` في قاعد
   غلط في الفرونت إند من الأول ولازم يتشال من `Ownership` type ومن
   الصفحة؟ | 🟡 **مفتوح، لم يبدأ — قرار منتجي معلَّق (بناء ميزة تسعير حي،
   ولا حذف افتراض غلط)** | `.claude/reports/realestate-hooks-nonexistent-imports-session-log.md` خطوة 11 |
+
+| — | **`realestate-ownershipresponse-missing-created-at-vs-frontend-type`** [2026-08-29] —
+  اكتُشف حيًا أثناء تنفيذ المرحلة الأولى لجلسة
+  `realestate-hooks-nonexistent-imports` (إصلاح `buyFractionalOwnership`
+  → `RealEstateService.buyFraction` في
+  `components/realestate/TokenizationExchange.tsx`، وإزالة unwrap
+  `response.data`): بمجرد ما نوع الاستدعاء بقى صحيح، ظهر type mismatch
+  حقيقي كان مخفي بالكامل بسبب فشل الاستيراد الأصلي (كان بيخلي النوع
+  `any`). `RealEstateService.buyFraction` بيرجع `OwnershipResponse`
+  (النوع المولَّد من الباك إند، `schemas.py` سطر 65-73:
+  `id, unit_id, owner_user_id, ownership_percentage, acquisition_date,
+  deed_nft_token_id?, purchase_tx_hash?`) — **مفيهوش `created_at`
+  إطلاقًا**. لكن `store/realestateStore.ts`
+  (`addOwnership: (ownership: PropertyOwnership) => void`) بيتوقع النوع
+  المحلي `PropertyOwnership` (`types/realestate.ts`) واللي فيه
+  `created_at: string` **إجباري (مش اختياري)**. **الحل المؤقَّت المُطبَّق
+  فعليًا الآن** (frontend-only، أقل تدخل، **مش حل جذري**): type
+  assertion صريح `response as unknown as PropertyOwnership` في
+  `TokenizationExchange.tsx` (سطر `onSuccess`) بدل تعديل
+  `store/realestateStore.ts` أو `types/realestate.ts`. **صفر إصلاح جذري
+  — القرار مؤجَّل:** هل `created_at` لازم يتضاف كحقل فعلي لـ
+  `OwnershipResponse` schema بالباك إند (لو الـDB فيها العمود أصلًا
+  بـSQLAlchemy default لكن الـschema مش عارضاه)، ولا `created_at` يتشال
+  من كونه إجباري في `PropertyOwnership` بالفرونت إند (يبقى اختياري أو
+  يتحذف لو مش مُستخدَم فعليًا في أي مكان)؟ **لما القرار يُتَّخذ، الـtype
+  assertion المؤقَّت في `TokenizationExchange.tsx` لازم يترجع/يتشال —
+  مش حل نهائي، مجرد تسكين مؤقت لعبور الـcompile.** | 🟡 **مفتوح، لم يبدأ
+  — حل مؤقت (type assertion) قائم حاليًا في `TokenizationExchange.tsx`،
+  يحتاج تراجع عند حسم القرار** | `.claude/reports/realestate-hooks-nonexistent-imports-session-log.md` خطوة 10 |
