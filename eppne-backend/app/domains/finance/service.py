@@ -146,6 +146,218 @@ class FinanceService:
 
         return tx
 
+    async def hold_funds(
+        self,
+        user_id: int,
+        amount: Decimal,
+        currency: str,
+        description: str,
+        idempotency_key: Optional[str] = None,
+        ip: Optional[str] = None,
+        ua: Optional[str] = None
+    ):
+        amount_decimal = Decimal(str(amount))
+
+        if idempotency_key:
+            existing_tx = await self.tx_repo.get_by_idempotency_key(idempotency_key, self.tenant_id)
+            if existing_tx:
+                logger.warning(f"Duplicate hold request detected: {idempotency_key}")
+                return existing_tx
+
+        async with self.db.begin_nested():
+            wallet = await self.get_or_create_wallet_for_update(user_id)
+
+            if cast(bool, wallet.is_frozen):  # type: ignore
+                raise PermissionDeniedError("محفظتك مجمدة. يرجى التواصل مع الدعم.")
+
+            balances = getattr(wallet, "balances", {}).copy()
+            held_balances = getattr(wallet, "held_balances", {}).copy()
+
+            current = Decimal(str(balances.get(currency, 0)))
+            if current < amount_decimal:
+                raise InsufficientBalanceError(f"رصيد غير كافٍ من {currency}")
+
+            balances[currency] = float(current - amount_decimal)
+            held_balances[currency] = float(Decimal(str(held_balances.get(currency, 0))) + amount_decimal)
+
+            await self.wallet_repo.update_wallet_funds(cast(int, wallet.id), balances, held_balances)
+
+            tx_hash = f"HOLD-{uuid.uuid4().hex[:12].upper()}"
+            tx = await self.tx_repo.create(
+                tx_hash=tx_hash,
+                idempotency_key=idempotency_key,
+                sender_id=user_id,
+                from_wallet_id=wallet.id,
+                amount=float(amount_decimal),
+                currency=currency,
+                tx_type="HOLD",
+                status="HELD",
+                notes=description,
+            )
+
+        await self._create_audit_log(
+            user_id=user_id,
+            action="HOLD_FUNDS",
+            details={
+                "currency": currency,
+                "amount": float(amount_decimal),
+                "tx_hash": tx_hash,
+            },
+            ip=ip,
+            ua=ua,
+        )
+
+        return tx
+
+    async def release_held_funds(
+        self,
+        user_id: int,
+        amount: Decimal,
+        currency: str,
+        description: str,
+        idempotency_key: Optional[str] = None,
+        ip: Optional[str] = None,
+        ua: Optional[str] = None
+    ):
+        amount_decimal = Decimal(str(amount))
+
+        if idempotency_key:
+            existing_tx = await self.tx_repo.get_by_idempotency_key(idempotency_key, self.tenant_id)
+            if existing_tx:
+                logger.warning(f"Duplicate release request detected: {idempotency_key}")
+                return existing_tx
+
+        async with self.db.begin_nested():
+            wallet = await self.get_or_create_wallet_for_update(user_id)
+
+            balances = getattr(wallet, "balances", {}).copy()
+            held_balances = getattr(wallet, "held_balances", {}).copy()
+
+            current_held = Decimal(str(held_balances.get(currency, 0)))
+            if current_held < amount_decimal:
+                raise ValidationError(f"لا يوجد مبلغ محجوز كافٍ من {currency} للتحرير")
+
+            held_balances[currency] = float(current_held - amount_decimal)
+            balances[currency] = float(Decimal(str(balances.get(currency, 0))) + amount_decimal)
+
+            await self.wallet_repo.update_wallet_funds(cast(int, wallet.id), balances, held_balances)
+
+            tx_hash = f"RELEASE-{uuid.uuid4().hex[:12].upper()}"
+            tx = await self.tx_repo.create(
+                tx_hash=tx_hash,
+                idempotency_key=idempotency_key,
+                receiver_id=user_id,
+                to_wallet_id=wallet.id,
+                amount=float(amount_decimal),
+                currency=currency,
+                tx_type="RELEASE",
+                status="COMPLETED",
+                notes=description,
+            )
+
+        await self._create_audit_log(
+            user_id=user_id,
+            action="RELEASE_FUNDS",
+            details={
+                "currency": currency,
+                "amount": float(amount_decimal),
+                "tx_hash": tx_hash,
+            },
+            ip=ip,
+            ua=ua,
+        )
+
+        return tx
+
+    async def settle_held_funds(
+        self,
+        sender_id: int,
+        receiver_email: str,
+        currency: str,
+        amount: Decimal,
+        idempotency_key: str,
+        notes: Optional[str] = None,
+        ip: Optional[str] = None,
+        ua: Optional[str] = None
+    ):
+        """تسوية ذرّية لحجز قائم: تنقل المبلغ من held_balances الخاص بالمرسل
+        مباشرة إلى balances الخاص بالمستلم، بدون المرور بـbalances المتاح
+        للمرسل — تقفل نافذة الخطر بين release_held_funds و transfer المنفصلين."""
+        if not idempotency_key:
+            raise ValidationError("Idempotency key is required")
+
+        existing_tx = await self.tx_repo.get_by_idempotency_key(idempotency_key, self.tenant_id)
+        if existing_tx:
+            logger.warning(f"Duplicate settlement request detected: {idempotency_key}")
+            return existing_tx
+
+        user_repo = UserRepository(self.db)
+        receiver = await user_repo.get_by_email(receiver_email, self.tenant_id)
+        if not receiver:
+            raise NotFoundError("المستلم غير موجود")
+
+        if receiver.tenant_id != self.tenant_id:
+            raise PermissionDeniedError("المستلم لا يخص هذا المستأجر")
+
+        amount_decimal = Decimal(str(amount))
+
+        async with self.db.begin_nested():
+            first_id, second_id = sorted([sender_id, cast(int, receiver.id)])
+            first_wallet = await self.get_or_create_wallet_for_update(first_id)
+            second_wallet = await self.get_or_create_wallet_for_update(second_id)
+
+            sender_wallet = first_wallet if first_id == sender_id else second_wallet
+            receiver_wallet = second_wallet if second_id == receiver.id else first_wallet
+
+            if cast(bool, sender_wallet.is_frozen):  # type: ignore
+                raise PermissionDeniedError("محفظتك مجمدة. يرجى التواصل مع الدعم.")
+            if cast(bool, receiver_wallet.is_frozen):  # type: ignore
+                raise PermissionDeniedError("محفظة المستلم مجمدة.")
+
+            sender_held = getattr(sender_wallet, "held_balances", {}).copy()
+            current_held = Decimal(str(sender_held.get(currency, 0)))
+            if current_held < amount_decimal:
+                raise ValidationError(f"لا يوجد مبلغ محجوز كافٍ من {currency} للتسوية")
+            sender_held[currency] = float(current_held - amount_decimal)
+            sender_balances = getattr(sender_wallet, "balances", {}).copy()
+
+            receiver_balances = getattr(receiver_wallet, "balances", {}).copy()
+            receiver_balances[currency] = float(Decimal(str(receiver_balances.get(currency, 0))) + amount_decimal)
+
+            await self.wallet_repo.update_wallet_funds(cast(int, sender_wallet.id), sender_balances, sender_held)
+            await self.wallet_repo.update_balances(cast(int, receiver_wallet.id), receiver_balances)
+
+            tx_hash = f"SETTLE-{uuid.uuid4().hex[:12].upper()}"
+            tx = await self.tx_repo.create(
+                tx_hash=tx_hash,
+                idempotency_key=idempotency_key,
+                sender_id=sender_id,
+                receiver_id=receiver.id,
+                from_wallet_id=sender_wallet.id,
+                to_wallet_id=receiver_wallet.id,
+                amount=float(amount_decimal),
+                currency=currency,
+                tx_type="SETTLEMENT",
+                status="COMPLETED",
+                notes=notes,
+            )
+
+        await self._create_audit_log(
+            user_id=sender_id,
+            action="SETTLE_HELD_FUNDS",
+            details={
+                "receiver_id": receiver.id,
+                "receiver_email": receiver_email,
+                "currency": currency,
+                "amount": float(amount_decimal),
+                "tx_hash": tx_hash,
+            },
+            ip=ip,
+            ua=ua,
+        )
+
+        return tx
+
     async def swap(
         self,
         user_id: int,

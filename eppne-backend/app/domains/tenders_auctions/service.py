@@ -344,7 +344,7 @@ class TendersAuctionsService:
         # حجز المبلغ
         finance = FinanceService(self.db, tenant_id)
         try:
-            await finance.hold_funds(  # type: ignore[attr-defined]
+            await finance.hold_funds(
                 user_id,
                 bid_amount,
                 "MR_USDT",
@@ -394,28 +394,41 @@ class TendersAuctionsService:
         if auction.created_by != closer_id:  # type: ignore
             raise PermissionDeniedError("Only auction creator can close")
 
-        live_bids = await self.repo.get_live_bids_for_auction(auction_id, limit=1)
-        highest_bid = live_bids[0] if live_bids else None
+        # جلسة #29 (2026-08-29): لازم كل المزايدات الحية للمزاد، مش أول واحدة
+        # بس — كل مزايدة غير فائزة (يشمل مزايدات سابقة للفائز نفسه لو رفع
+        # عرضه أكتر من مرة) لازم يتحرر حجزها، وإلا تفضل محجوزة للأبد.
+        all_live_bids = await self.repo.get_live_bids_for_auction(auction_id, limit=100_000)
+        highest_bid = all_live_bids[0] if all_live_bids else None
         has_winner = highest_bid is not None
 
         if has_winner and highest_bid:
             bidder_id = cast(int, highest_bid.bidder_id)
             bid_amount = cast(Decimal, highest_bid.bid_amount_mrusdt)
-            
+
             finance = FinanceService(self.db, tenant_id)
-            await finance.release_held_funds(  # type: ignore[attr-defined]
-                bidder_id,
-                bid_amount,
-                "MR_USDT",
-                f"Auction {auction_id} winner payment"
-            )
-            await finance.transfer(
+
+            # حرّر حجز كل مزايدة غير فائزة (خاسرون + مزايدات سابقة للفائز نفسه)
+            for live_bid in all_live_bids:
+                if live_bid.id == highest_bid.id:
+                    continue
+                await finance.release_held_funds(
+                    cast(int, live_bid.bidder_id),
+                    cast(Decimal, live_bid.bid_amount_mrusdt),
+                    "MR_USDT",
+                    f"Auction {auction_id} bid released (non-winning)",
+                    idempotency_key=f"AUCTION-RELEASE-{auction_id}-{live_bid.id}"
+                )
+
+            # تسوية ذرّية لحجز الفائز: تحرير + تحويل في خطوة واحدة، بدون
+            # المرور بـbalances المتاح — idempotency_key ثابت مُشتق من
+            # auction_id (مش uuid4 عشوائي) لضمان idempotency فعلية عند retry.
+            await finance.settle_held_funds(
                 sender_id=bidder_id,
                 receiver_email="system@eppne.com",
                 currency="MR_USDT",
                 amount=bid_amount,
                 notes=f"Auction {auction.title} sale",
-                idempotency_key=f"AUCTION-SALE-{auction_id}-{uuid.uuid4().hex[:8]}"
+                idempotency_key=f"AUCTION-SALE-{auction_id}"
             )
 
             invoice_service = InvoicingService(self.db, tenant_id)

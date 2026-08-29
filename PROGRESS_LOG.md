@@ -220,9 +220,11 @@ FK → tenants.id` — **لا يوجد جدول باسم `tenants` في قاعد
 | — | **`affiliate-commission-tiers-duplicate-global-null-gap`** [2026-08-25] — **ثغرة سلامة بيانات كامنة حقيقية (data integrity)، وليست مجرد ملاحظة عابرة** — اكتُشفت أثناء التحقق الحي لجلسة `tenant-system-account-phase3-conversion` (زرع بيانات throwaway لموقع `affiliate.withdraw_commissions`). الفهرس الفريد المُعرَّف فعليًا على `affiliate_commission_tiers` هو `UNIQUE(tenant_id, entity_type, target_product_id)` — القصد منه منع أكثر من صف `GLOBAL` واحد لكل تينانت (`target_product_id IS NULL` في هذه الحالة). لكن **دلالة `NULL` في فهارس Postgres الفريدة تعتبر كل قيمة `NULL` "مختلفة" عن أي `NULL` أخرى** (بعكس القيم الفعلية) — أي إدراج أكثر من صف `GLOBAL` لنفس التينانت **ينجح بصمت بلا أي `IntegrityError`**، رغم أن القيد صُمِّم تحديدًا لمنع هذا بالضبط. **الأثر العملي:** أي كود يعتمد على `get_commission_tiers()` (اللي بتفترض ضمنيًا صفًا واحدًا فقط عبر `scalar_one_or_none()` أو ما يعادلها) معرَّض لسلوك غير متوقَّع (أي صف من عدة صفوف صالحة يُرجَع فعليًا، حسب ترتيب القراءة) لو تكرر إدراج هذا الصف — ليس افتراضًا نظريًا: **حصل فعليًا وبالصدفة أثناء إعادة تشغيل جزء من اختبار Phase 3 هذا (صف مكرر بمعرّف `affiliate_commission_tiers.id=7`، اكتُشف وحُذف يدويًا فورًا كجزء من تنظيف بيانات الاختبار، صفر أثر على بيانات حقيقية)**. **الحل المطلوب (لم يُنفَّذ، خارج نطاق Phase 3 صراحة):** فهرس فريد جزئي (partial unique index) بدل الفهرس المركَّب الحالي — مثلًا `UNIQUE(tenant_id) WHERE entity_type='GLOBAL' AND target_product_id IS NULL` (نفس نمط `uq_users_tenant_system_account` المُضاف في نفس الجلسة لحساب النظام الموحَّد لكل تينانت) — يحتاج migration + تحقق من عدم وجود تكرارات فعلية بالفعل في القاعدة الحية قبل تطبيق القيد الجديد. | 🔴 **مفتوح، أولوية متوسطة-عالية** — ثغرة سلامة بيانات حقيقية مؤكَّدة حيًا (ليست افتراضية)، تمس دومين مالي (عمولات الإحالة) | `.claude/reports/tenant-system-account-phase3-conversion-session-log.md` §4.3 |
 | — | **`saas-social-limits-catalog-unseeded`** [2026-08-25] — اكتُشف أثناء التحقق الحي لموقع `social.subscribe_group_to_plan` (جلسة `tenant-system-account-phase3-conversion`): `SocialService._check_saas_limits(tenant_id, "social")` بينادي `SaaSControlService.can_access_service("social")`، اللي بيدوّر عن صف بـ`saas_service_catalog.code='social'` — **صفر صف بهذا الكود موجود في القاعدة الحية بالكامل**. النتيجة: أي استدعاء حقيقي لـ`subscribe_group_to_plan` (أو أي دالة تانية بتمر عبر نفس الفحص) بيرجع `has_access=False` دايمًا → `PermissionDeniedError` فوري، بغض النظر عن وجود اشتراك حقيقي صالح من عدمه — **يمنع الميزة بالكامل حاليًا لأي تينانت**. للوصول لمنطق `finance.transfer` المطلوب تحقيقه في نفس الجلسة، لزم تجاوز الفحص بـ`monkeypatch` على مستوى instance داخل سكربت الاختبار فقط (صفر لمس على الكود المصدري). | 🔴 **مفتوح، لم يبدأ** — يحتاج زرع صف `saas_service_catalog(code='social')` (أو مراجعة هل الميزة يُفترض أصلًا تُستثنى من فحص `_check_saas_limits`، قرار منتجي) | `.claude/reports/tenant-system-account-phase3-conversion-session-log.md` §4.3 |
 | — | **`stale-test-user-system-eppne-com`** [2026-08-25] — ليس باجًا في الكود، بل بقايا بيانات اختبار من جلسة سابقة تستحق تسجيلًا صريحًا لتفادي التباس مستقبلي: مستخدم حقيقي في القاعدة الحية بالبريد `system@eppne.com` (`id=43`, `username=p_ctor_proj_sysrecv`, أُنشئ 2026-08-14) — كان على الأرجح فِخًّا/حلاً بديلًا مُتعمَّدًا لسدّ ثغرة الحساب الثابت القديمة (`receiver_email="system@eppne.com"` الهاردكودد) قبل حل `tenant-system-account` الحالي. الكود الحالي (بعد Phase 3) **لا يشير لهذا البريد بأي شكل إطلاقًا** — الصف خامل تمامًا، بلا أي تأثير وظيفي. مذكور هنا فقط لأنه قد يُربِك أي جلسة تشخيص مستقبلية تبحث عن "من يملك هذا البريد". | 🟡 **مفتوح، أولوية منخفضة جدًا (تنظيف بيانات فقط)** — حذف الصف اختياري، بلا أي أثر وظيفي إن تُرك | `.claude/reports/tenant-system-account-phase3-conversion-session-log.md` §4.3 |
-| — | **`invoicing-invoice-model-metadata-attribute-collision`** [2026-08-25] — اكتُشف أثناء التحقق الحي لإصلاح Backlog #23 (`invoicing-list-invoices-wrong-kwarg`، جلسة `constructor-mismatch-backlog-cleanup`): بعد إزالة الـkwarg الزايد بنجاح (التحقق أكَّد اختفاء `TypeError` تمامًا)، الاستدعاء الحي لـ`InvoicingRepository.list_invoices()` كشف باجًا مختلفًا كليًا وأعمق: عمود `Invoice.metadata` بيتصادم مع attribute محجوز على مستوى SQLAlchemy declarative (`Base.metadata`) — أي محاولة تسلسل صف `Invoice` حقيقي عبر `InvoiceResponse.model_validate(inv)` تفشل بـ`pydantic_core.ValidationError: Input should be a valid dictionary` (لأن القيمة المقروءة فعليًا هي كائن `MetaData()` مش الـdict المتوقَّع). **الأثر:** `GET /invoicing/invoices` معطوب بالكامل لأي تينانت عنده فاتورة واحدة حقيقية على الأقل — بغض النظر عن إصلاح الـarity. مؤكَّد حيًا (تينانت1، فاتورة حقيقية موجودة). صفر لمس — خارج نطاق إصلاح الـarity صراحة، يحتاج قرار تصميم (إعادة تسمية العمود في الموديل، أم `Column("metadata", ..., key="invoice_metadata")` للفصل بين اسم عمود الـDB واسم attribute الـPython). | 🔴 **مفتوح، لم يبدأ** — يمنع `list_invoices` بالكامل لأي تينانت عنده فواتير حقيقية | `.claude/reports/constructor-mismatch-backlog-cleanup-session-log.md` (بند 2، مجموعة أ) |
+| — | **`invoicing-invoice-model-metadata-attribute-collision`** [2026-08-25] — اكتُشف أثناء التحقق الحي لإصلاح Backlog #23 (`invoicing-list-invoices-wrong-kwarg`، جلسة `constructor-mismatch-backlog-cleanup`): بعد إزالة الـkwarg الزايد بنجاح (التحقق أكَّد اختفاء `TypeError` تمامًا)، الاستدعاء الحي لـ`InvoicingRepository.list_invoices()` كشف باجًا مختلفًا كليًا وأعمق: عمود `Invoice.metadata` بيتصادم مع attribute محجوز على مستوى SQLAlchemy declarative (`Base.metadata`) — أي محاولة تسلسل صف `Invoice` حقيقي عبر `InvoiceResponse.model_validate(inv)` تفشل بـ`pydantic_core.ValidationError: Input should be a valid dictionary` (لأن القيمة المقروءة فعليًا هي كائن `MetaData()` مش الـdict المتوقَّع). **الأثر (وقتها):** `GET /invoicing/invoices` معطوب بالكامل لأي تينانت عنده فاتورة واحدة حقيقية على الأقل — بغض النظر عن إصلاح الـarity. مؤكَّد حيًا (تينانت1، فاتورة حقيقية موجودة). **✅ مُغلَق [اكتُشف الإغلاق 2026-08-29، جلسة `invoicing-21-metadata-collision`]:** هذا البند نفسه هو #21 في `constructor-mismatch-backlog-classification.md`. التحقيق في جلسة 2026-08-29 (المفروض تحديد قرار تصميم أ/ب) اكتشف إن العطل **مش موجود أصلًا في الكود الحالي** — الموديل والـmigration كانا دايمًا `invoice_metadata` (صفر تصادم على مستوى الـDB/ORM)، والتصادم كان محصورًا في `InvoiceBase.metadata` (schema فقط). اتصلح فعليًا بنفس اليوم (2026-08-25) عبر commit `93e68ac` (`fix(invoicing): close create_invoice mass-assignment, fix masked metadata bug`) — إصلاح جانبي مذكور صراحة في نفس commit message، لكن معنون لبند أمني مختلف تمامًا (mass-assignment)، فمافيش حد لاحظ وقتها إنه بيقفل هذا البند بالذات — من هنا جاء التضارب بين هذا السطر (فاضل "مفتوح") وتصنيف #21 (فاضل "لسه مفتوح، يحتاج قرار تصميم"). **تحقق حي بعد الإصلاح [2026-08-29]:** 5 فواتير حقيقية (من أصل 16 لتينانت 1) مُرِّرت فعليًا عبر `InvoiceResponse.model_validate()` — صفر استثناءات، `invoice_metadata` بيتسلسل صح. النمط المتبع فعليًا بالمشروع (9 دومينات فحصت) هو تسمية العمود نفسه `<entity>_metadata` في الـDB من البداية (مش alias بايثوني `key=`) — و`invoicing` كان بالفعل كذلك، فمفيش أي migration/تعديل موديل مطلوب. تفصيل كامل: `.claude/reports/invoicing-21-metadata-collision-session-log.md`. | ✅ **مُغلَق [اكتُشف الإغلاق 2026-08-29، مصدر الإصلاح الفعلي: commit `93e68ac`، 2026-08-25]** | `.claude/reports/constructor-mismatch-backlog-cleanup-session-log.md` (بند 2، مجموعة أ)؛ `.claude/reports/invoicing-21-metadata-collision-session-log.md` |
 | — | **`ai-governance-audit-log-decimal-not-json-serializable`** [2026-08-25] — اكتُشف أثناء التحقق الحي لإصلاح default الـ`reset_at` (جلسة `constructor-mismatch-backlog-cleanup`، مجموعة ب): بعد تأكيد نجاح `AIGovernanceRepository.create_or_update_quota()` منفردة، تشغيل المسار الكامل عبر `AIGovernanceService.set_quota()` كشف باجًا مختلفًا تمامًا وأعمق في نفس التسلسل: `repo.create_audit_log(..., new_value=quota_data, ...)` بيحاول يكتب `quota_data` (فيها `Decimal` من `limit_value`) مباشرة لعمود `agent_audit_logs.new_value` (JSONB) — `Decimal` **مش قابل للتحويل لـJSON افتراضيًا** (`asyncpg`/`sqlalchemy` بيرفضوه بـ`TypeError: Object of type Decimal is not JSON serializable`). **الأثر:** `POST /agents/{id}/quotas` (`set_quota`) معطوب بالكامل حاليًا — حتى بعد إصلاح `reset_at` — لأن الكراش بيحصل في خطوة `create_audit_log` الملازمة لنفس الـtransaction (`begin_nested()`). مؤكَّد حيًا (تينانت1، agent throwaway، `limit_value=Decimal("1000")`). صفر لمس — يحتاج تحويل `Decimal`→`float`/`str` قبل التخزين (أو `json.dumps(default=...)` مخصَّص) في `create_audit_log` أو عند بناء `quota_data`. | 🔴 **مفتوح، أولوية عالية** — يحجب endpoint إداري حساس (تحديد حصص الوكلاء) بالكامل | `.claude/reports/constructor-mismatch-backlog-cleanup-session-log.md` (بند ب، `ai_governance.reset_at`) |
 | — | **`ai-governance-usage-log-idempotency-wrong-arity`** [إعادة تأكيد 2026-08-25، اكتُشف أصلًا 2026-08-19] — تصعيد لبند رسمي في الجدول (كان موثَّقًا فقط ضمن سجل الجلسات المُقفلة أعلاه، تحت `regression-tests-backfill`). `AIGovernanceService.check_and_consume()` (`service.py:152`) بتنادي `self.repo.get_usage_log_by_idempotency(idempotency_key)` بمعامل واحد بس، لكن التوقيع الحقيقي (`repository.py:66`) `(idempotency_key: str, tenant_id: int)` — `tenant_id` إجباري بلا default. **الأثر:** أي استدعاء `check_and_consume()` بـ`idempotency_key` حقيقي (غير فاضي) يكراش فورًا بـ`TypeError` — مشروط بوجود هيدر `Idempotency-Key` من العميل، مش حتمي على كل استدعاء. **مؤكَّد لسه موجود [2026-08-25]** أثناء قراءة نفس الملف لإصلاح بند `reset_at` (مجموعة ب) — صفر لمس، برّه نطاق تلك الجلسة صراحة. | 🔴 **مفتوح، أولوية عالية** — يعطّل مسار شراء حقيقي (`service_marketplace`) كلما استُخدمت idempotency فعليًا | `tests/test_ai_governance_check_and_consume.py`؛ `.claude/reports/constructor-mismatch-backlog-cleanup-session-log.md` (بند ب) |
+| — | **`invitations-customer-interaction-metadata-attribute-collision`** [2026-08-29] — اكتُشف كاكتشاف جانبي أثناء جلسة `invoicing-21-metadata-collision` (بحث عن نمط تسمية `metadata` في كل المشروع، خارج نطاق الجلسة نفسها بالكامل — صفر تحقق حي، صفر لمس). **نفس فئة العطل بالحرف** الموثَّقة سابقًا في `invoicing-invoice-model-metadata-attribute-collision` أعلاه (المُغلَق)، لكن في دومين مختلف تمامًا: موديل `CustomerInteraction` (`invitations/models.py:257-270`، جدول `crm_interactions`) عنده عمود JSONB فعلي اسمه `meta_data` (سطر 270) — **مش `metadata`**، فصفر تصادم على مستوى الموديل نفسه. لكن `invitations/service.py:606` بيقرأ `"metadata": interaction.metadata` — أي بيحاول يوصل لـattribute اسمه `metadata` حرفيًا على كائن `interaction`، وهو مش موجود كعمود، فبيرجّع بدل منه `Base.metadata` المحجوز (كائن `MetaData` بتاع SQLAlchemy) بدل القيمة الفعلية المخزَّنة في `meta_data`. **الأثر المتوقَّع (غير مؤكَّد حيًا بعد):** أي استجابة API بتمر بالسطر ده (لازم تحديد أي endpoint/دالة بتستدعي الكود المحيط بسطر 606) هترجّع كائن `MetaData` بدل بيانات الـinteraction الفعلية بدل الحقل ده — إما فشل serialization (لو الاستجابة عبر Pydantic schema بيتوقع `dict`)، أو تسريب/عرض غلط لكائن داخلي لو مفيش validation صارمة. **لم يُحدَّد بعد:** أي route/دالة تحديدًا بتستدعي هذا الكود، هل فيه Pydantic schema بيتحقق من الاستجابة (زي حالة `invoicing` اللي كانت بترجع 400)، ولا الكود ماشي مباشر كـdict بلا validation (يعني ممكن يفشل بشكل مختلف تمامًا — تسريب كائن مش ValidationError). **صفر لمس، صفر تحقق حي — يحتاج جلسة تشخيص مستقلة.** | 🔴 **مفتوح، لم يبدأ فحص** — يحتاج تحديد نطاق الاستدعاء الفعلي (مين بينادي الكود حوالين `service.py:606`) وتحقق حي قبل أي إصلاح | `.claude/reports/invoicing-21-metadata-collision-session-log.md` §5 |
+| — | **`invoicing-process-overdue-invoices-missing-tenant-id-arg`** [2026-08-29] — اكتُشف كاكتشاف جانبي أثناء جلسة `invoicing-21-metadata-collision` (قراءة `router.py` بالكامل أثناء فحص كل استخدامات `InvoicingService`، خارج نطاق الجلسة نفسها — صفر تحقق حي، صفر لمس). `invoicing/router.py:330` (`POST /invoicing/admin/process-overdue`) بينادي `InvoicingService(db)` **بمعامل واحد بس**، لكن الـconstructor الفعلي (`invoicing/service.py:23`) `def __init__(self, db: AsyncSession, tenant_id: int)` — `tenant_id` **إجباري بلا default**. **الأثر المتوقَّع (غير مؤكَّد حيًا):** أي استدعاء فعلي لهذا الـendpoint (المفروض يُستدعى من Celery، حسب الوصف في الراوتر) هيرمي `TypeError: __init__() missing 1 required positional argument: 'tenant_id'` فورًا، قبل ما يوصل حتى لمنطق `process_overdue_invoices()` نفسه. **لم يُحدَّد بعد:** هل الـendpoint ده مُفعَّل فعليًا (مربوط بمهمة Celery حقيقية بتتنفذ دوريًا) ولا كود كامن زي `affiliate-distribute-commissions-celery-task-wrong-signature` (أعلاه) — لو مُفعَّل، ده معناه معالجة الفواتير المتأخرة معطَّلة بالكامل في الإنتاج. **صفر لمس، صفر تحقق حي — يحتاج جلسة تشخيص مستقلة.** | 🔴 **مفتوح، لم يبدأ فحص** — يحتاج تأكيد هل الـendpoint مُفعَّل فعليًا (Celery beat/schedule) قبل تحديد الأولوية الحقيقية | `.claude/reports/invoicing-21-metadata-collision-session-log.md` §5 |
 
 ---
 
@@ -478,3 +480,180 @@ FK → tenants.id` — **لا يوجد جدول باسم `tenants` في قاعد
   مش حل نهائي، مجرد تسكين مؤقت لعبور الـcompile.** | 🟡 **مفتوح، لم يبدأ
   — حل مؤقت (type assertion) قائم حاليًا في `TokenizationExchange.tsx`،
   يحتاج تراجع عند حسم القرار** | `.claude/reports/realestate-hooks-nonexistent-imports-session-log.md` خطوة 10 |
+| — | **`arbitration-syndicates-repository-27-remaining-methods`** [2026-08-29] —
+  إكمال بند Backlog #27 (`arbitration-syndicates-repository-missing-methods`)
+  بالكامل: 6/6 دوال `repository.py` مفقودة/بتوقيع غلط (`list_user_licenses`,
+  `list_candidates`, `list_syndicate_elections` [دالة سادسة اكتُشفت أثناء
+  التحقيق — كانت السبب الفعلي الوحيد لعطل `GET /syndicates/{id}/elections`،
+  مش من الخمسة المذكورين أصلًا في وصف البند]، `get_election_votes`,
+  `get_syndicate_memberships` [+ تعديل نداء `service.py:join_syndicate` عشان
+  يمرر `tenant_id` كمان — كان بيمرر `syndicate_id` بس]) + حذف الكود الميت
+  `get_cases_by_claimant` (شرط `hasattr` في `service.py` كان بيختار
+  `list_user_cases` الصحيحة دايمًا، فالفرع التاني مالوش أي مسار تنفيذ حي).
+  كل دالة فُلترت بـ`tenant_id` فعليًا من أول تنفيذها ومؤكَّدة حيًا (مسار
+  شرعي + مسار هجوم عبر تينانتين حقيقيين `1`/`16` + تنظيف)، **صفر IDOR
+  اتلقى أثناء الإصلاح في أي من الست دوال.**
+  **تمييز دقيق مهم لـ`list_candidates` تحديدًا (الأعلى خطورة كامنة في
+  البند):** ماكانتش بتسرّب بيانات فعليًا في أي وقت — كانت بترمي
+  `TypeError` (مؤكَّد `500 Internal Server Error` عبر اختبار HTTP
+  end-to-end حقيقي) **لأي طلب على الإطلاق، بصرف النظر عن هوية الطالب** —
+  المالك الشرعي والمهاجم كانا ياخدوا نفس العطل بالظبط، صفر بيانات لأي
+  حد. الخطورة كانت **افتراضية بحتة**: لو الإصلاح اقتصر على تمرير
+  `tenant_id` للدالة (لحل الـ`TypeError`) بلا استخدامه فعليًا في
+  `WHERE`، كان هيتولد IDOR حقيقي من لحظة نشر هذا الإصلاح الساذج تحديدًا
+  — لكن هذا لم يحدث؛ الإصلاح المُطبَّق فلتر بـ`tenant_id` من أول تعديل
+  واحد. **لا تُقرأ هذه الفقرة على إنها "IDOR اتصلح" بالمعنى اللي بيوحي
+  بتسريب فعلي تاريخي — النمط مختلف جوهريًا عن `list_user_cases` (المُصلَحة
+  سابقًا 2026-08-26، راجع صف #6 في `critical-finding-xtenant-systemic.md`)
+  حيث الثغرة كانت غياب فلترة فعلي وليس عطل شامل لكل الطلبات.** | ✅
+  **مُغلَق بالكامل [2026-08-29]** | `.claude/reports/arbitration-syndicates-repository-27-session-log.md`,
+  `.claude/reports/arbitration-syndicates-repository-27-post-execution-confirmation.md` |
+| — | **`realestate-rent-tokenize-missing-ownership-check`** [2026-08-29] —
+  اكتُشف عرضًا أثناء تحقيق أمني منفصل (سؤال أصلي: هل `buyFraction`/
+  `tokenizeAsset` بتثق بـamount جاهز من الفرونت إند؟ — الإجابة: لأ، آمن،
+  السيرفس بتحسب المبلغ بنفسها من `Decimal` في الـDB، راجع نفس التقرير).
+  أثناء فحص `rent_unit` كجزء من نفس السؤال، ظهر بج أمني أخطر تمامًا
+  ومنفصل: **`RealEstateService.rent_unit()` و`.tokenize_asset()` كانتا
+  بتقبلوا هوية الـcaller نفسه كـ`landlord_id`/`initiator_id` من غير أي
+  تحقق إنه فعلاً مالك الوحدة** (عبر سلسلة unit → development →
+  land_asset → owner_id). أي مستخدم authenticated كان يقدر: (أ) يعمل
+  `POST /realestate/rentals` لأي `unit_id`، ينصب نفسه landlord، ويحدد
+  `monthly_rent_mrusdt` كيفما شاء — وده بيولّد invoice حقيقي ضد
+  `tenant_user_id`. (ب) يعمل `POST /realestate/tokenize/{unit_id}` لأي
+  وحدة مش بتاعته بأي `share_price_mrusdt`. **الإصلاح المُطبَّق:** تحقق
+  `owner.id == landlord_id`/`initiator_id` (عبر helper موجود بالفعل
+  `_get_land_owner_for_unit`، نفس النمط المستخدَم في
+  `buy_fractional_ownership`) → `PermissionDeniedError` (403) عند عدم
+  التطابق. **تحقق حي كامل 100% لكلا الدالتين** (مسار شرعي ينجح فعليًا +
+  مسار هجوم يترفض بـ403 مؤكَّد بالرسالة الدقيقة + SELECT مستقل يثبت صفر
+  مورد اتسجل للمهاجم)، عبر ملفي اختبار جديدين:
+  `test_realestate_rent_unit_ownership_check.py`،
+  `test_realestate_tokenize_asset_ownership_check.py`. Commit `ed3af4f`. | ✅
+  **مُغلَق بالكامل ومتحقَّق حيًا [2026-08-29]** | `.claude/reports/realestate-buyfraction-amount-trust-check-session-log.md` |
+| — | **`realestate-asset-tokenizations-token-symbol-too-narrow`** [2026-08-29] —
+  اكتُشف حيًا (مش أمني — باج وظيفي بحت) أثناء التحقق من إصلاح
+  `tokenize_asset` أعلاه (بند منفصل تمامًا، وثّقته هنا لوحده عشان يكون
+  قابل للعثور عليه بمعزل عن السياق الأمني): `AssetTokenization.token_symbol`
+  كان `VARCHAR(10)` (`models.py`)، بينما `RealEstateService.tokenize_asset()`
+  بتولّد القيمة بصيغة `f"EPPNE-RE-{unit_id}-{uuid.uuid4().hex[:4].upper()}"`
+  — دايمًا 15+ حرف (حتى `unit_id` برقم واحد). **النتيجة: أي استدعاء
+  حقيقي لـ`tokenize_asset` — بغض النظر تمامًا عن هوية الـcaller أو صحة
+  أي تحقق ownership — كان بيفشل بـ`StringDataRightTruncationError` عند
+  الـINSERT.** مؤكَّد حيًا (رسالة الخطأ الكاملة موثَّقة في التقرير).
+  **الإصلاح المُطبَّق (بموافقة صريحة، نطاق موسَّع عن الطلب الأصلي):**
+  migration جديدة `041_widen_asset_tokenizations_token_symbol.py`
+  (`VARCHAR(10)` → `VARCHAR(30)`) + تحديث `models.py` مطابق، اتنفذت فعليًا
+  (`alembic upgrade head`). **تحقق حي بعد الـmigration:** إعادة تشغيل
+  `test_tokenize_asset_succeeds_for_real_owner` نجحت للنهاية الطبيعية
+  (`AssetTokenization` اتسجلت فعليًا، اتأكد بـSELECT مستقل). Commit
+  `ed3af4f` (نفس commit إصلاح الـownership، موثَّق كبند منفصل هنا). | ✅
+  **مُغلَق بالكامل ومتحقَّق حيًا [2026-08-29]** | `.claude/reports/realestate-buyfraction-amount-trust-check-session-log.md` |
+| — | **`insurance-review-claim-issuer-entity-id-reviewer-id-mismatch`**
+  (Backlog #41) [2026-08-29] — بند كان موثَّقًا مسبقًا بتحذير أمني صريح
+  في `constructor-mismatch-backlog-classification.md` ("الإصلاح الساذج
+  قد يفتح ثغرة صلاحية مختلفة"، نفس نمط تحذير `sovereign_entities`/#32).
+  **الفحص المُكتشَف قبل الإصلاح** (`insurance/service.py:431`):
+  `if policy.issuer_entity_id != reviewer_id: raise PermissionDeniedError`
+  — يقارن مفتاح أساسي لجدول `sovereign_entities_v2` (`issuer_entity_id`)
+  مقابل مفتاح أساسي لجدول `users` (`reviewer_id`)، **مساحتا معرِّفات
+  مختلفتان تمامًا رياضيًا**، فوق بوابة راوتر منفصلة تمامًا
+  `get_current_superuser` (دور منصة عالمي `system_role`، لا علاقة له
+  بعضوية الكيان المُصدِر). **تحقيق حي قاطع [جلسة
+  `insurance-41-review-claim-permission-check`] أثبت التصنيف الدقيق:**
+  استدعاء حي مباشر للفحص الأصلي غير المُعدَّل بأقرب تعريف ممكن لمراجع
+  شرعي (مستخدم `system_role=SUPER_ADMIN` **و** عضو `EntityMembership`
+  حقيقي بدور `OWNER` على نفس الكيان) رجع **نفس رسالة الرفض بالحرف**
+  اللي رجعتها لمستخدم عشوائي مالوش أي علاقة بالكيان إطلاقًا. **هذا
+  التمييز مهم لأي مراجعة لاحقة للسجل: البند لم يكن `broken-open`
+  (ثغرة صلاحية تسمح لغير المخوَّل — القلق الأصلي المسجَّل وقت اكتشاف
+  البند) — كان `broken-closed` (الميزة معطّلة بالكامل، تمنع حتى
+  المخوَّل الحقيقي 100% من حالات الاستخدام الواقعية). صفر دليل على أي
+  استغلال فعلي أو تسريب بيانات تاريخي — العطل كان شاملًا لكل الطلبات
+  بصرف النظر عن هوية المستخدم، مطابق لنفس نمط التمييز المسجَّل سابقًا
+  في بند `arbitration-syndicates-repository-27-remaining-methods`
+  أعلاه (`list_candidates`) لكن بسياق صلاحيات مختلف تمامًا (هناك
+  `TypeError` شامل، هنا مقارنة IDs بلا معنى منطقي شاملة).**
+  **الإصلاح المُطبَّق (بموافقة مستخدم صريحة على كل قرار):** استبدال
+  المقارنة بفحص `EntityMembership` حقيقي (`entity_type="SOVEREIGN_ENTITY"`,
+  `role in [OWNER, EXECUTIVE_DIRECTOR]`) — نفس نمط
+  `_is_authorized_representative`/`deposit_to_entity_wallet` الموجود
+  فعليًا في `sovereign_entities/service.py`. + إزالة بوابة
+  `get_current_superuser` من الراوتر (بلا علاقة منطقية بعضوية الكيان،
+  كانت ستُبقي الفحص الجديد الصحيح غير قابل للتفعيل عمليًا) → استُبدلت
+  بـ`get_current_active_user`، والـ`EntityMembership` أصبح الحارس
+  الوحيد والكافي — مطابق تمامًا لنمط بقية endpoints `sovereign_entities`
+  (لا بوابة `system_role` مكدَّسة فوق فحص العضوية في أي منها). **تحقق
+  حي كامل بعد الإصلاح لكلا المسارين** (عبر استدعاء مباشر للـservice
+  method الحقيقية، DB حقيقية، صفر mock): عضو `OWNER` حقيقي → نجح فعليًا
+  (claim → `REJECTED`، تأكيد `SELECT` مستقل من session منفصلة)؛ عضو
+  `REPRESENTATIVE` حقيقي (عضوية فعلية لكن دور غير كافٍ) → لسه بيترفض
+  بـ403، **يثبت إن الإصلاح واعٍ بالدور (`role-aware`) مش مجرد "أي
+  عضوية كافية"** — بالضبط نقيض التحذير الساذج المسجَّل مسبقًا عند
+  اكتشاف البند. Commit `99253e3`. | ✅ **مُغلَق بالكامل ومتحقَّق حيًا
+  [2026-08-29]** | `.claude/reports/insurance-41-review-claim-permission-check-session-log.md`,
+  `.claude/reports/constructor-mismatch-backlog-classification.md` (صف #41 محدَّث) |
+| 29 | **`finance-service-hold-funds-missing`** [2026-08-29] — `tenders_auctions/service.py`
+  كانت بتنادي `finance.hold_funds()`/`finance.release_held_funds()` بمعاملات
+  `# type: ignore[attr-defined]` — `FinanceService` ما كانتش عندها الدالتين دول
+  إطلاقًا (فقط `transfer()`/`swap()`/`mint_currency()`). أي `place_bid`/`close_auction`
+  حقيقي كان بيفشل `AttributeError`. **بحث حي شامل أكَّد:** الاسمان مستخدَمان فقط
+  في `tenders_auctions`، لا يوجد نمط حجز/تحرير مشابه بأسماء مختلفة في أي دومين آخر.
+  **الإصلاح المُطبَّق (بموافقة مستخدم صريحة على كل قرار تصميم):**
+  (1) عمود جديد `Wallet.held_balances` (JSONB، نفس شكل `balances`، migration
+  `042_add_held_balances_to_wallets.py`) + `CheckConstraint` مطابق لمنع القيم
+  السالبة. (2) 3 دوال جديدة في `FinanceService`: `hold_funds` (نقل من `balances`
+  لـ`held_balances`)، `release_held_funds` (عكسها)، و`settle_held_funds` **ذرّية**
+  (تحرير+تحويل الفائز في `begin_nested()` واحد، تاخد من `held_balances` مباشرة
+  بدون المرور بـ`balances` المتاح — تقفل نافذة خطر كانت موجودة في التصميم الأولي
+  المقترَح لو استخدمنا `release_held_funds`+`transfer()` منفصلين). نفس نمط القفل
+  (`get_or_create_wallet_for_update`) وidempotency (`Transaction.idempotency_key`
+  الفريد) المستخدَم فعليًا في `transfer`/`swap`/`mint_currency`.
+  (3) 4 إصلاحات إضافية اكتُشفت حيًا في الكولر نفسه أثناء التصميم (كانت هتسيب
+  تسريب مالي حقيقي حتى لو الدالتين الناقصتين اتصلحوا لوحدهم): `get_live_bids_for_auction`
+  كانت بترتب `created_at DESC` (آخر مزايدة زمنيًا) مش `bid_amount_mrusdt DESC`
+  (الأعلى قيمة فعليًا) → فائز غلط محتمل؛ `close_auction` كانت بتحرر حجز الفائز
+  بس، بتسيب كل المزايدات الخاسرة (وأي مزايدة سابقة للفائز نفسه لو رفع عرضه أكتر
+  من مرة) محجوزة للأبد → أُصلحت بلوب يحرر حجز كل مزايدة غير فائزة؛ `idempotency_key`
+  عشوائي (`uuid4()`) في استدعاء التحويل → أُصلح لمفتاح ثابت مُشتق من `auction_id`
+  (`AUCTION-SALE-{id}`)؛ `release_held_funds` كانت هتُستدعى بدون `idempotency_key`
+  إطلاقًا → أُضيف (`AUCTION-RELEASE-{auction_id}-{bid_id}`، فريد لكل مزايدة).
+  **تحقق حي كامل** (DB حقيقي، صفر mock، `tests/test_tenders_auctions_finance_hold_release_settle.py`
+  جديد ودائم): مزاد بـ3 مزايدين حقيقيين عبر `place_bid` الفعلية — الفائز
+  (أعلى `bid_amount_mrusdt` فعليًا، مش آخر مزايدة زمنيًا) اتحدد صح، الخاسرون
+  استرجعوا حجزهم بالكامل (`balances`/`held_balances` رجعوا لأصلهم بالظبط)،
+  الفائز فضل عند نفس الرصيد بعد الحجز طول الوقت (لم يرجع لرصيده الأصلي وسط
+  الطريق أبدًا — تأكيد مباشر لقفل نافذة الخطر)، حساب النظام استلم المبلغ
+  الصحيح بالظبط مرة واحدة. **Retry حقيقي على `close_auction`** (استدعاء
+  المزاد المُغلَق نفسه ثانية) أكَّد: صفر تحويل مزدوج، صفر تحرير حجز مزدوج
+  (`Transaction` count = 1 لكل `idempotency_key` قبل وبعد الـretry). عزل بج
+  `invoicing._generate_invoice_number` المنفصل تمامًا (راجع البند التالي
+  المرتبط، وسجل جلسات `realestate-buyfraction`/`insurance-savepoint` لتاريخه)
+  عبر `monkeypatch` داخل الاختبار فقط (نفس نمط `test_realestate_rent_unit_ownership_check.py`)
+  — صفر لمس على `invoicing/service.py`. | ✅ **مُغلَق بالكامل ومتحقَّق حيًا
+  [2026-08-30]** | `.claude/reports/finance-29-hold-funds-session-log.md` (كامل، يشمل
+  تصميم §5 وجدول مخاطر §7)، `.claude/reports/constructor-mismatch-backlog-classification.md`
+  (صف #29 محدَّث) |
+| — | **`finance-transaction-idempotency-key-lookup-multiple-results-bug`**
+  [2026-08-30] — اكتُشف أثناء التحقق الحي لجلسة #29 (`finance-service-hold-funds-missing`
+  أعلاه)، **لكنه باج منفصل تمامًا وكان كامنًا في `transfer()` من قبل جلسة #29
+  بكتير — مش نتيجة لتعديلاتها.** `TransactionRepository.get_by_idempotency_key`
+  (`finance/repository.py:97-109`) كانت بتعمل `.join(User, or_(User.id==sender_id,
+  User.id==receiver_id))` — لو صف `Transaction` واحد عنده **كلاهما** `sender_id`
+  و`receiver_id` غير فارغين (أي معاملة بطرفين حقيقيين: `transfer()` العادية،
+  وكمان `settle_held_funds()` الجديدة من #29)، الـJOIN بيتطابق **مرتين** لنفس
+  الصف (مرة عبر كل عمود) → صفين متطابقين يرجعوا من الاستعلام → `scalar_one_or_none()`
+  يرفع `sqlalchemy.exc.MultipleResultsFound` (500) **بدل ما يرجع نفس المعاملة
+  القديمة بأمان — عكس الهدف الكامل من `idempotency_key` تمامًا.** كان كامنًا
+  وغير مُلاحَظ لأن أي كولر سابق لـ`transfer()` على الأرجح ما عملش retry حقيقي
+  فعلي بنفس المفتاح في اختبار حي؛ أول استدعاء حقيقي بيعمل retry فعلي على معاملة
+  بطرفين (قرار #29-قسم8: `idempotency_key` ثابت مُشتق من `auction_id` بدل
+  `uuid4()` عشوائي لـ`settle_held_funds`) هو اللي فجّره لأول مرة.
+  **الإصلاح المُطبَّق:** استبدال الـJOIN بـ`subquery` (`Transaction.sender_id.in_(select(User.id)...)`
+  أو `receiver_id.in_(...)`) — نفس شرط "الطرف بينتمي للتينانت" بدون تكرار الصف
+  (`idempotency_key` عنده أصلًا `UNIQUE` index جزئي، `models.py:52`، فأقصى حاجة
+  ممكنة تتطابق صف واحد بغض النظر عن الـJOIN). صفر تغيير في السلوك المقصود
+  للدالة — إصلاح تنفيذي بحت. **تحقق حي مستقل مخصَّص** (`tests/test_tenders_auctions_finance_hold_release_settle.py::test_transfer_idempotency_key_retry_returns_same_transaction`،
+  منفصل عن اختبارات #29): استدعاء `transfer()` حقيقي مرتين بنفس `idempotency_key`
+  على معاملة بطرفين حقيقيين — رجعت نفس المعاملة (`tx1.id == tx2.id`)، صفر خصم
+  مزدوج، صف `transactions` واحد فقط. | ✅ **مُغلَق بالكامل ومتحقَّق حيًا
+  [2026-08-30]** | `.claude/reports/finance-29-hold-funds-session-log.md` §12 |

@@ -22,6 +22,14 @@ class Wallet(Base):
             "(balances->>'MRX')::numeric >= 0",
             name="check_wallet_balances_non_negative"
         ),
+        CheckConstraint(
+            "(held_balances->>'MR_POUND')::numeric >= 0 AND "
+            "(held_balances->>'MR_USDT')::numeric >= 0 AND "
+            "(held_balances->>'MR7')::numeric >= 0 AND "
+            "(held_balances->>'NBT')::numeric >= 0 AND "
+            "(held_balances->>'MRX')::numeric >= 0",
+            name="check_wallet_held_balances_non_negative"
+        ),
         {"extend_existing": True}
     )
 
@@ -31,6 +39,7 @@ class Wallet(Base):
     wallet_address = Column(String(42), unique=True, index=True, nullable=True)
     is_custodial = Column(Boolean, default=True)
     balances = Column(JSONB, default=dict, nullable=False)
+    held_balances = Column(JSONB, default=dict, nullable=False)
     is_frozen = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

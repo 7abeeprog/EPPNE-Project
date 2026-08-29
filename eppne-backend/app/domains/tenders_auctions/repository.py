@@ -152,9 +152,14 @@ class TendersAuctionsRepository:
         return bid
 
     async def get_live_bids_for_auction(self, auction_id: int, limit: int = 100) -> List[LiveBid]:
+        # جلسة #29 (2026-08-29): كان الترتيب created_at DESC — يعني "أعلى
+        # مزايدة" فعليًا كانت آخر مزايدة زمنيًا، مش صاحبة أعلى قيمة. رُتّب
+        # بالقيمة أولاً، مع created_at ASC كفاصل تعادل (أول من وصل للقيمة
+        # نفسها يفوز عند تساوي bid_amount_mrusdt بالضبط).
         result = await self.db.execute(
             select(LiveBid).where(LiveBid.auction_id == auction_id)
-            .order_by(LiveBid.created_at.desc()).limit(limit)
+            .order_by(LiveBid.bid_amount_mrusdt.desc(), LiveBid.created_at.asc())
+            .limit(limit)
         )
         return list(result.scalars().all())
 

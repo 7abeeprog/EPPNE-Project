@@ -38,6 +38,9 @@ class WalletRepository:
             wallet_address=wallet_address,
             balances={
                 "MR_POUND": 0, "MR_USDT": 0, "MR7": 0, "NBT": 0, "MRX": 0
+            },
+            held_balances={
+                "MR_POUND": 0, "MR_USDT": 0, "MR7": 0, "NBT": 0, "MRX": 0
             }
         )
         self.db.add(wallet)
@@ -48,6 +51,19 @@ class WalletRepository:
     async def update_balances(self, wallet_id: int, new_balances: dict) -> Wallet:
         await self.db.execute(
             update(Wallet).where(Wallet.id == wallet_id).values(balances=new_balances)
+        )
+        await self.db.flush()
+        result = await self.db.execute(select(Wallet).where(Wallet.id == wallet_id))
+        wallet = result.scalar_one_or_none()
+        if not wallet:
+            raise NotFoundError("المحفظة غير موجودة")
+        return wallet
+
+    async def update_wallet_funds(self, wallet_id: int, new_balances: dict, new_held_balances: dict) -> Wallet:
+        await self.db.execute(
+            update(Wallet)
+            .where(Wallet.id == wallet_id)
+            .values(balances=new_balances, held_balances=new_held_balances)
         )
         await self.db.flush()
         result = await self.db.execute(select(Wallet).where(Wallet.id == wallet_id))
@@ -81,13 +97,21 @@ class TransactionRepository:
     async def get_by_idempotency_key(self, idempotency_key: str, tenant_id: int) -> Optional[Transaction]:
         if not idempotency_key:
             return None
+        # جلسة #29 (2026-08-29): كان الاستعلام بيعمل JOIN مع
+        # or_(User.id==sender_id, User.id==receiver_id) — لو صف Transaction
+        # واحد عنده كلاهما (زي TRANSFER أو SETTLEMENT)، الـJOIN بيتطابق
+        # مرتين لنفس الصف → MultipleResultsFound عند أي retry حقيقي.
+        # subquery بدل JOIN بيتحقق من نفس شرط "الطرف بينتمي للتينانت" بدون
+        # تكرار الصف (idempotency_key فريد أصلًا عبر unique index جزئي).
+        tenant_user_ids = select(User.id).where(User.tenant_id == tenant_id)
         result = await self.db.execute(
-            select(Transaction)
-            .join(User, or_(User.id == Transaction.sender_id, User.id == Transaction.receiver_id))
-            .where(
+            select(Transaction).where(
                 and_(
                     Transaction.idempotency_key == idempotency_key,
-                    User.tenant_id == tenant_id
+                    or_(
+                        Transaction.sender_id.in_(tenant_user_ids),
+                        Transaction.receiver_id.in_(tenant_user_ids),
+                    ),
                 )
             )
         )
