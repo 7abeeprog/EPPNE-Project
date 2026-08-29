@@ -2,14 +2,14 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { getMyOwnerships, getSmartContractStatus } from '@/services/realestate';
+import { RealEstateService, getSmartContractStatus } from '@/services/realestate';
 import { Loader2, Building2, TrendingUp, Calendar, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function InvestorPortfolio() {
   const { data: ownerships, isLoading } = useQuery({
     queryKey: ['my-ownerships'],
-    queryFn: () => getMyOwnerships().then(res => res.data),
+    queryFn: () => RealEstateService.getMyOwnerships(),
     staleTime: 2 * 60 * 1000,
   });
 

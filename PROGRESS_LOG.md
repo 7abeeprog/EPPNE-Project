@@ -394,3 +394,58 @@ FK → tenants.id` — **لا يوجد جدول باسم `tenants` في قاعد
 | — | **`social-group-model-missing-idempotency-key-column`** [2026-08-24] — اكتُشف أثناء التحقق الحي لجلسة `social-media-idor-fix`: `SocialService.create_group()` كانت بتمرر `idempotency_key=idempotency_key` لـ`SocialRepository.create_group(**kwargs)` → `SocialGroup(**kwargs)`، لكن موديل `SocialGroup` (`social/models.py`) هو **الوحيد بين كل موديلات دومين `social` اللي معندوش عمود `idempotency_key`** (تأكيد `grep` شامل: كل موديل تاني بيدعم idempotency عنده العمود — `Post`, `PostComment`, `PostLike`, `GroupMember`, `SocialSmartContract`, `ContractSignature`, `EventAttendee`, `UserConnection`, `DigitalGift`, `PhysicalGiftRequest`, `GroupSubscription`). **مؤكَّد حيًا: `TypeError: 'idempotency_key' is an invalid keyword argument for SocialGroup`، فوري، لأي `POST /social/groups` بلا استثناء** (قبل الإصلاح). **الإصلاح المُطبَّق فعليًا في نفس الجلسة (نطاق كود بحت، صفر migration):** حذف تمرير `idempotency_key` من الاستدعاء — الحماية الحقيقية من التكرار موجودة أصلًا عبر Redis idempotency cache (`_validate_idempotency`/`_store_idempotency`)، مش عبر عمود الموديل. **قرار مفتوح، خارج نطاق هذه الجلسة:** هل يستحق `SocialGroup` عمود `idempotency_key` فعلي (زي بقية الموديلات، بحماية DB-level ضد race conditions) — يحتاج migration منفصلة، قرار معماري لاحق. | 🟢 **مُغلَق جزئيًا** — الكراش الفوري اتصلح (كود)، القرار المعماري (عمود DB) لسه مفتوح | `.claude/reports/social-media-idor-fix-session-log.md` §6.1 |
 
 | — | **`social-hardcoded-shop-email-not-registered`** [2026-08-24] — اكتُشف أثناء التحقق الحي لجلسة `social-media-idor-fix` (اختبار ضبط لـ`request_physical_gift` بعد إضافة فحص المستلم): `SocialService.request_physical_gift()` بتنادي `finance.transfer(receiver_email="shop@eppne.com", ...)` — بريد مستلم ثابت هاردكودد (نفس فئة `academy-enroll-hardcoded-receiver-email`/`projects-add-contribution-hardcoded-receiver-email` أعلاه)، لكن **الحساب `shop@eppne.com` غير موجود في الـDB المحلي** (`FinanceService.transfer` بترجع `NotFoundError: "المستلم غير موجود"`). **مؤكَّد حيًا:** طلب شرعي 100% (نفس التينانت، فحص المستلم الجديد اجتاز بنجاح) اصطدم بهذا الخطأ **بعد** تجاوز فحص `receiver_id` الجديد بنجاح — يثبت إن الفحص الجديد نفسه سليم ولا يرفض خطأً، والخطأ مصدره منطق منفصل تمامًا. **نفس فئة "حساب نظام هاردكودد" الموثَّقة في `critical-finding-xtenant-systemic.md`** لـ`commerce.release_commissions`/`affiliate.withdraw_commissions`/`iot.settle_carbon_credits`/`social.subscribe_group_to_plan` (`sender_id=0`/`sender_id=1`) — هنا نفس الفئة لكن كمستلم ثابت (`receiver_email`) بدل `user_id` هاردكودد، ولكل تينانت (مش تينانت1 بس). **صفر لمس/إصلاح — خارج نطاق جلسة `social-media-idor-fix` صراحة، توثيق فقط.** | 🟡 **مفتوح، لم يبدأ** — يمنع `request_physical_gift` بالكامل من الوصول لمرحلة النجاح لأي تينانت؛ يحتاج حساب متجر حقيقي لكل تينانت أو آلية "حساب نظام" رسمية (نفس القرار المعماري المؤجَّل لعائلة `sender_id=0/1` بالكامل) | `.claude/reports/social-media-idor-fix-session-log.md` §6.4 |
+
+| — | **`realestate-masterplanexplorer-decimal-fields-returned-as-string`** [2026-08-29] —
+  اكتُشف حيًا أثناء تنفيذ المرحلة الأولى من جلسة
+  `realestate-hooks-nonexistent-imports` (تصحيح استيراد `getMyLands` في
+  `components/realestate/MasterPlanExplorer.tsx` من الكائن الحقيقي
+  `RealEstateService` بدل استيراد اسمي فاشل — راجع البند
+  `realestate-hooks-layer-nonexistent-function-imports` أعلاه للسياق
+  الأصلي). بمجرد ما الاستيراد بقى صحيح وظهر النوع الحقيقي، تبيّن إن
+  `LandAssetResponse.area_sqm` و`current_value_mrusdt` **مُصرَّح عنهم
+  `string` فعليًا** في الـOpenAPI schema المولَّدة (`src/lib/api-types.ts`
+  سطر 11643/11652 — تأكيد حي، مش افتراض)، لكن `MasterPlanExplorer.tsx`
+  (سطور 68، 73) بينادي `.toFixed()` مباشرة عليهم — لو الشكل الحقيقي وقت
+  التشغيل فعلًا `string`، ده هيرمي `TypeError: toFixed is not a function`
+  **لأي مستخدم يفتح الصفحة**. الباج كان موجود من الأول في الكود، لكن
+  مخفي بالكامل بسبب فشل استيراد `getMyLands` الأصلي (كان بيخلي النوع
+  `any` فـTS ماكانش بيتحقق من `.toFixed()`). **صفر إصلاح — القرار مؤجَّل
+  عمدًا، خارج موافقة المرحلة الأولى الحالية:** هل التصحيح frontend-only
+  (`Number(land.area_sqm).toFixed(0)`)، ولا مراجعة أوسع لليه Decimal
+  بيتسلسل كـstring في الـschema بدل number (قرار قد يمس كل حقول Decimal
+  في المشروع، مش بس `realestate`)؟ | 🟡 **مفتوح، لم يبدأ — قرار تصميمي
+  معلَّق (frontend `Number()` مقابل مراجعة تسلسل الـschema بالباك إند)**
+  | `.claude/reports/realestate-hooks-nonexistent-imports-session-log.md` خطوة 11 |
+
+| — | **`realestate-tokenizationexchange-decimal-fields-returned-as-string`** [2026-08-29] —
+  نفس فئة `realestate-masterplanexplorer-decimal-fields-returned-as-string`
+  أعلاه بالضبط، اكتُشف بنفس الطريقة وفي نفس جلسة
+  `realestate-hooks-nonexistent-imports` (تصحيح استيراد
+  `getUnitsForSale`/`buyFraction` في
+  `components/realestate/TokenizationExchange.tsx`):
+  `PropertyUnitResponse.sale_price_mrusdt` مُصرَّح `string | null` فعليًا
+  (`src/lib/api-types.ts` سطر 14296). سطر 67 بينادي `.toFixed()` عليه
+  مباشرة (هيكسر وقت التشغيل فعليًا)، وسطر 96 بيعمل عملية حسابية
+  (`unit.sale_price_mrusdt * percentage`) عليه — دي فعليًا هتشتغل وقت
+  التشغيل بفضل تحويل JS التلقائي للنوع، لكن TS بيرفضها كـtype error.
+  **نفس القرار التصميمي المعلَّق في البند فوق ينطبق هنا حرفيًا** — صفر
+  إصلاح. | 🟡 **مفتوح، لم يبدأ — نفس القرار المعلَّق في البند أعلاه**
+  | `.claude/reports/realestate-hooks-nonexistent-imports-session-log.md` خطوة 11 |
+
+| — | **`realestate-ownerships-page-current-value-field-mismatch`** [2026-08-29] —
+  اكتُشف حيًا كتأثير تسلسلي (ripple effect) من إصلاح معتمَد ومُنفَّذ فعليًا
+  (`hooks/realestate/useMyOwnerships.ts`، استيراد صحيح لـ
+  `RealEstateService.getMyOwnerships`، جزء من المرحلة الأولى المكتملة
+  لجلسة `realestate-hooks-nonexistent-imports`): `app/(dashboard)/realestate/ownerships/page.tsx`
+  (سطور 32، 84، 87) بيستخدم نفس الهوك، وكان مفترض إن نتيجته فيها حقل
+  `current_value` (موجود بس في النوع المحلي `Ownership` بـ
+  `types/realestate.ts`)، لكن النوع الحقيقي الراجع من الباك إند
+  (`OwnershipResponse`، `schemas.py` سطر 65-73) **مفيهوش هذا الحقل
+  إطلاقًا**. هذا الملف لم يكن من ضمن الـ10 ملفات المحقَّق فيها أصلًا في
+  الجلسة — اكتشاف حادي عشر ظهر فقط بعد إصلاح `useMyOwnerships.ts`
+  المعتمَد، مش تعديل مباشر عليه. **صفر إصلاح — قرار مؤجَّل:** هل
+  `current_value` (القيمة الحالية المقدَّرة للملكية) ميزة حقيقية لازم
+  تُبنى بالباك إند (تحتاج منطق تقييم/تسعير حي)، ولا الحقل ده كان افتراض
+  غلط في الفرونت إند من الأول ولازم يتشال من `Ownership` type ومن
+  الصفحة؟ | 🟡 **مفتوح، لم يبدأ — قرار منتجي معلَّق (بناء ميزة تسعير حي،
+  ولا حذف افتراض غلط)** | `.claude/reports/realestate-hooks-nonexistent-imports-session-log.md` خطوة 11 |

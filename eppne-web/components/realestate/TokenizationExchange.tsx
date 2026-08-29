@@ -3,11 +3,12 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getUnitsForSale, buyFractionalOwnership } from '@/services/realestate';
+import { RealEstateService } from '@/services/realestate';
 import { useRealEstateStore } from '@/store/realestateStore';
 import { Loader2, TrendingUp, Users, Wallet, CheckCircle, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
+import type { PropertyOwnership } from '@/types/realestate';
 
 export default function TokenizationExchange() {
   const queryClient = useQueryClient();
@@ -18,17 +19,17 @@ export default function TokenizationExchange() {
 
   const { data: units, isLoading } = useQuery({
     queryKey: ['units-for-sale'],
-    queryFn: () => getUnitsForSale({ limit: 20 }).then(res => res.data),
+    queryFn: () => RealEstateService.listUnitsForSale({ limit: 20 }),
     staleTime: 2 * 60 * 1000,
   });
 
   const mutation = useMutation({
     mutationFn: () => {
       if (!selectedUnitId) throw new Error('اختر وحدة');
-      return buyFractionalOwnership(selectedUnitId, { ownership_percentage: percentage }, idempotencyKey);
+      return RealEstateService.buyFraction(selectedUnitId, { ownership_percentage: percentage }, { 'Idempotency-Key': idempotencyKey });
     },
     onSuccess: (response) => {
-      addOwnership(response.data);
+      addOwnership(response as unknown as PropertyOwnership);
       queryClient.invalidateQueries({ queryKey: ['my-ownerships'] });
       setSelectedUnitId(null);
     },

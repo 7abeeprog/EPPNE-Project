@@ -1,11 +1,11 @@
 // hooks/realestate/useMyOwnerships.ts
 import { useQuery } from '@tanstack/react-query';
-import { getMyOwnerships } from '@/services/realestate';
+import { RealEstateService } from '@/services/realestate';
 
 export const useMyOwnerships = () => {
   return useQuery({
     queryKey: ['realestate-my-ownerships'],
-    queryFn: () => getMyOwnerships().then((res) => res.data),
+    queryFn: () => RealEstateService.getMyOwnerships(),
     staleTime: 2 * 60 * 1000,
   });
 };

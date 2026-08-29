@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getMyLands } from '@/services/realestate';
+import { RealEstateService } from '@/services/realestate';
 import { Loader2, Map, Building2, Layers, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { LandAsset } from '@/types/realestate';
@@ -17,7 +17,7 @@ export default function MasterPlanExplorer({ onSelectLand }: MasterPlanExplorerP
 
   const { data: lands, isLoading } = useQuery({
     queryKey: ['my-lands'],
-    queryFn: () => getMyLands({ limit: 20 }).then(res => res.data),
+    queryFn: () => RealEstateService.getMyLands({ limit: 20 }),
     staleTime: 2 * 60 * 1000,
   });
 

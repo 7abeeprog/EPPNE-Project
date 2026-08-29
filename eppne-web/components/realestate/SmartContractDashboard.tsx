@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { deploySmartContract } from '@/services/realestate';
+import { RealEstateService } from '@/services/realestate';
 import { Loader2, Shield, CheckCircle, XCircle, Clock, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ContractType } from '@/types/realestate';
@@ -19,7 +19,7 @@ export default function SmartContractDashboard() {
     mutationFn: () => {
       try {
         const parsedMetadata = JSON.parse(metadata);
-        return deploySmartContract({
+        return RealEstateService.deploySmartContract({
           contract_type: contractType,
           reference_id: parseInt(referenceId),
           contract_metadata: parsedMetadata,
