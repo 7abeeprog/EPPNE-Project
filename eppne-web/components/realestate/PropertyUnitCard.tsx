@@ -4,6 +4,7 @@
 import Link from 'next/link';
 import { Building2, MapPin, DollarSign, TrendingUp, Home } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDecimalString } from '@/lib/format';
 import type { PropertyUnit } from '@/types/realestate';
 
 interface PropertyUnitCardProps {
@@ -58,12 +59,12 @@ export default function PropertyUnitCard({ unit, className }: PropertyUnitCardPr
         <div className="text-right">
           {unit.is_available_for_sale && unit.sale_price_mrusdt && (
             <span className="text-sm font-bold text-primary">
-              {unit.sale_price_mrusdt.toFixed(2)} MR_USDT
+              {formatDecimalString(unit.sale_price_mrusdt)} MR_USDT
             </span>
           )}
           {unit.is_available_for_rent && unit.rent_per_month_mrusdt && (
             <span className="text-xs text-muted-foreground/60">
-              {unit.rent_per_month_mrusdt.toFixed(2)} MR_USDT/شهر
+              {formatDecimalString(unit.rent_per_month_mrusdt)} MR_USDT/شهر
             </span>
           )}
         </div>

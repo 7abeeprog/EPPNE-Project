@@ -28,7 +28,7 @@ export interface SovereignEntity {
   official_phone?: string;
   website?: string;
   wallet_address?: string;
-  treasury_balance_mrusdt: number;
+  treasury_balance_mrusdt: string;
   logo_url?: string;
   cover_image_url?: string;
   primary_color: string;

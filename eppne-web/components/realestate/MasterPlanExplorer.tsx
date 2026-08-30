@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { RealEstateService } from '@/services/realestate';
 import { Loader2, Map, Building2, Layers, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDecimalString } from '@/lib/format';
 import type { LandAsset } from '@/types/realestate';
 
 interface MasterPlanExplorerProps {
@@ -65,12 +66,12 @@ export default function MasterPlanExplorer({ onSelectLand }: MasterPlanExplorerP
                 <div className="text-right">
                   <h4 className="font-medium text-foreground/90">{land.plot_number}</h4>
                   <p className="text-xs text-muted-foreground/50">
-                    {land.area_sqm.toFixed(0)} م² • {land.zoning}
+                    {formatDecimalString(land.area_sqm, { maximumFractionDigits: 0 })} م² • {land.zoning}
                   </p>
                 </div>
               </div>
               <span className="text-xs text-primary/80 font-medium">
-                {land.current_value_mrusdt.toFixed(2)} MR_USDT
+                {formatDecimalString(land.current_value_mrusdt)} MR_USDT
               </span>
             </div>
 

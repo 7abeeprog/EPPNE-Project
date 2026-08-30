@@ -37,8 +37,8 @@ export interface Project {
   status: ProjectStatus;
   carbon_impact_scope?: CarbonImpactScope;
   country?: string;
-  funding_goal_mrusdt: number;
-  current_funding_mrusdt: number;
+  funding_goal_mrusdt: string;
+  current_funding_mrusdt: string;
   currency: string;
   is_published: boolean;
   cover_image_url?: string;
@@ -82,11 +82,11 @@ export interface ProjectUpdate {
 export interface ProjectAnalytics {
   project_id: number;
   total_contributors: number;
-  total_monetary_contributions: number;
-  total_in_kind_value: number;
-  total_funding_mrusdt: number;
+  total_monetary_contributions: number; // TODO backlog: also Decimal-as-string in backend (projects/schemas.py:156), not covered by this fix — see frontend-decimal-standard-convention-session-log.md
+  total_in_kind_value: string;
+  total_funding_mrusdt: string;
   funding_percentage: number;
-  remaining_to_goal: number;
+  remaining_to_goal: string;
   milestones_completed: number;
   milestones_total: number;
   status: ProjectStatus;

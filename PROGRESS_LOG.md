@@ -657,3 +657,63 @@ FK → tenants.id` — **لا يوجد جدول باسم `tenants` في قاعد
   على معاملة بطرفين حقيقيين — رجعت نفس المعاملة (`tx1.id == tx2.id`)، صفر خصم
   مزدوج، صف `transactions` واحد فقط. | ✅ **مُغلَق بالكامل ومتحقَّق حيًا
   [2026-08-30]** | `.claude/reports/finance-29-hold-funds-session-log.md` §12 |
+| — | **`frontend-services-hooks-missing-exports-multi-domain`** [2026-08-30] —
+  اكتُشف أثناء جلسة `frontend-decimal-fields-standard-convention` (توحيد
+  التعامل مع حقول Decimal في الفرونت إند)، أثناء تشغيل `npx tsc --noEmit`
+  كـcheckpoint تحقق قبل تعديل types/*.ts: **نفس فئة الباج الموثَّقة في
+  `realestate-hooks-layer-nonexistent-function-imports` أعلاه [2026-08-29]
+  — لكن منتشرة في 4 دومينز إضافية على الأقل، لم تكن معروفة وقت توثيق البند
+  الأصلي:**
+  - `app/(dashboard)/payroll/page.tsx` و`app/(dashboard)/employment/page.tsx`:
+    بيستوردوا `getMyPayrolls`, `generatePayroll`, `approvePayroll`,
+    `payPayroll`, `getOpenJobs`, `getMyApplications`, `getMyContract` من
+    `@/services/employment` — **غير موجودة إطلاقًا** كـnamed exports.
+  - `components/projects/ProjectAnalysisDashboard.tsx`: `getProjectAnalytics`
+    غير موجودة في `@/services/projects`.
+  - `components/projects/MilestoneTimeline.tsx`,
+    `components/projects/AdvancedMilestones.tsx`: `getProject`,
+    `completeMilestone`, `releaseMilestoneFunds` غير موجودة في
+    `@/services/projects`.
+  - `components/ai-governance/QuotaManager.tsx`: الموديول
+    `@/services/ai-governance` **غير موجود إطلاقًا** (لا الملف ولا أي export منه).
+  - `app/(dashboard)/logistics/page.tsx`: الموديول `@/hooks/logistics/useStats`
+    **غير موجود إطلاقًا**.
+  - `app/(dashboard)/realestate/property/[id]/page.tsx`: إضافة لباج
+    `realestate-hooks-layer-nonexistent-function-imports` المعروف، هذا الملف
+    تحديدًا عنده أيضًا `useUpdateProperty` غير موجودة في
+    `hooks/realestate/useProperties.ts` (الموجود `useCreateProperty` بس)،
+    + موديولات npm مفقودة كليًا (`date-fns/ar`, `uuid` — تظهر أيضًا في
+    `payroll/page.tsx` و`AdvancedMilestones.tsx`/`MilestoneTimeline.tsx`،
+    قد تكون مشكلة تثبيت/lockfile منفصلة تمامًا تستاهل تحقق مستقل).
+  **الأثر المباشر على جلسة Decimal:** 7 من أصل 16 موضع Decimal-as-string
+  مؤكَّد وقعوا داخل هذه الملفات بالذات — بما إن الاستيراد المكسور بيخلي
+  المتغيرات كلها `any` ضمنيًا، **تصحيح type أي حقل Decimal في `types/*.ts`
+  لن يُظهر أي خطأ tsc جديد لهذه الـ7 حتى يُصلَح باج الاستيراد أولًا** —
+  السلسلة مقطوعة قبل ما توصل لفحص النوع أصلًا. **صفر إصلاح — خارج نطاق
+  جلسة Decimal صراحة، يحتاج جلسة تحقيق/اعتماد مستقلة تمامًا زي المعاملة
+  بالضبط مع realestate** (هل الـservices اتكتبت ضد تصميم API قديم تغيّر،
+  ولا العكس؟ قرار تصميمي قبل أي ربط ميكانيكي). | 🔴 **مفتوح، أولوية عالية
+  — يعطّل الـbuild/الصفحة بالكامل لـ7+ ملفات عبر 4 دومينز (employment,
+  projects, ai_governance, logistics)، أوسع نطاقًا من البند المكافئ في
+  realestate** | `.claude/reports/frontend-decimal-standard-convention-session-log.md` §4.2 |
+| — | **`frontend-decimal-fix-live-browser-render-unverified`** [2026-08-30] —
+  في نفس جلسة `frontend-decimal-fields-standard-convention`، بعد تطبيق
+  `formatDecimalString()` على 9 مواضع Decimal-as-string وتأكيدها عبر
+  `tsc --noEmit` (نظيفة تمامًا) + سكريبت Node مباشر يحاكي نفس التعبيرات
+  البرمجية الفعلية ببيانات Decimal-string واقعية (كل الحالات نجحت، راجع
+  §4.4 من التقرير) — **التحقق الحي الكامل في متصفح فعلي (DOM حقيقي، تفاعل
+  مستخدم، console errors) لم يحصل**: امتداد Chrome غير متصل بهذه الجلسة،
+  وأوامر PowerShell الشبكية علّقت بلا استجابة في الـsandbox رغم إن سيرفر
+  Next.js dev اتشغّل فعليًا (`localhost:3000`، تأكيد من الـlog). المستخدم
+  وافق صراحة على قبول الـsnapshot Node كبديل **مؤقت** لهذه الجلسة تحديدًا
+  — **مش اعتبار الفجوة مُغلَقة**. **صفر دليل بصري/DOM حقيقي حتى الآن** إن
+  الـ9 مكوّنات فعليًا بترندر صح بلا كسر layout/CSS أو أخطاء console في
+  متصفح حقيقي. **خطوات الإغلاق المقترَحة (بترتيب الأولوية):** (1) إعادة
+  نفس التحقق في جلسة قادمة بعد ما اتصال Chrome يرجع (فتح الصفحات التسعة
+  فعليًا، بمستخدم throwaway من `.claude/reports/throwaway-test-users.md`)؛
+  (2) بديل أدوم: إضافة `@testing-library/react` + `vitest`/`jest`
+  للمشروع (**غير مثبَّتين حاليًا إطلاقًا** — صفر إشارة في
+  `eppne-web/package.json`) للرندر عبر `jsdom` بدون حاجة لمتصفح فعلي —
+  قرار بنية تحتية جديد يحتاج موافقة صريحة منفصلة، مش جزء تلقائي من هذا
+  البند. | 🟡 **مفتوح، أولوية متوسطة — فجوة تحقق حقيقية، مش خطأ معروف**
+  | `.claude/reports/frontend-decimal-standard-convention-session-log.md` §4.4 |

@@ -3,6 +3,7 @@
 
 import { TrendingUp, Users, Wallet, Target, CheckCircle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDecimalString } from '@/lib/format';
 import type { ProjectAnalytics } from '@/types/projects';
 
 interface ProjectAnalyticsProps {
@@ -27,7 +28,7 @@ export default function ProjectAnalytics({ analytics, className }: ProjectAnalyt
     },
     {
       label: 'إجمالي التمويل',
-      value: `${analytics.total_funding_mrusdt.toFixed(2)} MR_USDT`,
+      value: `${formatDecimalString(analytics.total_funding_mrusdt)} MR_USDT`,
       icon: Wallet,
       color: 'text-primary bg-primary/10',
     },
@@ -39,7 +40,7 @@ export default function ProjectAnalytics({ analytics, className }: ProjectAnalyt
     },
     {
       label: 'المتبقي للهدف',
-      value: `${analytics.remaining_to_goal.toFixed(2)} MR_USDT`,
+      value: `${formatDecimalString(analytics.remaining_to_goal)} MR_USDT`,
       icon: Target,
       color: 'text-amber-500 bg-amber-500/10',
     },

@@ -7,6 +7,7 @@ import { RealEstateService } from '@/services/realestate';
 import { useRealEstateStore } from '@/store/realestateStore';
 import { Loader2, TrendingUp, Users, Wallet, CheckCircle, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDecimalString } from '@/lib/format';
 import { v4 as uuidv4 } from 'uuid';
 import type { PropertyOwnership } from '@/types/realestate';
 
@@ -64,7 +65,7 @@ export default function TokenizationExchange() {
                 </p>
               </div>
               <span className="text-sm font-bold text-primary">
-                {unit.sale_price_mrusdt?.toFixed(2)} MR_USDT
+                {formatDecimalString(unit.sale_price_mrusdt)} MR_USDT
               </span>
             </div>
             {selectedUnitId === unit.id && (
@@ -93,7 +94,9 @@ export default function TokenizationExchange() {
                 </div>
                 {selectedUnit && unit.sale_price_mrusdt && (
                   <p className="text-xs text-muted-foreground/40 mt-1">
-                    التكلفة: {((unit.sale_price_mrusdt * percentage) / 100).toFixed(2)} MR_USDT
+                    {/* Estimated cost preview only — never submitted to the backend,
+                        which recomputes the real charge from sale_price_mrusdt itself. */}
+                    التكلفة: {((Number(unit.sale_price_mrusdt) * percentage) / 100).toFixed(2)} MR_USDT
                   </p>
                 )}
               </div>

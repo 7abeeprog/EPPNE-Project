@@ -4,6 +4,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { formatDecimalString } from '@/lib/format';
 import { Building2, MapPin, TrendingUp, Users } from 'lucide-react';
 import { ProjectResponse } from '@/services/projects';
 
@@ -32,7 +33,11 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function ProjectCard({ project, className }: ProjectCardProps) {
-  // ✅ تحويل القيم المالية القادمة كنصوص (string) إلى أرقام (number)
+  // funding_goal_mrusdt/current_funding_mrusdt are Decimal-as-string. Number()
+  // conversion here is only for the progress-percentage/boolean calculations
+  // below (display-only, never sent back to the backend) — the amounts
+  // actually shown to the user use formatDecimalString on the original
+  // strings instead, to avoid float64 precision loss in the displayed value.
   const fundingGoal = Number(project.funding_goal_mrusdt ?? 0);
   const currentFunding = Number(project.current_funding_mrusdt ?? 0);
   const fundingPercentage = fundingGoal > 0 ? (currentFunding / fundingGoal) * 100 : 0;
@@ -94,7 +99,7 @@ export default function ProjectCard({ project, className }: ProjectCardProps) {
         <div className="space-y-1">
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground/60">
-              {currentFunding.toFixed(2)} / {fundingGoal.toFixed(2)} MR_USDT
+              {formatDecimalString(project.current_funding_mrusdt)} / {formatDecimalString(project.funding_goal_mrusdt)} MR_USDT
             </span>
             <span className="text-primary font-medium">{fundingPercentage.toFixed(0)}%</span>
           </div>

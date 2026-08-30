@@ -3,6 +3,7 @@
 
 import { TrendingUp, Users, DollarSign, Target } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDecimalString } from '@/lib/format';
 import type { MarketingCampaign } from '@/types/invitations';
 
 interface CampaignPerformanceChartProps {
@@ -15,8 +16,13 @@ export default function CampaignPerformanceChart({ campaign, className }: Campai
     ? (campaign.converted_leads / campaign.total_leads) * 100
     : 0;
 
-  const budgetUsed = campaign.budget_mrusdt > 0
-    ? (campaign.spent_mrusdt / campaign.budget_mrusdt) * 100
+  // budget_mrusdt/spent_mrusdt are Decimal-as-string; this ratio is a
+  // display-only progress percentage, never sent back to the backend, so
+  // converting to Number for the calculation (not for the amounts shown
+  // below, which use formatDecimalString on the original strings) is safe.
+  const budgetMrusdtNum = Number(campaign.budget_mrusdt);
+  const budgetUsed = budgetMrusdtNum > 0
+    ? (Number(campaign.spent_mrusdt) / budgetMrusdtNum) * 100
     : 0;
 
   const metrics = [
@@ -40,7 +46,7 @@ export default function CampaignPerformanceChart({ campaign, className }: Campai
     },
     {
       label: 'الميزانية المستخدمة',
-      value: `${campaign.spent_mrusdt.toFixed(2)} / ${campaign.budget_mrusdt.toFixed(2)} MR_USDT`,
+      value: `${formatDecimalString(campaign.spent_mrusdt)} / ${formatDecimalString(campaign.budget_mrusdt)} MR_USDT`,
       icon: DollarSign,
       color: 'text-amber-500',
     },

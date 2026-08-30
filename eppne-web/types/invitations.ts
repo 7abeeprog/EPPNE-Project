@@ -82,8 +82,8 @@ export interface MarketingCampaign {
   description?: string;
   campaign_type: CampaignType;
   target_audience: Record<string, any>;
-  budget_mrusdt: number;
-  spent_mrusdt: number;
+  budget_mrusdt: string;
+  spent_mrusdt: string;
   start_date: string;
   end_date?: string;
   status: CampaignStatus;

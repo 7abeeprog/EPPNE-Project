@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Building2, Wallet, CheckCircle, Clock, XCircle, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDecimalString } from '@/lib/format';
 import type { SovereignEntity } from '@/types/sovereign-entities';
 
 interface EntityCardProps {
@@ -78,7 +79,7 @@ export default function EntityCard({ entity, isActive = false }: EntityCardProps
           <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground/60">
             <span className="flex items-center gap-1">
               <Wallet className="w-3 h-3" />
-              {entity.treasury_balance_mrusdt.toFixed(2)} MR_USDT
+              {formatDecimalString(entity.treasury_balance_mrusdt)} MR_USDT
             </span>
             <span className="flex items-center gap-1">
               <Users className="w-3 h-3" />

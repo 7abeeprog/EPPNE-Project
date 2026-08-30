@@ -4,6 +4,7 @@
 import Image from 'next/image';
 import { MapPin, Calendar, Building2, Globe, Users, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDecimalString } from '@/lib/format';
 import type { Project, ProjectAnalytics } from '@/types/projects';
 
 interface ProjectDetailsProps {
@@ -42,8 +43,14 @@ const typeLabels: Record<string, string> = {
 };
 
 export default function ProjectDetails({ project, analytics }: ProjectDetailsProps) {
-  const fundingPercentage = project.funding_goal_mrusdt > 0
-    ? (project.current_funding_mrusdt / project.funding_goal_mrusdt) * 100
+  // funding_goal_mrusdt/current_funding_mrusdt are Decimal-as-string; this
+  // ratio is a display-only progress percentage, never sent back to the
+  // backend, so converting to Number for the calculation (not for the
+  // amounts shown below, which use formatDecimalString on the original
+  // strings) is safe.
+  const fundingGoalNum = Number(project.funding_goal_mrusdt);
+  const fundingPercentage = fundingGoalNum > 0
+    ? (Number(project.current_funding_mrusdt) / fundingGoalNum) * 100
     : 0;
 
   return (
@@ -135,11 +142,11 @@ export default function ProjectDetails({ project, analytics }: ProjectDetailsPro
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-4">
               <span className="text-foreground/80 font-medium">
-                {project.current_funding_mrusdt.toFixed(2)} <span className="text-muted-foreground/50 text-xs">MR_USDT</span>
+                {formatDecimalString(project.current_funding_mrusdt)} <span className="text-muted-foreground/50 text-xs">MR_USDT</span>
               </span>
               <span className="text-muted-foreground/50">من</span>
               <span className="text-foreground/80 font-medium">
-                {project.funding_goal_mrusdt.toFixed(2)} <span className="text-muted-foreground/50 text-xs">MR_USDT</span>
+                {formatDecimalString(project.funding_goal_mrusdt)} <span className="text-muted-foreground/50 text-xs">MR_USDT</span>
               </span>
             </div>
             <span className="text-primary font-bold">{fundingPercentage.toFixed(0)}%</span>

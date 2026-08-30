@@ -8,11 +8,11 @@ export type ContractType = 'SALE' | 'RENTAL' | 'MORTGAGE' | 'LEASE';
 export interface LandAsset {
   id: number;
   plot_number: string;
-  area_sqm: number;
+  area_sqm: string;
   gps_polygon: Record<string, any>;
   zoning: ZoningCategory;
   legal_status: LegalStatus;
-  current_value_mrusdt: number;
+  current_value_mrusdt: string;
   has_insurance: boolean;
   owner_id: number;
   created_at: string;
@@ -36,10 +36,10 @@ export interface PropertyUnit {
   development_id: number;
   unit_number: string;
   floor_number?: number;
-  area_sqm: number;
+  area_sqm: string;
   property_type: PropertyType;
-  sale_price_mrusdt?: number;
-  rent_per_month_mrusdt?: number;
+  sale_price_mrusdt?: string;
+  rent_per_month_mrusdt?: string;
   smart_asset_id?: number;
   is_available_for_sale: boolean;
   is_available_for_rent: boolean;

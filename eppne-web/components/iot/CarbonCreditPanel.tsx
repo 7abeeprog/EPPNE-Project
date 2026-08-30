@@ -1,6 +1,7 @@
 // components/iot/CarbonCreditPanel.tsx
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { IoTService } from '@/services/iot.service';
+import { formatDecimalString } from '@/lib/format';
 
 export function CarbonCreditPanel() {
   const queryClient = useQueryClient();
@@ -11,8 +12,12 @@ export function CarbonCreditPanel() {
     staleTime: 1000 * 30,
   });
 
-  const unsettled = readings.filter(r => r.carbon_credits_generated > 0 && !r.is_settled_on_chain);
-  const totalCredits = unsettled.reduce((acc, r) => acc + r.carbon_credits_generated, 0);
+  // carbon_credits_generated is Decimal-as-string; without Number() here,
+  // `acc + r.carbon_credits_generated` starting from 0 silently does string
+  // concatenation instead of addition (previously produced "NaN طن" for any
+  // tenant with more than one unsettled reading).
+  const unsettled = readings.filter(r => Number(r.carbon_credits_generated) > 0 && !r.is_settled_on_chain);
+  const totalCredits = unsettled.reduce((acc, r) => acc + Number(r.carbon_credits_generated), 0);
   const totalValue = totalCredits * 50;
 
   const settleMutation = useMutation({
@@ -48,7 +53,7 @@ export function CarbonCreditPanel() {
         {unsettled.slice(0, 5).map(r => (
           <div key={r.id} className="flex justify-between text-sm border-b border-white/5 pb-2">
             <span className="text-white/60">الأصل #{r.asset_id}</span>
-            <span className="text-green-300">{r.carbon_credits_generated} طن</span>
+            <span className="text-green-300">{formatDecimalString(r.carbon_credits_generated, { maximumFractionDigits: 4 })} طن</span>
           </div>
         ))}
         {unsettled.length > 5 && <p className="text-white/30 text-xs">+ {unsettled.length - 5} قراءات أخرى...</p>}
