@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from decimal import Decimal
-from app.domains.realestate.models import ZoningCategory, LegalStatus, ConstructionStatus, PropertyType
+from app.domains.realestate.models import ZoningCategory, LegalStatus, ConstructionStatus, PropertyType, PropertyStatus
 import re
 
 
@@ -50,6 +50,11 @@ class PropertyUnitCreate(BaseModel):
     sale_price_mrusdt: Optional[Decimal] = Field(default=None, description="سعر البيع")
     rent_per_month_mrusdt: Optional[Decimal] = Field(default=None, description="الإيجار الشهري")
     smart_asset_id: Optional[int] = Field(default=None, description="معرف الأصل الذكي المرتبط")
+    title: Optional[str] = Field(default=None, description="عنوان تسويقي للعقار")
+    description: Optional[str] = Field(default=None, description="وصف العقار")
+    location: Optional[str] = Field(default=None, description="الموقع (نص حر)")
+    cover_image_url: Optional[str] = Field(default=None, description="رابط صورة الغلاف")
+    status: PropertyStatus = Field(default=PropertyStatus.AVAILABLE, description="حالة العرض")
 
 class PropertyUnitResponse(PropertyUnitCreate):
     id: int = Field(description="معرف الوحدة")
@@ -57,6 +62,19 @@ class PropertyUnitResponse(PropertyUnitCreate):
     is_available_for_rent: bool = Field(description="متاحة للإيجار")
     created_at: datetime = Field(description="تاريخ الإنشاء")
     model_config = ConfigDict(from_attributes=True)
+
+class PropertyUnitUpdate(BaseModel):
+    unit_number: Optional[str] = Field(default=None, description="رقم الوحدة")
+    floor_number: Optional[int] = Field(default=None, description="رقم الطابق")
+    area_sqm: Optional[Decimal] = Field(default=None, description="المساحة بالمتر المربع")
+    property_type: Optional[PropertyType] = Field(default=None, description="نوع الوحدة")
+    sale_price_mrusdt: Optional[Decimal] = Field(default=None, description="سعر البيع")
+    rent_per_month_mrusdt: Optional[Decimal] = Field(default=None, description="الإيجار الشهري")
+    title: Optional[str] = Field(default=None, description="عنوان تسويقي للعقار")
+    description: Optional[str] = Field(default=None, description="وصف العقار")
+    location: Optional[str] = Field(default=None, description="الموقع (نص حر)")
+    cover_image_url: Optional[str] = Field(default=None, description="رابط صورة الغلاف")
+    status: Optional[PropertyStatus] = Field(default=None, description="حالة العرض")
 
 # ========== Ownership ==========
 class BuyFractionalOwnership(BaseModel):

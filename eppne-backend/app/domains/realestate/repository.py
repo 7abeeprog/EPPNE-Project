@@ -68,12 +68,15 @@ class RealEstateRepository:
         result = await self.db.execute(select(PropertyUnit).where(PropertyUnit.id == unit_id))
         return result.scalar_one_or_none()
 
-    async def list_units(self, tenant_id: int, development_id: Optional[int] = None, for_sale: bool = False, skip=0, limit=100):
+    async def list_units(self, tenant_id: int, development_id: Optional[int] = None, for_sale: bool = False,
+                          property_type: Optional[PropertyType] = None, skip=0, limit=100):
         query = select(PropertyUnit).where(PropertyUnit.tenant_id == tenant_id, PropertyUnit.is_deleted == False)
         if development_id:
             query = query.where(PropertyUnit.development_id == development_id)
         if for_sale:
             query = query.where(PropertyUnit.is_available_for_sale == True)
+        if property_type:
+            query = query.where(PropertyUnit.property_type == property_type)
         query = query.offset(skip).limit(limit)
         result = await self.db.execute(query)
         return result.scalars().all()
@@ -88,6 +91,20 @@ class RealEstateRepository:
             await self.db.execute(update(PropertyUnit).where(PropertyUnit.id == unit_id).values(**updates))
             await self.db.flush()
         return await self.get_unit(unit_id)
+
+    async def update_unit(self, unit_id: int, **kwargs) -> PropertyUnit:
+        """تحديث جزئي لحقول وحدة عقارية (استبعاد أي مفاتيح None تلقائيًا)."""
+        updates = {k: v for k, v in kwargs.items() if v is not None}
+        if updates:
+            await self.db.execute(update(PropertyUnit).where(PropertyUnit.id == unit_id).values(**updates))
+            await self.db.commit()
+        return await self.get_unit(unit_id)
+
+    async def soft_delete_unit(self, unit_id: int) -> None:
+        await self.db.execute(
+            update(PropertyUnit).where(PropertyUnit.id == unit_id).values(is_deleted=True, deleted_at=func.now())
+        )
+        await self.db.commit()
 
     # ---------- Ownership ----------
     async def create_ownership(self, **kwargs) -> PropertyOwnership:

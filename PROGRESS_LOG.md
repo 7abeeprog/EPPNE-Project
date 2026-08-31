@@ -873,3 +873,55 @@ FK → tenants.id` — **لا يوجد جدول باسم `tenants` في قاعد
   لـwagmi v3) — **خارج نطاق هذه الجلسة تمامًا.** | 🟢 **مُغلَق** —
   تعارض rainbowkit/wagmi موثَّق كـbacklog item منفصل، لم يُلمَس |
   `.claude/reports/npm-missing-deps-uuid-qrcode-session-log.md` |
+
+| — | **`realestate-hooks-layer-design-decision`** [2026-08-31] — إغلاق
+  كامل للـ8 حالات (ب) الموثَّقة في بند
+  `realestate-hooks-layer-nonexistent-function-imports` أعلاه [2026-08-29]
+  (`getProperties`, `getProperty`, `createProperty`, `updateProperty`,
+  `deleteProperty`, `getPropertyOwnerships`, `getSmartContractStatus`,
+  `getAssetTokenization`). **اكتشاف تصحيحي أول خطوة:** قراءة حية لـ
+  `repository.py` (لم تُقرأ في جلسة 2026-08-29) كشفت إن 3 من الثمانية
+  (`getPropertyOwnerships`, `getSmartContractStatus`,
+  `getAssetTokenization`) كان عندها method جاهزة بالكامل على مستوى
+  الـrepository (`get_ownerships_by_unit`, `get_smart_contract`,
+  `get_tokenization_by_unit`) غير موصولة بـservice/router إطلاقًا —
+  إعادة تصنيف من "(ب) مفهوم جديد" لـ"(أ) وصلة فقط". **القرار المعماري
+  المعتمَد لباقي الحالات:** `PropertyUnit` الموجود كافٍ كأساس للثمانية
+  كلها (**صفر كيان/جدول DB جديد كليًا** — القرار المؤجَّل من جلسة
+  التصنيف بتاريخ 2026-08-29 "نبني الميزات الناقصة، مش نقلّم الواجهة"
+  تحقَّق بامتداد schema بدل بناء مفهوم "Property" منفصل). **التنفيذ
+  الفعلي (3 مراحل متسلسلة، تحقُّق حي كامل بعد كل مرحلة):**
+  (1) وصلة service+router للحالات الثلاث أعلاه — صفر migration.
+  (2) migration جديدة `043_add_marketing_fields_to_property_units`
+  (5 أعمدة اختيارية على `property_units`: `title`, `description`,
+  `location`, `cover_image_url`, `status` — الأخير `Enum` جديد
+  `propertystatus` بقيم `AVAILABLE/SOLD/RENTED/UNDER_CONSTRUCTION`،
+  **مُعدَّلة عن اقتراح المستخدم الأولي `UNDER_OFFER`** لتطابق
+  `statusColors` الموجودة فعليًا في `property/[id]/page.tsx`) +
+  `GET /realestate/units` (قائمة عامة) + `GET /realestate/units/{id}`.
+  **اكتشاف حي أثناء الـmigration:** أول محاولة (`sa.Enum` مباشرة جوّه
+  `op.add_column`) فشلت فعليًا (`UndefinedObjectError: type
+  "propertystatus" does not exist` — عكس `create_table`، `add_column`
+  لا ينشئ نوع الـPostgres Enum تلقائيًا)؛ الترانزاكشن اتلف بالكامل
+  (تأكيد `alembic current` بعد الفشل)، صفر أعمدة معلَّقة. الإصلاح:
+  `postgresql.ENUM(..., create_type=False)` + `.create(checkfirst=True)`
+  صريح قبل `add_column`. (3) `PATCH /realestate/units/{id}` +
+  `DELETE /realestate/units/{id}` (soft-delete) — فحص ملكية **حرفيًا
+  نفس نمط** `_get_land_owner_for_unit` المستخدَم فعليًا في
+  `tokenize_asset`/`rent_unit`، + منع الحذف لو عند الوحدة ملكيات جزئية
+  أو تجزئة فعّالة (قرار عمل معتمَد من المستخدم). **تحقق حي كامل** (10
+  اختبارات pytest جديدة عبر 3 ملفات، DB حقيقية صفر mock، مسار شرعي
+  ومسار هجوم لكل عملية حساسة — نفس منهجية
+  `test_realestate_tokenize_asset_ownership_check.py`): كل الـ10 نجحوا.
+  `pytest tests/ -k realestate` الكامل بعد كل التعديلات: 23 passed،
+  **نفس** 3 فشلات موجودة *قبل* هذه الجلسة (drift بيئي في SaaS feature
+  flags لـ`tenant_id=1`، غير مرتبطة — تفصيل خطوة 9 من التقرير)، صفر
+  فشل جديد. **متبقٍ خارج النطاق (توثيق فقط):** ربط الفرونت إند فعليًا
+  بالـendpoints الجديدة، `property.owner_id` غير موجود في
+  `PropertyUnitResponse` (لم يكن من ضمن الأعمدة الخمسة المعتمَدة)،
+  `SmartContractStatusMonitor` كود يتيم بأسماء حقول مختلفة
+  (`status`/`tx_hash` مقابل `execution_status`/`blockchain_tx_hash`)،
+  والفشلات الثلاثة غير المرتبطة تستاهل بند backlog SaaS منفصل. |
+  ✅ **مُغلَق بالكامل ومتحقَّق حيًا [2026-08-31]** — كل الثمانية حالات
+  (ب) الأصلية اتقفلت في الباك إند (migration + service + router +
+  10 اختبارات حية) | `.claude/reports/realestate-design-decision-session-log.md` |

@@ -48,6 +48,12 @@ class ContractType(str, enum.Enum):
     MORTGAGE = "MORTGAGE"
     LEASE = "LEASE"
 
+class PropertyStatus(str, enum.Enum):
+    AVAILABLE = "AVAILABLE"
+    SOLD = "SOLD"
+    RENTED = "RENTED"
+    UNDER_CONSTRUCTION = "UNDER_CONSTRUCTION"
+
 
 # ========== 1. الأراضي السيادية ==========
 class LandAsset(Base):
@@ -130,6 +136,13 @@ class PropertyUnit(Base):
 
     is_available_for_sale = Column(Boolean, default=True)
     is_available_for_rent = Column(Boolean, default=False)
+
+    # ===== حقول تسويقية/عرضية (جلسة realestate-hooks-layer-design-decision، 2026-08-31) =====
+    title = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+    location = Column(String(255), nullable=True)
+    cover_image_url = Column(Text, nullable=True)
+    status = Column(SQLEnum(PropertyStatus), nullable=False, default=PropertyStatus.AVAILABLE)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

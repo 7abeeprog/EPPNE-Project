@@ -95,6 +95,20 @@ async def create_property_unit(
     )
     return unit
 
+@router.get("/units", response_model=list[PropertyUnitResponse])
+async def list_property_units(
+    property_type: Optional[PropertyType] = None,
+    development_id: Optional[int] = None,
+    skip: int = 0,
+    limit: int = 50,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = RealEstateService(db)
+    return await service.list_property_units(
+        cast(int, current_user.tenant_id), property_type, development_id, skip, limit
+    )
+
 @router.get("/units/for-sale", response_model=list[PropertyUnitResponse])
 async def list_units_for_sale(
     development_id: Optional[int] = None,
@@ -106,6 +120,47 @@ async def list_units_for_sale(
     service = RealEstateService(db)
     units = await service.list_units_for_sale(cast(int, current_user.tenant_id), development_id, skip, limit)
     return units
+
+@router.get("/units/{unit_id}", response_model=PropertyUnitResponse)
+async def get_property_unit(
+    unit_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = RealEstateService(db)
+    return await service.get_property_unit(unit_id, tenant_id=cast(int, current_user.tenant_id))
+
+@router.patch("/units/{unit_id}", response_model=PropertyUnitResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def update_property_unit(
+    unit_id: int,
+    data: PropertyUnitUpdate,
+    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = RealEstateService(db)
+    return await service.update_property_unit(
+        unit_id,
+        tenant_id=cast(int, tenant.id),
+        updater_id=cast(int, current_user.id),
+        data=data.model_dump(exclude_unset=True)
+    )
+
+@router.delete("/units/{unit_id}", status_code=204)
+@rate_limit(max_requests=10, window_seconds=60)
+async def delete_property_unit(
+    unit_id: int,
+    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = RealEstateService(db)
+    await service.delete_property_unit(
+        unit_id,
+        tenant_id=cast(int, tenant.id),
+        deleter_id=cast(int, current_user.id)
+    )
 
 @router.post("/units/{unit_id}/buy", response_model=OwnershipResponse)
 @rate_limit(max_requests=10, window_seconds=60)
@@ -137,6 +192,15 @@ async def get_my_ownerships(
     user_id = cast(int, current_user.id)
     ownerships = await service.get_my_ownerships(user_id)
     return ownerships
+
+@router.get("/units/{unit_id}/ownerships", response_model=list[OwnershipResponse])
+async def get_unit_ownerships(
+    unit_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = RealEstateService(db)
+    return await service.get_unit_ownerships(unit_id, tenant_id=cast(int, current_user.tenant_id))
 
 # ========== Rental ==========
 @router.post("/rentals", response_model=RentalContractResponse, status_code=201)
@@ -195,6 +259,15 @@ async def tokenize_asset(
     )
     return token
 
+@router.get("/units/{unit_id}/tokenization", response_model=Optional[TokenizationResponse])
+async def get_unit_tokenization(
+    unit_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = RealEstateService(db)
+    return await service.get_asset_tokenization(unit_id, tenant_id=cast(int, current_user.tenant_id))
+
 # ========== Smart Contracts ==========
 @router.post("/smart-contracts", response_model=SmartContractResponse, status_code=201)
 @rate_limit(max_requests=5, window_seconds=60)
@@ -214,3 +287,12 @@ async def deploy_smart_contract(
         idempotency_key=idempotency_key
     )
     return contract
+
+@router.get("/smart-contracts/{contract_id}", response_model=SmartContractResponse)
+async def get_smart_contract_status(
+    contract_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = RealEstateService(db)
+    return await service.get_smart_contract_status(contract_id, tenant_id=cast(int, current_user.tenant_id))

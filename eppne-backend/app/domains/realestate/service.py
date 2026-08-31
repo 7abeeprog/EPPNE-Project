@@ -177,6 +177,77 @@ class RealEstateService:
         )
         return list(result)
 
+    async def list_property_units(
+        self,
+        tenant_id: int,
+        property_type: Optional[PropertyType] = None,
+        development_id: Optional[int] = None,
+        skip: int = 0,
+        limit: int = 50
+    ) -> list[PropertyUnit]:
+        """قائمة عامة بكل الوحدات العقارية (بدون فرض توفرها للبيع)."""
+        result = await self.repo.list_units(
+            tenant_id=tenant_id,
+            development_id=development_id,
+            for_sale=False,
+            property_type=property_type,
+            skip=skip,
+            limit=limit
+        )
+        return list(result)
+
+    async def get_property_unit(self, unit_id: int, tenant_id: int) -> PropertyUnit:
+        """جلب وحدة عقارية بمعرفها."""
+        unit = await self.repo.get_unit(unit_id)
+        if not unit or unit.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("Property unit not found")
+        return unit
+
+    async def update_property_unit(
+        self,
+        unit_id: int,
+        tenant_id: int,
+        updater_id: int,
+        data: Dict[str, Any]
+    ) -> PropertyUnit:
+        """تحديث وحدة عقارية — يسمح فقط لمالك الأرض المرتبطة (نفس نمط فحص
+        الملكية في tokenize_asset/rent_unit)."""
+        unit = await self.repo.get_unit(unit_id)
+        if not unit or unit.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("Property unit not found")
+
+        owner = await self._get_land_owner_for_unit(unit, tenant_id)
+        if cast(int, owner.id) != updater_id:
+            raise PermissionDeniedError("ليس لديك صلاحية تعديل هذه الوحدة")
+
+        return await self.repo.update_unit(unit_id, **data)
+
+    async def delete_property_unit(
+        self,
+        unit_id: int,
+        tenant_id: int,
+        deleter_id: int
+    ) -> None:
+        """حذف (soft-delete) وحدة عقارية — نفس فحص الملكية أعلاه، مع منع
+        الحذف لو عندها ملكيات جزئية أو تجزئة فعّالة."""
+        unit = await self.repo.get_unit(unit_id)
+        if not unit or unit.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("Property unit not found")
+
+        owner = await self._get_land_owner_for_unit(unit, tenant_id)
+        if cast(int, owner.id) != deleter_id:
+            raise PermissionDeniedError("ليس لديك صلاحية حذف هذه الوحدة")
+
+        existing_ownerships = await self.repo.get_ownerships_by_unit(unit_id)
+        if existing_ownerships:
+            raise ValidationError("لا يمكن حذف وحدة عندها ملكيات جزئية فعّالة")
+
+        existing_tokenization = await self.repo.get_tokenization_by_unit(unit_id, tenant_id)
+        if existing_tokenization:
+            raise ValidationError("لا يمكن حذف وحدة مجزأة (tokenized) بالفعل")
+
+        await self.repo.soft_delete_unit(unit_id)
+
     # ============================================================
     # الملكية الجزئية (Fractional Ownership) – مع Idempotency محسّن
     # ============================================================
@@ -321,6 +392,14 @@ class RealEstateService:
     async def get_my_ownerships(self, user_id: int) -> list[PropertyOwnership]:
         """جلب ملكيات المستخدم."""
         result = await self.repo.get_user_ownerships(user_id)
+        return list(result)
+
+    async def get_unit_ownerships(self, unit_id: int, tenant_id: int) -> list[PropertyOwnership]:
+        """جلب كل الملكيات الجزئية لوحدة معيّنة."""
+        unit = await self.repo.get_unit(unit_id)
+        if not unit or unit.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("Property unit not found")
+        result = await self.repo.get_ownerships_by_unit(unit_id)
         return list(result)
 
     # ============================================================
@@ -501,6 +580,10 @@ class RealEstateService:
 
         return tokenization
 
+    async def get_asset_tokenization(self, unit_id: int, tenant_id: int) -> Optional[AssetTokenization]:
+        """جلب تفاصيل تجزئة وحدة (None لو غير مجزأة — حالة طبيعية وليست خطأ)."""
+        return await self.repo.get_tokenization_by_unit(unit_id, tenant_id)
+
     # ============================================================
     # العقود الذكية (Smart Contracts) – مع Idempotency محسّن
     # ============================================================
@@ -579,6 +662,13 @@ class RealEstateService:
             }
             await self._store_idempotency(idempotency_key, result_data)
 
+        return contract
+
+    async def get_smart_contract_status(self, contract_id: int, tenant_id: int) -> SmartContractEngine:
+        """جلب حالة عقد ذكي بمعرفه."""
+        contract = await self.repo.get_smart_contract(contract_id, tenant_id)
+        if not contract:
+            raise NotFoundError("Smart contract not found")
         return contract
 
     # ============================================================
