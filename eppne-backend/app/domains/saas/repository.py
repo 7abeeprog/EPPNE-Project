@@ -150,11 +150,24 @@ class SaaSRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_any_active_subscription(
+    async def get_all_active_subscriptions(
         self,
-        tenant_id: int
-    ) -> Optional[TenantSubscription]:
-        """اشتراك واحد شامل نشط/تجريبي للـtenant، بغض النظر عن الخدمة (يستخدمه _check_saas_limits عبر الدومينات)."""
+        tenant_id: int,
+    ) -> List[TenantSubscription]:
+        """كل اشتراكات الـtenant النشطة/التجريبية عبر كل الخدمات — بديل
+        get_any_active_subscription القديمة اللي كانت بترجع 'الأحدث زمنيًا'
+        فقط (صف واحد) وبتكسر أي tenant عنده أكتر من اشتراك فعّال لخدمات
+        مختلفة في نفس الوقت. تعدد الاشتراكات النشطة لنفس الـtenant حالة
+        طبيعية ومتوقعة في هذا الـschema (كل خدمة ليها اشتراكها المستقل عبر
+        saas_tenant_subscriptions.plan_id → saas_service_plans.service_id)
+        — مش استثناء نادر لازم نتعامل معاه كـ'صف واحد بس'.
+
+        ⚠️ تحذير للمستقبل: لو حد فكّر يرجّع لمنطق 'صف واحد بس' (مثلاً
+        لتحسين أداء)، لازم يتأكد إن أي استخدام جديد بيفلتر بالخدمة/الميزة
+        المطلوبة أولًا (زي get_active_subscription(tenant_id, service_id)
+        الموجودة فعلًا تحت في نفس الملف) — مش يرجع لـ'أحدث اشتراك بغض النظر
+        عن الخدمة'، وهو بالظبط الباج اللي بيتصلح هنا
+        (raج §8 من saas-feature-flags-drift-session-log.md)."""
         result = await self.db.execute(
             select(TenantSubscription)
             .where(
@@ -163,10 +176,8 @@ class SaaSRepository:
                     TenantSubscription.status.in_(["ACTIVE", "TRIAL"])
                 )
             )
-            .order_by(TenantSubscription.created_at.desc())
-            .limit(1)
         )
-        return result.scalar_one_or_none()
+        return list(result.scalars().all())
 
     async def get_subscriptions_for_renewal(self, tenant_id: Optional[int] = None) -> List[TenantSubscription]:
         now = datetime.now(timezone.utc)

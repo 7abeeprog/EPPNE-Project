@@ -9,7 +9,7 @@ import json
 
 from app.domains.invitations.repository import InvitationsRepository
 from app.domains.ai_agents.service import AIAgentsService
-from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
+from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService, FeatureAccessStatus
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
 from app.domains.finance.service import FinanceService
@@ -40,15 +40,11 @@ class InvitationsService:
 
     async def _check_saas_limits(self, tenant_id: int, feature: str = "crm"):
         saas_service = SaaSSubscriptionService(self.db, tenant_id)
-        subscription = await saas_service.get_active_subscription(tenant_id)  # type: ignore
-        if not subscription:
+        check = await saas_service.check_feature_access(tenant_id, feature)
+        if check.status == FeatureAccessStatus.NO_ACTIVE_SUBSCRIPTION:
             raise PermissionDeniedError("No active subscription found.")
-        if not subscription.plan:
-            raise PermissionDeniedError("No valid subscription plan found.")
-        features = subscription.plan.features or []
-        if feature not in features:
+        if check.status == FeatureAccessStatus.FEATURE_NOT_INCLUDED:
             raise PermissionDeniedError("CRM feature is not included in your current plan.")
-        return subscription, features
 
     async def _get_user(self, user_id: int, tenant_id: int) -> Optional[User]:
         from app.domains.identity.repository import UserRepository

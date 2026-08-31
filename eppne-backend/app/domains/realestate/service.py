@@ -13,7 +13,7 @@ from app.domains.realestate.repository import RealEstateRepository
 from app.domains.finance.service import FinanceService
 from app.domains.invoicing.service import InvoicingService
 from app.domains.affiliate.service import AffiliateService
-from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
+from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService, FeatureAccessStatus
 from app.domains.ai_agents.service import AIAgentsService
 from app.domains.ai_governance.service import AIGovernanceService
 from app.core.errors import NotFoundError, InsufficientBalanceError, PermissionDeniedError, IdempotencyError, ValidationError
@@ -59,15 +59,11 @@ class RealEstateService:
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "real_estate"):
         saas = SaaSSubscriptionService(self.db, tenant_id)
-        subscription = await saas.get_active_subscription(tenant_id)  # type: ignore
-        if not subscription:
+        check = await saas.check_feature_access(tenant_id, feature)
+        if check.status == FeatureAccessStatus.NO_ACTIVE_SUBSCRIPTION:
             raise PermissionDeniedError("No active subscription found.")
-        if not subscription.plan:
-            raise PermissionDeniedError("No valid subscription plan found.")
-        features = subscription.plan.features or []
-        if feature not in features:
+        if check.status == FeatureAccessStatus.FEATURE_NOT_INCLUDED:
             raise PermissionDeniedError("Real Estate feature is not included in your current plan.")
-        return subscription, features
 
     # ========== التحقق من حوكمة الذكاء الاصطناعي ==========
     async def _check_ai_governance(self, tenant_id: int, user_id: int, action: str, cost: Decimal):

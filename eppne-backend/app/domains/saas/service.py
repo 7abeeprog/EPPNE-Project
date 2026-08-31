@@ -3,8 +3,10 @@
 # pyright: reportArgumentType=false
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from enum import Enum
 import uuid
 import hashlib
 from typing import Optional, List, Dict, Any, cast
@@ -29,6 +31,28 @@ from app.core.errors import (
 )
 from app.core.logging_conf import logger
 from app.core.pagination import PaginatedResponse
+
+
+class FeatureAccessStatus(str, Enum):
+    """نتيجة check_feature_access — راجع §8.3 من
+    saas-feature-flags-drift-session-log.md لتفاصيل سبب استخدام enum
+    بدل bool بسيط هنا."""
+    GRANTED = "granted"
+    NO_ACTIVE_SUBSCRIPTION = "no_active_subscription"
+    FEATURE_NOT_INCLUDED = "feature_not_included"
+
+
+@dataclass(frozen=True)
+class FeatureAccessCheck:
+    status: FeatureAccessStatus
+    tenant_id: int
+    feature: str
+    checked_subscription_ids: List[int] = field(default_factory=list)
+    granting_subscription_id: Optional[int] = None
+
+    @property
+    def granted(self) -> bool:
+        return self.status == FeatureAccessStatus.GRANTED
 
 
 class SaaSControlService:
@@ -99,9 +123,56 @@ class SaaSControlService:
             "is_active": sub.status in ["ACTIVE", "TRIAL"],
         }
 
-    async def get_active_subscription(self, tenant_id: int) -> Optional[TenantSubscription]:
-        """اشتراك واحد شامل نشط/تجريبي للـtenant (wrapper حول SaaSRepository.get_any_active_subscription) — تُستخدَم من _check_saas_limits عبر 8 دومينات."""
-        return await self.repo.get_any_active_subscription(tenant_id)
+    async def check_feature_access(
+        self,
+        tenant_id: int,
+        feature: str,
+    ) -> FeatureAccessCheck:
+        """يفحص هل عند الـtenant صلاحية استخدام feature معيّن، عبر union كل
+        اشتراكاته النشطة/التجريبية الحالية (مش 'الأحدث' بس) — تُستخدَم من
+        _check_saas_limits عبر 12 دومين. بديل get_active_subscription
+        القديمة اللي كانت بترجع اشتراك واحد فقط ('الأحدث زمنيًا')، فكانت
+        بتفشل بالخطأ لأي tenant عنده أكتر من اشتراك فعّال لخدمات مختلفة في
+        نفس الوقت (حالة طبيعية ومتوقعة، مش استثناء).
+
+        ⚠️ حدود متعمدة (مش عيوبًا خفية): الدالة دي **مش** بتتحقق إن
+        الاشتراك اللي منحك الـfeature هو فعلًا اشتراك لنفس 'خدمة' الدومين
+        اللي بيطلب الفحص — لو plan.features احتوت feature من نطاق خدمة
+        تانية بالغلط، هتُمنح برضه. حل هذه النقطة يحتاج ربط رسمي
+        feature→service_id غير موجود في الـschema الحالي، وهو خارج نطاق
+        هذا الإصلاح عمدًا (راجع §6 من saas-feature-flags-drift-session-
+        log.md — 'عيب تصميم أمني كامن'، غير قابل للاستغلال حاليًا لأن
+        إنشاء اشتراك جديد عبر الـAPI الحي معطّل ببَج منفصل تمامًا
+        (get_plan_by_id). ممنوع إصلاح get_plan_by_id بمعزل عن سد هذه
+        النقطة، وإلا هيبقى قابل للاستغلال)."""
+        subscriptions = await self.repo.get_all_active_subscriptions(tenant_id)
+        checked_ids = [cast(int, s.id) for s in subscriptions]
+
+        if not subscriptions:
+            return FeatureAccessCheck(
+                status=FeatureAccessStatus.NO_ACTIVE_SUBSCRIPTION,
+                tenant_id=tenant_id,
+                feature=feature,
+                checked_subscription_ids=checked_ids,
+            )
+
+        for sub in subscriptions:
+            plan_features = sub.plan.features if sub.plan else None
+            if plan_features and feature in plan_features:
+                return FeatureAccessCheck(
+                    status=FeatureAccessStatus.GRANTED,
+                    tenant_id=tenant_id,
+                    feature=feature,
+                    checked_subscription_ids=checked_ids,
+                    granting_subscription_id=cast(int, sub.id),
+                )
+
+        return FeatureAccessCheck(
+            status=FeatureAccessStatus.FEATURE_NOT_INCLUDED,
+            tenant_id=tenant_id,
+            feature=feature,
+            checked_subscription_ids=checked_ids,
+        )
 
     async def create_subscription(
         self,

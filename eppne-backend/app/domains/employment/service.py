@@ -44,7 +44,7 @@ from app.domains.employment.repository import EmploymentRepository
 from app.domains.finance.service import FinanceService
 from app.domains.identity.models import User
 from app.domains.invoicing.service import InvoicingService
-from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
+from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService, FeatureAccessStatus
 
 
 class EmploymentService:
@@ -64,22 +64,18 @@ class EmploymentService:
     # أدوات مساعدة داخلية (Private Helpers)
     # ============================================================
 
-    async def _check_saas_limits(self, tenant_id: int, feature: str = "hr_management") -> dict:
+    async def _check_saas_limits(self, tenant_id: int, feature: str = "hr_management") -> None:
         """
         التحقق من أن المستأجر لديه اشتراك فعال يتضمن الميزة المطلوبة.
         """
         saas_service = SaaSSubscriptionService(self.db, tenant_id)
-        subscription = await saas_service.get_active_subscription(tenant_id)
-        if not subscription:
+        check = await saas_service.check_feature_access(tenant_id, feature)
+        if check.status == FeatureAccessStatus.NO_ACTIVE_SUBSCRIPTION:
             raise PermissionDeniedError("No active subscription found for this entity.")
-        if not subscription.plan:
-            raise PermissionDeniedError("No valid subscription plan found.")
-        features = subscription.plan.features or []
-        if feature not in features:
+        if check.status == FeatureAccessStatus.FEATURE_NOT_INCLUDED:
             raise PermissionDeniedError(
                 f"Feature '{feature}' is not included in your current plan."
             )
-        return subscription, features
 
     async def _get_user(self, user_id: int, tenant_id: int) -> Optional[User]:
         """جلب بيانات المستخدم."""
