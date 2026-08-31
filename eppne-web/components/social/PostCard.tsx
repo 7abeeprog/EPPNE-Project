@@ -8,7 +8,13 @@ import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import type { Post } from '@/types/social';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 interface PostCardProps {
   post: Post;
@@ -23,7 +29,7 @@ export default function PostCard({ post, onComment }: PostCardProps) {
   const shareMutation = useSharePost();
 
   const handleLike = () => {
-    const idempotencyKey = `like-${post.id}-${uuidv4()}`;
+    const idempotencyKey = `like-${post.id}-${generateIdempotencyKey()}`;
     likeMutation.mutate(
       { postId: post.id, idempotencyKey },
       {

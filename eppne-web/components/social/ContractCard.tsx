@@ -5,8 +5,14 @@ import { useState } from 'react';
 import { useSignContract } from '@/hooks/social/useContracts';
 import { FileText, Users, CheckCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { v4 as uuidv4 } from 'uuid';
 import type { SocialSmartContract } from '@/types/social';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 interface ContractCardProps {
   contract: SocialSmartContract;
@@ -24,7 +30,7 @@ export default function ContractCard({ contract }: ContractCardProps) {
   const signContract = useSignContract();
 
   const handleSign = () => {
-    const idempotencyKey = `sign-${contract.id}-${uuidv4()}`;
+    const idempotencyKey = `sign-${contract.id}-${generateIdempotencyKey()}`;
     signContract.mutate({
       contractId: contract.id,
       data: { digital_signature_hash: signatureHash || `sig-${Date.now()}` },

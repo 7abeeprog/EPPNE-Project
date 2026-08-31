@@ -8,7 +8,13 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 export default function LicensesPage() {
   const { data: licenses, isLoading: lLoading } = useMyLicenses();
@@ -25,7 +31,7 @@ export default function LicensesPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const idempotencyKey = `license-${uuidv4()}`;
+    const idempotencyKey = `license-${generateIdempotencyKey()}`;
     issueLicense.mutate(
       {
         data: formData,

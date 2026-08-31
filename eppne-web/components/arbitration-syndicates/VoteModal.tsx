@@ -4,7 +4,13 @@
 import { useState } from 'react';
 import { useCastVote } from '@/hooks/arbitration-syndicates/useElections';
 import { X, Loader2, Vote, User } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 interface VoteModalProps {
   isOpen: boolean;
@@ -21,7 +27,7 @@ export default function VoteModal({ isOpen, onClose, electionId, candidates }: V
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCandidate) return;
-    const idempotencyKey = `vote-${electionId}-${uuidv4()}`;
+    const idempotencyKey = `vote-${electionId}-${generateIdempotencyKey()}`;
     castVote.mutate(
       {
         electionId,

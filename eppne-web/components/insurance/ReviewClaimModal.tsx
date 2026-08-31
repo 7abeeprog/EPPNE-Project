@@ -4,7 +4,13 @@
 import { useState } from 'react';
 import { useReviewClaim } from '@/hooks/insurance/useClaims';
 import { X, Loader2, CheckCircle, XCircle } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 interface ReviewClaimModalProps {
   isOpen: boolean;
@@ -22,7 +28,7 @@ export default function ReviewClaimModal({ isOpen, onClose, claimId, onSuccess }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const idempotencyKey = `review-${claimId}-${uuidv4()}`;
+    const idempotencyKey = `review-${claimId}-${generateIdempotencyKey()}`;
     reviewClaim.mutate(
       {
         claimId,

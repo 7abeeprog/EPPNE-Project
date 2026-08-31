@@ -32,8 +32,14 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { v4 as uuidv4 } from 'uuid';
 import type { PropertyType } from '@/types/realestate';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 const typeLabels: Record<PropertyType, string> = {
   APARTMENT: 'شقة',
@@ -89,7 +95,7 @@ export default function PropertyDetailPage() {
   };
 
   const handleBuyFraction = () => {
-    const idempotencyKey = `buy-${propertyId}-${uuidv4()}`;
+    const idempotencyKey = `buy-${propertyId}-${generateIdempotencyKey()}`;
     buyFraction.mutate(
       {
         unitId: propertyId,

@@ -4,11 +4,17 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { addContribution } from '@/services/projects';
+import { ProjectsService } from '@/services/projects';
 import { X, Loader2, Wallet, Landmark, Clock, Briefcase, Wrench, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { v4 as uuidv4 } from 'uuid';
 import type { ContributionType } from '@/types/projects';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 interface ContributionModalProps {
   projectId: number;
@@ -36,7 +42,7 @@ export default function ContributionModal({ projectId }: ContributionModalProps)
   const router = useRouter();
 
   // توليد Idempotency Key عند فتح النافذة
-  const [idempotencyKey] = useState(() => `contribution-${uuidv4()}`);
+  const [idempotencyKey] = useState(() => `contribution-${generateIdempotencyKey()}`);
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -58,7 +64,7 @@ export default function ContributionModal({ projectId }: ContributionModalProps)
         payload.equipment_estimated_value = parseFloat(amount) || 0;
       }
 
-      return addContribution(payload, idempotencyKey);
+      return ProjectsService.addContribution(payload, idempotencyKey);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });

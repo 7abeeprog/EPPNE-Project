@@ -5,7 +5,13 @@ import { useState } from 'react';
 import { useSendDigitalGift } from '@/hooks/social/useGifts';
 import { useOccasions } from '@/hooks/social/useOccasions';
 import { X, Loader2, Gift, Users } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 interface SendGiftModalProps {
   isOpen: boolean;
@@ -28,7 +34,7 @@ export default function SendGiftModal({ isOpen, onClose, receiverId, receiverNam
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const idempotencyKey = `gift-${receiverId}-${uuidv4()}`;
+    const idempotencyKey = `gift-${receiverId}-${generateIdempotencyKey()}`;
     sendGift.mutate(
       {
         data: {

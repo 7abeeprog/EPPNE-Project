@@ -4,7 +4,13 @@
 import { useState } from 'react';
 import { usePlaceBid } from '@/hooks/tenders-auctions/useLiveBids';
 import { X, Loader2, Gavel, DollarSign } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 interface PlaceBidModalProps {
   isOpen: boolean;
@@ -20,7 +26,7 @@ export default function PlaceBidModal({ isOpen, onClose, auctionId, currentHighe
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const idempotencyKey = `bid-${auctionId}-${uuidv4()}`;
+    const idempotencyKey = `bid-${auctionId}-${generateIdempotencyKey()}`;
     placeBid.mutate(
       {
         auctionId,

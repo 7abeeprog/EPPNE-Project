@@ -225,6 +225,7 @@ FK → tenants.id` — **لا يوجد جدول باسم `tenants` في قاعد
 | — | **`ai-governance-usage-log-idempotency-wrong-arity`** [إعادة تأكيد 2026-08-25، اكتُشف أصلًا 2026-08-19] — تصعيد لبند رسمي في الجدول (كان موثَّقًا فقط ضمن سجل الجلسات المُقفلة أعلاه، تحت `regression-tests-backfill`). `AIGovernanceService.check_and_consume()` (`service.py:152`) بتنادي `self.repo.get_usage_log_by_idempotency(idempotency_key)` بمعامل واحد بس، لكن التوقيع الحقيقي (`repository.py:66`) `(idempotency_key: str, tenant_id: int)` — `tenant_id` إجباري بلا default. **الأثر:** أي استدعاء `check_and_consume()` بـ`idempotency_key` حقيقي (غير فاضي) يكراش فورًا بـ`TypeError` — مشروط بوجود هيدر `Idempotency-Key` من العميل، مش حتمي على كل استدعاء. **مؤكَّد لسه موجود [2026-08-25]** أثناء قراءة نفس الملف لإصلاح بند `reset_at` (مجموعة ب) — صفر لمس، برّه نطاق تلك الجلسة صراحة. | 🔴 **مفتوح، أولوية عالية** — يعطّل مسار شراء حقيقي (`service_marketplace`) كلما استُخدمت idempotency فعليًا | `tests/test_ai_governance_check_and_consume.py`؛ `.claude/reports/constructor-mismatch-backlog-cleanup-session-log.md` (بند ب) |
 | — | **`invitations-customer-interaction-metadata-attribute-collision`** [2026-08-29] — اكتُشف كاكتشاف جانبي أثناء جلسة `invoicing-21-metadata-collision` (بحث عن نمط تسمية `metadata` في كل المشروع، خارج نطاق الجلسة نفسها بالكامل — صفر تحقق حي، صفر لمس). **نفس فئة العطل بالحرف** الموثَّقة سابقًا في `invoicing-invoice-model-metadata-attribute-collision` أعلاه (المُغلَق)، لكن في دومين مختلف تمامًا: موديل `CustomerInteraction` (`invitations/models.py:257-270`، جدول `crm_interactions`) عنده عمود JSONB فعلي اسمه `meta_data` (سطر 270) — **مش `metadata`**، فصفر تصادم على مستوى الموديل نفسه. لكن `invitations/service.py:606` بيقرأ `"metadata": interaction.metadata` — أي بيحاول يوصل لـattribute اسمه `metadata` حرفيًا على كائن `interaction`، وهو مش موجود كعمود، فبيرجّع بدل منه `Base.metadata` المحجوز (كائن `MetaData` بتاع SQLAlchemy) بدل القيمة الفعلية المخزَّنة في `meta_data`. **الأثر المتوقَّع (غير مؤكَّد حيًا بعد):** أي استجابة API بتمر بالسطر ده (لازم تحديد أي endpoint/دالة بتستدعي الكود المحيط بسطر 606) هترجّع كائن `MetaData` بدل بيانات الـinteraction الفعلية بدل الحقل ده — إما فشل serialization (لو الاستجابة عبر Pydantic schema بيتوقع `dict`)، أو تسريب/عرض غلط لكائن داخلي لو مفيش validation صارمة. **لم يُحدَّد بعد:** أي route/دالة تحديدًا بتستدعي هذا الكود، هل فيه Pydantic schema بيتحقق من الاستجابة (زي حالة `invoicing` اللي كانت بترجع 400)، ولا الكود ماشي مباشر كـdict بلا validation (يعني ممكن يفشل بشكل مختلف تمامًا — تسريب كائن مش ValidationError). **صفر لمس، صفر تحقق حي — يحتاج جلسة تشخيص مستقلة.** | 🔴 **مفتوح، لم يبدأ فحص** — يحتاج تحديد نطاق الاستدعاء الفعلي (مين بينادي الكود حوالين `service.py:606`) وتحقق حي قبل أي إصلاح | `.claude/reports/invoicing-21-metadata-collision-session-log.md` §5 |
 | — | **`invoicing-process-overdue-invoices-missing-tenant-id-arg`** [2026-08-29] — اكتُشف كاكتشاف جانبي أثناء جلسة `invoicing-21-metadata-collision` (قراءة `router.py` بالكامل أثناء فحص كل استخدامات `InvoicingService`، خارج نطاق الجلسة نفسها — صفر تحقق حي، صفر لمس). `invoicing/router.py:330` (`POST /invoicing/admin/process-overdue`) بينادي `InvoicingService(db)` **بمعامل واحد بس**، لكن الـconstructor الفعلي (`invoicing/service.py:23`) `def __init__(self, db: AsyncSession, tenant_id: int)` — `tenant_id` **إجباري بلا default**. **الأثر المتوقَّع (غير مؤكَّد حيًا):** أي استدعاء فعلي لهذا الـendpoint (المفروض يُستدعى من Celery، حسب الوصف في الراوتر) هيرمي `TypeError: __init__() missing 1 required positional argument: 'tenant_id'` فورًا، قبل ما يوصل حتى لمنطق `process_overdue_invoices()` نفسه. **لم يُحدَّد بعد:** هل الـendpoint ده مُفعَّل فعليًا (مربوط بمهمة Celery حقيقية بتتنفذ دوريًا) ولا كود كامن زي `affiliate-distribute-commissions-celery-task-wrong-signature` (أعلاه) — لو مُفعَّل، ده معناه معالجة الفواتير المتأخرة معطَّلة بالكامل في الإنتاج. **صفر لمس، صفر تحقق حي — يحتاج جلسة تشخيص مستقلة.** | 🔴 **مفتوح، لم يبدأ فحص** — يحتاج تأكيد هل الـendpoint مُفعَّل فعليًا (Celery beat/schedule) قبل تحديد الأولوية الحقيقية | `.claude/reports/invoicing-21-metadata-collision-session-log.md` §5 |
+| — | **`frontend-missing-exports-genuinely-absent-backlog`** [2026-08-31] — من إجمالي 37 حالة `TS2307` (استيراد داخلي `@/...` مفقود بالكامل) اكتُشفت في الفحص الشامل لبند `frontend-missing-exports-multidomain-scope` (أعلاه)، **8 اتصلحوا فعليًا** (فئة "ج" — الملف موجود بمسار/اسم مختلف، راجع بند `frontend-hooks-misplaced-files-phase2-warning` وتفاصيل الإصلاح في تقرير الجلسة)، و**29 اتأكَّدوا معدومين فعلًا** بعد فحص `Glob` + قراءة أي تطابق اسم مرشَّح (رُفض تطابقان بالاسم فقط بعد قراءة المحتوى: `zamakana/CampaignCard.tsx` و`tourism-sports/TicketCard.tsx` — مكوّنات مختلفة تمامًا عن اللي محتاجه `invitations`). قائمة الـ29 منظَّمة حسب الدومين: **Components (17):** `agritech/{FarmCard,FarmZoneCard,WeatherAlertCard}`، `automation/ExecutionsPage`، `finance/{admin-mint-card,balance-card,web3-deposit-withdraw}`، `invitations/{CampaignCard,InvitationCard,InvitationStatusBadge,TicketCard,TicketStatusBadge}`، `iot/{MaintenanceLogs,ReadingsChart}`، `saas/CreatePlanModal`، `social/CreatePostModal`، `tourism-sports/TransferCard`، `ui/tooltip`، `zamakana/{PledgeCard,PledgeForm}`. **Hooks (8):** `agritech/useStats`، `commerce/useOrders`، `logistics/useStats`، `manufacturing/{usePendingMaintenance,useProductionLines,useStats}`، `transport/useDrivers`، `zamakana/usePledges`. **Utilities (2):** `hooks/use-debounce`، `lib/auth-utils` — صفر أي ملف بأي اسم قريب في المشروع كله. **Services (1):** `services/ai-governance` — يوجد `types/ai-governance.ts` فقط (الأنواع جاهزة)، صفر ملف service حتى بمسمّى `.service.ts`. كل حالة محتاجة **كتابة كود جديد بالكامل**، مش إصلاح استيراد — بعضها (`ui/tooltip`, `hooks/use-debounce`) utility عامة مفقودة تمامًا من المشروع، مش خاصة بدومين واحد. | 🔴 **مفتوح، backlog منظَّم — أساس لجلسات تصميم/تنفيذ مستقبلية لكل دومين على حدة، صفر قرار أولوية نهائي حتى الآن** | `.claude/reports/frontend-missing-exports-multidomain-session-log.md` |
 
 ---
 
@@ -717,3 +718,158 @@ FK → tenants.id` — **لا يوجد جدول باسم `tenants` في قاعد
   قرار بنية تحتية جديد يحتاج موافقة صريحة منفصلة، مش جزء تلقائي من هذا
   البند. | 🟡 **مفتوح، أولوية متوسطة — فجوة تحقق حقيقية، مش خطأ معروف**
   | `.claude/reports/frontend-decimal-standard-convention-session-log.md` §4.4 |
+| — | **`frontend-missing-exports-multidomain-scope`** [2026-08-31] —
+  فحص شامل (`tsc --noEmit` كامل على `eppne-web`) أثبت إن باج "استيراد
+  دوال/hooks/modules غير موجودة فعليًا" (نفس فئة
+  `realestate-hooks-layer-nonexistent-function-imports`) منتشر عبر
+  **~36 دومين، 175 ملف، 438 سطر خطأ** — مش محصور في الـ4 دومينات
+  (employment, projects, ai_governance, logistics) الموثَّقة سابقًا في
+  البند اللي فوق. السبب الجذري في كل عيّنة اتفحصت (social, transport,
+  insurance, tourism-sports, agritech, employment): كل `services/
+  <domain>.ts` بيصدّر كائن واحد (`export const XService = {...}`)، بينما
+  الـhooks بتعمل named import مباشر. **لكن مش كل حالة نفس السبب** — من
+  كل الأسماء المطلوبة المفحوصة، ~42% موجودة فعلًا كـproperty بنمط
+  استيراد غلط (قابلة لإصلاح ميكانيكي)، و**~58% غير موجودة إطلاقًا تحت
+  أي اسم** (فجوة تنفيذ حقيقية، بعضها بباك إند جاهز فعلًا — تأكدت من
+  `openapi.json` لـagritech: `GET /agritech/agritech/farms` و
+  `weather-alerts` شغّالين لكن الفرونت إند ماستدعاهمش إطلاقًا). راجع
+  `.claude/reports/frontend-missing-exports-multidomain-session-log.md`
+  للتفاصيل الكاملة والجدول الكامل لكل دومين. | 🔴 **مفتوح، أولوية عالية
+  — أوسع بمقياس كامل من التقدير الأصلي** |
+  `.claude/reports/frontend-missing-exports-multidomain-session-log.md` |
+| — | **`frontend-missing-exports-social-duplicate-hooks`** [2026-08-31] —
+  أثناء إصلاح دومين `social` (مرحلة 1 من البند اللي فوق)، لوحظ إن
+  `hooks/social/useMatchmaking.ts` و`hooks/social/useMatchSuggestions.ts`
+  بيصدّروا نفس أسماء الـhooks حرفيًا (`useMatchProfile`,
+  `useUpdateMatchProfile`, `useMatchSuggestions`) بمحتوى شبه مطابق. وكذلك
+  `hooks/social/useConnections.ts` و`useMatchmaking.ts` بيصدّروا نفس
+  `useConnections`/`useRequestConnection`/`useAcceptConnection`/
+  `useRejectConnection`. `useRequestConnection` (من useMatchmaking.ts)
+  **مالوش أي مستهلك `.tsx` إطلاقًا** — hook ميت. **صفر لمس** — قرار "أي
+  ملف الأصلي وأيهم يتحذف" مؤجَّل لجلسة تصنيف أولويات منفصلة. | 🟡 **مفتوح،
+  أولوية منخفضة — تكرار كود، مش كسر وظيفي** |
+  `.claude/reports/frontend-missing-exports-multidomain-session-log.md` |
+| — | **`transport-vehicles-hook-file-wrong-content`** [2026-08-31] —
+  أثناء نفس المرحلة على دومين `transport`،
+  `hooks/transport/useVehicles.ts` طلع تعليقه الأول
+  `// hooks/transport/useTrips.ts` ومحتواه نسخة شبه كاملة من hooks
+  الرحلات (trips) — **صفر كود مركبات فيه إطلاقًا**. الصفحات
+  (`vehicles/page.tsx`, `trips/page.tsx`, `fleets/page.tsx`) بتستورد
+  `useVehicles`, `useCreateVehicle`, `useDeleteVehicle`,
+  `useAvailableVehicles` من نفس المسار — **مش موجودين في أي ملف في
+  الكود كله**. ميزة "المركبات" في الفرونت إند معدومة بالكامل من الجذر،
+  رغم إن `TransportService` في `services/transport.ts` عنده فعلًا
+  `createVehicle`, `updateVehicleLocation`, `getAvailableVehicles` جاهزين
+  ومُنفَّذين. **صفر لمس** — يحتاج جلسة تصميم/تنفيذ منفصلة (كتابة كود
+  hooks مركبات جديد بالكامل، مش إصلاح استيراد). | 🔴 **مفتوح، أولوية
+  عالية — ميزة كاملة معدومة رغم جاهزية الباك إند** |
+  `.claude/reports/frontend-missing-exports-multidomain-session-log.md` |
+| — | **`transport-formdata-vs-openapi-schema-mismatch`** [2026-08-31] —
+  بعد إصلاح استيراد `createDelivery`/`createRoute` (فئة "نمط استيراد
+  غلط") في نفس مرحلة transport، ظهر TS2345 جديد كان مخفيًا: `DeliveryFormData`
+  و`RouteFormData` اليدويتين في `types/transport.ts` غير متوافقتين مع
+  الـschema الحقيقي المولَّد من الباك إند — حقول زي `pickup_address`,
+  `dropoff_address`, `waypoints` معرَّفة في الباك إند كـ`dict`/`list[dict]`
+  بدون Pydantic model فرعي، فطلعت `Record<string, never>` في
+  `api-types.ts` (غير قابلة عمليًا لأي كائن حقيقي بحقول). كمان
+  `DeliveryTaskCreate` محتاج `sender_id: number` مطلوب مش موجود في
+  `DeliveryFormData` إطلاقًا. **صفر لمس** — `useDeliveries.ts:42` و
+  `useRoutes.ts:27` سايبينهم بالحالة دي عمدًا (لا type assertion ترقيعي
+  ولا إصلاح schema). محتمل نفس النمط يتكرر في دومينات تانية فيها
+  `*FormData` يدوي في `types/<domain>.ts`. أيضًا اكتُشف بالمصادفة:
+  `trip.driver_name` مستخدَم في `trips/page.tsx:88,320` لكن مش موجود في
+  `TripResponse` الحقيقي إطلاقًا (بس `driver_id` موجود) — نفس فئة
+  المشكلة، على جانب القراءة مش الكتابة. | 🟡 **مفتوح، أولوية متوسطة —
+  يحتاج قرار: إصلاح schema الباك إند أم ترقيع frontend** |
+  `.claude/reports/frontend-missing-exports-multidomain-session-log.md` |
+| — | **`frontend-hooks-misplaced-files-phase2-warning`** [2026-08-31] —
+  أثناء إصلاح transport، اتكشف إن `hooks/useFleets.ts` و`hooks/useHubs.ts`
+  كانوا موجودين فعليًا (بمحتوى سليم ومطابق لاسمهم) لكن في `hooks/`
+  مباشرة بدل `hooks/transport/` — الصفحات كانت بتستوردهم بمسار
+  `@/hooks/transport/useFleets`/`useHubs` فيطلع `TS2307: Cannot find
+  module`. كانوا متصنَّفين في الفحص الشامل الأول (بند
+  `frontend-missing-exports-multidomain-scope` فوق) كـ"موديول غير موجود
+  إطلاقًا" — **تصنيف غلط**، الملفات كانت موجودة وبس في مكان غلط. تم
+  إصلاحهم فعليًا بـ`git mv` (صفر أثر جانبي، تأكدت بـgrep إن محدش بيستورد
+  من المسار القديم). **تحذير منهجي لأي جلسة مرحلة 2 قادمة:** قبل تصنيف
+  أي حالة TS2307 (`@/hooks/...`, `@/components/...`) كـ"ميزة معدومة"
+  نهائيًا في جدول التوثيق، **لازم تتأكد بـ`find`/`Glob` من عدم وجود
+  الملف في مكان تاني بمحتوى مطابق** — قد يكون مجرد نقل ملف، مش كتابة
+  كود جديد. | 🟢 **الجزء المُنفَّذ (نقل الملفين) مغلَق ومُتحقَّق منه —
+  التحذير المنهجي نفسه مفتوح لحد ما يتطبَّق على باقي الـ34 دومين** |
+  `.claude/reports/frontend-missing-exports-multidomain-session-log.md` |
+| — | **`frontend-missing-exports-category-c-path-fixes`** [2026-08-31] —
+  تطبيقًا لتحذير `frontend-hooks-misplaced-files-phase2-warning` (فوق)،
+  اتفحصت كل الـ37 حالة `TS2307` الداخلية الباقية عبر المشروع كله
+  (`Glob` لكل basename + قراءة أي تطابق مرشَّح). طلع **8 منها فئة "ج"
+  جديدة** (الملف موجود فعلًا، بس بمسار/اسم مختلف تمامًا عن المتوقَّع):
+  `@/services/{academy,ai-agents,commerce,communications,digital-twin,
+  health}` كلها موجودة فعليًا بلاحقة `.service.ts` (`academy.service.ts`
+  إلخ) — بعض المستهلكين (`store/agentStore.ts`,
+  `app/(dashboard)/communications/mail/inbox/page.tsx`) كانوا بيستوردوا
+  صح بالفعل، وهذا أثبت الاتفاقية الصحيحة موجودة أصلًا في نفس الكودبيز.
+  `@/store/aiAgentStore` (+ اسم `useAIAgentStore`) الصح فعليًا
+  `@/store/agentStore` (+ `useAgentStore`) — تأكدت بقراءة المحتوى (نفس
+  الميزة بالضبط: بيستورد من `ai-agents.service`، بيدير agents/approvals).
+  `@/hooks/saas` (استيراد barrel لـ`useServices`/`useSubscriptions`)
+  الملفات موجودة منفصلة (`hooks/saas/useServices.ts` إلخ) بلا
+  `index.ts` — **نفس الملف** (`app/(dashboard)/saas/page.tsx`) كان
+  بيستورد `useInvoices`/`useDashboardStats` بمسار مباشر صح في نفس
+  الوقت. **الإصلاح المُطبَّق: تصحيح مسار/اسم الاستيراد في 18 ملف
+  مستهلِك فقط — صفر لمس على أي `service.ts`/`store.ts`، صفر تغيير
+  منطق.** تحقق `tsc`: صفر `TS2307` متبقٍ لأي من الـ8. **متوقَّع وموثَّق
+  (مش مُصلَح):** بمجرد تصحيح المسار، ظهر TS2305/2339/2459/2551 جديد في
+  7 دومينات (academy, ai-agents, commerce, communications, digital-twin,
+  health, saas) — نفس فئة الباج الأصلية (استيراد named ضد كائن واحد أو
+  أسماء مش متطابقة)، أوسعها فجوة `saas` (نمط تسمية `get*`/`list*` مختلف
+  تمامًا بين الـhooks والـservice الفعلي). هذه الاكتشافات الجديدة نقطة
+  بداية جاهزة لجلسات هذه الـ7 دومينات القادمة، **صفر إصلاح إضافي في هذه
+  الجلسة**. | 🟢 **مُغلَق (تصحيح المسار نفسه) — الاكتشافات الجديدة
+  المتفرعة عنه مفتوحة كبداية لجلسات دومينات مستقبلية منفصلة** |
+  `.claude/reports/frontend-missing-exports-multidomain-session-log.md` |
+| — | **`frontend-mechanical-fix-all-domains-pass1`** [2026-08-31] —
+  تطبيق فئة "أ" (نمط استيراد غلط) على كل الدومينات المتبقية دفعة واحدة.
+  النمط: كل `services/<domain>.ts` بيصدّر كائن واحد (`XService = {...}`)،
+  لكن أغلب `hooks/`/`components/` كانت بتستورد دوال منفردة بالاسم مباشرة.
+  5 agents متوازيين اتبعثوا لتغطية 25 دومين لكن ضربوا rate limit في
+  النص؛ الجلسة كملت الباقي مباشرة (بدون subagents) بما فيها التحقق من
+  شغل الـagents الجزئي. **23 دومين اتصلّح فعليًا** (~80 ملف)، `tsc`
+  TS2305+TS2307: 442 → 290 (تراجع 152). **استثناءات موثّقة صفر لمس:**
+  `realestate` (كل الـhooks بلا استثناء فئة ب حقيقية — نفس سابقة
+  `realestate-hooks-layer-nonexistent-function-imports`، يحتاج قرار
+  تصميم)، باج مزدوج في `date-fns/ar` عبر ~30 ملف (locale غلط + دالة من
+  الباكدج الأساسي مش الـlocale — يحتاج تعديل منطق مش مجرد استيراد)،
+  `uuid`/`qrcode.react` غير مثبتين كتبعية أصلًا، ~20 ملف/hook معدوم
+  تمامًا (اتأكد بـ`Glob` قبل التصنيف). `academy`/`saas`/`commerce`:
+  صفر لمس مطلوب — الصفحات بتستورد من طبقة hooks وسيطة مش من الـservice
+  مباشرة، فمفيش `TS2305`/`TS2307` فعلي في نطاق هذه الجلسة. تفاصيل كاملة
+  (كل ملف، جدول فئة ب حسب الدومين) في التقرير. | 🟢 **مُغلَق —
+  الاستثناءات الموثقة (realestate، date-fns/ar، الملفات المعدومة)
+  مفتوحة لجلسات مخصصة قادمة** |
+  `.claude/reports/frontend-mechanical-fix-all-domains-pass1-session-log.md` |
+| — | **`npm-missing-dependencies-uuid-qrcode`** [2026-08-31] —
+  حزمتين مفقودتين فعليًا من `package.json`/`node_modules` (اكتُشفوا في
+  `frontend-mechanical-fix-all-domains-pass1`). **uuid (21 ملف، مش ~15
+  كما قُدِّر أوليًا):** كل استخدام كان `uuidv4()` واحد بس لبناء
+  idempotency key — استُبدل بدالة محلية `generateIdempotencyKey()` في كل
+  ملف (نفس النمط الدفاعي `crypto.randomUUID()` + fallback `IDEMP-` الموجود
+  فعليًا في `hooks/finance/useTransfer.ts`/`useCheckout.ts`؛ **قرار: صفر
+  utility مشتركة جديدة في `lib/`** لأن النمط القائم بالفعل محلي لكل ملف،
+  مش دالة مشتركة — استخراج واحدة كان هيبقى نمط تالت مختلف، خارج نطاق
+  الاستبدال الميكانيكي المتفق عليه). صفر `npm install` لـuuid. **qrcode.react
+  (ملف واحد، TicketCard.tsx):** وظيفة عرض SVG حقيقية بلا بديل built-in،
+  اتثبتت فعليًا (`npm install qrcode.react@^4.2.0 --legacy-peer-deps`).
+  تحقق `tsc` بعد الدفعتين: 1023 → 1002 (uuid) → 1001 (qrcode.react)،
+  صفر خطأ uuid/qrcode متبقٍ. اختبار Node مباشر أكّد صيغة UUID v4 صحيحة
+  (RFC 4122) من الدالة المحلية الجديدة. **اكتشاف جانبي غير مرتبط بهذه
+  الجلسة:** تثبيت qrcode.react كشف (بالصدفة، مش بالسبب) تعارض peer-dependency
+  موجود بالفعل من قبل بين `@rainbow-me/rainbowkit@2.2.11` (يطلب
+  `wagmi: ^2.9.0`) و`wagmi@3.6.16` المثبت فعليًا في المشروع — تأكَّد إن
+  التعارض كان مُثبَّتًا بالفعل في `package-lock.json` قبل أي لمسة من هذه
+  الجلسة، وإن `qrcode.react` نفسها صفر علاقة بـ`wagmi` إطلاقًا (`npm view`
+  لا يذكرها في dependencies ولا peerDependencies). استُخدم
+  `--legacy-peer-deps` لتجاوز الفحص النظري فقط (لم يغيّر نسخة `wagmi`
+  الفعلية). **يستاهل مراجعة لاحقة** (تحديث `rainbowkit` لنسخة بدعم رسمي
+  لـwagmi v3) — **خارج نطاق هذه الجلسة تمامًا.** | 🟢 **مُغلَق** —
+  تعارض rainbowkit/wagmi موثَّق كـbacklog item منفصل، لم يُلمَس |
+  `.claude/reports/npm-missing-deps-uuid-qrcode-session-log.md` |

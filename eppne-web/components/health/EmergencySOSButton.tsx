@@ -3,11 +3,17 @@
 
 import { useState, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { callEmergency } from '@/services/health';
+import { HealthService } from '@/services/health.service';
 import { useHealthStore } from '@/store/healthStore';
 import { Loader2, Phone, MapPin, AlertTriangle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 interface EmergencySOSButtonProps {
   className?: string;
@@ -20,12 +26,12 @@ export default function EmergencySOSButton({ className }: EmergencySOSButtonProp
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const { setActiveEmergency } = useHealthStore();
 
-  const [idempotencyKey] = useState(() => `emergency-${uuidv4()}`);
+  const [idempotencyKey] = useState(() => `emergency-${generateIdempotencyKey()}`);
 
   const mutation = useMutation({
     mutationFn: () => {
       if (!location) throw new Error('الموقع غير متاح');
-      return callEmergency(
+      return HealthService.callEmergency(
         {
           emergency_type: emergencyType,
           gps_location: location,

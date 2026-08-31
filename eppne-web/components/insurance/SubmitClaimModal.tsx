@@ -5,7 +5,13 @@ import { useState } from 'react';
 import { useSubmitClaim } from '@/hooks/insurance/useClaims';
 import { useMySubscriptions } from '@/hooks/insurance/useSubscriptions';
 import { X, Loader2, AlertTriangle, Upload } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 interface SubmitClaimModalProps {
   isOpen: boolean;
@@ -27,7 +33,7 @@ export default function SubmitClaimModal({ isOpen, onClose }: SubmitClaimModalPr
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const idempotencyKey = `claim-${uuidv4()}`;
+    const idempotencyKey = `claim-${generateIdempotencyKey()}`;
     submitClaim.mutate(
       {
         data: {

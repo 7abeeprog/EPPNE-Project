@@ -4,7 +4,13 @@
 import { useState } from 'react';
 import { useJuryVote } from '@/hooks/arbitration-syndicates/useJuryVote';
 import { X, Loader2, ThumbsUp, ThumbsDown, Scale } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 interface JuryVoteModalProps {
   isOpen: boolean;
@@ -21,7 +27,7 @@ export default function JuryVoteModal({ isOpen, onClose, caseId }: JuryVoteModal
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (vote === null) return;
-    const idempotencyKey = `jury-${caseId}-${uuidv4()}`;
+    const idempotencyKey = `jury-${caseId}-${generateIdempotencyKey()}`;
     juryVote.mutate(
       {
         caseId,

@@ -3,12 +3,18 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getMyPayrolls, generatePayroll, approvePayroll, payPayroll } from '@/services/employment';
+import { EmploymentService } from '@/services/employment';
 import { Loader2, DollarSign, CheckCircle, Shield, Clock, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import StatusBadge from '@/components/employment/StatusBadge';
 import ConfirmationModal from '@/components/ui/ConfirmationModal';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 export default function PayrollPage() {
   const queryClient = useQueryClient();
@@ -17,26 +23,26 @@ export default function PayrollPage() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   const [actionTarget, setActionTarget] = useState<{ id: number; action: 'generate' | 'approve' | 'pay' } | null>(null);
-  const [idempotencyKey] = useState(() => `payroll-${uuidv4()}`);
+  const [idempotencyKey] = useState(() => `payroll-${generateIdempotencyKey()}`);
 
   const { data: payrolls, isLoading } = useQuery({
     queryKey: ['my-payrolls'],
-    queryFn: () => getMyPayrolls({ limit: 24 }).then(res => res.data),
+    queryFn: () => EmploymentService.getMyPayrolls({ limit: 24 }).then(res => res.data),
     staleTime: 2 * 60 * 1000,
   });
 
   const generateMutation = useMutation({
-    mutationFn: () => generatePayroll(1, selectedMonth, idempotencyKey),
+    mutationFn: () => EmploymentService.generatePayroll(1, selectedMonth, idempotencyKey),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my-payrolls'] }),
   });
 
   const approveMutation = useMutation({
-    mutationFn: (payrollId: number) => approvePayroll(payrollId),
+    mutationFn: (payrollId: number) => EmploymentService.approvePayroll(payrollId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my-payrolls'] }),
   });
 
   const payMutation = useMutation({
-    mutationFn: (payrollId: number) => payPayroll(payrollId, idempotencyKey),
+    mutationFn: (payrollId: number) => EmploymentService.payPayroll(payrollId, idempotencyKey),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my-payrolls'] }),
   });
 

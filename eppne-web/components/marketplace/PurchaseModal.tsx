@@ -4,11 +4,17 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { purchaseService } from '@/services/marketplace';
+import { MarketplaceService as MarketplaceServiceApi } from '@/services/marketplace';
 import { X, Loader2, Check, AlertTriangle, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { v4 as uuidv4 } from 'uuid';
 import type { MarketplaceService, ServiceAddon, SubscriptionPlan, PurchaseData } from '@/types/marketplace';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 interface PurchaseModalProps {
   service: MarketplaceService;
@@ -32,7 +38,7 @@ export default function PurchaseModal({ service, addons, onClose }: PurchaseModa
   const [autoRenew, setAutoRenew] = useState(true);
 
   // توليد Idempotency Key عند فتح النافذة
-  const idempotencyKey = useRef(`purchase-${uuidv4()}`);
+  const idempotencyKey = useRef(`purchase-${generateIdempotencyKey()}`);
 
   const planPrices: Record<SubscriptionPlan, number> = {
     FREE: 0,
@@ -58,7 +64,7 @@ export default function PurchaseModal({ service, addons, onClose }: PurchaseModa
         custom_domain: customDomain || undefined,
         auto_renew: autoRenew,
       };
-      return purchaseService(data, idempotencyKey.current);
+      return MarketplaceServiceApi.purchaseService(data, idempotencyKey.current);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-licenses'] });

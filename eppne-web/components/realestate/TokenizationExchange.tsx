@@ -8,15 +8,21 @@ import { useRealEstateStore } from '@/store/realestateStore';
 import { Loader2, TrendingUp, Users, Wallet, CheckCircle, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDecimalString } from '@/lib/format';
-import { v4 as uuidv4 } from 'uuid';
 import type { PropertyOwnership } from '@/types/realestate';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 export default function TokenizationExchange() {
   const queryClient = useQueryClient();
   const { addOwnership } = useRealEstateStore();
   const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
   const [percentage, setPercentage] = useState(5);
-  const [idempotencyKey] = useState(() => `ownership-${uuidv4()}`);
+  const [idempotencyKey] = useState(() => `ownership-${generateIdempotencyKey()}`);
 
   const { data: units, isLoading } = useQuery({
     queryKey: ['units-for-sale'],

@@ -9,7 +9,13 @@ import { Loader2, Calendar, User, Package, X, CheckCircle, XCircle, Clock, Searc
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 export default function BookingsPage() {
   const [showForm, setShowForm] = useState(false);
@@ -28,7 +34,7 @@ export default function BookingsPage() {
 
   const handleBook = () => {
     if (!selectedTripId) return;
-    const idempotencyKey = `booking-${selectedTripId}-${uuidv4()}`;
+    const idempotencyKey = `booking-${selectedTripId}-${generateIdempotencyKey()}`;
     bookTrip.mutate({
       data: {
         trip_id: selectedTripId,

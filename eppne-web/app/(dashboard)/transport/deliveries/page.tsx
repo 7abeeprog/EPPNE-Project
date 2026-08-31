@@ -6,7 +6,13 @@ import { useMyDeliveries, useCreateDelivery, usePayDelivery, useCompleteDelivery
 import { useTrips } from '@/hooks/transport/useTrips';
 import { Loader2, Plus, Package, MapPin, CheckCircle, XCircle, Truck, Search, Eye, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 export default function DeliveriesPage() {
   const [showForm, setShowForm] = useState(false);
@@ -35,7 +41,7 @@ export default function DeliveriesPage() {
   };
 
   const handlePay = (taskId: number) => {
-    const idempotencyKey = `delivery-pay-${taskId}-${uuidv4()}`;
+    const idempotencyKey = `delivery-pay-${taskId}-${generateIdempotencyKey()}`;
     payDelivery.mutate({ taskId, idempotencyKey });
   };
 

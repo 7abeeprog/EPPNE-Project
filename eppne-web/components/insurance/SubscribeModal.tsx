@@ -4,7 +4,13 @@
 import { useState } from 'react';
 import { useSubscribe } from '@/hooks/insurance/useSubscriptions';
 import { X, Loader2, Shield } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 interface SubscribeModalProps {
   isOpen: boolean;
@@ -30,7 +36,7 @@ export default function SubscribeModal({ isOpen, onClose, policyId }: SubscribeM
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const idempotencyKey = `subscribe-${policyId}-${uuidv4()}`;
+    const idempotencyKey = `subscribe-${policyId}-${generateIdempotencyKey()}`;
     subscribe.mutate(
       {
         data: {

@@ -4,7 +4,13 @@
 import { useState } from 'react';
 import { useEvaluateBid } from '@/hooks/tenders-auctions/useEvaluateBid';
 import { X, Loader2, CheckCircle, XCircle } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 interface EvaluateBidModalProps {
   isOpen: boolean;
@@ -18,7 +24,7 @@ export default function EvaluateBidModal({ isOpen, onClose, bidId }: EvaluateBid
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const idempotencyKey = `evaluate-${bidId}-${uuidv4()}`;
+    const idempotencyKey = `evaluate-${bidId}-${generateIdempotencyKey()}`;
     evaluateBid.mutate(
       {
         bidId,

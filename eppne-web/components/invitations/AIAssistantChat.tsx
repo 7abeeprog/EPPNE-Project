@@ -6,7 +6,13 @@ import { useChatWithAI } from '@/hooks/invitations/useChatWithAI';
 import { useInvitation } from '@/hooks/invitations/useInvitations';
 import { Loader2, Send, Bot, User, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 interface AIAssistantChatProps {
   invitationId: number;
@@ -58,7 +64,7 @@ export default function AIAssistantChat({ invitationId, visitorSessionId, classN
     setInput('');
     setIsLoading(true);
 
-    const idempotencyKey = `chat-${invitationId}-${uuidv4()}`;
+    const idempotencyKey = `chat-${invitationId}-${generateIdempotencyKey()}`;
 
     try {
       const response = await chatWithAI.mutateAsync({

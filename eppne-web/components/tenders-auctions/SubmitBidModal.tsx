@@ -4,7 +4,13 @@
 import { useState } from 'react';
 import { useSubmitBid } from '@/hooks/tenders-auctions/useBids';
 import { X, Loader2, FileText, Lock } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
+
+const generateIdempotencyKey = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 interface SubmitBidModalProps {
   isOpen: boolean;
@@ -20,7 +26,7 @@ export default function SubmitBidModal({ isOpen, onClose, tenderId }: SubmitBidM
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const idempotencyKey = `bid-${tenderId}-${uuidv4()}`;
+    const idempotencyKey = `bid-${tenderId}-${generateIdempotencyKey()}`;
     submitBid.mutate(
       {
         data: {
