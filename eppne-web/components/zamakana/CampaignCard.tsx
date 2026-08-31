@@ -2,7 +2,8 @@
 'use client';
 
 import { Clock, Users, Calendar, CheckCircle, AlertCircle } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { PlanetaryCampaign } from '@/types/zamakana';
 
@@ -43,7 +44,7 @@ export default function CampaignCard({ campaign }: { campaign: PlanetaryCampaign
         </div>
         <div className="flex items-center gap-2">
           <Calendar className="w-3 h-3" />
-          {format(new Date(campaign.start_date), 'dd/MM/yyyy')} - {format(new Date(campaign.end_date), 'dd/MM/yyyy')}
+          {format(new Date(campaign.start_date), 'dd/MM/yyyy', { locale: ar })} - {format(new Date(campaign.end_date), 'dd/MM/yyyy', { locale: ar })}
         </div>
         <div className="flex items-center gap-2">
           <Users className="w-3 h-3" />

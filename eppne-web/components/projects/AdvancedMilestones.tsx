@@ -3,8 +3,10 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getProject, completeMilestone, releaseMilestoneFunds } from '@/services/projects';
-import { formatDistanceToNow } from 'date-fns/ar';
+import { getProject, releaseMilestoneFunds } from '@/services/projects';
+import { ProjectsService } from '@/services/projects';
+import { formatDistanceToNow } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { 
   CheckCircle, Circle, Calendar, Loader2, 
   DollarSign, ChevronDown, ChevronUp, 
@@ -28,7 +30,7 @@ export default function AdvancedMilestones({ projectId }: AdvancedMilestonesProp
 
   const completeMutation = useMutation({
     mutationFn: ({ milestoneId, data }: { milestoneId: number; data: { actual_date: string; completion_notes?: string } }) =>
-      completeMilestone(milestoneId, data),
+      ProjectsService.completeMilestone(milestoneId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
       queryClient.invalidateQueries({ queryKey: ['project-analytics', projectId] });
@@ -121,7 +123,7 @@ export default function AdvancedMilestones({ projectId }: AdvancedMilestonesProp
                   {isCompleted && milestone.actual_date && (
                     <span className="flex items-center gap-1 text-emerald-500/50">
                       <Clock className="w-3 h-3" />
-                      {formatDistanceToNow(new Date(milestone.actual_date), { addSuffix: true })}
+                      {formatDistanceToNow(new Date(milestone.actual_date), { addSuffix: true, locale: ar })}
                     </span>
                   )}
                 </div>

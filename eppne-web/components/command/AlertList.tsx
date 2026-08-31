@@ -1,7 +1,8 @@
 // components/command/AlertList.tsx
 'use client';
 
-import { formatDistanceToNow } from 'date-fns/ar';
+import { formatDistanceToNow } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { AlertCircle, CheckCircle, Info, AlertTriangle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SystemAlert } from '@/types/command';
@@ -57,7 +58,7 @@ export default function AlertList({ alerts, onResolve, onDismiss, className }: A
               </div>
               <p className="text-sm text-muted-foreground/60">{alert.description}</p>
               <span className="text-[10px] text-muted-foreground/30">
-                {formatDistanceToNow(new Date(alert.created_at), { addSuffix: true })}
+                {formatDistanceToNow(new Date(alert.created_at), { addSuffix: true, locale: ar })}
               </span>
             </div>
             {!alert.is_resolved && (

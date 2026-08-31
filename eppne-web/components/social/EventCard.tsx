@@ -3,7 +3,8 @@
 
 import { useAttendEvent, useUnattendEvent } from '@/hooks/social/useEvents';
 import { Calendar, MapPin, Users, Loader2 } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { SocialEvent } from '@/types/social';
 
@@ -29,7 +30,7 @@ export default function EventCard({ event }: EventCardProps) {
           <div className="mt-1 space-y-1 text-xs text-muted-foreground/50">
             <div className="flex items-center gap-2">
               <Calendar className="w-3 h-3" />
-              {format(new Date(event.start_time), 'dd/MM/yyyy HH:mm')} - {format(new Date(event.end_time), 'HH:mm')}
+              {format(new Date(event.start_time), 'dd/MM/yyyy HH:mm', { locale: ar })} - {format(new Date(event.end_time), 'HH:mm', { locale: ar })}
             </div>
             {event.location_details && (
               <div className="flex items-center gap-2">

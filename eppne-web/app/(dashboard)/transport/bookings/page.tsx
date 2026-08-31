@@ -7,7 +7,8 @@ import { useTrips } from '@/hooks/transport/useTrips';
 import TripStatusBadge from '@/components/transport/TripStatusBadge';
 import { Loader2, Calendar, User, Package, X, CheckCircle, XCircle, Clock, Search, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { v4 as uuidv4 } from 'uuid';
 
 export default function BookingsPage() {
@@ -81,7 +82,7 @@ export default function BookingsPage() {
                 <option value="">اختر رحلة</option>
                 {trips?.map((trip) => (
                   <option key={trip.id} value={trip.id}>
-                    رحلة #{trip.id} - {format(new Date(trip.scheduled_start), 'dd/MM/yyyy HH:mm')}
+                    رحلة #{trip.id} - {format(new Date(trip.scheduled_start), 'dd/MM/yyyy HH:mm', { locale: ar })}
                   </option>
                 ))}
               </select>

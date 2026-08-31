@@ -7,7 +7,8 @@ import { useCampaignPledges } from '@/hooks/zamakana/usePledges';
 import { useState } from 'react';
 import { Loader2, ArrowLeft, Clock, Users, Calendar, Shield } from 'lucide-react';
 import Link from 'next/link';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import PledgeForm from '@/components/zamakana/PledgeForm';
 import PledgeCard from '@/components/zamakana/PledgeCard';
 
@@ -54,7 +55,7 @@ export default function CampaignDetailPage() {
               </span>
               <span className="flex items-center gap-1">
                 <Calendar className="w-4 h-4" />
-                {format(new Date(campaign.start_date), 'dd/MM/yyyy')} - {format(new Date(campaign.end_date), 'dd/MM/yyyy')}
+                {format(new Date(campaign.start_date), 'dd/MM/yyyy', { locale: ar })} - {format(new Date(campaign.end_date), 'dd/MM/yyyy', { locale: ar })}
               </span>
               <span className="flex items-center gap-1">
                 <Users className="w-4 h-4" />

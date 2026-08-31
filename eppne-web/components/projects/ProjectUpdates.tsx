@@ -4,7 +4,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getProjectUpdates, addProjectUpdate } from '@/services/projects';
-import { formatDistanceToNow } from 'date-fns/ar';
+import { formatDistanceToNow } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { Loader2, Plus, X, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -117,7 +118,7 @@ export default function ProjectUpdates({ projectId }: ProjectUpdatesProps) {
             <div className="flex items-start justify-between">
               <h4 className="font-medium text-foreground/80">{update.title}</h4>
               <span className="text-xs text-muted-foreground/40">
-                {formatDistanceToNow(new Date(update.created_at), { addSuffix: true })}
+                {formatDistanceToNow(new Date(update.created_at), { addSuffix: true, locale: ar })}
               </span>
             </div>
             <p className="text-sm text-foreground/70 mt-1 whitespace-pre-wrap">{update.content}</p>

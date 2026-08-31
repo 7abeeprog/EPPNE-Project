@@ -5,7 +5,8 @@ import { useTender } from '@/hooks/tenders-auctions/useTenders';
 import { useTenderBids } from '@/hooks/tenders-auctions/useTenderBids';
 import { useState } from 'react';
 import { Loader2, Calendar, DollarSign, Building2, FileText, Users } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import SubmitBidModal from './SubmitBidModal';
 import EvaluateBidModal from './EvaluateBidModal';
@@ -44,7 +45,7 @@ export default function TenderDetail({ tender, isOwner = false }: TenderDetailPr
             <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground/50">
               <span className="flex items-center gap-1">
                 <Calendar className="w-4 h-4" />
-                {format(new Date(tender.opening_date), 'dd/MM/yyyy')} - {format(new Date(tender.closing_date), 'dd/MM/yyyy')}
+                {format(new Date(tender.opening_date), 'dd/MM/yyyy', { locale: ar })} - {format(new Date(tender.closing_date), 'dd/MM/yyyy', { locale: ar })}
               </span>
               <span className="flex items-center gap-1">
                 <DollarSign className="w-4 h-4" />

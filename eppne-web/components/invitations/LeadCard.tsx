@@ -2,7 +2,8 @@
 'use client';
 
 import { User, Mail, Phone, Building2, Briefcase } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import LeadStatusBadge from './LeadStatusBadge';
 import type { Lead } from '@/types/invitations';
@@ -50,7 +51,7 @@ export default function LeadCard({ lead, onClick }: { lead: Lead; onClick?: () =
       <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground/40">
         <span>المصدر: {lead.source}</span>
         <span>درجة الجاهزية: {lead.score}%</span>
-        <span>{format(new Date(lead.created_at), 'dd/MM/yyyy')}</span>
+        <span>{format(new Date(lead.created_at), 'dd/MM/yyyy', { locale: ar })}</span>
       </div>
     </div>
   );

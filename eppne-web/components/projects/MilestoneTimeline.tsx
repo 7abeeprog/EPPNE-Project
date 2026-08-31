@@ -5,7 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { getProject } from '@/services/projects';
 import { CheckCircle, Circle, Calendar, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDistanceToNow } from 'date-fns/ar';
+import { formatDistanceToNow } from 'date-fns';
+import { ar } from 'date-fns/locale';
 
 interface MilestoneTimelineProps {
   projectId: number;
@@ -80,7 +81,7 @@ export default function MilestoneTimeline({ projectId }: MilestoneTimelineProps)
                 <div className="text-right">
                   {isCompleted && milestone.actual_date && (
                     <span className="text-xs text-emerald-500/70">
-                      ✓ تم الإنجاز {formatDistanceToNow(new Date(milestone.actual_date), { addSuffix: true })}
+                      ✓ تم الإنجاز {formatDistanceToNow(new Date(milestone.actual_date), { addSuffix: true, locale: ar })}
                     </span>
                   )}
                   {milestone.funds_to_release > 0 && (

@@ -8,7 +8,8 @@ import { useProperty, useUpdateProperty } from '@/hooks/realestate/useProperties
 import { useAssetTokenization } from '@/hooks/realestate/useTokenization';
 import { useBuyFractionalShare } from '@/hooks/realestate/useTokenization';
 import { usePropertyOwnerships } from '@/hooks/realestate/usePropertyOwnerships';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import {
   Loader2,
   ArrowLeft,
@@ -315,7 +316,7 @@ export default function PropertyDetailPage() {
             <div className="flex justify-between">
               <span className="text-muted-foreground/60">تاريخ الإنشاء</span>
               <span className="text-foreground/80">
-                {format(new Date(property.created_at), 'dd/MM/yyyy')}
+                {format(new Date(property.created_at), 'dd/MM/yyyy', { locale: ar })}
               </span>
             </div>
           </div>

@@ -2,7 +2,8 @@
 'use client';
 
 import { Package, DollarSign, Calendar, Box } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import InventoryStatusBadge from './InventoryStatusBadge';
 import type { InventoryItem } from '@/types/logistics';
 
@@ -40,7 +41,7 @@ export default function InventoryCard({ item, onClick }: { item: InventoryItem; 
         {item.expiry_date && (
           <div className="flex items-center gap-2 col-span-2">
             <Calendar className="w-3 h-3" />
-            {format(new Date(item.expiry_date), 'dd/MM/yyyy')}
+            {format(new Date(item.expiry_date), 'dd/MM/yyyy', { locale: ar })}
             {isExpired && <span className="text-red-500"> (منتهي)</span>}
           </div>
         )}

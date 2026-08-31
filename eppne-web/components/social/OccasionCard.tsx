@@ -2,7 +2,8 @@
 'use client';
 
 import { Calendar, Trash2, Globe, Lock } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { useDeleteOccasion } from '@/hooks/social/useOccasions';
 import type { UserOccasion } from '@/types/social';
 
@@ -20,7 +21,7 @@ export default function OccasionCard({ occasion }: { occasion: UserOccasion }) {
           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground/50">
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
-              {format(new Date(occasion.occasion_date), 'dd/MM/yyyy')}
+              {format(new Date(occasion.occasion_date), 'dd/MM/yyyy', { locale: ar })}
             </span>
             <span className="flex items-center gap-1">
               {occasion.is_public ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}

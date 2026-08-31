@@ -2,7 +2,8 @@
 'use client';
 
 import { Wrench, MapPin, Calendar, DollarSign } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { Equipment } from '@/types/logistics';
 
@@ -45,7 +46,7 @@ export default function EquipmentCard({ equipment, onClick }: { equipment: Equip
         {equipment.next_maintenance_date && (
           <div className="flex items-center gap-2 col-span-2">
             <Calendar className="w-3 h-3" />
-            الصيانة القادمة: {format(new Date(equipment.next_maintenance_date), 'dd/MM/yyyy')}
+            الصيانة القادمة: {format(new Date(equipment.next_maintenance_date), 'dd/MM/yyyy', { locale: ar })}
           </div>
         )}
         {equipment.purchase_price_mrusdt > 0 && (

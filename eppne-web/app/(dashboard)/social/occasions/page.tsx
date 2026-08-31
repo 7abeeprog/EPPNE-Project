@@ -5,7 +5,8 @@ import { useState } from 'react';
 import { useOccasions, useDeleteOccasion } from '@/hooks/social/useOccasions';
 import CreateOccasionModal from '@/components/social/CreateOccasionModal';
 import { Loader2, Plus, Trash2, Calendar } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 
 export default function OccasionsPage() {
   const [createOpen, setCreateOpen] = useState(false);
@@ -48,7 +49,7 @@ export default function OccasionsPage() {
                   <h4 className="font-medium text-foreground/80">{occ.title || occ.occasion_type}</h4>
                   <p className="text-sm text-muted-foreground/60">{occ.description}</p>
                   <p className="text-xs text-muted-foreground/40 mt-1">
-                    {format(new Date(occ.occasion_date), 'dd/MM/yyyy')}
+                    {format(new Date(occ.occasion_date), 'dd/MM/yyyy', { locale: ar })}
                   </p>
                   <p className="text-xs text-muted-foreground/40">
                     {occ.is_public ? '🌍 عامة' : '🔒 خاصة'}

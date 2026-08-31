@@ -2,7 +2,8 @@
 'use client';
 
 import { Calendar, MapPin, DollarSign } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import type { EntertainmentEvent } from '@/types/tourism-sports';
 
 export default function EventCard({ event }: { event: EntertainmentEvent }) {
@@ -15,7 +16,7 @@ export default function EventCard({ event }: { event: EntertainmentEvent }) {
       <div className="mt-2 space-y-1 text-xs text-muted-foreground/50">
         <div className="flex items-center gap-2">
           <Calendar className="w-3 h-3" />
-          {format(new Date(event.start_time), 'dd/MM/yyyy HH:mm')}
+          {format(new Date(event.start_time), 'dd/MM/yyyy HH:mm', { locale: ar })}
         </div>
         <div className="flex items-center gap-2">
           <MapPin className="w-3 h-3" />

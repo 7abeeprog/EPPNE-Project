@@ -2,7 +2,6 @@
 'use client';
 
 import { Shield, DollarSign, Calendar, Building2, CheckCircle, XCircle } from 'lucide-react';
-import { format } from 'date-fns/ar';
 import { cn } from '@/lib/utils';
 import type { InsurancePolicy } from '@/types/insurance';
 

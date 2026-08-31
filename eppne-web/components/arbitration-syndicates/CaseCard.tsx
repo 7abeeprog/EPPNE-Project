@@ -2,7 +2,8 @@
 'use client';
 
 import { Scale, User, Calendar, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { ArbitrationCase } from '@/types/arbitration-syndicates';
 
@@ -49,7 +50,7 @@ export default function CaseCard({ caseItem }: { caseItem: ArbitrationCase }) {
             </span>
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
-              {format(new Date(caseItem.created_at), 'dd/MM/yyyy')}
+              {format(new Date(caseItem.created_at), 'dd/MM/yyyy', { locale: ar })}
             </span>
           </div>
         </div>

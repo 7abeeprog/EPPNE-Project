@@ -3,10 +3,12 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getTimeCapsule, createTimeCapsule, sendHeartbeat, createDigitalWill } from '@/services/digital-twin';
+import { getTimeCapsule } from '@/services/digital-twin.service';
+import { DigitalTwinService } from '@/services/digital-twin.service';
 import { Loader2, Clock, Heart, FileText, Users, Plus, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDistanceToNow } from 'date-fns/ar';
+import { formatDistanceToNow } from 'date-fns';
+import { ar } from 'date-fns/locale';
 
 export default function LegacyPage() {
   const queryClient = useQueryClient();
@@ -19,7 +21,7 @@ export default function LegacyPage() {
   });
 
   const heartbeatMutation = useMutation({
-    mutationFn: sendHeartbeat,
+    mutationFn: DigitalTwinService.sendHeartbeat,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['time-capsule'] }),
   });
 
@@ -53,7 +55,7 @@ export default function LegacyPage() {
             <div>
               <h3 className="font-medium text-foreground/80">الخزنة الزمنية</h3>
               <p className="text-sm text-muted-foreground/60">
-                {capsule ? `نشطة منذ ${formatDistanceToNow(new Date(capsule.created_at), { addSuffix: true })}` : 'غير منشأة'}
+                {capsule ? `نشطة منذ ${formatDistanceToNow(new Date(capsule.created_at), { addSuffix: true, locale: ar })}` : 'غير منشأة'}
               </p>
             </div>
           </div>
@@ -78,7 +80,7 @@ export default function LegacyPage() {
             <div className="p-2 rounded-xl bg-white/5">
               <span className="text-muted-foreground/50">آخر نبضة</span>
               <p className="text-foreground/80 font-medium">
-                {capsule.last_heartbeat_at ? formatDistanceToNow(new Date(capsule.last_heartbeat_at), { addSuffix: true }) : '—'}
+                {capsule.last_heartbeat_at ? formatDistanceToNow(new Date(capsule.last_heartbeat_at), { addSuffix: true, locale: ar }) : '—'}
               </p>
             </div>
             <div className="p-2 rounded-xl bg-white/5">

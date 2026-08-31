@@ -2,7 +2,6 @@
 'use client';
 
 import { QRCodeSVG } from 'qrcode.react';
-import { format } from 'date-fns/ar';
 import type { NFTTicket } from '@/types/tourism-sports';
 
 export default function TicketCard({ ticket }: { ticket: NFTTicket }) {

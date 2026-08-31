@@ -1,7 +1,8 @@
 // components/tenders-auctions/LiveBidCard.tsx
 'use client';
 
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { Crown } from 'lucide-react';
 import type { LiveBid } from '@/types/tenders-auctions';
 
@@ -23,7 +24,7 @@ export default function LiveBidCard({ bid, isHighest = false }: LiveBidCardProps
             {bid.bidder_name || `المستخدم #${bid.bidder_id}`}
           </p>
           <p className="text-xs text-muted-foreground/50">
-            {format(new Date(bid.created_at), 'HH:mm:ss')}
+            {format(new Date(bid.created_at), 'HH:mm:ss', { locale: ar })}
           </p>
         </div>
       </div>

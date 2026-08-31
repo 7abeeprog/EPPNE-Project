@@ -11,7 +11,8 @@ import TripStatusBadge from '@/components/transport/TripStatusBadge';
 import CarbonFootprintBadge from '@/components/transport/CarbonFootprintBadge';
 import { Loader2, Plus, Play, CheckCircle, XCircle, Calendar, Truck, User, Route as RouteIcon, Filter, Search, Eye, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import type { TripStatus, TripCategory } from '@/types/transport';
 
 const categoryLabels: Record<TripCategory, string> = {
@@ -309,7 +310,7 @@ export default function TripsPage() {
                     <div className="flex flex-wrap items-center gap-3 mt-0.5 text-xs text-muted-foreground/50">
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
-                        {format(new Date(trip.scheduled_start), 'dd/MM/yyyy HH:mm')}
+                        {format(new Date(trip.scheduled_start), 'dd/MM/yyyy HH:mm', { locale: ar })}
                       </span>
                       <span className="flex items-center gap-1">
                         <Truck className="w-3 h-3" />
@@ -395,12 +396,12 @@ export default function TripsPage() {
                     </div>
                     {trip.actual_start && (
                       <p className="text-xs text-muted-foreground/50">
-                        بدأت فعلياً: {format(new Date(trip.actual_start), 'dd/MM/yyyy HH:mm')}
+                        بدأت فعلياً: {format(new Date(trip.actual_start), 'dd/MM/yyyy HH:mm', { locale: ar })}
                       </p>
                     )}
                     {trip.actual_end && (
                       <p className="text-xs text-muted-foreground/50">
-                        انتهت فعلياً: {format(new Date(trip.actual_end), 'dd/MM/yyyy HH:mm')}
+                        انتهت فعلياً: {format(new Date(trip.actual_end), 'dd/MM/yyyy HH:mm', { locale: ar })}
                       </p>
                     )}
                   </div>

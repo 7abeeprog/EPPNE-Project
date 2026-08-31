@@ -2,7 +2,8 @@
 'use client';
 
 import { Clock, DollarSign, TrendingUp, Gavel } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { SovereignAuction } from '@/types/tenders-auctions';
 
@@ -29,7 +30,7 @@ export default function AuctionCard({ auction }: { auction: SovereignAuction }) 
       <div className="mt-2 space-y-1 text-xs text-muted-foreground/50">
         <div className="flex items-center gap-2">
           <Clock className="w-3 h-3" />
-          {format(new Date(auction.start_time), 'dd/MM/yyyy HH:mm')} - {format(new Date(auction.end_time), 'HH:mm')}
+          {format(new Date(auction.start_time), 'dd/MM/yyyy HH:mm', { locale: ar })} - {format(new Date(auction.end_time), 'HH:mm', { locale: ar })}
         </div>
         <div className="flex items-center gap-2">
           <DollarSign className="w-3 h-3" />

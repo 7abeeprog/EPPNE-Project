@@ -2,7 +2,8 @@
 'use client';
 
 import { Calendar, DollarSign, Building2, FileText } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { SovereignTender } from '@/types/tenders-auctions';
 
@@ -29,7 +30,7 @@ export default function TenderCard({ tender }: { tender: SovereignTender }) {
       <div className="mt-2 space-y-1 text-xs text-muted-foreground/50">
         <div className="flex items-center gap-2">
           <Calendar className="w-3 h-3" />
-          {format(new Date(tender.opening_date), 'dd/MM/yyyy')} - {format(new Date(tender.closing_date), 'dd/MM/yyyy')}
+          {format(new Date(tender.opening_date), 'dd/MM/yyyy', { locale: ar })} - {format(new Date(tender.closing_date), 'dd/MM/yyyy', { locale: ar })}
         </div>
         <div className="flex items-center gap-2">
           <DollarSign className="w-3 h-3" />

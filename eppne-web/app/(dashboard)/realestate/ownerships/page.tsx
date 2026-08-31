@@ -3,7 +3,8 @@
 
 import { useRouter } from 'next/navigation';
 import { useMyOwnerships } from '@/hooks/realestate/useMyOwnerships';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { Loader2, Building2, TrendingUp, Calendar, ExternalLink, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -79,7 +80,7 @@ export default function MyOwnershipsPage() {
                   </span>
                   <span className="flex items-center gap-1">
                     <Calendar className="w-3 h-3" />
-                    {format(new Date(ownership.acquisition_date), 'dd/MM/yyyy')}
+                    {format(new Date(ownership.acquisition_date), 'dd/MM/yyyy', { locale: ar })}
                   </span>
                   {ownership.current_value && (
                     <span className="flex items-center gap-1">

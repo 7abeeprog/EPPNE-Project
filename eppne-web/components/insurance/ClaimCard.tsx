@@ -2,7 +2,8 @@
 'use client';
 
 import { AlertTriangle, DollarSign, Calendar, FileText, CheckCircle, XCircle, Clock } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { InsuranceClaim } from '@/types/insurance';
 
@@ -62,7 +63,7 @@ export default function ClaimCard({ claim }: { claim: InsuranceClaim }) {
         )}
         <div className="flex items-center gap-2">
           <Calendar className="w-3 h-3" />
-          {format(new Date(claim.incident_date), 'dd/MM/yyyy')}
+          {format(new Date(claim.incident_date), 'dd/MM/yyyy', { locale: ar })}
         </div>
         {claim.evidence_urls.length > 0 && (
           <div className="flex items-center gap-2">

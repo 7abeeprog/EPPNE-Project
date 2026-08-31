@@ -2,10 +2,11 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { getAIPrognosis } from '@/services/health';
+import { HealthService } from '@/services/health.service';
 import { Loader2, AlertTriangle, CheckCircle, Activity, Brain } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDistanceToNow } from 'date-fns/ar';
+import { formatDistanceToNow } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import type { AIHealthPrognosis, RiskLevel } from '@/types/health';
 
 const riskColors: Record<RiskLevel, string> = {
@@ -25,7 +26,7 @@ const riskLabels: Record<RiskLevel, string> = {
 export default function AIPrognosisRadar() {
   const { data, isLoading } = useQuery({
     queryKey: ['ai-prognosis'],
-    queryFn: () => getAIPrognosis().then(res => res.data),
+    queryFn: () => HealthService.getAIPrognosis().then(res => res.data),
     refetchInterval: 30000,
     staleTime: 10000,
   });
@@ -98,7 +99,7 @@ export default function AIPrognosisRadar() {
         )}
 
         <p className="text-[10px] text-muted-foreground/30 mt-2 text-left">
-          {formatDistanceToNow(new Date(latest.created_at), { addSuffix: true })}
+          {formatDistanceToNow(new Date(latest.created_at), { addSuffix: true, locale: ar })}
         </p>
       </div>
 

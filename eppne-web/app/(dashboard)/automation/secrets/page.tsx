@@ -3,11 +3,13 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getSecrets, deleteSecret } from '@/services/automation.service';
+import { getSecrets } from '@/services/automation.service';
+import { AutomationService } from '@/services/automation.service';
 import SecretForm from '@/components/automation/SecretForm';
 import { Plus, Trash2, Loader2, Shield, Key, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDistanceToNow } from 'date-fns/ar';
+import { formatDistanceToNow } from 'date-fns';
+import { ar } from 'date-fns/locale';
 
 export default function SecretsPage() {
   const queryClient = useQueryClient();
@@ -21,7 +23,7 @@ export default function SecretsPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteSecret,
+    mutationFn: AutomationService.deleteSecret,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['secrets'] });
       setDeleteTarget(null);
@@ -89,7 +91,7 @@ export default function SecretsPage() {
                   <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground/50">
                     <span className="flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      {formatDistanceToNow(new Date(secret.created_at), { addSuffix: true })}
+                      {formatDistanceToNow(new Date(secret.created_at), { addSuffix: true, locale: ar })}
                     </span>
                     <span className="flex items-center gap-1">
                       <Key className="w-3 h-3" />

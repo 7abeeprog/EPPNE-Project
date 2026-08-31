@@ -5,7 +5,8 @@ import { useState } from 'react';
 import { useLikePost, useSharePost } from '@/hooks/social/usePosts';
 import { Heart, Share2, MessageCircle, Sparkles, MoreVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDistanceToNow } from 'date-fns/ar';
+import { formatDistanceToNow } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import type { Post } from '@/types/social';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -26,11 +27,9 @@ export default function PostCard({ post, onComment }: PostCardProps) {
     likeMutation.mutate(
       { postId: post.id, idempotencyKey },
       {
-        onSuccess: (data) => {
-          if (data.status === 'success') {
-            setIsLiked(true);
-            setLikesCount((prev) => prev + 1);
-          }
+        onSuccess: () => {
+          setIsLiked(true);
+          setLikesCount((prev) => prev + 1);
         },
       }
     );
@@ -56,7 +55,7 @@ export default function PostCard({ post, onComment }: PostCardProps) {
               </span>
             )}
             <span className="text-xs text-muted-foreground/40">
-              {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
+              {formatDistanceToNow(new Date(post.created_at), { addSuffix: true, locale: ar })}
             </span>
           </div>
           {post.content && <p className="mt-1 text-sm text-foreground/70">{post.content}</p>}

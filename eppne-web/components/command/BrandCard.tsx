@@ -2,7 +2,8 @@
 'use client';
 
 import { Building2, Users, DollarSign, Activity, CheckCircle, XCircle } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { Brand } from '@/types/command';
 
@@ -32,7 +33,7 @@ export default function BrandCard({ brand, onClick }: BrandCardProps) {
           <div>
             <h4 className="font-medium text-foreground/80">{brand.name}</h4>
             <p className="text-xs text-muted-foreground/50">
-              {brand.subscription_plan} • {format(new Date(brand.created_at), 'dd/MM/yyyy')}
+              {brand.subscription_plan} • {format(new Date(brand.created_at), 'dd/MM/yyyy', { locale: ar })}
             </p>
           </div>
         </div>

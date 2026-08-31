@@ -3,12 +3,13 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { getExecution, getExecutionLogs } from '@/services/automation.service';
+import { AutomationService } from '@/services/automation.service';
 import { useExecutionWebSocket } from '@/hooks/automation/useExecutionWebSocket';
 import ExecutionStatusBadge from '@/components/automation/ExecutionStatusBadge';
 import { ArrowLeft, Loader2, Clock, Database, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDistanceToNow } from 'date-fns/ar';
+import { formatDistanceToNow } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { useEffect, useState } from 'react';
 
 export default function ExecutionDetailsPage() {
@@ -19,13 +20,13 @@ export default function ExecutionDetailsPage() {
   // ===== جلب البيانات =====
   const { data: execution, isLoading: isLoadingExecution } = useQuery({
     queryKey: ['execution', executionId],
-    queryFn: () => getExecution(executionId).then(res => res.data),
+    queryFn: () => AutomationService.getExecution(executionId).then(res => res.data),
     refetchInterval: 5000, // تحديث دوري احتياطي (بالإضافة إلى WebSocket)
   });
 
   const { data: logs, isLoading: isLoadingLogs } = useQuery({
     queryKey: ['execution-logs', executionId],
-    queryFn: () => getExecutionLogs(executionId).then(res => res.data),
+    queryFn: () => AutomationService.getExecutionLogs(executionId).then(res => res.data),
     refetchInterval: 5000,
   });
 
@@ -123,7 +124,7 @@ export default function ExecutionDetailsPage() {
           <div className="text-xs text-muted-foreground/50">المدة</div>
           <div className="text-sm font-medium text-foreground/80 mt-1">
             {execution.finished_at
-              ? formatDistanceToNow(new Date(execution.finished_at), { addSuffix: true })
+              ? formatDistanceToNow(new Date(execution.finished_at), { addSuffix: true, locale: ar })
               : 'جاري...'}
           </div>
         </div>
@@ -185,7 +186,7 @@ export default function ExecutionDetailsPage() {
                           showLabel={false}
                         />
                         <span className="text-[10px] text-muted-foreground/40">
-                          {log.started_at && formatDistanceToNow(new Date(log.started_at), { addSuffix: true })}
+                          {log.started_at && formatDistanceToNow(new Date(log.started_at), { addSuffix: true, locale: ar })}
                         </span>
                       </div>
                     </div>

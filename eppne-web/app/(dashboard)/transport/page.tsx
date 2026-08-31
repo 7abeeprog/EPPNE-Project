@@ -10,7 +10,8 @@ import TripStatusBadge from '@/components/transport/TripStatusBadge';
 import CarbonFootprintBadge from '@/components/transport/CarbonFootprintBadge';
 import { Loader2, Plus, ArrowRight, Truck, Package, MapPin } from 'lucide-react';
 import Link from 'next/link';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
 export default function TransportDashboard() {
@@ -86,7 +87,7 @@ export default function TransportDashboard() {
                   <div>
                     <p className="text-sm font-medium text-foreground/80">رحلة #{trip.id}</p>
                     <p className="text-xs text-muted-foreground/50">
-                      {format(new Date(trip.scheduled_start), 'dd/MM/yyyy HH:mm')}
+                      {format(new Date(trip.scheduled_start), 'dd/MM/yyyy HH:mm', { locale: ar })}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

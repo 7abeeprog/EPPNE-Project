@@ -2,7 +2,8 @@
 'use client';
 
 import { Calendar, Users, Vote, Clock, CheckCircle, XCircle } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { SyndicateElection } from '@/types/arbitration-syndicates';
 
@@ -52,11 +53,11 @@ export default function ElectionCard({ election }: { election: SyndicateElection
       <div className="mt-2 space-y-1 text-xs text-muted-foreground/50">
         <div className="flex items-center gap-2">
           <Calendar className="w-3 h-3" />
-          الترشيح: {format(new Date(election.nomination_start), 'dd/MM')} - {format(new Date(election.nomination_end), 'dd/MM')}
+          الترشيح: {format(new Date(election.nomination_start), 'dd/MM', { locale: ar })} - {format(new Date(election.nomination_end), 'dd/MM', { locale: ar })}
         </div>
         <div className="flex items-center gap-2">
           <Vote className="w-3 h-3" />
-          التصويت: {format(new Date(election.voting_start), 'dd/MM')} - {format(new Date(election.voting_end), 'dd/MM')}
+          التصويت: {format(new Date(election.voting_start), 'dd/MM', { locale: ar })} - {format(new Date(election.voting_end), 'dd/MM', { locale: ar })}
         </div>
       </div>
     </div>

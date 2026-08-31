@@ -2,7 +2,8 @@
 'use client';
 
 import { DollarSign, Calendar, User, CheckCircle, XCircle } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { PensionRecord } from '@/types/insurance';
 
@@ -37,8 +38,8 @@ export default function PensionCard({ pension }: { pension: PensionRecord }) {
         </div>
         <div className="flex items-center gap-2">
           <Calendar className="w-3 h-3" />
-          {format(new Date(pension.start_date), 'dd/MM/yyyy')}
-          {pension.end_date && ` - ${format(new Date(pension.end_date), 'dd/MM/yyyy')}`}
+          {format(new Date(pension.start_date), 'dd/MM/yyyy', { locale: ar })}
+          {pension.end_date && ` - ${format(new Date(pension.end_date), 'dd/MM/yyyy', { locale: ar })}`}
         </div>
       </div>
     </div>

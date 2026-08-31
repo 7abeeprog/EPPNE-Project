@@ -4,9 +4,10 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { getWorkflowExecutions } from '@/services/automation.service';
+import { AutomationService } from '@/services/automation.service';
 import ExecutionStatusBadge from '@/components/automation/ExecutionStatusBadge';
-import { formatDistanceToNow } from 'date-fns/ar';
+import { formatDistanceToNow } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { Loader2, Search, RefreshCw, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -19,7 +20,7 @@ export default function ExecutionsPage() {
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['executions', workflowId, statusFilter],
-    queryFn: () => getWorkflowExecutions(workflowId, {
+    queryFn: () => AutomationService.getWorkflowExecutions(workflowId, {
       limit: 50,
       ...(statusFilter && { status: statusFilter })
     }).then(res => res.data),
@@ -105,7 +106,7 @@ export default function ExecutionsPage() {
               <tbody className="divide-y divide-white/5">
                 {filtered?.map((exec) => {
                   const duration = exec.finished_at
-                    ? formatDistanceToNow(new Date(exec.finished_at), { addSuffix: true })
+                    ? formatDistanceToNow(new Date(exec.finished_at), { addSuffix: true, locale: ar })
                     : exec.status === 'RUNNING'
                       ? 'جارٍ التنفيذ...'
                       : '—';

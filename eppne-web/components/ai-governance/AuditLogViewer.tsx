@@ -3,7 +3,8 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { getAgentAuditLogs } from '@/services/ai-governance';
-import { formatDistanceToNow } from 'date-fns/ar';
+import { formatDistanceToNow } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { Loader2, Shield, User, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -103,7 +104,7 @@ export default function AuditLogViewer({ agentId }: AuditLogViewerProps) {
               </div>
             </div>
             <span className="text-[10px] text-muted-foreground/30 whitespace-nowrap ml-2">
-              {formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
+              {formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: ar })}
             </span>
           </div>
         </div>

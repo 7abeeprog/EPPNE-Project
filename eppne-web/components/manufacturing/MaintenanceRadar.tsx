@@ -2,10 +2,11 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { getPendingMaintenance } from '@/services/manufacturing';
+import { ManufacturingService } from '@/services/manufacturing';
 import { Loader2, AlertTriangle, Wrench, Clock, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDistanceToNow } from 'date-fns/ar';
+import { formatDistanceToNow } from 'date-fns';
+import { ar } from 'date-fns/locale';
 
 interface MaintenanceRadarProps {
   lineId: number;
@@ -14,7 +15,7 @@ interface MaintenanceRadarProps {
 export default function MaintenanceRadar({ lineId }: MaintenanceRadarProps) {
   const { data: logs, isLoading } = useQuery({
     queryKey: ['manufacturing-pending-maintenance', lineId],
-    queryFn: () => getPendingMaintenance(lineId).then((res) => res.data),
+    queryFn: () => ManufacturingService.getPendingMaintenance(lineId).then((res) => res.data),
     enabled: !!lineId,
     refetchInterval: 30000,
   });
@@ -81,7 +82,7 @@ export default function MaintenanceRadar({ lineId }: MaintenanceRadarProps) {
                 </div>
               </div>
               <span className="text-xs text-muted-foreground/30">
-                {formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
+                {formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: ar })}
               </span>
             </div>
             {log.status === 'PENDING' && !isCritical && (

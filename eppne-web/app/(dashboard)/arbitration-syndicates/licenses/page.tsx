@@ -6,7 +6,8 @@ import { useSyndicates } from '@/hooks/arbitration-syndicates/useSyndicates';
 import { Loader2, Shield, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { v4 as uuidv4 } from 'uuid';
 
 export default function LicensesPage() {
@@ -138,7 +139,7 @@ export default function LicensesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Calendar className="w-3 h-3" />
-                  {format(new Date(license.issue_date), 'dd/MM/yyyy')} - {format(new Date(license.expiry_date), 'dd/MM/yyyy')}
+                  {format(new Date(license.issue_date), 'dd/MM/yyyy', { locale: ar })} - {format(new Date(license.expiry_date), 'dd/MM/yyyy', { locale: ar })}
                 </div>
               </div>
             </div>

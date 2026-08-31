@@ -7,7 +7,8 @@ import { useAuctionBids } from '@/hooks/tenders-auctions/useLiveBids';
 import { useState } from 'react';
 import { Loader2, ArrowLeft, Clock, DollarSign, Gavel, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import PlaceBidModal from '@/components/tenders-auctions/PlaceBidModal';
 import CloseAuctionModal from '@/components/tenders-auctions/CloseAuctionModal';
@@ -56,7 +57,7 @@ export default function AuctionDetailPage() {
             <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground/50">
               <span className="flex items-center gap-1">
                 <Clock className="w-4 h-4" />
-                {format(new Date(auction.start_time), 'dd/MM/yyyy HH:mm')} - {format(new Date(auction.end_time), 'HH:mm')}
+                {format(new Date(auction.start_time), 'dd/MM/yyyy HH:mm', { locale: ar })} - {format(new Date(auction.end_time), 'HH:mm', { locale: ar })}
               </span>
               <span className="flex items-center gap-1">
                 <DollarSign className="w-4 h-4" />
@@ -106,7 +107,7 @@ export default function AuctionDetailPage() {
               <div key={bid.id} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10">
                 <div>
                   <p className="text-sm font-medium text-foreground/80">{bid.bidder_name || `#${bid.bidder_id}`}</p>
-                  <p className="text-xs text-muted-foreground/50">{format(new Date(bid.created_at), 'HH:mm:ss')}</p>
+                  <p className="text-xs text-muted-foreground/50">{format(new Date(bid.created_at), 'HH:mm:ss', { locale: ar })}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-bold text-primary">{bid.bid_amount_mrusdt} MR_USDT</p>

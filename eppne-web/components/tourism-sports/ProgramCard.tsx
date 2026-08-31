@@ -2,7 +2,8 @@
 'use client';
 
 import { Calendar, Users, DollarSign } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { TourismProgram } from '@/types/tourism-sports';
 
@@ -21,7 +22,7 @@ export default function ProgramCard({ program }: { program: TourismProgram }) {
       <div className="mt-2 space-y-1 text-xs text-muted-foreground/50">
         <div className="flex items-center gap-2">
           <Calendar className="w-3 h-3" />
-          {format(new Date(program.start_date), 'dd/MM/yyyy')} - {format(new Date(program.end_date), 'dd/MM/yyyy')}
+          {format(new Date(program.start_date), 'dd/MM/yyyy', { locale: ar })} - {format(new Date(program.end_date), 'dd/MM/yyyy', { locale: ar })}
         </div>
         <div className="flex items-center gap-2">
           <Users className="w-3 h-3" />

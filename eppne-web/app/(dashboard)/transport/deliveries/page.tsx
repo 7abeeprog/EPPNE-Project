@@ -6,7 +6,6 @@ import { useMyDeliveries, useCreateDelivery, usePayDelivery, useCompleteDelivery
 import { useTrips } from '@/hooks/transport/useTrips';
 import { Loader2, Plus, Package, MapPin, CheckCircle, XCircle, Truck, Search, Eye, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns/ar';
 import { v4 as uuidv4 } from 'uuid';
 
 export default function DeliveriesPage() {

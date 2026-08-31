@@ -9,7 +9,8 @@ import { Loader2, ArrowLeft, Calendar, DollarSign, Building2, FileText } from 'l
 import Link from 'next/link';
 import SubmitBidModal from '@/components/tenders-auctions/SubmitBidModal';
 import EvaluateBidModal from '@/components/tenders-auctions/EvaluateBidModal';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
 const statusColors: Record<string, string> = {
@@ -65,7 +66,7 @@ export default function TenderDetailPage() {
             <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground/50">
               <span className="flex items-center gap-1">
                 <Calendar className="w-4 h-4" />
-                {format(new Date(tender.opening_date), 'dd/MM/yyyy')} - {format(new Date(tender.closing_date), 'dd/MM/yyyy')}
+                {format(new Date(tender.opening_date), 'dd/MM/yyyy', { locale: ar })} - {format(new Date(tender.closing_date), 'dd/MM/yyyy', { locale: ar })}
               </span>
               <span className="flex items-center gap-1">
                 <DollarSign className="w-4 h-4" />

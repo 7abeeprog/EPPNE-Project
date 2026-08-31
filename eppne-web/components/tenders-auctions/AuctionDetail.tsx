@@ -5,7 +5,8 @@ import { useAuction } from '@/hooks/tenders-auctions/useAuctions';
 import { useAuctionBids } from '@/hooks/tenders-auctions/useLiveBids';
 import { useState } from 'react';
 import { Loader2, Clock, DollarSign, Gavel, TrendingUp, Users } from 'lucide-react';
-import { format } from 'date-fns/ar';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import PlaceBidModal from './PlaceBidModal';
 import CloseAuctionModal from './CloseAuctionModal';
@@ -44,7 +45,7 @@ export default function AuctionDetail({ auction, isOwner = false }: AuctionDetai
             <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground/50">
               <span className="flex items-center gap-1">
                 <Clock className="w-4 h-4" />
-                {format(new Date(auction.start_time), 'dd/MM/yyyy HH:mm')} - {format(new Date(auction.end_time), 'HH:mm')}
+                {format(new Date(auction.start_time), 'dd/MM/yyyy HH:mm', { locale: ar })} - {format(new Date(auction.end_time), 'HH:mm', { locale: ar })}
               </span>
               <span className="flex items-center gap-1">
                 <DollarSign className="w-4 h-4" />
