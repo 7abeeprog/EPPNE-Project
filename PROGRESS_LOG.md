@@ -927,3 +927,71 @@ FK → tenants.id` — **لا يوجد جدول باسم `tenants` في قاعد
   ✅ **مُغلَق بالكامل ومتحقَّق حيًا [2026-08-31]** — كل الثمانية حالات
   (ب) الأصلية اتقفلت في الباك إند (migration + service + router +
   10 اختبارات حية) | `.claude/reports/realestate-design-decision-session-log.md` |
+| — | **`transport-domain-migration-and-hold-funds`** [2026-09-01] —
+  دومين `transport` كان مكتمل كودًا (models/schemas/service/repository/
+  router) وتم إصلاح ثغرات X-Tenant-ID IDOR مسبقًا (commit `6b38d82`)، لكن
+  **صفر migration** أنشأ الجداول السبعة (`transport_hubs`, `fleets`,
+  `vehicles`, `transport_routes`, `transport_trips`, `trip_bookings`,
+  `delivery_tasks`) — كل الـ16 endpoint كانت تفشل بـ`UndefinedTableError`
+  عند أول استدعاء حقيقي. **الحل المُنفَّذ [موافقة مستخدم صريحة]:**
+  (1) `migrations/versions/044_create_transport_tables.py` — الجداول
+  السبعة بالضبط كما فى `models.py`، صفر تغيير بنيوي. (2) `schemas.py`:
+  `GeoAddress`/`Waypoint` sub-models حقيقية بدل `Dict[str, Any]` لحل
+  `transport-formdata-vs-openapi-schema-mismatch` (أسفل)، وحذف
+  `DeliveryTaskCreate.sender_id` الميت. (3) إصلاح باج idempotency retry
+  في `book_trip` (`get_booking()` كان بوسيط واحد بدل اتنين). (4) تحويل
+  `book_trip`/`pay_delivery` من `finance.transfer()` المباشر لـ
+  `hold_funds()`، مع تسوية (`settle_held_funds()`) عند `complete_trip`
+  (لكل حجوزات `CONFIRMED` على الرحلة) و`complete_delivery` (لو الرسوم
+  محجوزة)، وإضافة `cancel_booking`/`cancel_delivery` (endpoint جديدين)
+  بـ`release_held_funds()` — نفس نمط `tenders_auctions` بالكامل. (5) فحص
+  ملكية جديد لـ`complete_delivery` (`trip.driver_id == current_user.id`،
+  كان بلا أي فحص مستخدم من قبل). **اكتشافان حيّان جديدان اتصلحوا أثناء
+  التحقق (أول تنفيذ حقيقي في تاريخ المشروع لهذا الكود، كان معطَّل بنيويًا
+  من الأساس):** (أ) `logger.error(f"...{booking.id}...")` بعد فشل
+  `invoicing.create_invoice()` (باج `invoicing-generate-invoice-number-
+  count-based-collision` أسفل، خارج النطاق) كان بيحاول يقرأ صفة ORM
+  والجلسة محتاجة `rollback()` — بيطمس نجاح الحجز الفعلي بخطأ ثانٍ
+  (`MissingGreenlet`) يرجّع 500 كاذب للعميل؛ الحل `rollback()`+`refresh()`
+  صريحين. (ب) `Trip.vehicle`/`driver`/`route` و`TripBooking.trip` كانت
+  مُستخدَمة عبر `selectinload()` في `repository.py` بلا أي `relationship()`
+  مُعرَّف فعليًا في `models.py` — `AttributeError` فوري (كود ميت كان
+  مخفيًا لأن الجداول ما كانتش موجودة أصلًا)؛ أُضيفت الأربعة علاقات (تغيير
+  ORM بحت، صفر migration). **تحقق حي كامل** (سكريبتات مباشرة، جلسة منفصلة
+  لكل خطوة تحاكي دورة حياة طلب HTTP، throwaway + تنظيف مؤكَّد مستقل):
+  hold→settle (السائق استلم الأجرة فعليًا)، hold→release (استرداد كامل عند
+  الإلغاء)، فحوصات ملكية `cancel_booking`/`complete_delivery` (رفض حقيقي
+  لغير المالك)، عزل تينانت، إعادة إرسال idempotency نظيفة. **صفر لمس
+  فرونت إند** (خارج النطاق المُتَّفَق عليه) — الـ~23 endpoint إضافية
+  اللي الفرونت إند مبني عليها (list/update/delete/cancel/stats/tracking)
+  تُوثَّق كبند منفصل تحت. | ✅ **مُغلَق ومتحقَّق حيًا بالكامل [2026-09-01]** |
+  `.claude/reports/transport-domain-full-build-session-log.md` (كامل، §7) |
+| — | **`transport-frontend-assumed-api-surface-backlog`** [2026-09-01] —
+  اكتُشف أثناء `transport-domain-migration-and-hold-funds` (أعلاه):
+  `hooks/transport/*.ts` مبنية على افتراض سطح API أوسع بكثير من الـ16-18
+  endpoint الفعليين — بتستورد أسماء دوال (named exports) من
+  `services/transport.ts` **غير موجودة إطلاقًا** (الملف بيصدّر بس object
+  واحد `TransportService`). محتاج ~21 endpoint إضافي (باك إند + service.ts
+  متوافق) موزَّعين هيك: **Fleets:** `getFleets` (list)، `updateFleet`،
+  `deleteFleet`. **Hubs:** `updateHub`، `deleteHub` (الـGET list موجود
+  فعليًا كـ`listHubs`، محتاج بس تصدير باسم `getHubs`). **Vehicles:**
+  `getVehicles` (قائمة كل المركبات، مش بس المتاحة)، `getVehicle`،
+  `deleteVehicle`، `getVehicleLocation` (تتبع حي polling كل 3 ثواني —
+  `useLiveTracking.ts`). **Routes:** `getRoutes`، `getRoute`،
+  `updateRoute`، `deleteRoute`، `optimizeRoute`. **Trips:** `getTrips`
+  (كل الرحلات، مش بس "رحلاتي")، `getTrip`، `cancelTrip`. **Bookings:**
+  `getBookings` (عرض إداري لكل الحجوزات — `cancelBooking` بقى موجود من
+  الجلسة أعلاه، محتاج بس تصدير frontend مطابق). **Deliveries:**
+  `getDeliveries`، `getMyDeliveries`، `assignDeliveryToTrip`
+  (`cancelDelivery` نفس ملاحظة `cancelBooking`). **Stats:**
+  `getTransportStats` (`GET /transport/stats` — `total_vehicles`,
+  `available_vehicles`, `active_trips`, `total_deliveries`,
+  `total_carbon_saved`, `total_hubs`, `total_routes`، يستهلكها
+  `TransportStatsCards.tsx`). **مرتبط:** `hooks/transport/useVehicles.ts`
+  لسه فيه محتوى غلط بالكامل (نسخة كاملة من `useTrips.ts`، صفر كود مركبات)
+  — موثَّق سابقًا `transport-vehicles-hook-file-wrong-content` (أسفل)،
+  لسه بلا لمس. أيضًا `*_name` enrichment (`driver_name`, `passenger_name`,
+  `sender_name`, `receiver_name`) غائب من كل الـResponse schemas — الفرونت
+  إند يتوقعها جاهزة، الباك إند بيرجّع `*_id` بس. | 🔴 **مفتوح، backlog
+  منظَّم لجلسة/جلسات لاحقة (باك إند + إعادة كتابة `services/transport.ts`
+  + `useVehicles.ts` من الصفر)** | `.claude/reports/transport-domain-full-build-session-log.md` §2, §8 |

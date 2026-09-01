@@ -5,6 +5,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB  # ✅ الاستيراد الصحيح
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from app.core.database import Base
 import enum
 
@@ -154,6 +155,15 @@ class Trip(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    # علاقات مفقودة من الأساس — repository.list_trips كانت بتستخدم
+    # selectinload(Trip.vehicle/driver/route) بلا تعريف relationship() فعلي
+    # هنا، فبتفشل بـAttributeError عند أول استدعاء حقيقي (مكتشف حيًا، جلسة
+    # transport-domain-full-build، 2026-09-01 — كان كود ميت لحد ما الجداول
+    # اتعملها migration).
+    vehicle = relationship("Vehicle", foreign_keys=[vehicle_id])
+    driver = relationship("User", foreign_keys=[driver_id])
+    route = relationship("Route", foreign_keys=[route_id])
+
     __table_args__ = (
         Index("ix_trips_driver_status", "driver_id", "status"),
         Index("ix_trips_schedule", "scheduled_start", "scheduled_end"),
@@ -181,6 +191,10 @@ class TripBooking(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # نفس إصلاح Trip.vehicle/driver/route فوق — repository.list_bookings
+    # كانت بتستخدم selectinload(TripBooking.trip) بلا تعريف هنا.
+    trip = relationship("Trip", foreign_keys=[trip_id])
 
     __table_args__ = (
         CheckConstraint(

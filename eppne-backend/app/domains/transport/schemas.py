@@ -49,11 +49,16 @@ class VehicleResponse(VehicleCreate):
     model_config = ConfigDict(from_attributes=True)
 
 # ========== Routes ==========
+class Waypoint(BaseModel):
+    lat: float = Field(description="خط العرض")
+    lng: float = Field(description="خط الطول")
+    name: Optional[str] = Field(default=None, description="اسم نقطة الوسط")
+
 class RouteCreate(BaseModel):
     name: str = Field(description="اسم المسار")
     start_hub_id: int = Field(description="معرف محطة البداية")
     end_hub_id: int = Field(description="معرف محطة النهاية")
-    waypoints: List[Dict[str, Any]] = Field(default=[], description="نقاط وسيطة")
+    waypoints: List[Waypoint] = Field(default=[], description="نقاط وسيطة")
     distance_km: Decimal = Field(description="المسافة بالكيلومترات")
     estimated_duration_minutes: int = Field(description="المدة التقديرية بالدقائق")
 
@@ -109,12 +114,20 @@ class TripBookingResponse(TripBookingCreate):
     model_config = ConfigDict(from_attributes=True)
 
 # ========== Deliveries ==========
+class GeoAddress(BaseModel):
+    address: str = Field(description="العنوان النصي")
+    lat: float = Field(description="خط العرض")
+    lng: float = Field(description="خط الطول")
+
 class DeliveryTaskCreate(BaseModel):
     order_id: Optional[int] = Field(default=None, description="معرف الطلب من قطاع التجارة")
-    sender_id: int = Field(description="معرف المرسل")
+    # ملاحظة: sender_id مش من هنا — بيُشتق من current_user في الراوتر
+    # (router.py:193)، مش من جسم الطلب. كان موجود سابقًا كحقل مطلوب هنا
+    # بلا أي استخدام فعلي في service.create_delivery — حُذف [جلسة
+    # transport-domain-full-build، 2026-09-01].
     receiver_id: int = Field(description="معرف المستلم")
-    pickup_address: Dict[str, Any] = Field(description="عنوان الاستلام")
-    dropoff_address: Dict[str, Any] = Field(description="عنوان التسليم")
+    pickup_address: GeoAddress = Field(description="عنوان الاستلام")
+    dropoff_address: GeoAddress = Field(description="عنوان التسليم")
     estimated_distance_km: Optional[Decimal] = Field(default=None, description="المسافة التقديرية")
     delivery_fee_mrusdt: Decimal = Field(default=Decimal('0.0'), description="رسوم التوصيل")
 

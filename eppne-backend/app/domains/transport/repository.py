@@ -183,6 +183,14 @@ class TransportRepository:
         )
         return result.scalar_one_or_none()
 
+    async def cancel_booking(self, booking_id: int, tenant_id: int) -> Optional[TripBooking]:
+        await self.db.execute(
+            update(TripBooking).where(TripBooking.id == booking_id, TripBooking.tenant_id == tenant_id)
+            .values(status="CANCELLED")
+        )
+        await self.db.commit()
+        return await self.get_booking(booking_id, tenant_id)
+
     async def list_bookings(self, tenant_id: int, passenger_id: Optional[int] = None, trip_id: Optional[int] = None):
         query = select(TripBooking).options(
             selectinload(TripBooking.trip)
@@ -212,6 +220,14 @@ class TransportRepository:
         await self.db.execute(
             update(DeliveryTask).where(DeliveryTask.id == task_id, DeliveryTask.tenant_id == tenant_id)
             .values(trip_id=trip_id, status="ASSIGNED")
+        )
+        await self.db.commit()
+        return await self.get_delivery_task(task_id, tenant_id)
+
+    async def cancel_delivery_task(self, task_id: int, tenant_id: int) -> Optional[DeliveryTask]:
+        await self.db.execute(
+            update(DeliveryTask).where(DeliveryTask.id == task_id, DeliveryTask.tenant_id == tenant_id)
+            .values(status="CANCELLED")
         )
         await self.db.commit()
         return await self.get_delivery_task(task_id, tenant_id)

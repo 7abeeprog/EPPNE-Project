@@ -226,5 +226,33 @@ async def complete_delivery(
     db: AsyncSession = Depends(get_db)
 ):
     service = TransportService(db)
-    task = await service.complete_delivery(cast(int, current_user.tenant_id), task_id, proof.proof_hash)  # ✅ cast
+    user_id = cast(int, current_user.id)
+    task = await service.complete_delivery(cast(int, current_user.tenant_id), task_id, user_id, proof.proof_hash)  # ✅ cast
     return task
+
+
+@router.post("/deliveries/{task_id}/cancel", response_model=DeliveryTaskResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def cancel_delivery(
+    task_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TransportService(db)
+    user_id = cast(int, current_user.id)
+    task = await service.cancel_delivery(cast(int, current_user.tenant_id), task_id, user_id)
+    return task
+
+
+# ========== Booking cancellation ==========
+@router.patch("/bookings/{booking_id}/cancel", response_model=TripBookingResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def cancel_booking(
+    booking_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TransportService(db)
+    user_id = cast(int, current_user.id)
+    booking = await service.cancel_booking(cast(int, current_user.tenant_id), booking_id, user_id)
+    return booking

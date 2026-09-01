@@ -264,6 +264,38 @@ class TransportService:
         carbon = self.calculate_carbon(vehicle, total_distance_km)
         result = await self.repo.complete_trip(trip_id, tenant_id, actual_end, total_distance_km, carbon)
 
+        # تسوية (settle) كل الحجوزات المؤكَّدة على الرحلة دي — الأجرة كانت
+        # محجوزة (hold) وقت book_trip، وبتتحرر للسائق فعليًا دلوقتي بعد
+        # اكتمال الرحلة فعلًا [قرار مستخدم، جلسة
+        # transport-domain-full-build، 2026-09-01]. حجوزات company_id
+        # (مش مُستخدَمة فعليًا من أي فرونت إند حاليًا) بتتخطى — تحتاج تصميم
+        # فوترة شركات منفصل خارج نطاق هذه الجلسة.
+        driver = await self._get_user_by_id(driver_id, tenant_id)
+        finance = FinanceService(self.db, tenant_id)
+        confirmed_bookings = await self.repo.list_bookings(tenant_id, trip_id=trip_id)
+        for booking in confirmed_bookings:
+            if booking.status != "CONFIRMED" or booking.passenger_id is None:  # type: ignore
+                continue
+            try:
+                await finance.settle_held_funds(
+                    sender_id=cast(int, booking.passenger_id),  # type: ignore
+                    receiver_email=cast(str, driver.email),
+                    currency="MR_USDT",
+                    amount=cast(Decimal, booking.fare_paid_mrusdt),  # type: ignore
+                    notes=f"Trip {trip_id} completed",
+                    idempotency_key=f"SETTLE-TRIP{trip_id}-BOOKING{booking.id}",
+                )
+            except Exception as e:
+                logger.error(f"Settlement failed for booking {booking.id} on trip {trip_id}: {e}")
+
+        # settle_held_funds() بتعمل begin_nested() (savepoint) بس من
+        # جوّه — بلا commit() صريح هنا، أي تسوية ناجحة كانت بتترجع
+        # (rollback) صامتة لما الجلسة تتقفل، بلا أي استثناء يُظهر المشكلة
+        # (مكتشف حيًا: held_balances فضلت زي ما هي بعد complete_trip رغم
+        # نجاح settle_held_funds منطقيًا) [جلسة
+        # transport-domain-full-build، 2026-09-01].
+        await self.db.commit()
+
         await audit_log(  # type: ignore[call-arg]
             user_id=driver_id,
             tenant_id=tenant_id,
@@ -312,7 +344,7 @@ class TransportService:
             if cached is not None:
                 booking_id = cached.get("booking_id")
                 if booking_id:
-                    booking = await self.repo.get_booking(booking_id)
+                    booking = await self.repo.get_booking(booking_id, tenant_id)
                     if booking:
                         return booking
                 raise ValidationError("Idempotency record exists but booking not found.")
@@ -330,12 +362,16 @@ class TransportService:
         invoicing = InvoicingService(self.db, tenant_id)
         async with self.db.begin_nested():
             try:
-                tx_hash = await finance.transfer(
-                    sender_id=passenger_id,
-                    receiver_email=cast(str, driver.email),
-                    currency="MR_USDT",
+                # حجز (hold) بدل تحويل مباشر — الأجرة بتتحرر (settle) للسائق
+                # فقط لما الرحلة تكتمل فعليًا (complete_trip)، أو تترجع
+                # (release) لو الحجز اتلغى قبل الرحلة (cancel_booking).
+                # نفس نمط tenders_auctions.place_live_bid [قرار مستخدم،
+                # جلسة transport-domain-full-build، 2026-09-01].
+                await finance.hold_funds(
+                    user_id=passenger_id,
                     amount=cast(Decimal, fare),
-                    notes=f"Trip booking {trip.id}",
+                    currency="MR_USDT",
+                    description=f"Trip booking hold - trip {trip.id}",
                     idempotency_key=idempotency_key or ""
                 )
             except InsufficientBalanceError:
@@ -387,6 +423,18 @@ class TransportService:
                 due_date=datetime.utcnow() + timedelta(days=3)
             )
         except Exception as e:
+            # rollback + refresh إجباريان قبل أي وصول لاحق لـbooking.id —
+            # فشل create_invoice (IntegrityError شائع، راجع backlog
+            # invoicing-generate-invoice-number-count-based-collision)
+            # يسيب الجلسة محتاجة rollback، ورollback بيُنهي (expire) كل
+            # كائنات الجلسة — أي وصول عادي (`booking.id`) بعدها بيحاول
+            # lazy-load ضمني برّه سياق greenlet فيفشل بـMissingGreenlet
+            # (خطأ ثانٍ بيطمس نجاح الحجز الفعلي ويرجّع 500 للعميل رغم أن
+            # الحجز والدفع اتموا فعليًا). refresh() صريح (await حقيقي)
+            # بيعيد تحميل الصف بأمان قبل أي وصول تاني [جلسة
+            # transport-domain-full-build، 2026-09-01].
+            await self.db.rollback()
+            await self.db.refresh(booking)
             logger.error(f"Invoice creation failed for trip booking {booking.id}: {e}")
 
         # تخزين معرف الحجز فقط
@@ -394,6 +442,86 @@ class TransportService:
             await self._store_idempotency(idempotency_key, {"booking_id": booking.id})
 
         return booking
+
+    async def cancel_booking(self, tenant_id: int, booking_id: int, user_id: int) -> TripBooking:
+        """يلغي حجزًا مؤكَّدًا قبل بدء الرحلة، ويحرر (release) الأجرة
+        المحجوزة وقت الحجز — جزء من دورة hold_funds/settle/release الكاملة
+        [قرار مستخدم، جلسة transport-domain-full-build، 2026-09-01]."""
+        booking = await self.repo.get_booking(booking_id, tenant_id)
+        if not booking:
+            raise NotFoundError("Booking not found")
+        if booking.passenger_id != user_id:  # type: ignore
+            raise PermissionDeniedError("Not authorized to cancel this booking")
+        if booking.status != "CONFIRMED":  # type: ignore
+            raise ValueError("Booking cannot be cancelled in its current status")
+
+        trip = await self.repo.get_trip(cast(int, booking.trip_id), tenant_id)  # type: ignore
+        if not trip or trip.status != TripStatus.SCHEDULED:  # type: ignore
+            raise ValueError("Trip has already started or completed — booking cannot be cancelled")
+
+        finance = FinanceService(self.db, tenant_id)
+        await finance.release_held_funds(
+            user_id=user_id,
+            amount=cast(Decimal, booking.fare_paid_mrusdt),  # type: ignore
+            currency="MR_USDT",
+            description=f"Booking {booking_id} cancelled",
+            idempotency_key=f"RELEASE-BOOKING-{booking_id}",
+        )
+
+        result = await self.repo.cancel_booking(booking_id, tenant_id)
+
+        await audit_log(  # type: ignore[call-arg]
+            user_id=user_id,
+            tenant_id=tenant_id,
+            action="BOOKING_CANCELLED",
+            resource_id=booking_id,
+            details={"trip_id": booking.trip_id}  # type: ignore
+        )
+        await self.event_bus.publish("transport.booking.cancelled", {
+            "booking_id": booking_id,
+            "passenger_id": user_id,
+            "tenant_id": tenant_id,
+        })
+
+        return cast(TripBooking, result)
+
+    async def cancel_delivery(self, tenant_id: int, task_id: int, user_id: int) -> DeliveryTask:
+        """يلغي مهمة توصيل لم تُسلَّم بعد، ويحرر (release) الرسوم المحجوزة
+        لو كانت اتدفعت أصلًا عبر pay_delivery."""
+        task = await self.repo.get_delivery_task(task_id, tenant_id)
+        if not task:
+            raise NotFoundError("Delivery task not found")
+        if task.sender_id != user_id:  # type: ignore
+            raise PermissionDeniedError("Not authorized to cancel this delivery")
+        if task.status in ("DELIVERED", "CANCELLED"):  # type: ignore
+            raise ValueError("Delivery cannot be cancelled in its current status")
+
+        if task.payment_tx_hash:  # type: ignore
+            finance = FinanceService(self.db, tenant_id)
+            await finance.release_held_funds(
+                user_id=user_id,
+                amount=cast(Decimal, task.delivery_fee_mrusdt),  # type: ignore
+                currency="MR_USDT",
+                description=f"Delivery {task_id} cancelled",
+                idempotency_key=f"RELEASE-DELIVERY-{task_id}",
+            )
+
+        result = await self.repo.cancel_delivery_task(task_id, tenant_id)
+
+        await audit_log(  # type: ignore[call-arg]
+            user_id=user_id,
+            tenant_id=tenant_id,
+            action="DELIVERY_CANCELLED",
+            resource_id=task_id,
+            details={}
+        )
+        await self.event_bus.publish("transport.delivery.cancelled", {
+            "task_id": task_id,
+            "sender_id": user_id,
+            "tenant_id": tenant_id,
+        })
+
+        return cast(DeliveryTask, result)
 
     async def get_my_bookings(
         self,
@@ -470,9 +598,42 @@ class TransportService:
         self,
         tenant_id: int,
         task_id: int,
+        driver_id: int,
         proof_hash: str
     ) -> DeliveryTask:
         await self._check_saas_limits(tenant_id, "transport")
+
+        # فحص ملكية مستخدم — كان مفقودًا بالكامل (بس فحص تينانت)، أي
+        # active_user من نفس التينانت كان يقدر ينهي أي توصيل [قرار مستخدم،
+        # جلسة transport-domain-full-build، 2026-09-01]. المُنفِّذ الفعلي
+        # لعملية التسليم هو سائق الرحلة المرتبطة — نفس نمط فحص driver_id
+        # في start_trip/complete_trip فوق.
+        task = await self.repo.get_delivery_task(task_id, tenant_id)
+        if not task:
+            raise NotFoundError("Delivery task not found")
+        if not task.trip_id:  # type: ignore
+            raise ValueError("Delivery not assigned to a trip")
+        trip = await self.repo.get_trip(cast(int, task.trip_id), tenant_id)  # type: ignore
+        if not trip or trip.driver_id != driver_id:  # type: ignore
+            raise PermissionDeniedError("Not authorized to complete this delivery")
+
+        # تسوية (settle) رسوم التوصيل المحجوزة (لو دُفعت أصلًا عبر
+        # pay_delivery) — بتتحرر للسائق فعليًا دلوقتي بعد التسليم الفعلي.
+        if task.payment_tx_hash:  # type: ignore
+            driver = await self._get_user_by_id(driver_id, tenant_id)
+            finance = FinanceService(self.db, tenant_id)
+            try:
+                await finance.settle_held_funds(
+                    sender_id=cast(int, task.sender_id),  # type: ignore
+                    receiver_email=cast(str, driver.email),
+                    currency="MR_USDT",
+                    amount=cast(Decimal, task.delivery_fee_mrusdt),  # type: ignore
+                    notes=f"Delivery {task_id} completed",
+                    idempotency_key=f"SETTLE-DELIVERY-{task_id}",
+                )
+            except Exception as e:
+                logger.error(f"Settlement failed for delivery {task_id}: {e}")
+
         return await self.repo.complete_delivery(task_id, tenant_id, proof_hash)
 
     # ============================================================
@@ -515,12 +676,15 @@ class TransportService:
         invoicing = InvoicingService(self.db, tenant_id)
         async with self.db.begin_nested():
             try:
-                tx_hash = await finance.transfer(
-                    sender_id=payer_id,
-                    receiver_email=cast(str, driver.email),
-                    currency="MR_USDT",
+                # حجز (hold) بدل تحويل مباشر — رسوم التوصيل بتتحرر للسائق
+                # فقط لما التوصيل يكتمل فعليًا (complete_delivery)، أو
+                # تترجع (release) لو اتلغى (cancel_delivery) [قرار مستخدم،
+                # جلسة transport-domain-full-build، 2026-09-01].
+                hold_tx = await finance.hold_funds(
+                    user_id=payer_id,
                     amount=cast(Decimal, task.delivery_fee_mrusdt),  # type: ignore
-                    notes=f"Delivery fee for task {task.id}",
+                    currency="MR_USDT",
+                    description=f"Delivery fee hold - task {task.id}",
                     idempotency_key=idempotency_key or ""
                 )
             except InsufficientBalanceError:
@@ -528,7 +692,7 @@ class TransportService:
 
             await self.db.execute(
                 update(DeliveryTask).where(DeliveryTask.id == task_id).values(
-                    payment_tx_hash=tx_hash.tx_hash
+                    payment_tx_hash=hold_tx.tx_hash
                 )
             )
 
@@ -559,6 +723,11 @@ class TransportService:
                 due_date=datetime.utcnow() + timedelta(days=3)
             )
         except Exception as e:
+            # نفس إصلاح book_trip فوق — rollback يُنهي (expire) كل كائنات
+            # الجلسة، فأي وصول عادي لـtask.id بعده بيحتاج refresh() صريح
+            # (await حقيقي) وإلا يفشل بـMissingGreenlet برّه سياق greenlet.
+            await self.db.rollback()
+            await self.db.refresh(task)
             logger.error(f"Invoice creation failed for delivery task {task.id}: {e}")
 
         # تخزين معرف المهمة فقط
