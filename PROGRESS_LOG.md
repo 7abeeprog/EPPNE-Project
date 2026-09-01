@@ -1049,3 +1049,75 @@ reply_text = ai_response.get("result", {}).get("reply", "شكراً لتواصل
 **الحل المتوقَّع (شقّان منفصلان):** (أ) إصلاح آلية توليد `invoice_number` نفسها (خارج نطاق هذا التوثيق، يحتاج فحص الكود المولِّد). (ب) نمط عام: أي `except Exception` بيمسك استثناء DB (فشل flush/commit) **لازم يعمل `await self.db.rollback()` صريح** قبل أي استمرار على نفس الجلسة — مش بس `logger.error()` — وإلا أي كود لاحق في نفس الجلسة معرَّض لنفس فئة `PendingRollbackError` (يحتاج جرد شبيه بـ`transaction-savepoint-bug-session-log.md` لكل مواضع `except Exception` المحيطة بعمليات DB في المشروع).
 
 **الحالة:** 🔴 مفتوح (كلا الشقين)، موثَّق فقط، صفر إصلاح في هذه الجلسة (تم تجاوزه بـ`monkeypatch` معزول في الاختبار فقط، صفر لمس على كود الإنتاج). اكتُشف/تأكَّد أثناء التحقق الحي لجلسة `backlog-16-begin-nested-commit-conflict` (`.claude/reports/backlog-16-begin-nested-commit-session-log.md` §5.4).
+
+---
+
+## [2026-09-01] ✅ إغلاق — `ai-governance-check-and-consume-commit-inside-begin-nested` (تابع مباشر لدرس #16)
+
+**السياق:** هذا إغلاق للبند المفتوح أعلاه (نفس التاريخ) بجلسة منفصلة
+`ai-governance-check-and-consume-begin-nested` — **تابع مباشر ومتعمَّد لنفس
+درس §16** ("انتهاك تحذير Backlog موثَّق أثناء إصلاح نمطي لاحق"، القسم أعلاه)،
+مش اكتشاف جديد: نفس فئة العطل بالحرف (`begin_nested()`+`commit()` داخلي
+مستقل)، فى دالة حوكمة مختلفة (`check_and_consume`) بدل `execute_agent_action`،
+واتصلحت بنفس المنهجية بالضبط (جرد كامل لكل الكولرز، تحقق حي بسكربت throwaway
+قبل أي تنفيذ، نقل موضع النداء بدل تعديل الدالة المشتركة).
+
+**التقرير الكامل:** `.claude/reports/ai-governance-check-and-consume-begin-nested-session-log.md`.
+
+**الفرق البنيوي المكتشَف عن #16 (مهم لأي بحث مستقبلي مشابه):** `check_and_consume()`
+بتفتح `begin_nested()` **خاصة بيها هي** وتغلقها بشكل طبيعي قبل الـ`commit()`
+الداخلي — فالاستثناء (`InvalidRequestError: Can't operate on closed
+transaction`) **لا** يحدث عند نداء الدالة نفسها (خلافًا لـ`execute_agent_action`)،
+بل عند **أول عملية DB تالية** جوّه أي `begin_nested()` خارجي محيط. مؤكَّد
+حيًا بسكربت throwaway مستقل قبل الإصلاح (تشغيلتان: بدون/مع SELECT تالية).
+
+**الجرد:** 15 موضع استدعاء عبر 14 دومين + الراوتر — **موضع واحد بس** متأثر:
+`realestate.buy_fractional_ownership()` (عبر `_check_ai_governance()`، جوّه
+`begin_nested()` الخاص بالشراء). الـ14 الباقيين مستقلون تمامًا (يعتمدون على
+الـ`commit()` الداخلي، بلا تغيير).
+
+**الإصلاح المُطبَّق:** نقل نداء `self._check_ai_governance(...)` (كان سطر 303
+جوّه `begin_nested()`) لبعد `self.db.commit()` الرئيسي، بجوار `ai.execute_agent_action`
+الموجودة هناك بالفعل من إصلاح #16 أمس — بلا `try/except` إضافية (الدالة عندها
+واحدة داخلية أصلًا). صفر لمس على `check_and_consume()` نفسها.
+
+**اختبار جديد:** `tests/test_ai_governance_begin_nested.py` (اختبارين: مسار
+شرعي كامل عبر `buy_fractional_ownership()` الحقيقية بلا أي `monkeypatch` على
+الحوكمة، + نداء مستقل مباشر لـ`check_and_consume()` يثبت الشكل الصحيح
+المستخدَم في الـ14 دومين الآخرين) — **كلاهما PASSED** ضد DB حقيقية.
+
+**الحالة:** ✅ مُغلَق بالكامل. `realestate/service.py`،
+`tests/test_ai_governance_begin_nested.py` مُعدَّلان ومُتحقَّق منهما حيًا.
+
+---
+
+## [2026-09-01] بند Backlog جديد — `realestate-ai-governance-quota-not-enforced`
+
+**الوصف:** اكتُشف أثناء جلسة `ai-governance-check-and-consume-begin-nested`
+(أثناء تحليل نقل نداء `_check_ai_governance`، خارج نطاق إصلاح begin_nested
+نفسه): `RealEstateService._check_ai_governance()` (`realestate/service.py:69-81`)
+بترجع `result: bool` (ناتج `check_and_consume()` — `True` لو الاستهلاك
+مسموح، `False` لو تجاوز الحصة)، **لكن** الكولر الوحيد
+(`buy_fractional_ownership`) بينادي `await self._check_ai_governance(...)`
+**كـstatement مجرد، بلا استخدام القيمة المُرجَعة إطلاقًا** — لا `if not
+result: raise PermissionDeniedError(...)`، ولا أي فحص من أي نوع.
+
+**الأثر:** حتى لو الحصة (quota) الخاصة بالوكيل (`agent_id=2`) اتجاوزت فعليًا
+(`check_and_consume` ترجع `False` بشكل صحيح)، **عملية شراء الملكية الجزئية
+(`buy_fractional_ownership`) لا تُمنَع أبدًا** — الحوكمة (governance) لا تعمل
+فعليًا كبوابة (choke-point) لهذه العملية تحديدًا، رغم أن هذا هو الغرض
+المُعلَن من `check_and_consume()` (راجع تعليق "نقطة الخنق والتنفيذ" في
+`ai_governance/service.py:142-145`).
+
+**ملاحظة مهمة:** إصلاح begin_nested (أعلاه) **لا يغيّر ولا يُصلِح هذا
+السلوك** — نقل موضع النداء لبعد الـ`commit()` لا يؤثر على حقيقة أن القيمة
+المُرجَعة كانت وهتفضل غير مستخدَمة على أي حال (كانت غير مستخدَمة قبل النقل
+وبعده على حد سواء).
+
+**الحل المتوقَّع (يحتاج قرار منتج/عمل منفصل، خارج نطاق begin_nested):** إما
+(أ) `_check_ai_governance` تفحص القيمة المُرجَعة وترفع `PermissionDeniedError`
+صراحة لو `False`، أو (ب) توثيق صريح إن الحوكمة هنا "استشارية فقط" (best-effort
+logging) وليست بوابة إلزامية — قرار يحتاج مراجعة منتج، مش تخمين تقني.
+
+**الحالة:** 🔴 مفتوح، موثَّق فقط، صفر إصلاح — يحتاج جلسة/قرار منفصل.
+`.claude/reports/ai-governance-check-and-consume-begin-nested-session-log.md`.

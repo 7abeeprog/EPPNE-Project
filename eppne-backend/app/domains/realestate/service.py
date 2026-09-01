@@ -300,8 +300,6 @@ class RealEstateService:
             unit_price = cast(Decimal, unit.sale_price_mrusdt)
             cost = (unit_price * percentage) / Decimal(100)
 
-            await self._check_ai_governance(tenant_id, buyer_id, "FRACTIONAL_PURCHASE", cost)
-
             # جلب المالك
             owner = await self._get_land_owner_for_unit(unit, tenant_id)
             owner_email = cast(str, owner.email)
@@ -353,10 +351,14 @@ class RealEstateService:
         await self.db.commit()
 
         # ========================================
-        # استدعاء الوكيل الذكي (بعد commit() الرئيسي عمدًا — execute_agent_action()
-        # تنفّذ commit() مستقل داخلها؛ نداؤها من جوّه begin_nested() أعلاه كان يكسر
-        # الـSAVEPOINT. راجع .claude/reports/backlog-16-begin-nested-commit-session-log.md)
+        # فحص/استهلاك حوكمة الذكاء الاصطناعي + استدعاء الوكيل الذكي (بعد commit()
+        # الرئيسي عمدًا — كلاهما تنفّذ commit() مستقل داخلها؛ نداؤهما من جوّه
+        # begin_nested() أعلاه كان يكسر الـSAVEPOINT. راجع
+        # .claude/reports/backlog-16-begin-nested-commit-session-log.md و
+        # .claude/reports/ai-governance-check-and-consume-begin-nested-session-log.md)
         # ========================================
+        await self._check_ai_governance(tenant_id, buyer_id, "FRACTIONAL_PURCHASE", cost)
+
         try:
             await ai.execute_agent_action(agent_id=2, action_type="ANALYZE_PROJECT", payload={"unit_id": unit_id, "price": float(cost), "percentage": float(percentage), "buyer_id": buyer_id}, executor_user_id=buyer_id, idempotency_key=f"REALESTATE-FRAC-T{tenant_id}-{idempotency_key or uuid.uuid4().hex[:8]}")
         except Exception as e:
