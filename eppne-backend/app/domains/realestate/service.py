@@ -300,11 +300,6 @@ class RealEstateService:
             unit_price = cast(Decimal, unit.sale_price_mrusdt)
             cost = (unit_price * percentage) / Decimal(100)
 
-            # ========================================
-            # استدعاء الوكيل الذكي
-            # ========================================
-            await ai.execute_agent_action(agent_id=2, action_type="ANALYZE_PROJECT", payload={"unit_id": unit_id, "price": float(cost), "percentage": float(percentage), "buyer_id": buyer_id}, executor_user_id=buyer_id, idempotency_key=f"REALESTATE-FRAC-T{tenant_id}-{idempotency_key or uuid.uuid4().hex[:8]}")
-
             await self._check_ai_governance(tenant_id, buyer_id, "FRACTIONAL_PURCHASE", cost)
 
             # جلب المالك
@@ -356,6 +351,16 @@ class RealEstateService:
             )
 
         await self.db.commit()
+
+        # ========================================
+        # استدعاء الوكيل الذكي (بعد commit() الرئيسي عمدًا — execute_agent_action()
+        # تنفّذ commit() مستقل داخلها؛ نداؤها من جوّه begin_nested() أعلاه كان يكسر
+        # الـSAVEPOINT. راجع .claude/reports/backlog-16-begin-nested-commit-session-log.md)
+        # ========================================
+        try:
+            await ai.execute_agent_action(agent_id=2, action_type="ANALYZE_PROJECT", payload={"unit_id": unit_id, "price": float(cost), "percentage": float(percentage), "buyer_id": buyer_id}, executor_user_id=buyer_id, idempotency_key=f"REALESTATE-FRAC-T{tenant_id}-{idempotency_key or uuid.uuid4().hex[:8]}")
+        except Exception as e:
+            logger.error(f"AI analysis failed for fractional ownership purchase (unit {unit_id}): {e}")
 
         try:
             await invoicing.create_invoice(  # type: ignore

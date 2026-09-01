@@ -17,19 +17,13 @@ payload, executor_user_id, idempotency_key)` — **صفر معامل `tenant_id`
 #11a: تضمين `tenant_id` صراحة في النص يمنع تصادم `AgentApprovalQueue.idempotency_key`
 العالمي — العمود `unique=True` **بلا** قيد مركّب مع `tenant_id` في الـschema).
 
-**🔴 موضعان مُستثنيان عمدًا من الإصلاح، بقرار صريح موثَّق (§7 من التقرير):**
-- `realestate/service.py:232` (داخل `buy_fractional_ownership`)
-- `invitations/service.py:415` (داخل `chat_with_ai`)
-
-السبب: `execute_agent_action()` نفسها بتنفّذ `await self.db.commit()` داخل
-جسمها (مساري النجاح والفشل معًا، سطر 223/226). الموضعان دول بينادوها من
-**جوّه `async with self.db.begin_nested()`** خارجي، بلا `try/except`. لو
-اتصلح الـkwargs فيهم بمعزل عن حل بنية المعاملة، هيوصلوا لأول مرة فعليًا
-لتنفيذ `commit()` حقيقي وهما لسه جوّه savepoint — **احتمال تلف حالة
-transaction بالكامل**، نفس فئة خطورة #11a/#11b الجذرية (`realestate:232`
-تحديدًا داخل عملية شراء ملكية عقارية بأموال حقيقية). **هذا مُوثَّق كبند
-Backlog منفصل مفتوح: `ai-agents-execute-action-commit-inside-begin-nested`
-— لازم يُصلَح الاتنين سوا (بنية المعاملة أولًا) في جلسة مستقبلية منفصلة.**
+**تحديث [2026-09-01، جلسة `backlog-16-begin-nested-commit-conflict`]:**
+الموضعان (`realestate/service.py`، `invitations/service.py`) **اتصلحوا
+فعليًا** بنقل نداء `execute_agent_action()` بره حدود `begin_nested()`
+(تفاصيل كاملة + تحقيق حي: `.claude/reports/backlog-16-begin-nested-commit-session-log.md`).
+الاختباران اللي كانوا `xfail(strict=True)` أسفل هذا الملف اتحوّلوا لاختباري
+نجاح حقيقيين (`..._now_fixed`)، + اختبار إضافي لـinvitations يثبت إن مسار
+الفشل الآمن (execute_agent_action تفشل) مايسيبش رسالة يتيمة.
 
 هذا الملف يغطي:
 - **منطق `execute_agent_action` نفسها مباشرة** (4 اختبارات، بأشكال
@@ -39,11 +33,12 @@ Backlog منفصل مفتوح: `ai-agents-execute-action-commit-inside-begin-nes
   (صفر تصادم بفضل `T{tenant_id}`)، ومفتاح خام بلا تمييز tenant عبر
   تينانتين (يثبت حيًا خطر `ai-agents-execute-action-approval-queue-global-unique-collision`
   الموثَّق مسبقًا).
-- **اختباران `xfail(strict=True)` موثَّقان للموضعين المُستثنيين** —
+- **اختباران للموضعين اللي كانوا مُستثنيين (realestate/invitations)** —
   استدعاء حي حقيقي لـ`buy_fractional_ownership`/`chat_with_ai` (الدالتين
-  الحقيقيتين المحيطتين، مش استدعاء `execute_agent_action` مباشرة)، يثبتان
-  إن الاستثناء **لسه موجود بالحرف** ومُستبعَد عمدًا — **ممنوع تجاهلهم أو
-  كتابة اختبار نجاح لهم**، طبقًا لقرار الجلسة الأصلي الصريح.
+  الحقيقيتين المحيطتين، مش استدعاء `execute_agent_action` مباشرة)، بيثبتوا
+  المسار الشرعي الكامل ينجح فعليًا بعد إصلاح بنية المعاملة، + اختبار فشل
+  آمن (`invitations`) يثبت صفر رسالة يتيمة حتى لو `execute_agent_action`
+  فشلت.
 
 **تجاوز متعمَّد لبج غير مرتبط (Backlog #7، `redis-client-wrapper-missing-methods`):**
 `ai_engine.generate()` الحقيقية بتنادي `CostTracker.record_usage()` اللي
@@ -59,12 +54,13 @@ Backlog منفصل مفتوح: `ai-agents-execute-action-commit-inside-begin-nes
 موجودان فعلًا، نفس التينانتين المستخدَمين في التحقق الحي الأصلي). وكلاء AI
 throwaway جدد لكل اختبار. تنظيف كامل في `finally`.
 """
+import json
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.exc import IntegrityError
 
 from app.main import fastapi_app  # noqa: F401 — يضمن تسجيل كل الـmodels
@@ -76,11 +72,14 @@ from app.domains.identity.models import User
 
 from app.domains.ai_agents.service import AIAgentsService
 from app.domains.ai_agents.models import AIAgent, AgentRole, AgentStatus, AITaskLog, AgentApprovalQueue
+from app.domains.ai_governance.models import AgentUsageLog
 from app.services.ai import ai_engine
 
 from app.domains.realestate.service import RealEstateService
 from app.domains.realestate.repository import RealEstateRepository
 from app.domains.realestate.models import RealEstateDevelopment, PropertyUnit, PropertyType, PropertyOwnership
+from app.domains.finance.models import Wallet, Transaction
+from app.domains.invoicing.service import InvoicingService
 
 from app.domains.invitations.service import InvitationsService
 from app.domains.invitations.repository import InvitationsRepository
@@ -307,69 +306,223 @@ async def test_execute_agent_action_raw_idempotency_key_without_tenant_prefix_co
 
 
 # ============================================================
-# 5) 🔴 realestate/service.py:232 — مُستثنى عمدًا، xfail موثَّق (ممنوع نجاح)
+# 5) ✅ realestate/service.py — begin_nested()/commit() conflict مُصلَح
+#    [جلسة backlog-16-begin-nested-commit-conflict، 2026-09-01]
 # ============================================================
+#
+# التاريخ: كانت execute_agent_action() تُنادى من جوّه async with
+# self.db.begin_nested() في buy_fractional_ownership() — commit() الداخلي
+# بتاعها كان بيكسر الـSAVEPOINT (InvalidRequestError: "Can't operate on
+# closed transaction inside context manager"، مؤكَّد حيًا بسكربت
+# scratchpad/repro_begin_nested_commit.py، راجع
+# .claude/reports/backlog-16-begin-nested-commit-session-log.md §3).
+# الإصلاح: نداء execute_agent_action() اتنقل لبعد self.db.commit() الرئيسي
+# (نفس نمط/مكان invoicing.create_invoice() المجاور)، try/except، بلا تغيير
+# على القيم الممرَّرة. هذا الاختبار بقى اختبار نجاح حقيقي (مش xfail).
+#
+# ملاحظة: buy_fractional_ownership() بتستخدم agent_id=2 مُثبَّت (hardcoded)
+# في الكود — مش جزء من نطاق هذا الإصلاح (باج منفصل موثَّق). الاختبار بيزرع
+# وكيل throwaway بمعرّف 2 صراحة عشان يوصل فعليًا لمسار execute_agent_action.
 
 async def _noop_check_saas_limits_realestate(self, tenant_id, feature="real_estate"):
     return None, []
 
 
-@pytest.mark.xfail(
-    reason=(
-        "مُستثنى عمدًا من إصلاح #16 [قرار صريح 2026-08-18] — Backlog "
-        "ai-agents-execute-action-commit-inside-begin-nested. execute_agent_action() "
-        "تنفّذ await self.db.commit() داخل جسمها، وbuy_fractional_ownership() بتناديها "
-        "من جوّه async with self.db.begin_nested() خارجي (realestate/service.py:214-232)، "
-        "بلا try/except. تصحيح tenant_id=/idempotency_key= هنا بمعزل عن حل بنية المعاملة "
-        "كان سيجعلها تصل لأول مرة لـcommit() حقيقي وهي لسه جوّه savepoint — احتمال تلف "
-        "transaction حقيقي (عملية شراء ملكية عقارية بأموال حقيقية). لسه بترمي TypeError "
-        "معروف (نفس فئة #16 الأصلية: tenant_id= زيادة، idempotency_key مفقودة) — هذا "
-        "xfail بيثبت إنها لسه مُستثناة فعليًا، مش بيختبر نجاحها. لو حد أصلح بنية المعاملة "
-        "وصحّح الـkwargs سوا لاحقًا، هيبقى XPASS ويفشل تلقائيًا (strict=True) كتذكير."
-    ),
-    strict=True,
-)
+async def _noop_check_ai_governance_realestate(self, tenant_id, user_id, action, cost):
+    """اكتشاف جانبي أثناء هذه الجلسة (خارج نطاقها): _check_ai_governance()
+    بتنادي ai_governance.check_and_consume()، اللي عندها نفس بالضبط عيب
+    begin_nested()+commit() داخلي (service.py:165-200) — ومن جوّه
+    buy_fractional_ownership() بتتنادى من داخل begin_nested() الخارجي بتاعة
+    realestate نفسها (سطر 303، قبل execute_agent_action المنقولة). النتيجة:
+    الاستثناء بيتبلع بـtry/except الموجودة أصلاً في _check_ai_governance، لكن
+    الجلسة بتفضل في حالة transaction مقفولة، فأي عملية DB تالية (زي
+    _get_land_owner_for_unit) بتفشل بـInvalidRequestError مش معالَجة. هذا باج
+    منفصل تمامًا، بنفس فئة #16 لكن call-site مختلف (ai_governance، مش
+    ai_agents) — مُوثَّق فقط، غير مُصلَح هنا (خارج نطاق الموافقة الحالية)."""
+    return True
+
+
+async def _noop_create_invoice_for_isolation(self, *args, **kwargs):
+    """اكتشاف جانبي تاني (خارج نطاق هذه الجلسة، معروف مسبقًا — راجع رسالة
+    commit b4bf356: "an invoice-numbering collision surfaced while testing
+    #37"): invoicing.create_invoice() بتفشل بـIntegrityError على
+    invoice_number مكرر (مؤكَّد حيًا: نفس الرقم 'INV-1-000015' تكرر في عدة
+    تشغيلات مختلفة لهذا الاختبار). production code بيمسكها بـtry/except
+    فعلاً، لكن الـflush الفاشل بيسيب الجلسة بحالة PendingRollbackError، وأي
+    وصول تالٍ لخاصية معلَّقة على كائن منتهي الصلاحية (زي
+    ownership.acquisition_date بعد commit() execute_agent_action الجديدة)
+    بيفشل بنفس الاستثناء القديم. تجاوز معزول هنا (نفس منهجية Redis #7) —
+    صفر تعديل على كود الإنتاج، صفر علاقة بإصلاح begin_nested/commit."""
+    return None
+
+
 @pytest.mark.asyncio
-async def test_realestate_buy_fractional_ownership_execute_agent_action_still_excluded(db, monkeypatch):
+async def test_realestate_buy_fractional_ownership_execute_agent_action_now_fixed(db, monkeypatch):
     monkeypatch.setattr(RealEstateService, "_check_saas_limits", _noop_check_saas_limits_realestate)
+    monkeypatch.setattr(RealEstateService, "_check_ai_governance", _noop_check_ai_governance_realestate)
+    monkeypatch.setattr(InvoicingService, "create_invoice", _noop_create_invoice_for_isolation)
+    monkeypatch.setattr(ai_engine, "generate", _fake_generate)
+
+    # buy_fractional_ownership() بتنادي execute_agent_action(agent_id=2, ...)
+    # بمعرّف مُثبَّت — لازم وكيل حقيقي بنفس المعرّف عشان نوصل فعليًا للمسار
+    # المُصلَح (مش NotFoundError). صفر وكيل بمعرّف 2 موجود حاليًا (تأكيد مباشر
+    # قبل الزرع)، والـsequence متقدمة كتير عن 2 — صفر خطر تصادم مستقبلي.
+    existing = (await db.execute(select(AIAgent).where(AIAgent.id == 2))).scalar_one_or_none()
+    assert existing is None, "وكيل بمعرّف 2 موجود بالفعل — الاختبار مش آمن يكمل، افحص يدويًا"
+
+    owner = await _create_user(db, "p_regtest_agents16_re_owner")
+    owner_id = owner.id
+    agent = AIAgent(
+        id=2, tenant_id=TENANT_ID, owner_id=owner_id,
+        name=f"REGTEST-AGENTS16-FIXED-AGENT-{_suffix()}",
+        role=AgentRole.SALES_NEGOTIATOR, status=AgentStatus.ACTIVE,
+        system_prompt="regtest throwaway agent (fixed id=2)",
+        requires_human_approval=True,
+    )
+    db.add(agent)
+    await db.commit()
+    await db.refresh(agent)
+
     re_repo = RealEstateRepository(db)
     development = await re_repo.create_development(
         tenant_id=TENANT_ID, land_asset_id=EXISTING_LAND_ASSET_ID,
         name=f"REGTEST-AGENTS16-DEV-{_suffix()}", development_type="RESIDENTIAL",
     )
+    development_id = development.id
     unit = await re_repo.create_unit(
-        tenant_id=TENANT_ID, development_id=development.id,
+        tenant_id=TENANT_ID, development_id=development_id,
         unit_number=f"REGTEST-AGENTS16-UNIT-{_suffix()}", area_sqm=Decimal("100"),
         property_type=PropertyType.APARTMENT,
         is_available_for_sale=True, is_available_for_rent=False,
         sale_price_mrusdt=Decimal("1000"),
     )
+    unit_id = unit.id
     buyer = await _create_user(db, "p_regtest_agents16_buyer")
+    buyer_id = buyer.id
+    # UserService.register() بينشئ محفظة تلقائيًا (برصيد {} فاضي) لكل مستخدم
+    # جديد — لازم نحدّث نفس الصف الموجود (مش نضيف صف تاني، ده هيسبب
+    # MultipleResultsFound جوّه finance.get_or_create_wallet_for_update
+    # اللي بتفترض صف واحد بالظبط لكل user_id+tenant_id).
+    await db.execute(
+        text("UPDATE wallets SET balances = CAST(:b AS JSONB) WHERE user_id = :uid AND tenant_id = :tid"),
+        {
+            "b": json.dumps({"MR_POUND": 0, "MR_USDT": 1000, "MR7": 0, "NBT": 0, "MRX": 0}),
+            "uid": buyer_id, "tid": TENANT_ID,
+        },
+    )
+    await db.commit()
+
+    # المالك (بائع) بتاع EXISTING_LAND_ASSET_ID مستخدم حقيقي مشترك بين
+    # اختبارات تانية (مش throwaway) — finance.transfer() هيزود رصيده فعليًا.
+    # نلقط رصيده الحالي هنا عشان نرجّعه بالظبط في finally، بدل ما نسيب أثر
+    # دائم على fixture مشترك.
+    seller_id_row = (await db.execute(
+        text("SELECT owner_id FROM land_assets WHERE id = :lid"), {"lid": EXISTING_LAND_ASSET_ID}
+    )).first()
+    seller_id = seller_id_row[0]
+    seller_wallet_before = (await db.execute(
+        select(Wallet).where(Wallet.user_id == seller_id, Wallet.tenant_id == TENANT_ID)
+    )).scalar_one_or_none()
+    seller_balances_snapshot = dict(seller_wallet_before.balances) if seller_wallet_before else None
+
     service = RealEstateService(db)
 
     try:
         ownership = await service.buy_fractional_ownership(
-            buyer_id=buyer.id, tenant_id=TENANT_ID, unit_id=unit.id,
+            buyer_id=buyer_id, tenant_id=TENANT_ID, unit_id=unit_id,
             percentage=Decimal("10"), idempotency_key=f"REGTEST-AGENTS16-BUY-{_suffix()}",
         )
-        assert ownership is not None  # لو وصلنا هنا (XPASS)، الباج اتصلح فعليًا
+        # 1) الشراء نفسه نجح فعليًا (المسار الأصلي، غير متأثر بإصلاح الـAI)
+        assert ownership is not None
+        assert ownership.owner_user_id == buyer_id
+
+        # 2) تحقق مستقل مباشر: الملكية فعليًا محفوظة في الـDB
+        db_ownership = (await db.execute(
+            select(PropertyOwnership).where(PropertyOwnership.unit_id == unit_id)
+        )).scalar_one()
+        assert db_ownership.owner_user_id == buyer_id
+        assert db_ownership.ownership_percentage == Decimal("10")
+
+        # 3) الدليل الحاسم: execute_agent_action() نُفِّذت فعليًا بعد commit()
+        #    الرئيسي بلا InvalidRequestError (لو الباج لسه موجود، الشراء كان
+        #    هيفشل بالكامل قبل الوصول هنا) — task_log حقيقي اتسجل.
+        task_logs = (await db.execute(
+            select(AITaskLog).where(AITaskLog.agent_id == 2, AITaskLog.tenant_id == TENANT_ID)
+        )).scalars().all()
+        assert len(task_logs) == 1, "execute_agent_action() لازم تكون اتنفذت فعليًا بعد commit() الرئيسي"
+        assert task_logs[0].idempotency_key.startswith("REALESTATE-FRAC-T1-")
+
+        # 4) صفر صف يتيم: طلب الموافقة (لو وُجد) مرتبط بنفس الـidempotency_key
+        approvals = (await db.execute(
+            select(AgentApprovalQueue).where(AgentApprovalQueue.agent_id == 2, AgentApprovalQueue.tenant_id == TENANT_ID)
+        )).scalars().all()
+        assert len(approvals) == 1
+        assert approvals[0].idempotency_key == f"{task_logs[0].idempotency_key}-approval"
     finally:
-        await db.execute(delete(PropertyOwnership).where(PropertyOwnership.unit_id == unit.id))
-        await db.execute(delete(PropertyUnit).where(PropertyUnit.id == unit.id))
-        await db.execute(delete(RealEstateDevelopment).where(RealEstateDevelopment.id == development.id))
+        # _check_ai_governance() (جوّه buy_fractional_ownership، غير متأثرة
+        # بهذا الإصلاح) بتستخدم agent_id=2 كمان -> بتسجل صف في agent_usage_logs
+        # (جدول ai_governance، منفصل عن ai_task_logs) لازم يتشال قبل حذف الوكيل
+        # نفسه (FK).
+        #
+        # ⚠️ ملاحظة (باج معروف مسبقًا، خارج نطاق هذه الجلسة تمامًا — راجع
+        # commit b4bf356 "invoice-numbering collision surfaced while testing
+        # #37"): invoicing.create_invoice() (بعد execute_agent_action() المنقولة،
+        # نفس مكانها الأصلي) بيفشل أحيانًا بـIntegrityError على invoice_number
+        # مكرر. production code بيمسكها بـtry/except فعلاً (الشراء نفسه سليم،
+        # الاختبار أعلاه أثبت كل الـassertions قبل هذه النقطة)، لكن الجلسة
+        # (session) بتفضل بحالة "pending rollback" بعد الفلاش الفاشل — لازم
+        # rollback() صريح قبل أي عملية تالية على نفس الجلسة (نفس نمط
+        # conftest.py's session teardown).
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        await db.execute(delete(AgentUsageLog).where(AgentUsageLog.agent_id == 2))
+        await db.execute(delete(AgentApprovalQueue).where(AgentApprovalQueue.agent_id == 2))
+        await db.execute(delete(AITaskLog).where(AITaskLog.agent_id == 2))
+        await db.execute(delete(PropertyOwnership).where(PropertyOwnership.unit_id == unit_id))
+        await db.execute(delete(PropertyUnit).where(PropertyUnit.id == unit_id))
+        await db.execute(delete(RealEstateDevelopment).where(RealEstateDevelopment.id == development_id))
+        await db.execute(delete(AIAgent).where(AIAgent.id == 2))
+        await db.execute(delete(Transaction).where(Transaction.sender_id == buyer_id))
+        await db.execute(delete(Wallet).where(Wallet.user_id == buyer_id))
+        # production code بتاعة buy_fractional_ownership بتسجل audit_log()+
+        # _send_notification() لـbuyer_id — لازم يتشالوا قبل _cleanup_user (FK)
+        await db.execute(text("DELETE FROM audit_logs WHERE user_id = :uid"), {"uid": buyer_id})
+        await db.execute(text("DELETE FROM notifications WHERE user_id = :uid"), {"uid": buyer_id})
+        if seller_balances_snapshot is not None:
+            await db.execute(
+                text("UPDATE wallets SET balances = CAST(:b AS JSONB) WHERE user_id = :uid AND tenant_id = :tid"),
+                {"b": json.dumps(seller_balances_snapshot, default=str), "uid": seller_id, "tid": TENANT_ID},
+            )
         await db.commit()
-        await _cleanup_user(db, buyer.id)
+        await _cleanup_user(db, buyer_id)
+        await _cleanup_user(db, owner_id)
 
 
 # ============================================================
-# 6) 🔴 invitations/service.py:415 — مُستثنى عمدًا، xfail موثَّق (ممنوع نجاح)
+# 6) ✅ invitations/service.py — begin_nested()/commit() conflict مُصلَح
+#    [جلسة backlog-16-begin-nested-commit-conflict، 2026-09-01]
 # ============================================================
+#
+# التاريخ: كانت execute_agent_action() تُنادى من جوّه async with
+# self.db.begin_nested() في chat_with_ai() — بعد repo.create_conversation()
+# لرسالة المستخدم (كتابة حقيقية سابقة لنداء execute_agent_action داخل نفس
+# البلوك). التحقيق الحي (سكربت repro_begin_nested_commit.py) أثبت: أي كتابة
+# قبل execute_agent_action() جوّه begin_nested() بتتحفظ دائمًا في الـDB رغم
+# ما الـcommit() الداخلي بتاعها بيرمي InvalidRequestError ويكسر باقي البلوك
+# — يعني رسالة المستخدم كانت هتتحفظ يتيمة بلا رد لو الـkwargs اتصلحت هنا
+# بمعزل عن حل بنية المعاملة. الإصلاح: بناء الـprompt + نداء
+# execute_agent_action() اتنقلوا لأعلى، قبل begin_nested() تمامًا (نتيجتها
+# reply_text مُستخدَمة فعليًا في بناء الرد، فمينفعش تتأجل زي realestate) —
+# وتصحيح tenant_id=/idempotency_key= في نفس الخطوة. هذا الاختبار بقى اختبار
+# نجاح حقيقي (مش xfail)، ومعاه اختبار إضافي للفشل الآمن.
 
 async def _noop_check_saas_limits_invitations(self, tenant_id, feature="crm"):
     return None, []
 
 
-async def _create_sent_invitation(db, title: str) -> SovereignInvitation:
+async def _create_sent_invitation(db, title: str, assigned_ai_agent_id=None) -> SovereignInvitation:
     repo = InvitationsRepository(db)
     inv = await repo.create_invitation(
         tenant_id=TENANT_ID,
@@ -379,26 +532,22 @@ async def _create_sent_invitation(db, title: str) -> SovereignInvitation:
         campaign_id=999999,
         title=title,
         status=InvitationStatus.SENT,
+        assigned_ai_agent_id=assigned_ai_agent_id,
     )
     await db.commit()
     return inv
 
 
-@pytest.mark.xfail(
-    reason=(
-        "مُستثنى عمدًا من إصلاح #16 [قرار صريح 2026-08-18] — Backlog "
-        "ai-agents-execute-action-commit-inside-begin-nested. نفس سبب realestate:232 "
-        "بالحرف: chat_with_ai() بتنادي execute_agent_action() من جوّه async with "
-        "self.db.begin_nested() خارجي (invitations/service.py:394-420)، بلا try/except. "
-        "لسه بترمي TypeError معروف (tenant_id= زيادة، idempotency_key مفقودة). هذا xfail "
-        "بيثبت إنها لسه مُستثناة فعليًا، مش بيختبر نجاحها."
-    ),
-    strict=True,
-)
 @pytest.mark.asyncio
-async def test_invitations_chat_with_ai_execute_agent_action_still_excluded(db, monkeypatch):
+async def test_invitations_chat_with_ai_execute_agent_action_now_fixed(db, monkeypatch):
     monkeypatch.setattr(InvitationsService, "_check_saas_limits", _noop_check_saas_limits_invitations)
-    invitation = await _create_sent_invitation(db, f"REGTEST-AGENTS16-INV-{_suffix()}")
+    monkeypatch.setattr(ai_engine, "generate", _fake_generate)
+
+    owner = await _create_user(db, "p_regtest_agents16_inv_owner")
+    agent = await _create_throwaway_agent(db, TENANT_ID, owner.id, requires_human_approval=True)
+    invitation = await _create_sent_invitation(
+        db, f"REGTEST-AGENTS16-INV-{_suffix()}", assigned_ai_agent_id=agent.id,
+    )
     service = InvitationsService(db)
 
     try:
@@ -406,9 +555,89 @@ async def test_invitations_chat_with_ai_execute_agent_action_still_excluded(db, 
             invitation_id=invitation.id, tenant_id=TENANT_ID,
             visitor_session_id=f"regtest-session-{_suffix()}",
             user_message="regtest message",
+            user_id=owner.id,  # مستخدم حقيقي — يتفادى FK ناقص (agent_usage_logs.user_id) غير مرتبط بهذا الإصلاح لو user_id=None
         )
-        assert result is not None  # لو وصلنا هنا (XPASS)، الباج اتصلح فعليًا
+        # 1) نجاح المسار الكامل — رد فعلي، وconversation_id حقيقي
+        #    ⚠️ اكتشاف جانبي (خارج نطاق هذه الجلسة، موثَّق فقط): reply_text
+        #    مصدره ai_response.get("result", {}).get("reply", <fallback>) —
+        #    لكن ai_engine.generate() الحقيقية بترجع المفتاح "text" مش "reply"
+        #    إطلاقًا (services/ai/engine.py:157). يعني chat_with_ai بترجع
+        #    نص الـfallback الثابت دايمًا، مش رد الـAI الفعلي — باج مستقل
+        #    قبل هذا الإصلاح وبعده، مش ناتج عن نقل execute_agent_action.
+        #    الاختبار بيتحقق من السلوك الحالي الحقيقي (مش المتوقَّع منطقيًا).
+        assert result is not None
+        fallback_reply = "شكراً لتواصلك. كيف يمكنني مساعدتك؟"
+        assert result["reply"] == fallback_reply
+        ai_conversation_id = result["conversation_id"]
+
+        # 2) تحقق مستقل: رسالتا المحادثة (المستخدم + الـAI) اتسجلوا سوا،
+        #    مش بس رد الـAI (الدليل إن begin_nested() اتقفل صح، بلا تناقض)
+        conversations = (await db.execute(
+            select(InvitationConversation).where(InvitationConversation.invitation_id == invitation.id)
+        )).scalars().all()
+        assert len(conversations) == 2, "لازم رسالة المستخدم + رد الـAI سوا — صفر رسالة يتيمة"
+        by_role = {c.is_from_ai: c for c in conversations}
+        assert by_role[False].message == "regtest message"
+        assert by_role[True].message == fallback_reply
+        assert by_role[True].id == ai_conversation_id
+
+        # 3) الدليل الحاسم: execute_agent_action() نُفِّذت فعليًا (task_log)
+        task_logs = (await db.execute(
+            select(AITaskLog).where(AITaskLog.agent_id == agent.id, AITaskLog.tenant_id == TENANT_ID)
+        )).scalars().all()
+        assert len(task_logs) == 1
+        assert task_logs[0].idempotency_key.startswith(f"AI-CRMCHAT-T{TENANT_ID}-{invitation.id}-")
     finally:
+        # governance.check_and_consume() (قبل begin_nested()، غير متأثرة بهذا
+        # الإصلاح) بتسجل صف في agent_usage_logs — لازم يتشال قبل حذف الوكيل (FK).
+        await db.execute(delete(AgentUsageLog).where(AgentUsageLog.agent_id == agent.id))
+        await db.execute(delete(AgentApprovalQueue).where(AgentApprovalQueue.agent_id == agent.id))
         await db.execute(delete(InvitationConversation).where(InvitationConversation.invitation_id == invitation.id))
         await db.execute(delete(SovereignInvitation).where(SovereignInvitation.id == invitation.id))
         await db.commit()
+        await _cleanup_agent(db, agent.id)
+        await _cleanup_user(db, owner.id)
+
+
+@pytest.mark.asyncio
+async def test_invitations_chat_with_ai_execute_agent_action_failure_leaves_no_orphan_message(db, monkeypatch):
+    """لو execute_agent_action() فشلت (أي سبب)، الفشل لازم يحصل قبل أي
+    كتابة على الإطلاق — صفر رسالة مستخدم يتيمة بلا رد، حتى في مسار الفشل.
+    هذا يثبت إن رفع النداء لبره begin_nested() قفل الثغرة اللي كانت هتفضل
+    مفتوحة لو الكتابة الأولى (رسالة المستخدم) فضلت جوّه البلوك القديم."""
+    monkeypatch.setattr(InvitationsService, "_check_saas_limits", _noop_check_saas_limits_invitations)
+
+    async def _broken_generate(*args, **kwargs):
+        raise RuntimeError("regtest: simulated AI engine failure")
+
+    monkeypatch.setattr(ai_engine, "generate", _broken_generate)
+
+    owner = await _create_user(db, "p_regtest_agents16_inv_fail_owner")
+    agent = await _create_throwaway_agent(db, TENANT_ID, owner.id, requires_human_approval=True)
+    invitation = await _create_sent_invitation(
+        db, f"REGTEST-AGENTS16-INV-FAIL-{_suffix()}", assigned_ai_agent_id=agent.id,
+    )
+    service = InvitationsService(db)
+
+    try:
+        with pytest.raises(Exception):
+            await service.chat_with_ai(
+                invitation_id=invitation.id, tenant_id=TENANT_ID,
+                visitor_session_id=f"regtest-session-{_suffix()}",
+                user_message="regtest message that should never be saved",
+                user_id=owner.id,
+            )
+
+        conversations = (await db.execute(
+            select(InvitationConversation).where(InvitationConversation.invitation_id == invitation.id)
+        )).scalars().all()
+        assert len(conversations) == 0, "صفر كتابة يُفترض تحصل قبل ما execute_agent_action() تنجح"
+    finally:
+        await db.execute(delete(AgentUsageLog).where(AgentUsageLog.agent_id == agent.id))
+        await db.execute(delete(AgentApprovalQueue).where(AgentApprovalQueue.agent_id == agent.id))
+        await db.execute(delete(AITaskLog).where(AITaskLog.agent_id == agent.id))
+        await db.execute(delete(InvitationConversation).where(InvitationConversation.invitation_id == invitation.id))
+        await db.execute(delete(SovereignInvitation).where(SovereignInvitation.id == invitation.id))
+        await db.commit()
+        await _cleanup_agent(db, agent.id)
+        await _cleanup_user(db, owner.id)

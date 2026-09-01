@@ -386,7 +386,35 @@ class InvitationsService:
 
         sanitized_message = bleach.clean(user_message, tags=[], strip=True)
 
+        # ========================================
+        # استدعاء الوكيل الذكي (قبل begin_nested() عمدًا — execute_agent_action()
+        # تنفّذ commit() مستقل داخلها؛ نداؤها من جوّه begin_nested() كان يكسر
+        # الـSAVEPOINT ويسيب رسالة المستخدم يتيمة بلا رد. راجع
+        # .claude/reports/backlog-16-begin-nested-commit-session-log.md)
+        # ========================================
         ai_service = AIAgentsService(self.db, tenant_id)
+        ai_agent_id = invitation.assigned_ai_agent_id or 1  # type: ignore
+        prompt = f"""
+        أنت وكيل ذكاء اصطناعي متخصص في تحويل العملاء.
+        الدعوة: {invitation.title}
+        نوع الحملة: {invitation.campaign_type}
+        رسالة العميل: "{user_message}"
+        قم بالرد بأسلوب ودود ومقنع.
+        """
+
+        ai_response = await ai_service.execute_agent_action(
+            agent_id=ai_agent_id,
+            action_type="CHAT",
+            payload={"prompt": prompt},
+            executor_user_id=user_id or 0,
+            idempotency_key=(
+                f"AI-CRMCHAT-T{tenant_id}-{idempotency_key}" if idempotency_key
+                else f"AI-CRMCHAT-T{tenant_id}-{invitation_id}-{uuid.uuid4().hex[:8]}"
+            ),
+        )
+
+        reply_text = ai_response.get("result", {}).get("reply", "شكراً لتواصلك. كيف يمكنني مساعدتك؟")
+
         async with self.db.begin_nested():
             await self.repo.create_conversation(
                 tenant_id=tenant_id,  # type: ignore
@@ -397,25 +425,6 @@ class InvitationsService:
                 is_from_ai=False,
                 idempotency_key=idempotency_key
             )
-
-            ai_agent_id = invitation.assigned_ai_agent_id or 1  # type: ignore
-            prompt = f"""
-            أنت وكيل ذكاء اصطناعي متخصص في تحويل العملاء.
-            الدعوة: {invitation.title}
-            نوع الحملة: {invitation.campaign_type}
-            رسالة العميل: "{user_message}"
-            قم بالرد بأسلوب ودود ومقنع.
-            """
-
-            ai_response = await ai_service.execute_agent_action(
-                agent_id=ai_agent_id,
-                tenant_id=tenant_id,  # type: ignore
-                action_type="CHAT",
-                payload={"prompt": prompt},
-                executor_user_id=user_id or 0
-            )
-
-            reply_text = ai_response.get("result", {}).get("reply", "شكراً لتواصلك. كيف يمكنني مساعدتك؟")
 
             ai_message = await self.repo.create_conversation(
                 tenant_id=tenant_id,  # type: ignore

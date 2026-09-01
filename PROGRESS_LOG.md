@@ -995,3 +995,57 @@ FK → tenants.id` — **لا يوجد جدول باسم `tenants` في قاعد
   إند يتوقعها جاهزة، الباك إند بيرجّع `*_id` بس. | 🔴 **مفتوح، backlog
   منظَّم لجلسة/جلسات لاحقة (باك إند + إعادة كتابة `services/transport.ts`
   + `useVehicles.ts` من الصفر)** | `.claude/reports/transport-domain-full-build-session-log.md` §2, §8 |
+
+---
+
+## [2026-09-01] درس عام — انتهاك تحذير Backlog موثَّق صراحة أثناء "إصلاح نمطي" لاحق
+
+**السياق:** جلسة `backlog-16-begin-nested-commit-conflict` (راجع `.claude/reports/backlog-16-begin-nested-commit-session-log.md`) اكتشفت أن commit `b4bf356` [2026-08-29، جلسة `constructor-mismatch-backlog-cleanup`، بند #40 في رسالة الـcommit] **صحّح فعليًا** `tenant_id=`/`idempotency_key=` في `realestate/service.py:306` (نداء `execute_agent_action` جوّه `buy_fractional_ownership`) — **رغم أن هذا الموضع بالتحديد كان مُستثنى عمدًا بقرار صريح موثَّق** في `.claude/reports/ai-agents-execute-action-fix-session-log.md` §6-7 [2026-08-18]: "**لا يُطبَّق أي إصلاح على الموضعين... حتى لو بدا الحل 'بسيط'**" — لأن تصحيح الـkwargs بمعزل عن حل بنية `begin_nested()`/`commit()` كان سيجعل الكود يصل لأول مرة فعليًا لتلف حالة transaction حقيقي.
+
+**ما حصل فعليًا:** جلسة `#40` عالجت هذا الموضع كجزء من نمط عام متكرر (17 موضع مشابهة، نفس الشكل الحرفي: حذف `tenant_id=` + إضافة `idempotency_key=`) **بدون** مراجعة التحذير الخاص المُوثَّق مسبقًا لهذا الموضع تحديدًا. النتيجة: الكود وصل فعليًا لـ`self.db.commit()` الداخلي جوّه `begin_nested()` الخارجي، وأنتج `sqlalchemy.exc.InvalidRequestError: Can't operate on closed transaction inside context manager` — بالضبط كما حذَّر التقرير الأصلي (مؤكَّد حيًا بسكربت `repro_begin_nested_commit.py`). **الموضع الشقيق (`invitations/service.py:415`) لم يُلمَس في نفس الجلسة — يبدو أن الاستثناء طُبِّق بشكل غير متسق (ربما لأن `realestate` بدا "من نفس المجموعة الآمنة الـ17" بينما `invitations` احتفظ بشكل مختلف قليلًا يميّزه بصريًا).**
+
+**الدرس العام (لأي جلسة "إصلاح نمطي/ميكانيكي" مستقبلية):** قبل تطبيق نفس التعديل على مجموعة مواضع تبدو متطابقة الشكل، **افحص صراحة هل أي موضع من المجموعة له تحذير/استثناء موثَّق مسبقًا في تقرير جلسة سابقة أو في `PROGRESS_LOG.md`** — تشابه الشكل السطحي (نفس الـkwarg، نفس نوع التعديل) **لا يضمن** تطابق الأمان أو السياق (هنا: وجود `begin_nested()` محيط غيّر الأثر الفعلي بالكامل). التوصية العملية: `grep` عن اسم الدالة/الموضع في كل تقارير `.claude/reports/*.md` وفي `PROGRESS_LOG.md` نفسه **قبل** تطبيق أي "دفعة إصلاحات مشابهة"، وأي موضع عليه علم 🔴 مستثنى صراحة يُعامَل بمعزل تام عن باقي الدفعة حتى لو بدا الإصلاح مطابقًا حرفيًا.
+
+**الحالة:** ✅ الموضعان (`realestate`, `invitations`) اتصلحا بنيويًا بشكل صحيح في نفس جلسة `backlog-16-begin-nested-commit-conflict` (نقل `execute_agent_action()` بره حدود `begin_nested()`، تفاصيل كاملة في التقرير المرجعي أعلاه). هذا القسم توثيق للدرس العام فقط، مش بند عمل معلَّق.
+
+---
+
+## [2026-09-01] بند Backlog جديد — `ai-governance-check-and-consume-commit-inside-begin-nested`
+
+**الوصف:** `AIGovernanceService.check_and_consume()` (`ai_governance/service.py:165-200`) عندها **نفس بالضبط** عيب `begin_nested()`+`commit()` داخلي الموصوف في بند `ai-agents-execute-action-commit-inside-begin-nested` (Backlog #16) — تفتح `begin_nested()` خاصة بيها (سطر 165)، وبعد الخروج منها تعمل `await self.db.commit()` مستقل (سطر 200) — **بالضبط نفس بنية `execute_agent_action()`**.
+
+**موضع مؤكَّد حيًا:** `realestate._check_ai_governance()` (`realestate/service.py:69-81`) بتنادي `check_and_consume()` من **جوّه** `begin_nested()` الخارجي بتاعة `buy_fractional_ownership()` نفسها (السطر بعد حساب `cost`، قبل `_get_land_owner_for_unit`) — غير متأثرة بإصلاح جلسة `backlog-16-begin-nested-commit-conflict` (اللي عالجت `execute_agent_action` بس). **الأثر المؤكَّد حيًا:** الاستثناء (`InvalidRequestError`) بيتبلع فعليًا بـ`try/except` موجودة أصلاً في `_check_ai_governance`، لكن الجلسة (`AsyncSession`) بتفضل بحالة transaction "مقفولة" (`DEACTIVE`) — أي عملية DB تالية غير محمية بـ`try/except` (زي `_get_land_owner_for_unit` مباشرة بعدها) بتفشل بنفس النوع من `InvalidRequestError` غير معالَج، وتُسقِط `buy_fractional_ownership` بالكامل.
+
+**احتمال الانتشار:** `check_and_consume()` مُستخدَمة عبر 8+ دومينات (راجع بند `ai-governance-check-and-consume-wrong-kwarg`، #15، في `constructor-mismatch-backlog-classification.md`) — أي دومين ينادي `check_and_consume()` (مباشرة أو عبر helper زي `_check_ai_governance`) من **جوّه** `begin_nested()` خاصة بيه معرَّض لنفس النمط. لم يُفحَص شموليًا في هذه الجلسة (خارج نطاقها) — يحتاج نفس منهجية الجرد المُتَّبعة في `transaction-savepoint-bug-session-log.md` (`grep` شامل لكل استدعاء `check_and_consume` + فحص هل محاط بـ`begin_nested()` خارجي).
+
+**الحل المتوقَّع (بناءً على سابقة #16):** نفس المبدأ — `check_and_consume()` لها كولرز مستقلة (بلا `begin_nested()` محيط) تحتاج الـ`commit()` الداخلي فعليًا، فالإصلاح يكون في الكولرز المتضررة (نقل النداء بره `begin_nested()` بتاعتها)، مش في `check_and_consume()` نفسها — يحتاج قرار/جلسة منفصلة.
+
+**الحالة:** 🔴 مفتوح، موثَّق فقط، صفر إصلاح. اكتُشف أثناء التحقق الحي لجلسة `backlog-16-begin-nested-commit-conflict` (`.claude/reports/backlog-16-begin-nested-commit-session-log.md` §5.4).
+
+---
+
+## [2026-09-01] بند Backlog جديد — `invitations-chat-with-ai-reply-key-mismatch`
+
+**الوصف:** `InvitationsService.chat_with_ai()` (`invitations/service.py`) بتبني رد الـAI هكذا:
+```python
+reply_text = ai_response.get("result", {}).get("reply", "شكراً لتواصلك. كيف يمكنني مساعدتك؟")
+```
+لكن `ai_response["result"]` مصدرها القيمة اللي بترجعها `ai_engine.generate()` الحقيقية (`services/ai/engine.py:157`) — **ومفتاحها الفعلي هو `"text"`, مش `"reply"` إطلاقًا** (`{"text": generated_text, "model": ..., "usage": {...}, ...}`). يعني `ai_response.get("result", {}).get("reply", <fallback>)` **بترجع نص الـfallback الثابت دايمًا**، بغض النظر عن رد الـAI الفعلي — `chat_with_ai` كسول وظيفيًا: العميل بيدردش مع نص افتراضي واحد ("شكراً لتواصلك...") مهما كان محتوى رد النموذج الحقيقي.
+
+**الأثر:** ميزة "الدردشة مع الـAI" في CRM الدعوات (`invitations`) لا تعمل فعليًا كما هو متوقَّع — الرد المعروض للعميل ثابت دايمًا، مش رد ذكي حقيقي. باج مستقل تمامًا عن begin_nested/commit، **موجود من قبل جلسة `backlog-16-begin-nested-commit-conflict` وبعدها** (لم يُنشأ ولم يُصلَح في هذه الجلسة).
+
+**الحل المتوقَّع:** تغيير المفتاح المقروء من `"reply"` إلى `"text"` (`ai_response.get("result", {}).get("text", <fallback>)`) — يحتاج تأكيد إضافي إن `"text"` هو المحتوى الصحيح المطلوب عرضه للعميل (مش مجرد تصحيح اسم مفتاح أعمى)، وتحقق حي بعده يثبت إن رد فعلي متغيّر (مش نص ثابت) بيوصل للعميل.
+
+**الحالة:** 🔴 مفتوح، موثَّق فقط، صفر إصلاح. اكتُشف أثناء التحقق الحي لجلسة `backlog-16-begin-nested-commit-conflict` (`.claude/reports/backlog-16-begin-nested-commit-session-log.md` §5.2/§5.4) — الاختبار الجديد `test_invitations_chat_with_ai_execute_agent_action_now_fixed` وثّق السلوك الحالي الحقيقي (نص fallback) صراحة كتحفّظ، بدل افتراض سلوك غير موجود.
+
+---
+
+## [2026-09-01] بند Backlog — تأكيد إضافي على `invoicing-create-invoice-numbering-collision` (معروف مسبقًا، commit `b4bf356`)
+
+**الوصف:** `InvoicingService.create_invoice()` بتفشل بتكرار بـ`IntegrityError` على قيد `invoices_invoice_number_key` — نفس الاكتشاف الموثَّق أصلًا في رسالة commit `b4bf356` ("an invoice-numbering collision surfaced while testing #37"، غير مُصلَح وقتها). **تأكيد حي إضافي [2026-09-01]:** نفس رقم الفاتورة بالحرف (`INV-1-000015`) تكرر عبر 3 تشغيلات throwaway مختلفة تمامًا لجلسة `backlog-16-begin-nested-commit-conflict` — يبدو إن آلية توليد الرقم مش بتعتمد فعليًا على قيمة متزايدة يتم قراءتها/تحديثها بشكل ذرّي وموثوق (سباق أو منطق عداد ثابت/كاش).
+
+**اكتشاف جانبي جديد (تفاعل مع بج آخر معروف — نمط "عدم `rollback()` صريح بعد استثناء DB مُمسوك"، موثَّق سابقًا في `transaction-savepoint-bug-session-log.md`):** الـ`try/except` الموجودة حول `create_invoice()` في `realestate.buy_fractional_ownership` (ونظيراتها في دومينات تانية، نمط #11b) بتمسك الاستثناء وتسجّله بـ`logger.error()`، **لكن الجلسة (`AsyncSession`) بتفضل بحالة `PendingRollbackError`** بعد الفلاش الفاشل (`expire_on_commit=True` الافتراضي بيخلي أي وصول تالٍ لخاصية ORM منتهية الصلاحية على نفس الجلسة يفشل). **مؤكَّد حيًا:** الوصول لـ`ownership.acquisition_date` (في فرع تخزين الـidempotency، بعد `create_invoice()` الفاشلة) بيفشل بـ`PendingRollbackError` غير معالَج، ويُسقِط `buy_fractional_ownership` بالكامل رغم إن الشراء نفسه نجح فعليًا قبل هذه النقطة.
+
+**الحل المتوقَّع (شقّان منفصلان):** (أ) إصلاح آلية توليد `invoice_number` نفسها (خارج نطاق هذا التوثيق، يحتاج فحص الكود المولِّد). (ب) نمط عام: أي `except Exception` بيمسك استثناء DB (فشل flush/commit) **لازم يعمل `await self.db.rollback()` صريح** قبل أي استمرار على نفس الجلسة — مش بس `logger.error()` — وإلا أي كود لاحق في نفس الجلسة معرَّض لنفس فئة `PendingRollbackError` (يحتاج جرد شبيه بـ`transaction-savepoint-bug-session-log.md` لكل مواضع `except Exception` المحيطة بعمليات DB في المشروع).
+
+**الحالة:** 🔴 مفتوح (كلا الشقين)، موثَّق فقط، صفر إصلاح في هذه الجلسة (تم تجاوزه بـ`monkeypatch` معزول في الاختبار فقط، صفر لمس على كود الإنتاج). اكتُشف/تأكَّد أثناء التحقق الحي لجلسة `backlog-16-begin-nested-commit-conflict` (`.claude/reports/backlog-16-begin-nested-commit-session-log.md` §5.4).
