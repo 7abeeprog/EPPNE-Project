@@ -352,3 +352,15 @@ export const AIAgentsService = {
     }
   },
 };
+
+// ==========================================
+// دوال مستقلة (named exports) — لدعم استهلاك app/(dashboard)/ai-governance
+// ==========================================
+
+export const getMyAgents = async (
+  params?: Parameters<typeof AIAgentsService.listAgents>[0],
+  headers?: { 'X-Tenant-ID'?: number }
+) => {
+  const data = await AIAgentsService.listAgents(params, headers);
+  return { data };
+};

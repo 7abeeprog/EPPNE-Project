@@ -71,6 +71,29 @@ export const ArbitrationSyndicatesService = {
   },
 
   /**
+   * جلب تفاصيل قضية واحدة
+   * GET /arbitration-syndicates/cases/{case_id}
+   * تدعم X-Tenant-ID
+   */
+  getCase: async (caseId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<ArbitrationCaseResponse> => {
+    try {
+      const id = Number(caseId);
+      if (isNaN(id)) throw new Error("معرف القضية غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<ArbitrationCaseResponse>(`/arbitration-syndicates/cases/${id}`, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب القضية");
+    }
+  },
+
+  /**
    * التصويت كعضو في هيئة المحلفين على قضية
    * POST /arbitration-syndicates/cases/{case_id}/jury-vote
    * تدعم Idempotency-Key و X-Tenant-ID
@@ -172,6 +195,29 @@ export const ArbitrationSyndicatesService = {
       return result;
     } catch (error) {
       throw handleError(error, "فشل إنشاء النقابة");
+    }
+  },
+
+  /**
+   * جلب تفاصيل نقابة واحدة
+   * GET /arbitration-syndicates/syndicates/{syndicate_id}
+   * تدعم X-Tenant-ID
+   */
+  getSyndicate: async (syndicateId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<SyndicateResponse> => {
+    try {
+      const id = Number(syndicateId);
+      if (isNaN(id)) throw new Error("معرف النقابة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<SyndicateResponse>(`/arbitration-syndicates/syndicates/${id}`, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب النقابة");
     }
   },
 
@@ -279,6 +325,29 @@ export const ArbitrationSyndicatesService = {
   },
 
   /**
+   * جلب تفاصيل انتخابات واحدة
+   * GET /arbitration-syndicates/elections/{election_id}
+   * تدعم X-Tenant-ID
+   */
+  getElection: async (electionId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<ElectionResponse> => {
+    try {
+      const id = Number(electionId);
+      if (isNaN(id)) throw new Error("معرف الانتخابات غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<ElectionResponse>(`/arbitration-syndicates/elections/${id}`, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب الانتخابات");
+    }
+  },
+
+  /**
    * ترشيح مرشح في انتخابات
    * POST /arbitration-syndicates/elections/{election_id}/candidates
    * تدعم X-Tenant-ID
@@ -336,3 +405,34 @@ export const ArbitrationSyndicatesService = {
     }
   },
 };
+
+// ==========================================
+// دوال مستقلة (named exports) — لدعم استهلاك hooks/arbitration-syndicates/*
+// تُرجع الشكل { data } الذي تتوقعه هذه الـhooks (نمط .then((res) => res.data))
+// ==========================================
+
+export const getCase = async (caseId: number, headers?: { 'X-Tenant-ID'?: number }) => {
+  const data = await ArbitrationSyndicatesService.getCase(caseId, headers);
+  return { data };
+};
+
+export const createCase = (data: ArbitrationCaseCreate, idempotencyKey?: string) =>
+  ArbitrationSyndicatesService.createDispute(data, { 'Idempotency-Key': idempotencyKey });
+
+export const getSyndicates = async (headers?: { 'X-Tenant-ID'?: number }) => {
+  const data = await ArbitrationSyndicatesService.listSyndicates(headers);
+  return { data };
+};
+
+export const getSyndicate = async (syndicateId: number, headers?: { 'X-Tenant-ID'?: number }) => {
+  const data = await ArbitrationSyndicatesService.getSyndicate(syndicateId, headers);
+  return { data };
+};
+
+export const getElection = async (electionId: number, headers?: { 'X-Tenant-ID'?: number }) => {
+  const data = await ArbitrationSyndicatesService.getElection(electionId, headers);
+  return { data };
+};
+
+export const castVote = (electionId: number, data: VoteCast, idempotencyKey?: string) =>
+  ArbitrationSyndicatesService.voteInElection(electionId, data, { 'Idempotency-Key': idempotencyKey });

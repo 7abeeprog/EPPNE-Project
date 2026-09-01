@@ -255,3 +255,14 @@ export const HealthService = {
     }
   },
 };
+
+// ==========================================
+// دوال مستقلة (named exports) — لدعم استهلاك app/(dashboard)/health و components/health
+// ==========================================
+
+export const getMyProfile = async () => {
+  const data = await HealthService.getMyMedicalProfile();
+  return { data };
+};
+
+export const updateMyProfile = (data: MedicalProfileCreate) => HealthService.updateMyMedicalProfile(data);

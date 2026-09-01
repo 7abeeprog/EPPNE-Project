@@ -1121,3 +1121,97 @@ logging) وليست بوابة إلزامية — قرار يحتاج مراجع
 
 **الحالة:** 🔴 مفتوح، موثَّق فقط، صفر إصلاح — يحتاج جلسة/قرار منفصل.
 `.claude/reports/ai-governance-check-and-consume-begin-nested-session-log.md`.
+
+---
+
+## [2026-09-01] بند Backlog جديد — `agritech-full-domain-build`
+
+**الوصف:** اكتُشف أثناء جلسة `frontend-category-b-phase1-cheap-wins` (البند
+1، "agritech routing"، أعلى أولوية في تلك الجلسة). مقارنة `main.py.bak`
+(يحوي `agritech_router` مسجَّل) بـ`main.py` الحالي (لا وجود لـagritech
+إطلاقًا) كشفت إن هذا مش نسيان تسجيل — commit موثَّق ومقصود
+(`9e01ede`, 2026-08-26, `fix(agritech): remove duplicate ai_governance
+router mistakenly mounted at /agritech`) شال `router.py` القديم لأنه كان
+**نسخة مكررة بالغلط من `ai_governance/router.py`** (نفس الـheader، نفس
+الـendpoints بتستخدم `AIGovernanceService`) — لم يقدّم أي API حقيقي
+لـagritech حتى وقت ما كان "مسجَّل". راجع
+`.claude/reports/agritech-status-check-2026-08-26.md` (تفاصيل الفحص
+الأصلي) و`.claude/reports/category-b/group2-tourism-tenders-agritech.md`
+(تصنيف الحالات).
+
+**الحالة الحقيقية لـagritech الآن:** `service.py`/`models.py`/
+`repository.py`/`schemas.py` (~1454 سطر) موجودة وسليمة وظيفيًا (منطق كامل:
+farms, crop cycles, harvest, bio assets, traceability QR, certificates,
+soil sensors, weather alerts)، لكن **orphaned بالكامل** — صفر `router.py`،
+صفر تسجيل في `main.py`، صفر نقطة استدعاء (حتى `tasks/agritech.py` عنده
+import ميت). جداول DB موجودة في migration.
+
+**القرار الموثَّق سابقًا (وأُعيد تأكيده في هذه الجلسة):** بناء `router.py`
+حقيقي لـagritech **قرار منتجي مؤجَّل، مش bug fix ولا "وصلة فقط"** — يحتاج
+تصميم ~11 endpoint من الصفر (مش استرجاع القديم، كان تالف)، بالإضافة لـ3
+مكوّنات UI مفقودة (`FarmCard`, `FarmZoneCard`, `WeatherAlertCard`) فوقه.
+هذا يرقّى agritech لحجم **"بناء دومين كامل"** — يشبه حجم عمل `transport`
+(راجع commit `fffd5fe`)، مش حالة "وصلة فقط" مايكروية.
+
+**الحل المتوقَّع:** جلسة مستقلة مخصَّصة (زي transport) تتضمن: (أ) تصميم
+`router.py` جديد كليًا لكل الـ11 endpoint، (ب) توصيله بـ`service.py`/
+`repository.py` الموجودين فعليًا، (ج) تسجيله في `main.py` (نمط
+`routers_config` الحالي، بلا `require_sector` — أُلغيت مشروعيًا)، (د)
+دفعة أمنية كاملة (tenant scoping, ownership checks) زي باقي الدومينات —
+لأنه هيكون سطح هجوم جديد بالكامل، (هـ) الثلاثة مكوّنات UI فوقه بعد اكتمال
+الـAPI.
+
+**الحالة:** 🔴 مفتوح، موثَّق فقط، صفر إصلاح/تفعيل في هذه الجلسة (بناءً على
+موافقة المستخدم الصريحة بعدم اللمس) — يحتاج جلسة منفصلة لاحقًا.
+`.claude/reports/frontend-category-b-phase1-session-log.md`.
+
+---
+
+## [2026-09-01] جلسة `frontend-category-b-phase1-cheap-wins` — إغلاق مرحلي
+
+**السياق:** المرحلة 1 من خطة إصلاح ~290 حالة فئة (ب) المصنَّفة في جلسة
+`frontend-category-b-classification-all-domains` (راجع
+`.claude/reports/category-b/group1..group5-*.md`). النطاق: أرخص وأضمن
+119 حالة "وصلة فقط" (أ) + بند agritech الحرج + 11 مكوّن UI فوق API جاهز.
+توقَّفت الجلسة عند نقطة منطقية بموافقة المستخدم، بدل تنفيذ كل الحالات
+دفعة واحدة. التفاصيل الكاملة والدقيقة لكل حالة:
+`.claude/reports/frontend-category-b-phase1-session-log.md`.
+
+**البند 1 (agritech):** ✅ مغلق — رُقِّي لبند backlog مستقل منفصل، راجع
+`agritech-full-domain-build` أعلاه في نفس الملف.
+
+**البند 2 (119 حالة "وصلة فقط") — 40/119 مُنجَزة عبر 11 دومين كامل:**
+
+| الدومين | حالات مُنجَزة | باك إند لُمس؟ |
+|---|---|---|
+| arbitration-syndicates | 6/7 (1 مؤجَّلة — `getElections` يحتاج query repository جديد، خارج حدود "صفر قرار تصميم") | لا |
+| zamakana | 6/6 | لا |
+| logistics | 6/6 | لا |
+| automation | 6/6 | لا |
+| health | 2/2 | لا |
+| marketplace | 2/2 | لا |
+| employment | 3/3 | **نعم** — `EmploymentService.get_job` + `GET /employment/jobs/{job_id}`، تحقَّق منه حيًا بـ`pytest` ضد DB حقيقية (`tests/test_employment_get_job_wiring.py`, PASSED) |
+| ai-governance/ai-agents | 4/4 | لا |
+| digital-twin | 2/2 | لا |
+| saas | 1/1 | لا |
+| communications | 1/1 | لا |
+
+**تأكيد مهم:** `employment` هو الدومين الوحيد من الـ11 اللي احتاج أي
+تعديل باك إند في هذه الجلسة — كل الباقي كان توصيل فرونت إند بحت (named
+exports/aliases فوق endpoints جاهزة بالكامل مسبقًا)، صفر تعديل على
+`router.py`/`service.py`/`repository.py` لأي دومين آخر.
+
+**الباقي من البند 2 (~79 حالة، لم يبدأ):** realestate (12، الباك إند
+جاهز من جلسة سابقة، الفرونت إند لسه محتاج تصدير أسماء)، insurance (10)،
+invitations (5 aliases)، social (11)، transport (9)، tourism-sports (4)،
+tenders-auctions (10)، manufacturing (4)، command (2)، + سطور متفرقة
+(commerce/academy/projects/finance-wallet، ~5).
+
+**البند 3 (11 مكوّن UI فوق API جاهز):** 🔴 لم يبدأ. 5 invitations + 1
+tourism-sports (`TransferCard`) قابلة للتنفيذ لاحقًا. **3 مكوّنات
+agritech محظورة بالكامل** — نفس سبب حظر بند agritech routing أعلاه (API
+غير جاهز، صفر endpoint قابل للوصول).
+
+**الحالة:** 🟡 مرحلة 1 مُغلَقة جزئيًا بنجاح — 40/119 + agritech موثَّق
+كبند backlog منفصل. المتبقي (~79 حالة من البند 2 + البند 3) يحتاج جلسة/
+جلسات لاحقة بنفس المنهجية.

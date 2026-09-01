@@ -607,3 +607,42 @@ export const LogisticsService = {
     }
   },
 };
+
+// ==========================================
+// دوال مستقلة (named exports) — لدعم استهلاك hooks/logistics/*
+// تُرجع الشكل { data } الذي تتوقعه هذه الـhooks (نمط .then((res) => res.data))
+// ==========================================
+
+export const getEquipmentItem = async (equipmentId: number, headers?: { 'X-Tenant-ID'?: number }) => {
+  const data = await LogisticsService.getEquipment(equipmentId, headers);
+  return { data };
+};
+
+export const getInventory = async (
+  params?: Parameters<typeof LogisticsService.listInventory>[0],
+  headers?: { 'X-Tenant-ID'?: number }
+) => {
+  const data = await LogisticsService.listInventory(params, headers);
+  return { data };
+};
+
+export const getInventoryItem = async (itemId: number, headers?: { 'X-Tenant-ID'?: number }) => {
+  const data = await LogisticsService.getInventoryItem(itemId, headers);
+  return { data };
+};
+
+export const getForecasts = async (
+  params?: { product_id?: number; period?: string; skip?: number; limit?: number },
+  headers?: { 'X-Tenant-ID'?: number }
+) => {
+  const data = await LogisticsService.listForecasts(params, headers);
+  return { data };
+};
+
+export const getWarehouses = async (
+  params?: Parameters<typeof LogisticsService.listWarehouses>[0],
+  headers?: { 'X-Tenant-ID'?: number }
+) => {
+  const data = await LogisticsService.listWarehouses(params, headers);
+  return { data };
+};

@@ -219,3 +219,12 @@ export const CommunicationsService = {
     }
   },
 };
+
+// ==========================================
+// دوال مستقلة (named exports) — لدعم استهلاك components/communications
+// ==========================================
+
+export const getNotifications = async (params?: Parameters<typeof CommunicationsService.getMyNotifications>[0]) => {
+  const data = await CommunicationsService.getMyNotifications(params);
+  return { data };
+};

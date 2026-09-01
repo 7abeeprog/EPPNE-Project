@@ -455,3 +455,28 @@ export const EmploymentService = {
     }
   },
 };
+
+// ==========================================
+// دوال مستقلة (named exports) — لدعم استهلاك app/(dashboard)/employment و components/employment
+// ==========================================
+
+export const getJob = async (jobId: number, headers?: { 'X-Tenant-ID'?: number }) => {
+  const reqHeaders: Record<string, string> = {};
+  if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+    reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+  }
+  try {
+    const { data } = await apiClient.get<JobListingResponse>(`/employment/jobs/${jobId}`, {
+      headers: reqHeaders,
+      withCredentials: true,
+    });
+    return { data };
+  } catch (error) {
+    throw handleError(error, "فشل جلب الوظيفة");
+  }
+};
+
+export const getMyContract = async () => {
+  const data = await EmploymentService.getMyActiveContract();
+  return { data };
+};

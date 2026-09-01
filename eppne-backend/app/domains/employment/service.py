@@ -194,6 +194,13 @@ class EmploymentService:
         """عرض وظائف صاحب العمل."""
         return await self.repo.list_employer_jobs(employer_id, skip, limit)
 
+    async def get_job(self, job_id: int, tenant_id: int) -> JobListing:
+        """جلب تفاصيل وظيفة واحدة."""
+        job = await self.repo.get_job_listing(job_id, tenant_id)
+        if not job:
+            raise NotFoundError("الوظيفة غير موجودة")
+        return job
+
     async def update_job(self, employer_id: int, job_id: int, data: Dict[str, Any]) -> JobListing:
         """تحديث بيانات وظيفة."""
         job = await self.repo.get_job_listing_by_employer(job_id, employer_id)

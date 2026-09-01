@@ -319,3 +319,14 @@ export const DigitalTwinService = {
     }
   },
 };
+
+// ==========================================
+// دوال/أنواع مستقلة (named exports) — لدعم استهلاك app/(dashboard)/digital-twin و store/digitalTwinStore
+// ==========================================
+
+export type TwinConfig = TwinConfigResponse;
+
+export const getTimeCapsule = async (headers?: { 'X-Tenant-ID'?: number }) => {
+  const data = await DigitalTwinService.getMyTimeCapsule(headers);
+  return { data };
+};

@@ -480,3 +480,32 @@ export const ZamakanaService = {
     }
   },
 };
+
+// ==========================================
+// دوال مستقلة (named exports) — لدعم استهلاك hooks/zamakana/*
+// تُرجع الشكل { data } الذي تتوقعه هذه الـhooks (نمط .then((res) => res.data))
+// ==========================================
+
+export const getCampaigns = async (
+  params?: { status?: string; skip?: number; limit?: number },
+  headers?: { 'X-Tenant-ID'?: number }
+) => {
+  const data = await ZamakanaService.listCampaigns(params, headers);
+  return { data };
+};
+
+export const getNodes = async (
+  params?: { node_type?: string; skip?: number; limit?: number },
+  headers?: { 'X-Tenant-ID'?: number }
+) => {
+  const data = await ZamakanaService.listNodes(params, headers);
+  return { data };
+};
+
+export const getScenarios = async (
+  params?: { status?: string; skip?: number; limit?: number },
+  headers?: { 'X-Tenant-ID'?: number }
+) => {
+  const data = await ZamakanaService.listScenarios(params, headers);
+  return { data };
+};

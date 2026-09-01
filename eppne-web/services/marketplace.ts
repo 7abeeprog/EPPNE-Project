@@ -308,3 +308,23 @@ export const MarketplaceService = {
     }
   },
 };
+
+// ==========================================
+// دوال مستقلة (named exports) — لدعم استهلاك app/(dashboard)/marketplace و components/marketplace
+// ==========================================
+
+export const getServices = async (
+  params?: Parameters<typeof MarketplaceService.listServices>[0],
+  headers?: { 'X-Tenant-ID'?: number }
+) => {
+  const data = await MarketplaceService.listServices(params, headers);
+  return { data };
+};
+
+export const getAddons = async (
+  params?: Parameters<typeof MarketplaceService.listAddons>[0],
+  headers?: { 'X-Tenant-ID'?: number }
+) => {
+  const data = await MarketplaceService.listAddons(params, headers);
+  return { data };
+};

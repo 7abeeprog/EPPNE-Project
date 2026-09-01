@@ -294,3 +294,21 @@ export const AutomationService = {
     }
   },
 };
+
+// ==========================================
+// دوال مستقلة (named exports) — لدعم استهلاك صفحات/مكوّنات automation
+// تُرجع الشكل { data } الذي تتوقعه هذه الاستدعاءات (نمط .then((res) => res.data))
+// ==========================================
+
+export const getSecrets = async (headers?: { 'X-Tenant-ID'?: number }) => {
+  const data = await AutomationService.listSecrets(headers);
+  return { data };
+};
+
+export const getAvailableAgents = async (headers?: { 'X-Tenant-ID'?: number }) => {
+  const data = await AutomationService.listAvailableAgents(headers);
+  return { data };
+};
+
+export const toggleWorkflowActive = (workflowId: number, isActive: boolean) =>
+  AutomationService.updateWorkflow(workflowId, { is_active: isActive });

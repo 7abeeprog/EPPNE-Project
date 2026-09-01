@@ -69,6 +69,16 @@ async def get_my_jobs(
     return jobs
 
 
+@router.get("/jobs/{job_id}", response_model=JobListingResponse)
+async def get_job(
+    job_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = EmploymentService(db)
+    return await service.get_job(job_id, tenant_id=cast(int, current_user.tenant_id))
+
+
 @router.put("/jobs/{job_id}", response_model=JobListingResponse)
 @rate_limit(max_requests=10, window_seconds=60)
 async def update_job(
