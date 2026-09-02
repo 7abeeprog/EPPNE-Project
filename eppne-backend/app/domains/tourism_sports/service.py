@@ -118,6 +118,13 @@ class TourismSportsService:
             status="ANNOUNCED"
         )
 
+    async def get_program(self, program_id: int, tenant_id: int) -> TourismProgram:
+        """جلب برنامج سياحي واحد مع التأكد من tenant_id."""
+        program = await self.repo.get_program(program_id)
+        if not program or program.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("البرنامج غير موجود")
+        return program
+
     # ============================================================
     # 2. حجز برنامج سياحي (مع Idempotency محسّن)
     # ============================================================
@@ -228,6 +235,13 @@ class TourismSportsService:
             end_time=data["end_time"],
             base_ticket_price_mrusdt=data["base_ticket_price_mrusdt"]
         )
+
+    async def get_event(self, event_id: int, tenant_id: int) -> EntertainmentEvent:
+        """جلب فعالية ترفيهية واحدة مع التأكد من tenant_id."""
+        event = await self.repo.get_event(event_id)
+        if not event or event.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("الفعالية غير موجودة")
+        return event
 
     # ============================================================
     # 4. شراء تذكرة فعالية (مع Idempotency محسّن)
@@ -354,6 +368,13 @@ class TourismSportsService:
             main_sport=data.get("main_sport")
         )
 
+    async def get_sports_org(self, org_id: int, tenant_id: int) -> SportsOrganization:
+        """جلب منظمة رياضية واحدة مع التأكد من tenant_id."""
+        org = await self.repo.get_sports_org(org_id, tenant_id)
+        if not org:
+            raise NotFoundError("المنظمة الرياضية غير موجودة")
+        return org
+
     async def create_player_profile(
         self,
         user_id: int,
@@ -372,6 +393,13 @@ class TourismSportsService:
             position_or_role=data.get("position_or_role"),
             market_value_mrusdt=data.get("market_value_mrusdt", Decimal(0))
         )
+
+    async def get_player(self, profile_id: int, tenant_id: int) -> PlayerProfile:
+        """جلب ملف لاعب واحد مع التأكد من tenant_id."""
+        player = await self.repo.get_player_profile_by_id(profile_id)
+        if not player or player.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("ملف اللاعب غير موجود")
+        return player
 
     # ============================================================
     # 6. تقديم عرض شراء لاعب (مع Idempotency محسّن)

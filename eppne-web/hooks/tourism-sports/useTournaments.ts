@@ -1,6 +1,7 @@
 // hooks/tourism-sports/useTournaments.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getTournaments, getTournament, createTournament } from '@/services/tourism-sports';
+import { getTournaments, getTournament } from '@/services/tourism-sports';
+import { TourismSportsService } from '@/services/tourism-sports';
 
 export const useTournaments = () => {
   return useQuery({
@@ -22,7 +23,7 @@ export const useTournament = (id: number) => {
 export const useCreateTournament = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Parameters<typeof createTournament>[0]) => createTournament(data),
+    mutationFn: (data: Parameters<typeof TourismSportsService.createTournament>[0]) => TourismSportsService.createTournament(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sports-tournaments'] });
     },

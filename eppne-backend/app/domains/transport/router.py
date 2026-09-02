@@ -84,6 +84,17 @@ async def get_available_vehicles(
     vehicles = await service.get_available_vehicles(cast(int, current_user.tenant_id), fleet_id)  # ✅ cast
     return vehicles
 
+@router.get("/vehicles/{vehicle_id}", response_model=VehicleResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_vehicle(
+    vehicle_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TransportService(db)
+    vehicle = await service.get_vehicle(vehicle_id, cast(int, current_user.tenant_id))
+    return vehicle
+
 # ========== Routes ==========
 @router.post("/routes", response_model=RouteResponse, status_code=201)
 @rate_limit(max_requests=5, window_seconds=60)
@@ -94,6 +105,17 @@ async def create_route(
 ):
     service = TransportService(db)
     route = await service.create_route(cast(int, current_user.tenant_id), data.model_dump())  # ✅ cast
+    return route
+
+@router.get("/routes/{route_id}", response_model=RouteResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_route(
+    route_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TransportService(db)
+    route = await service.get_route(route_id, cast(int, current_user.tenant_id))
     return route
 
 # ========== Trips ==========
@@ -150,6 +172,17 @@ async def get_my_trips(
     trips = await service.get_my_trips(cast(int, current_user.tenant_id), user_id, status_filter, skip, limit)  # ✅ cast
     return trips
 
+@router.get("/trips/{trip_id}", response_model=TripResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_trip(
+    trip_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TransportService(db)
+    trip = await service.get_trip(trip_id, cast(int, current_user.tenant_id))
+    return trip
+
 # ========== Bookings ==========
 @router.post("/bookings", response_model=TripBookingResponse, status_code=201)
 @rate_limit(max_requests=20, window_seconds=60)
@@ -178,6 +211,18 @@ async def get_my_bookings(
     service = TransportService(db)
     user_id = cast(int, current_user.id)
     bookings = await service.get_my_bookings(cast(int, current_user.tenant_id), user_id)  # ✅ cast
+    return bookings
+
+@router.get("/bookings", response_model=list[TripBookingResponse])
+@rate_limit(max_requests=30, window_seconds=60)
+async def list_bookings(
+    passenger_id: Optional[int] = None,
+    trip_id: Optional[int] = None,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TransportService(db)
+    bookings = await service.list_bookings(cast(int, current_user.tenant_id), passenger_id, trip_id)
     return bookings
 
 # ========== Deliveries ==========
@@ -230,6 +275,19 @@ async def complete_delivery(
     task = await service.complete_delivery(cast(int, current_user.tenant_id), task_id, user_id, proof.proof_hash)  # ✅ cast
     return task
 
+
+@router.post("/deliveries/{task_id}/assign", response_model=DeliveryTaskResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def assign_delivery_to_trip(
+    task_id: int,
+    data: AssignDeliveryRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TransportService(db)
+    user_id = cast(int, current_user.id)
+    task = await service.assign_delivery_to_trip(cast(int, current_user.tenant_id), task_id, data.trip_id, user_id)
+    return task
 
 @router.post("/deliveries/{task_id}/cancel", response_model=DeliveryTaskResponse)
 @rate_limit(max_requests=10, window_seconds=60)

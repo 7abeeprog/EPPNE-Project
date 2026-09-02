@@ -93,6 +93,33 @@ export const InsuranceService = {
   },
 
   /**
+   * تحديث سياسة تأمين
+   * PATCH /insurance/policies/{policy_id}
+   * تدعم X-Tenant-ID
+   */
+  updatePolicy: async (
+    policyId: number,
+    data: Partial<InsurancePolicyCreate> & { is_active?: boolean },
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<InsurancePolicyResponse> => {
+    try {
+      const id = Number(policyId);
+      if (isNaN(id)) throw new Error("معرف السياسة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.patch<InsurancePolicyResponse>(`/insurance/policies/${id}`, data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تحديث سياسة التأمين");
+    }
+  },
+
+  /**
    * الاشتراك في سياسة تأمين
    * POST /insurance/subscriptions
    * تدعم Idempotency-Key و X-Tenant-ID
@@ -174,6 +201,59 @@ export const InsuranceService = {
       return result;
     } catch (error) {
       throw handleError(error, "فشل تجديد الاشتراك");
+    }
+  },
+
+  /**
+   * جلب اشتراك تأمين واحد
+   * GET /insurance/subscriptions/{subscription_id}
+   * تدعم X-Tenant-ID
+   */
+  getSubscription: async (
+    subscriptionId: number,
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<InsuranceSubscriptionResponse> => {
+    try {
+      const id = Number(subscriptionId);
+      if (isNaN(id)) throw new Error("معرف الاشتراك غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<InsuranceSubscriptionResponse>(`/insurance/subscriptions/${id}`, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب الاشتراك");
+    }
+  },
+
+  /**
+   * إلغاء اشتراك تأمين
+   * POST /insurance/subscriptions/{subscription_id}/cancel
+   * تدعم X-Tenant-ID
+   */
+  cancelSubscription: async (
+    subscriptionId: number,
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<InsuranceSubscriptionResponse> => {
+    try {
+      const id = Number(subscriptionId);
+      if (isNaN(id)) throw new Error("معرف الاشتراك غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<InsuranceSubscriptionResponse>(
+        `/insurance/subscriptions/${id}/cancel`,
+        undefined,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إلغاء الاشتراك");
     }
   },
 
@@ -268,6 +348,56 @@ export const InsuranceService = {
   },
 
   /**
+   * جلب مطالبة تأمين واحدة
+   * GET /insurance/claims/{claim_id}
+   * تدعم X-Tenant-ID
+   */
+  getClaim: async (claimId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<InsuranceClaimResponse> => {
+    try {
+      const id = Number(claimId);
+      if (isNaN(id)) throw new Error("معرف المطالبة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<InsuranceClaimResponse>(`/insurance/claims/${id}`, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب المطالبة");
+    }
+  },
+
+  /**
+   * تحديث مطالبة تأمين (للمشرفين)
+   * PATCH /insurance/claims/{claim_id}
+   * تدعم X-Tenant-ID
+   */
+  updateClaim: async (
+    claimId: number,
+    data: { status?: string; approved_amount_mrusdt?: number | string; investigation_notes?: string; oracle_verification_hash?: string },
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<InsuranceClaimResponse> => {
+    try {
+      const id = Number(claimId);
+      if (isNaN(id)) throw new Error("معرف المطالبة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.patch<InsuranceClaimResponse>(`/insurance/claims/${id}`, data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تحديث المطالبة");
+    }
+  },
+
+  /**
    * إنشاء سجل معاش جديد
    * POST /insurance/pensions
    * تدعم X-Tenant-ID
@@ -306,6 +436,80 @@ export const InsuranceService = {
       return data;
     } catch (error) {
       throw handleError(error, "فشل جلب معاشاتي");
+    }
+  },
+
+  /**
+   * جلب سجل معاش واحد
+   * GET /insurance/pensions/{pension_id}
+   * تدعم X-Tenant-ID
+   */
+  getPension: async (pensionId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<PensionRecordResponse> => {
+    try {
+      const id = Number(pensionId);
+      if (isNaN(id)) throw new Error("معرف المعاش غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<PensionRecordResponse>(`/insurance/pensions/${id}`, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب المعاش");
+    }
+  },
+
+  /**
+   * تحديث سجل معاش (للمشرفين)
+   * PATCH /insurance/pensions/{pension_id}
+   * تدعم X-Tenant-ID
+   */
+  updatePension: async (
+    pensionId: number,
+    data: { pension_type?: string; monthly_amount_mrusdt?: number | string; end_date?: string },
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<PensionRecordResponse> => {
+    try {
+      const id = Number(pensionId);
+      if (isNaN(id)) throw new Error("معرف المعاش غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.patch<PensionRecordResponse>(`/insurance/pensions/${id}`, data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تحديث المعاش");
+    }
+  },
+
+  /**
+   * تعليق سجل معاش (للمشرفين)
+   * POST /insurance/pensions/{pension_id}/suspend
+   * تدعم X-Tenant-ID
+   */
+  suspendPension: async (pensionId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<PensionRecordResponse> => {
+    try {
+      const id = Number(pensionId);
+      if (isNaN(id)) throw new Error("معرف المعاش غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<PensionRecordResponse>(
+        `/insurance/pensions/${id}/suspend`,
+        undefined,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تعليق المعاش");
     }
   },
 
@@ -352,6 +556,31 @@ export const InsuranceService = {
       return data;
     } catch (error) {
       throw handleError(error, "فشل جلب ملف الموظف");
+    }
+  },
+
+  /**
+   * تحديث ملف التأمين الخاص بي كموظف
+   * PUT /insurance/employee-profiles/me
+   * تدعم X-Tenant-ID
+   */
+  updateEmployeeProfile: async (
+    data: { employee_share_percentage?: number | string; employer_share_percentage?: number | string },
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<EmployeeInsuranceProfileResponse> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.put<EmployeeInsuranceProfileResponse>(
+        "/insurance/employee-profiles/me",
+        data,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تحديث ملف الموظف");
     }
   },
 

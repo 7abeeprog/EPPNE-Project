@@ -84,6 +84,20 @@ async def update_my_brand(
     return brand
 
 
+@router.get("/brands", response_model=List[BrandSettingsResponse])
+@rate_limit(max_requests=30, window_seconds=60)
+async def list_brands(
+    skip: int = 0,
+    limit: int = 50,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """جلب قائمة البراندات الخاصة بالمستأجر الحالي"""
+    service = CommandService(db)
+    brands = await service.list_brands(tenant_id=cast(int, current_user.tenant_id), skip=skip, limit=limit)
+    return brands
+
+
 # ============================================================
 # 3. التنبيهات (Alerts)
 # ============================================================
@@ -329,6 +343,7 @@ async def list_metrics(
     metric_name: Optional[str] = Query(None, description="اسم المقياس"),
     start_date: Optional[datetime] = Query(None, description="تاريخ البداية"),
     end_date: Optional[datetime] = Query(None, description="تاريخ النهاية"),
+    period: Optional[str] = Query(None, description="الفترة الزمنية للمقياس"),
     limit: int = Query(100, ge=1, le=500),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
@@ -340,6 +355,7 @@ async def list_metrics(
         metric_name=metric_name,
         start_date=start_date,
         end_date=end_date,
+        period=period,
         limit=limit
     )
     return metrics

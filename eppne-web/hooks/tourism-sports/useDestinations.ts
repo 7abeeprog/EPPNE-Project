@@ -1,11 +1,12 @@
 // hooks/tourism-sports/useDestinations.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getDestinations, getDestination, createDestination } from '@/services/tourism-sports';
+import { getDestination } from '@/services/tourism-sports';
+import { TourismSportsService } from '@/services/tourism-sports';
 
 export const useDestinations = (params?: { destination_type?: string }) => {
   return useQuery({
     queryKey: ['tourism-destinations', params],
-    queryFn: () => getDestinations(params).then((res) => res.data),
+    queryFn: () => TourismSportsService.listDestinations(params),
     staleTime: 2 * 60 * 1000,
   });
 };
@@ -22,7 +23,7 @@ export const useDestination = (id: number) => {
 export const useCreateDestination = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Parameters<typeof createDestination>[0]) => createDestination(data),
+    mutationFn: (data: Parameters<typeof TourismSportsService.createDestination>[0]) => TourismSportsService.createDestination(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tourism-destinations'] });
     },

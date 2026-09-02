@@ -1,6 +1,7 @@
 // hooks/tourism-sports/useTransfers.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getTransfers, placeTransferBid } from '@/services/tourism-sports';
+import { getTransfers } from '@/services/tourism-sports';
+import { TourismSportsService } from '@/services/tourism-sports';
 
 export const useTransfers = (params?: { status?: string }) => {
   return useQuery({
@@ -17,9 +18,9 @@ export const usePlaceTransferBid = () => {
       data,
       idempotencyKey,
     }: {
-      data: Parameters<typeof placeTransferBid>[0];
+      data: Parameters<typeof TourismSportsService.placeTransferBid>[0];
       idempotencyKey?: string;
-    }) => placeTransferBid(data, idempotencyKey),
+    }) => TourismSportsService.placeTransferBid(data, { 'Idempotency-Key': idempotencyKey }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sports-transfers'] });
       queryClient.invalidateQueries({ queryKey: ['sports-players'] });

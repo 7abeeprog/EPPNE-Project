@@ -48,6 +48,17 @@ async def create_program(
     prog = await service.create_program(user_id, cast(int, current_user.tenant_id), data.model_dump())  # ✅ cast
     return prog
 
+@router.get("/programs/{program_id}", response_model=TourismProgramResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_program(
+    program_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TourismSportsService(db)
+    program = await service.get_program(program_id, cast(int, current_user.tenant_id))
+    return program
+
 @router.post("/programs/{program_id}/book", response_model=ProgramBookingResponse)
 @rate_limit(max_requests=10, window_seconds=60)
 async def book_program(
@@ -72,6 +83,17 @@ async def create_event(
     service = TourismSportsService(db)
     user_id = cast(int, current_user.id)
     event = await service.create_event(user_id, cast(int, current_user.tenant_id), data.model_dump())  # ✅ cast
+    return event
+
+@router.get("/events/{event_id}", response_model=EventResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_event(
+    event_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TourismSportsService(db)
+    event = await service.get_event(event_id, cast(int, current_user.tenant_id))
     return event
 
 @router.post("/tickets/purchase", response_model=TicketResponse)
@@ -107,6 +129,17 @@ async def create_sports_org(
     org = await service.create_sports_org(user_id, cast(int, current_user.tenant_id), data.model_dump())  # ✅ cast
     return org
 
+@router.get("/sports/organizations/{org_id}", response_model=SportsOrgResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_sports_org(
+    org_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TourismSportsService(db)
+    org = await service.get_sports_org(org_id, cast(int, current_user.tenant_id))
+    return org
+
 @router.post("/sports/players/profile", response_model=PlayerProfileResponse)
 @rate_limit(max_requests=5, window_seconds=60)
 async def create_player_profile(
@@ -118,6 +151,17 @@ async def create_player_profile(
     user_id = cast(int, current_user.id)
     profile = await service.create_player_profile(user_id, cast(int, current_user.tenant_id), data.model_dump())  # ✅ cast
     return profile
+
+@router.get("/sports/players/{profile_id}", response_model=PlayerProfileResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_player(
+    profile_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TourismSportsService(db)
+    player = await service.get_player(profile_id, cast(int, current_user.tenant_id))
+    return player
 
 @router.post("/sports/transfers/bid", response_model=TransferBidResponse)
 @rate_limit(max_requests=5, window_seconds=60)

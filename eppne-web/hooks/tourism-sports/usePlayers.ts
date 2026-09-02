@@ -1,6 +1,7 @@
 // hooks/tourism-sports/usePlayers.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getPlayers, getPlayer, createPlayerProfile } from '@/services/tourism-sports';
+import { getPlayers } from '@/services/tourism-sports';
+import { TourismSportsService } from '@/services/tourism-sports';
 
 export const usePlayers = (params?: { club_id?: number; sport_category?: string }) => {
   return useQuery({
@@ -13,7 +14,7 @@ export const usePlayers = (params?: { club_id?: number; sport_category?: string 
 export const usePlayer = (id: number) => {
   return useQuery({
     queryKey: ['sports-player', id],
-    queryFn: () => getPlayer(id).then((res) => res.data),
+    queryFn: () => TourismSportsService.getPlayer(id),
     enabled: !!id,
     staleTime: 2 * 60 * 1000,
   });
@@ -22,7 +23,7 @@ export const usePlayer = (id: number) => {
 export const useCreatePlayerProfile = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Parameters<typeof createPlayerProfile>[0]) => createPlayerProfile(data),
+    mutationFn: (data: Parameters<typeof TourismSportsService.createPlayerProfile>[0]) => TourismSportsService.createPlayerProfile(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sports-players'] });
     },

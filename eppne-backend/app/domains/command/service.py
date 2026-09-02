@@ -190,6 +190,10 @@ class CommandService:
         """تحديث إعدادات البراند"""
         return await self.repo.update_brand(tenant_id, **data)
 
+    async def list_brands(self, tenant_id: int, skip: int = 0, limit: int = 50) -> List[BrandSettings]:
+        """جلب قائمة البراندات الخاصة بالمستأجر"""
+        return await self.repo.list_brands(tenant_id, skip, limit)
+
     # ============================================================
     # 3. التنبيهات (Alerts)
     # ============================================================
@@ -442,7 +446,8 @@ class CommandService:
         metric_name: Optional[str] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
+        period: Optional[str] = None,
         limit: int = 100
     ) -> List[PlatformMetric]:
         """جلب قائمة المقاييس المسجلة"""
-        return await self.repo.list_metrics(tenant_id, metric_name, start_date, end_date, limit)
+        return await self.repo.list_metrics(tenant_id, metric_name, start_date, end_date, period, limit)

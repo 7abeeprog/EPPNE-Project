@@ -76,6 +76,23 @@ async def get_policy(
     return policy
 
 
+@router.patch("/policies/{policy_id}", response_model=InsurancePolicyResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def update_policy(
+    policy_id: int,
+    data: InsurancePolicyUpdate,
+    current_user: User = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db)
+):
+    service = InsuranceService(db)
+    policy = await service.update_policy(
+        policy_id=policy_id,
+        tenant_id=cast(int, current_user.tenant_id),
+        data=data.model_dump(exclude_unset=True)
+    )
+    return policy
+
+
 # ============================================================
 # 2. اشتراكات التأمين (Subscriptions)
 # ============================================================
@@ -134,6 +151,30 @@ async def renew_subscription(
         user_id=cast(int, current_user.id)
     )
     return renewed
+
+
+@router.get("/subscriptions/{subscription_id}", response_model=InsuranceSubscriptionResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_subscription(
+    subscription_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = InsuranceService(db)
+    subscription = await service.get_subscription(subscription_id, cast(int, current_user.tenant_id))
+    return subscription
+
+
+@router.post("/subscriptions/{subscription_id}/cancel", response_model=InsuranceSubscriptionResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def cancel_subscription(
+    subscription_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = InsuranceService(db)
+    subscription = await service.cancel_subscription(subscription_id, cast(int, current_user.id))
+    return subscription
 
 
 # ============================================================
@@ -200,6 +241,35 @@ async def review_claim(
     return claim
 
 
+@router.get("/claims/{claim_id}", response_model=InsuranceClaimResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_claim(
+    claim_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = InsuranceService(db)
+    claim = await service.get_claim(claim_id, cast(int, current_user.tenant_id))
+    return claim
+
+
+@router.patch("/claims/{claim_id}", response_model=InsuranceClaimResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def update_claim(
+    claim_id: int,
+    data: InsuranceClaimUpdate,
+    current_user: User = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db)
+):
+    service = InsuranceService(db)
+    claim = await service.update_claim(
+        claim_id=claim_id,
+        tenant_id=cast(int, current_user.tenant_id),
+        data=data.model_dump(exclude_unset=True)
+    )
+    return claim
+
+
 # ============================================================
 # 4. المعاشات (Pensions)
 # ============================================================
@@ -232,6 +302,47 @@ async def get_my_pensions(
     service = InsuranceService(db)
     pensions = await service.get_my_pensions(user_id=cast(int, current_user.id))
     return pensions
+
+
+@router.get("/pensions/{pension_id}", response_model=PensionRecordResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_pension(
+    pension_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = InsuranceService(db)
+    pension = await service.get_pension(pension_id, cast(int, current_user.tenant_id))
+    return pension
+
+
+@router.patch("/pensions/{pension_id}", response_model=PensionRecordResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def update_pension(
+    pension_id: int,
+    data: PensionRecordUpdate,
+    current_user: User = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db)
+):
+    service = InsuranceService(db)
+    pension = await service.update_pension(
+        pension_id=pension_id,
+        tenant_id=cast(int, current_user.tenant_id),
+        data=data.model_dump(exclude_unset=True)
+    )
+    return pension
+
+
+@router.post("/pensions/{pension_id}/suspend", response_model=PensionRecordResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def suspend_pension(
+    pension_id: int,
+    current_user: User = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db)
+):
+    service = InsuranceService(db)
+    pension = await service.suspend_pension(pension_id, cast(int, current_user.tenant_id))
+    return pension
 
 
 @router.post("/admin/disburse-pensions")
@@ -280,4 +391,19 @@ async def get_my_employee_profile(
     profile = await service.get_employee_profile(user_id=cast(int, current_user.id))
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
+    return profile
+
+
+@router.put("/employee-profiles/me", response_model=EmployeeInsuranceProfileResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def update_my_employee_profile(
+    data: EmployeeInsuranceProfileUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = InsuranceService(db)
+    profile = await service.update_employee_profile(
+        user_id=cast(int, current_user.id),
+        data=data.model_dump(exclude_unset=True)
+    )
     return profile

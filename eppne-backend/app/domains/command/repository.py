@@ -127,6 +127,7 @@ class CommandRepository:
         metric_name: Optional[str] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
+        period: Optional[str] = None,
         limit: int = 100
     ) -> List[PlatformMetric]:
         query = select(PlatformMetric).where(PlatformMetric.tenant_id == tenant_id)
@@ -136,6 +137,8 @@ class CommandRepository:
             query = query.where(PlatformMetric.recorded_at >= start_date)
         if end_date:
             query = query.where(PlatformMetric.recorded_at <= end_date)
+        if period:
+            query = query.where(PlatformMetric.period == period)
         query = query.order_by(PlatformMetric.recorded_at.desc()).limit(limit)
         result = await self.db.execute(query)
         return list(result.scalars().all())

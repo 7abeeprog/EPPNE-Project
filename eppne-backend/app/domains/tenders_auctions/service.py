@@ -103,6 +103,43 @@ class TendersAuctionsService:
 
         return tender
 
+    async def get_tender(self, tender_id: int, tenant_id: int) -> SovereignTender:
+        tender = await self.repo.get_tender(tender_id)
+        if not tender or tender.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("Tender not found")
+        return tender
+
+    async def list_tenders(
+        self,
+        tenant_id: int,
+        status: Optional[str] = None,
+        project_id: Optional[int] = None,
+        skip: int = 0,
+        limit: int = 50
+    ) -> List[SovereignTender]:
+        return await self.repo.list_tenders(tenant_id, cast(Any, status), project_id, skip, limit)
+
+    async def update_tender(self, tender_id: int, tenant_id: int, data: Dict[str, Any]) -> SovereignTender:
+        tender = await self.repo.get_tender(tender_id)
+        if not tender or tender.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("Tender not found")
+        return await self.repo.update_tender(tender_id, **data)
+
+    async def open_tender(self, tender_id: int, tenant_id: int) -> SovereignTender:
+        """ينقل المناقصة من DRAFT/مجدولة إلى PUBLISHED."""
+        tender = await self.repo.get_tender(tender_id)
+        if not tender or tender.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("Tender not found")
+        if cast(TenderStatus, tender.status) != TenderStatus.DRAFT:
+            raise PermissionDeniedError("Tender cannot be opened from its current status")
+        return await self.repo.update_tender(tender_id, status=TenderStatus.PUBLISHED)
+
+    async def get_tender_bids(self, tender_id: int, tenant_id: int, status: Optional[str] = None) -> List[TenderBid]:
+        tender = await self.repo.get_tender(tender_id)
+        if not tender or tender.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("Tender not found")
+        return await self.repo.list_bids_for_tender(tender_id, cast(Any, status))
+
     # ========== تقديم عطاء (مع Idempotency محسّن) ==========
     async def submit_bid(
         self,
@@ -281,6 +318,37 @@ class TendersAuctionsService:
         })
 
         return auction
+
+    async def get_auction(self, auction_id: int, tenant_id: int) -> SovereignAuction:
+        auction = await self.repo.get_auction(auction_id)
+        if not auction or auction.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("Auction not found")
+        return auction
+
+    async def list_auctions(
+        self,
+        tenant_id: int,
+        status: Optional[str] = None,
+        asset_type: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50
+    ) -> List[SovereignAuction]:
+        return await self.repo.list_auctions(tenant_id, cast(Any, status), asset_type, skip, limit)
+
+    async def start_auction(self, auction_id: int, tenant_id: int) -> SovereignAuction:
+        """ينقل المزاد من DRAFT/SCHEDULED إلى OPEN."""
+        auction = await self.repo.get_auction(auction_id)
+        if not auction or auction.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("Auction not found")
+        if cast(AuctionStatus, auction.status) not in (AuctionStatus.DRAFT, AuctionStatus.SCHEDULED):
+            raise PermissionDeniedError("Auction cannot be started from its current status")
+        return await self.repo.update_auction(auction_id, status=AuctionStatus.OPEN)
+
+    async def get_auction_bids(self, auction_id: int, tenant_id: int, limit: int = 100) -> List[LiveBid]:
+        auction = await self.repo.get_auction(auction_id)
+        if not auction or auction.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("Auction not found")
+        return await self.repo.get_live_bids_for_auction(auction_id, limit)
 
     # ========== وضع مزايدة حية (مع Idempotency محسّن) ==========
     async def place_bid(

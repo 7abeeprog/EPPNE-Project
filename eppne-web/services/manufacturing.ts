@@ -49,6 +49,51 @@ export const ManufacturingService = {
   },
 
   /**
+   * جلب قائمة مرافق التصنيع
+   * GET /manufacturing/facilities
+   * تدعم X-Tenant-ID
+   */
+  listFacilities: async (params?: { skip?: number; limit?: number }, headers?: { 'X-Tenant-ID'?: number }): Promise<ManufacturingFacilityResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<ManufacturingFacilityResponse[]>("/manufacturing/facilities", {
+        params,
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب مرافق التصنيع");
+    }
+  },
+
+  /**
+   * جلب مرفق تصنيع واحد
+   * GET /manufacturing/facilities/{facility_id}
+   * تدعم X-Tenant-ID
+   */
+  getFacility: async (facilityId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<ManufacturingFacilityResponse> => {
+    try {
+      const id = Number(facilityId);
+      if (isNaN(id)) throw new Error("معرف المرفق غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<ManufacturingFacilityResponse>(`/manufacturing/facilities/${id}`, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب المرفق");
+    }
+  },
+
+  /**
    * إضافة خط إنتاج داخل مرفق
    * POST /manufacturing/facilities/{facility_id}/lines
    */

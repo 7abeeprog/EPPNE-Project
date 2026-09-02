@@ -1,6 +1,7 @@
 // hooks/social/useGifts.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getDigitalGifts, getPhysicalGifts, sendDigitalGift, requestPhysicalGift } from '@/services/social';
+import { getDigitalGifts, getPhysicalGifts } from '@/services/social';
+import { SocialService } from '@/services/social';
 
 export const useDigitalGifts = () => {
   return useQuery({
@@ -25,9 +26,9 @@ export const useSendDigitalGift = () => {
       data,
       idempotencyKey,
     }: {
-      data: Parameters<typeof sendDigitalGift>[0];
+      data: Parameters<typeof SocialService.sendDigitalGift>[0];
       idempotencyKey?: string;
-    }) => sendDigitalGift(data, idempotencyKey),
+    }) => SocialService.sendDigitalGift(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['social-digital-gifts'] });
     },
@@ -41,9 +42,9 @@ export const useRequestPhysicalGift = () => {
       data,
       idempotencyKey,
     }: {
-      data: Parameters<typeof requestPhysicalGift>[0];
+      data: Parameters<typeof SocialService.requestPhysicalGift>[0];
       idempotencyKey?: string;
-    }) => requestPhysicalGift(data, idempotencyKey),
+    }) => SocialService.requestPhysicalGift(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['social-physical-gifts'] });
     },

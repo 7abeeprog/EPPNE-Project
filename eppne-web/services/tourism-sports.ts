@@ -88,6 +88,23 @@ export const TourismSportsService = {
   },
 
   /**
+   * جلب برنامج سياحي واحد
+   * GET /tourism-sports/programs/{program_id}
+   */
+  getProgram: async (programId: number): Promise<TourismProgramResponse> => {
+    try {
+      const id = Number(programId);
+      if (isNaN(id)) throw new Error("معرف البرنامج غير صحيح");
+      const { data } = await apiClient.get<TourismProgramResponse>(`/tourism-sports/programs/${id}`, {
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب البرنامج السياحي");
+    }
+  },
+
+  /**
    * حجز برنامج سياحي
    * POST /tourism-sports/programs/{program_id}/book
    * تدعم Idempotency-Key و X-Tenant-ID
@@ -140,6 +157,23 @@ export const TourismSportsService = {
   },
 
   /**
+   * جلب فعالية ترفيهية واحدة
+   * GET /tourism-sports/events/{event_id}
+   */
+  getEvent: async (eventId: number): Promise<EventResponse> => {
+    try {
+      const id = Number(eventId);
+      if (isNaN(id)) throw new Error("معرف الفعالية غير صحيح");
+      const { data } = await apiClient.get<EventResponse>(`/tourism-sports/events/${id}`, {
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب الفعالية");
+    }
+  },
+
+  /**
    * شراء تذكرة
    * POST /tourism-sports/tickets/purchase
    * تدعم Idempotency-Key و X-Tenant-ID
@@ -187,6 +221,40 @@ export const TourismSportsService = {
       return result;
     } catch (error) {
       throw handleError(error, "فشل إنشاء المنظمة الرياضية");
+    }
+  },
+
+  /**
+   * جلب منظمة رياضية واحدة
+   * GET /tourism-sports/sports/organizations/{org_id}
+   */
+  getSportsOrg: async (orgId: number): Promise<SportsOrgResponse> => {
+    try {
+      const id = Number(orgId);
+      if (isNaN(id)) throw new Error("معرف المنظمة غير صحيح");
+      const { data } = await apiClient.get<SportsOrgResponse>(`/tourism-sports/sports/organizations/${id}`, {
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب المنظمة الرياضية");
+    }
+  },
+
+  /**
+   * جلب ملف لاعب واحد
+   * GET /tourism-sports/sports/players/{profile_id}
+   */
+  getPlayer: async (profileId: number): Promise<PlayerProfileResponse> => {
+    try {
+      const id = Number(profileId);
+      if (isNaN(id)) throw new Error("معرف اللاعب غير صحيح");
+      const { data } = await apiClient.get<PlayerProfileResponse>(`/tourism-sports/sports/players/${id}`, {
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب ملف اللاعب");
     }
   },
 

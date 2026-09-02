@@ -1,6 +1,7 @@
 // hooks/command/useCommandStats.ts
 import { useQuery } from '@tanstack/react-query';
-import { getCommandStats, getDashboardMetrics } from '@/services/command';
+import { getCommandStats } from '@/services/command';
+import { CommandService } from '@/services/command';
 
 export const useCommandStats = () => {
   return useQuery({
@@ -14,7 +15,7 @@ export const useCommandStats = () => {
 export const useDashboardMetrics = (period?: string) => {
   return useQuery({
     queryKey: ['command-metrics', period],
-    queryFn: () => getDashboardMetrics({ period }).then((res) => res.data),
+    queryFn: () => CommandService.listMetrics({ period }),
     refetchInterval: 60000,
     staleTime: 30000,
   });

@@ -28,6 +28,16 @@ class InsurancePolicyCreate(BaseModel):
     )
 
 
+class InsurancePolicyUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=3, max_length=255, description="اسم البوليصة")
+    description: Optional[str] = Field(default=None, description="وصف البوليصة")
+    base_premium_mrusdt: Optional[Decimal] = Field(default=None, gt=0, description="القسط الأساسي")
+    premium_cycle: Optional[PremiumCycle] = Field(default=None, description="دورة القسط")
+    max_coverage_limit_mrusdt: Optional[Decimal] = Field(default=None, gt=0, description="الحد الأقصى للتغطية")
+    terms_and_conditions: Optional[Dict[str, Any]] = Field(default=None, description="الشروط والأحكام")
+    is_active: Optional[bool] = Field(default=None, description="هل البوليصة نشطة؟")
+
+
 class InsurancePolicyResponse(InsurancePolicyCreate):
     id: int
     tenant_id: int
@@ -118,6 +128,12 @@ class PensionRecordCreate(BaseModel):
     end_date: Optional[datetime] = Field(default=None, description="تاريخ الانتهاء")
 
 
+class PensionRecordUpdate(BaseModel):
+    pension_type: Optional[str] = Field(default=None, description="نوع المعاش")
+    monthly_amount_mrusdt: Optional[Decimal] = Field(default=None, gt=0, description="المبلغ الشهري")
+    end_date: Optional[datetime] = Field(default=None, description="تاريخ الانتهاء")
+
+
 class PensionRecordResponse(PensionRecordCreate):
     id: int
     total_disbursed_mrusdt: Decimal
@@ -138,6 +154,11 @@ class EmployeeInsuranceProfileCreate(BaseModel):
     government_insurance_number: str = Field(..., min_length=5, max_length=50, description="رقم التأمين الحكومي")
     employee_share_percentage: Decimal = Field(..., ge=0, le=100, description="نسبة استقطاع الموظف")
     employer_share_percentage: Decimal = Field(..., ge=0, le=100, description="نسبة صاحب العمل")
+
+
+class EmployeeInsuranceProfileUpdate(BaseModel):
+    employee_share_percentage: Optional[Decimal] = Field(default=None, ge=0, le=100, description="نسبة استقطاع الموظف")
+    employer_share_percentage: Optional[Decimal] = Field(default=None, ge=0, le=100, description="نسبة صاحب العمل")
 
 
 class EmployeeInsuranceProfileResponse(EmployeeInsuranceProfileCreate):

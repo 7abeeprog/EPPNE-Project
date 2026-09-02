@@ -3,11 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getDeliveries,
   getMyDeliveries,
-  createDelivery,
-  payDelivery,
-  completeDelivery,
-  assignDeliveryToTrip,
 } from '@/services/transport';
+import { TransportService } from '@/services/transport';
 import type { DeliveryFormData } from '@/types/transport';
 
 export const useDeliveries = (params?: { status?: string; skip?: number; limit?: number }) => {
@@ -41,7 +38,7 @@ export const useMyDeliveries = () => {
 export const useCreateDelivery = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: DeliveryFormData) => createDelivery(data),
+    mutationFn: (data: DeliveryFormData) => TransportService.createDelivery(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-deliveries'] });
       queryClient.invalidateQueries({ queryKey: ['transport-my-deliveries'] });
@@ -53,7 +50,7 @@ export const usePayDelivery = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ taskId, idempotencyKey }: { taskId: number; idempotencyKey?: string }) =>
-      payDelivery(taskId, idempotencyKey),
+      TransportService.payDelivery(taskId, { 'Idempotency-Key': idempotencyKey }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-deliveries'] });
       queryClient.invalidateQueries({ queryKey: ['transport-my-deliveries'] });
@@ -66,7 +63,7 @@ export const useCompleteDelivery = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ taskId, proofHash }: { taskId: number; proofHash: string }) =>
-      completeDelivery(taskId, proofHash),
+      TransportService.completeDelivery(taskId, { proof_hash: proofHash }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-deliveries'] });
       queryClient.invalidateQueries({ queryKey: ['transport-my-deliveries'] });
@@ -78,7 +75,7 @@ export const useAssignDeliveryToTrip = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ taskId, tripId }: { taskId: number; tripId: number }) =>
-      assignDeliveryToTrip(taskId, tripId),
+      TransportService.assignDeliveryToTrip(taskId, tripId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-deliveries'] });
       queryClient.invalidateQueries({ queryKey: ['transport-my-deliveries'] });

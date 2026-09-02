@@ -1,11 +1,12 @@
 // hooks/manufacturing/useFacilities.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getFacilities, getFacility, createFacility, updateFacility, deleteFacility } from '@/services/manufacturing';
+import { updateFacility, deleteFacility } from '@/services/manufacturing';
+import { ManufacturingService } from '@/services/manufacturing';
 
 export const useFacilities = (params?: { skip?: number; limit?: number }) => {
   return useQuery({
     queryKey: ['manufacturing-facilities', params],
-    queryFn: () => getFacilities(params).then((res) => res.data),
+    queryFn: () => ManufacturingService.listFacilities(params),
     staleTime: 2 * 60 * 1000,
   });
 };
@@ -13,7 +14,7 @@ export const useFacilities = (params?: { skip?: number; limit?: number }) => {
 export const useFacility = (id: number) => {
   return useQuery({
     queryKey: ['manufacturing-facility', id],
-    queryFn: () => getFacility(id).then((res) => res.data),
+    queryFn: () => ManufacturingService.getFacility(id),
     enabled: !!id,
     staleTime: 2 * 60 * 1000,
   });
@@ -22,7 +23,7 @@ export const useFacility = (id: number) => {
 export const useCreateFacility = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Parameters<typeof createFacility>[0]) => createFacility(data),
+    mutationFn: (data: Parameters<typeof ManufacturingService.createFacility>[0]) => ManufacturingService.createFacility(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['manufacturing-facilities'] });
       queryClient.invalidateQueries({ queryKey: ['manufacturing-stats'] });

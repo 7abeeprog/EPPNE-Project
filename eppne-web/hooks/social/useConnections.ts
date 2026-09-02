@@ -1,11 +1,12 @@
 // hooks/social/useConnections.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getConnections, requestConnection, acceptConnection, rejectConnection } from '@/services/social';
+import { acceptConnection, rejectConnection } from '@/services/social';
+import { SocialService } from '@/services/social';
 
 export const useConnections = () => {
   return useQuery({
     queryKey: ['social-connections'],
-    queryFn: () => getConnections().then((res) => res.data),
+    queryFn: () => SocialService.getMyConnections(),
     staleTime: 2 * 60 * 1000,
   });
 };
@@ -13,7 +14,7 @@ export const useConnections = () => {
 export const useRequestConnection = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Parameters<typeof requestConnection>[0]) => requestConnection(data),
+    mutationFn: (data: Parameters<typeof SocialService.requestConnection>[0]) => SocialService.requestConnection(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['social-connections'] });
     },

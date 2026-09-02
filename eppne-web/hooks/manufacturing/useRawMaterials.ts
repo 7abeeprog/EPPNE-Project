@@ -1,11 +1,11 @@
 // hooks/manufacturing/useRawMaterials.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getRawMaterials, registerRawMaterial, consumeRawMaterial } from '@/services/manufacturing';
+import { ManufacturingService } from '@/services/manufacturing';
 
 export const useRawMaterials = (params?: { skip?: number; limit?: number }) => {
   return useQuery({
     queryKey: ['manufacturing-raw-materials', params],
-    queryFn: () => getRawMaterials(params).then((res) => res.data),
+    queryFn: () => ManufacturingService.listRawMaterials(params),
     staleTime: 2 * 60 * 1000,
   });
 };
@@ -13,7 +13,7 @@ export const useRawMaterials = (params?: { skip?: number; limit?: number }) => {
 export const useRegisterRawMaterial = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Parameters<typeof registerRawMaterial>[0]) => registerRawMaterial(data),
+    mutationFn: (data: Parameters<typeof ManufacturingService.registerRawMaterial>[0]) => ManufacturingService.registerRawMaterial(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['manufacturing-raw-materials'] });
       queryClient.invalidateQueries({ queryKey: ['manufacturing-stats'] });
@@ -30,9 +30,9 @@ export const useConsumeRawMaterial = () => {
       idempotencyKey,
     }: {
       batchId: number;
-      data: Parameters<typeof consumeRawMaterial>[1];
+      data: Parameters<typeof ManufacturingService.consumeRawMaterial>[1];
       idempotencyKey?: string;
-    }) => consumeRawMaterial(batchId, data, idempotencyKey),
+    }) => ManufacturingService.consumeRawMaterial(batchId, data, { 'Idempotency-Key': idempotencyKey }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['manufacturing-raw-materials'] });
       queryClient.invalidateQueries({ queryKey: ['manufacturing-batches'] });

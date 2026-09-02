@@ -43,6 +43,17 @@ async def get_feed(
     posts = await service.get_feed(cast(int, tenant.id), skip, limit)  # ✅ cast
     return posts
 
+@router.get("/posts/{post_id}", response_model=PostResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_post(
+    post_id: int,
+    tenant: AcademyTenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    service = SocialService(db)
+    post = await service.get_post(post_id, cast(int, tenant.id))
+    return post
+
 @router.post("/posts/{post_id}/like")
 @rate_limit(max_requests=10, window_seconds=60)
 async def like_post(
@@ -97,6 +108,17 @@ async def create_group(
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
+    return group
+
+@router.get("/groups/{group_id}", response_model=SocialGroupResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_group(
+    group_id: int,
+    tenant: AcademyTenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    service = SocialService(db)
+    group = await service.get_group(group_id, cast(int, tenant.id))
     return group
 
 @router.post("/groups/{group_id}/join")
@@ -157,6 +179,17 @@ async def sign_contract(
     )
     return result
 
+@router.get("/contracts/{contract_id}", response_model=SocialContractResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_contract(
+    contract_id: int,
+    tenant: AcademyTenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    service = SocialService(db)
+    contract = await service.get_contract(contract_id, cast(int, tenant.id))
+    return contract
+
 # ========== AI Matchmaking ==========
 @router.post("/match/profile", response_model=AIMatchProfileResponse)
 @rate_limit(max_requests=5, window_seconds=60)
@@ -173,6 +206,17 @@ async def setup_match_profile(
         tenant_id=cast(int, tenant.id),  # ✅ cast
         data=data.model_dump()
     )
+    return profile
+
+@router.get("/match/profile", response_model=AIMatchProfileResponse)
+@rate_limit(max_requests=20, window_seconds=60)
+async def get_match_profile(
+    tenant: AcademyTenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = SocialService(db)
+    profile = await service.get_match_profile(cast(int, current_user.id), cast(int, tenant.id))
     return profile
 
 @router.get("/match/suggestions", response_model=list[dict])
@@ -346,6 +390,17 @@ async def subscribe_group(
         idempotency_key=idempotency_key
     )
     return sub
+
+@router.get("/groups/{group_id}/subscription", response_model=Optional[GroupSubscriptionResponse])
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_group_subscription(
+    group_id: int,
+    tenant: AcademyTenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    service = SocialService(db)
+    subscription = await service.get_group_subscription(group_id, cast(int, tenant.id))
+    return subscription
 
 @router.get("/groups/{group_id}/features", response_model=list[str])
 @rate_limit(max_requests=30, window_seconds=60)

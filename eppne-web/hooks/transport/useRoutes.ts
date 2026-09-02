@@ -1,6 +1,7 @@
 // hooks/transport/useRoutes.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getRoutes, getRoute, createRoute, updateRoute, deleteRoute, optimizeRoute } from '@/services/transport';
+import { getRoutes, updateRoute, deleteRoute, optimizeRoute } from '@/services/transport';
+import { TransportService } from '@/services/transport';
 import type { RouteFormData } from '@/types/transport';
 
 export const useRoutes = (params?: { is_active?: boolean; skip?: number; limit?: number }) => {
@@ -14,7 +15,7 @@ export const useRoutes = (params?: { is_active?: boolean; skip?: number; limit?:
 export const useRoute = (id: number) => {
   return useQuery({
     queryKey: ['transport-route', id],
-    queryFn: () => getRoute(id).then((res) => res.data),
+    queryFn: () => TransportService.getRoute(id),
     enabled: !!id,
     staleTime: 2 * 60 * 1000,
   });
@@ -23,7 +24,7 @@ export const useRoute = (id: number) => {
 export const useCreateRoute = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: RouteFormData) => createRoute(data),
+    mutationFn: (data: RouteFormData) => TransportService.createRoute(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-routes'] });
       queryClient.invalidateQueries({ queryKey: ['transport-stats'] });

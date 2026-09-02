@@ -153,6 +153,12 @@ class InsuranceService:
             raise PermissionDeniedError("ليس لديك صلاحية الاطلاع على هذه البوليصة")
         return policy
 
+    async def update_policy(self, policy_id: int, tenant_id: int, data: Dict[str, Any]) -> InsurancePolicy:
+        policy = await self.repo.get_policy(policy_id)
+        if not policy or cast(int, policy.tenant_id) != tenant_id:  # type: ignore
+            raise NotFoundError("Policy not found")
+        return await self.repo.update_policy(policy_id, **data)
+
     # ============================================================
     # 2. اشتراكات التأمين (Subscriptions) – مع Idempotency محسّن
     # ============================================================
@@ -296,6 +302,19 @@ class InsuranceService:
 
         return await self.repo.update_subscription(subscription_id, end_date=new_end, status="ACTIVE")
 
+    async def get_subscription(self, subscription_id: int, tenant_id: int) -> InsuranceSubscription:
+        subscription = await self.repo.get_subscription(subscription_id)
+        if not subscription or cast(int, subscription.tenant_id) != tenant_id:  # type: ignore
+            raise NotFoundError("Subscription not found")
+        return subscription
+
+    async def cancel_subscription(self, subscription_id: int, user_id: int) -> InsuranceSubscription:
+        """يلغي اشتراكًا نشطًا — نفس نمط الملكية المستخدم في renew_subscription."""
+        subscription = await self.repo.get_subscription(subscription_id)
+        if not subscription or subscription.subscriber_user_id != user_id:  # type: ignore
+            raise NotFoundError("Subscription not found")
+        return await self.repo.update_subscription(subscription_id, status="CANCELLED")
+
     # ============================================================
     # 3. مطالبات التعويض (Claims) – مع Idempotency محسّن
     # ============================================================
@@ -397,6 +416,18 @@ class InsuranceService:
         status: Optional[str] = None
     ) -> List[InsuranceClaim]:
         return await self.repo.list_claims_for_user(user_id, cast(Any, status))
+
+    async def get_claim(self, claim_id: int, tenant_id: int) -> InsuranceClaim:
+        claim = await self.repo.get_claim(claim_id)
+        if not claim or cast(int, claim.tenant_id) != tenant_id:  # type: ignore
+            raise NotFoundError("Claim not found")
+        return claim
+
+    async def update_claim(self, claim_id: int, tenant_id: int, data: Dict[str, Any]) -> InsuranceClaim:
+        claim = await self.repo.get_claim(claim_id)
+        if not claim or cast(int, claim.tenant_id) != tenant_id:  # type: ignore
+            raise NotFoundError("Claim not found")
+        return await self.repo.update_claim(claim_id, **data)
 
     async def review_claim(
         self,
@@ -543,6 +574,24 @@ class InsuranceService:
     async def get_my_pensions(self, user_id: int) -> List[PensionRecord]:
         return await self.repo.list_pensions_for_beneficiary(user_id)
 
+    async def get_pension(self, pension_id: int, tenant_id: int) -> PensionRecord:
+        pension = await self.repo.get_pension(pension_id)
+        if not pension or cast(int, pension.tenant_id) != tenant_id:  # type: ignore
+            raise NotFoundError("Pension not found")
+        return pension
+
+    async def update_pension(self, pension_id: int, tenant_id: int, data: Dict[str, Any]) -> PensionRecord:
+        pension = await self.repo.get_pension(pension_id)
+        if not pension or cast(int, pension.tenant_id) != tenant_id:  # type: ignore
+            raise NotFoundError("Pension not found")
+        return await self.repo.update_pension(pension_id, **data)
+
+    async def suspend_pension(self, pension_id: int, tenant_id: int) -> PensionRecord:
+        pension = await self.repo.get_pension(pension_id)
+        if not pension or cast(int, pension.tenant_id) != tenant_id:  # type: ignore
+            raise NotFoundError("Pension not found")
+        return await self.repo.update_pension(pension_id, status=PensionStatus.SUSPENDED)
+
     async def disburse_monthly_pensions(self) -> int:
         """دفع المعاشات الشهرية (يتم استدعاؤها تلقائياً عبر جدولة)."""
         pensions = await self.repo.list_pensions_for_beneficiary(cast(int, None), status=PensionStatus.ACTIVE)
@@ -587,3 +636,9 @@ class InsuranceService:
 
     async def get_employee_profile(self, user_id: int) -> Optional[EmployeeInsuranceProfile]:
         return await self.repo.get_employee_profile(user_id)
+
+    async def update_employee_profile(self, user_id: int, data: Dict[str, Any]) -> EmployeeInsuranceProfile:
+        profile = await self.repo.get_employee_profile(user_id)
+        if not profile:
+            raise NotFoundError("Employee insurance profile not found")
+        return await self.repo.update_employee_profile(user_id, **data)

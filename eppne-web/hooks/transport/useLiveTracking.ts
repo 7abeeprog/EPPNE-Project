@@ -1,6 +1,6 @@
 // hooks/transport/useLiveTracking.ts
 import { useQuery } from '@tanstack/react-query';
-import { getVehicleLocation } from '@/services/transport';
+import { TransportService } from '@/services/transport';
 import { useTransportStore } from '@/store/transportStore';
 
 export const useLiveTracking = (vehicleId: number, enabled: boolean = true) => {
@@ -8,7 +8,7 @@ export const useLiveTracking = (vehicleId: number, enabled: boolean = true) => {
 
   return useQuery({
     queryKey: ['transport-vehicle-location', vehicleId],
-    queryFn: () => getVehicleLocation(vehicleId).then((res) => res.data),
+    queryFn: () => TransportService.getVehicle(vehicleId).then((vehicle) => vehicle.current_location),
     enabled: enabled && isTrackingLive && !!vehicleId,
     refetchInterval: 3000,
     staleTime: 1000,

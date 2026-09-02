@@ -1,11 +1,11 @@
 // hooks/tenders-auctions/useAuctionBids.ts
 import { useQuery } from '@tanstack/react-query';
-import { getAuctionBids } from '@/services/tenders-auctions';
+import { TendersAuctionsService } from '@/services/tenders-auctions';
 
 export const useAuctionBids = (auctionId: number, limit: number = 50) => {
   return useQuery({
     queryKey: ['auction-bids', auctionId],
-    queryFn: () => getAuctionBids(auctionId, { limit }).then((res) => res.data),
+    queryFn: () => TendersAuctionsService.getAuctionBids(auctionId, limit),
     enabled: !!auctionId,
     staleTime: 5 * 1000,
     refetchInterval: (data) => {

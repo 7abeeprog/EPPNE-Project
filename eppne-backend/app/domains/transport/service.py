@@ -155,6 +155,12 @@ class TransportService:
         result = await self.repo.list_available_vehicles(tenant_id, fleet_id)
         return list(result)
 
+    async def get_vehicle(self, vehicle_id: int, tenant_id: int) -> Vehicle:
+        vehicle = await self.repo.get_vehicle(vehicle_id, tenant_id)
+        if not vehicle:
+            raise NotFoundError("Vehicle not found")
+        return vehicle
+
     # ============================================================
     # 3. المسارات (Routes)
     # ============================================================
@@ -194,6 +200,12 @@ class TransportService:
             distance_km=data["distance_km"],
             estimated_duration_minutes=data["estimated_duration_minutes"]
         )
+
+    async def get_route(self, route_id: int, tenant_id: int) -> Route:
+        route = await self.repo.get_route(route_id, tenant_id)
+        if not route:
+            raise NotFoundError("Route not found")
+        return route
 
     # ============================================================
     # 4. الرحلات (Trips)
@@ -523,6 +535,20 @@ class TransportService:
 
         return cast(DeliveryTask, result)
 
+    async def assign_delivery_to_trip(self, tenant_id: int, task_id: int, trip_id: int, user_id: int) -> DeliveryTask:
+        task = await self.repo.get_delivery_task(task_id, tenant_id)
+        if not task:
+            raise NotFoundError("Delivery task not found")
+        if task.sender_id != user_id:  # type: ignore
+            raise PermissionDeniedError("Not authorized to assign this delivery")
+
+        trip = await self.repo.get_trip(trip_id, tenant_id)
+        if not trip:
+            raise NotFoundError("Trip not found")
+
+        result = await self.repo.assign_delivery_to_trip(task_id, tenant_id, trip_id)
+        return cast(DeliveryTask, result)
+
     async def get_my_bookings(
         self,
         tenant_id: int,
@@ -530,6 +556,15 @@ class TransportService:
     ) -> List[TripBooking]:
         await self._check_saas_limits(tenant_id, "transport")
         result = await self.repo.list_bookings(tenant_id, passenger_id=passenger_id)
+        return list(result)
+
+    async def list_bookings(
+        self,
+        tenant_id: int,
+        passenger_id: Optional[int] = None,
+        trip_id: Optional[int] = None
+    ) -> List[TripBooking]:
+        result = await self.repo.list_bookings(tenant_id, passenger_id=passenger_id, trip_id=trip_id)
         return list(result)
 
     # ============================================================

@@ -1,11 +1,16 @@
 // hooks/tenders-auctions/useAuctions.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getAuctions, getAuction, createAuction, startAuction, closeAuction } from '@/services/tenders-auctions';
+import { TendersAuctionsService } from '@/services/tenders-auctions';
 
 export const useAuctions = (params?: { status?: string; asset_type?: string; skip?: number; limit?: number }) => {
   return useQuery({
     queryKey: ['auctions', params],
-    queryFn: () => getAuctions(params).then((res) => res.data),
+    queryFn: () => TendersAuctionsService.listAuctions({
+      status_filter: params?.status,
+      asset_type: params?.asset_type,
+      skip: params?.skip,
+      limit: params?.limit,
+    }),
     staleTime: 2 * 60 * 1000,
   });
 };
@@ -13,7 +18,7 @@ export const useAuctions = (params?: { status?: string; asset_type?: string; ski
 export const useAuction = (id: number) => {
   return useQuery({
     queryKey: ['auction', id],
-    queryFn: () => getAuction(id).then((res) => res.data),
+    queryFn: () => TendersAuctionsService.getAuction(id),
     enabled: !!id,
     staleTime: 2 * 60 * 1000,
     refetchInterval: (data) => {
@@ -26,7 +31,7 @@ export const useAuction = (id: number) => {
 export const useCreateAuction = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Parameters<typeof createAuction>[0]) => createAuction(data),
+    mutationFn: (data: Parameters<typeof TendersAuctionsService.createAuction>[0]) => TendersAuctionsService.createAuction(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['auctions'] });
     },
@@ -36,7 +41,7 @@ export const useCreateAuction = () => {
 export const useStartAuction = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => startAuction(id),
+    mutationFn: (id: number) => TendersAuctionsService.startAuction(id),
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ['auction', id] });
       queryClient.invalidateQueries({ queryKey: ['auctions'] });
@@ -47,7 +52,7 @@ export const useStartAuction = () => {
 export const useCloseAuction = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => closeAuction(id),
+    mutationFn: (id: number) => TendersAuctionsService.closeAuction(id),
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ['auction', id] });
       queryClient.invalidateQueries({ queryKey: ['auctions'] });

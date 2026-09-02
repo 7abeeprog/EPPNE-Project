@@ -61,6 +61,23 @@ export const SocialService = {
   },
 
   /**
+   * جلب منشور واحد
+   * GET /social/posts/{post_id}
+   */
+  getPost: async (postId: number): Promise<PostResponse> => {
+    try {
+      const id = Number(postId);
+      if (isNaN(id)) throw new Error("معرف المنشور غير صحيح");
+      const { data } = await apiClient.get<PostResponse>(`/social/posts/${id}`, {
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب المنشور");
+    }
+  },
+
+  /**
    * الإعجاب بمنشور
    * POST /social/posts/{post_id}/like
    */
@@ -103,6 +120,23 @@ export const SocialService = {
       return result;
     } catch (error) {
       throw handleError(error, "فشل إنشاء المجموعة");
+    }
+  },
+
+  /**
+   * جلب مجموعة واحدة
+   * GET /social/groups/{group_id}
+   */
+  getGroup: async (groupId: number): Promise<SocialGroupResponse> => {
+    try {
+      const id = Number(groupId);
+      if (isNaN(id)) throw new Error("معرف المجموعة غير صحيح");
+      const { data } = await apiClient.get<SocialGroupResponse>(`/social/groups/${id}`, {
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب المجموعة");
     }
   },
 
@@ -152,6 +186,23 @@ export const SocialService = {
     }
   },
 
+  /**
+   * جلب عقد اجتماعي واحد
+   * GET /social/contracts/{contract_id}
+   */
+  getContract: async (contractId: number): Promise<SocialContractResponse> => {
+    try {
+      const id = Number(contractId);
+      if (isNaN(id)) throw new Error("معرف العقد غير صحيح");
+      const { data } = await apiClient.get<SocialContractResponse>(`/social/contracts/${id}`, {
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب العقد");
+    }
+  },
+
   // ==========================================
   // 4. التوفيق (Matchmaking)
   // ==========================================
@@ -167,6 +218,21 @@ export const SocialService = {
       return result;
     } catch (error) {
       throw handleError(error, "فشل إعداد ملف التوفيق");
+    }
+  },
+
+  /**
+   * جلب ملف التوفيق الخاص بي
+   * GET /social/match/profile
+   */
+  getMatchProfile: async (): Promise<AIMatchProfileResponse> => {
+    try {
+      const { data } = await apiClient.get<AIMatchProfileResponse>("/social/match/profile", {
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب ملف التوفيق");
     }
   },
 
@@ -320,6 +386,23 @@ export const SocialService = {
       return result;
     } catch (error) {
       throw handleError(error, "فشل اشتراك المجموعة");
+    }
+  },
+
+  /**
+   * جلب اشتراك المجموعة الفعّال الحالي (إن وجد)
+   * GET /social/groups/{group_id}/subscription
+   */
+  getGroupSubscription: async (groupId: number): Promise<GroupSubscriptionResponse | null> => {
+    try {
+      const id = Number(groupId);
+      if (isNaN(id)) throw new Error("معرف المجموعة غير صحيح");
+      const { data } = await apiClient.get<GroupSubscriptionResponse | null>(`/social/groups/${id}/subscription`, {
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب اشتراك المجموعة");
     }
   },
 

@@ -1,11 +1,11 @@
 // hooks/insurance/usePensions.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getMyPensions, getPension, createPension, updatePension, suspendPension } from '@/services/insurance';
+import { InsuranceService } from '@/services/insurance';
 
 export const useMyPensions = () => {
   return useQuery({
     queryKey: ['insurance-pensions'],
-    queryFn: () => getMyPensions().then((res) => res.data),
+    queryFn: () => InsuranceService.getMyPensions(),
     staleTime: 2 * 60 * 1000,
   });
 };
@@ -13,7 +13,7 @@ export const useMyPensions = () => {
 export const usePension = (id: number) => {
   return useQuery({
     queryKey: ['insurance-pension', id],
-    queryFn: () => getPension(id).then((res) => res.data),
+    queryFn: () => InsuranceService.getPension(id),
     enabled: !!id,
     staleTime: 2 * 60 * 1000,
   });
@@ -22,7 +22,7 @@ export const usePension = (id: number) => {
 export const useCreatePension = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Parameters<typeof createPension>[0]) => createPension(data),
+    mutationFn: (data: Parameters<typeof InsuranceService.createPension>[0]) => InsuranceService.createPension(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['insurance-pensions'] });
     },
@@ -32,8 +32,8 @@ export const useCreatePension = () => {
 export const useUpdatePension = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updatePension>[1] }) =>
-      updatePension(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof InsuranceService.updatePension>[1] }) =>
+      InsuranceService.updatePension(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['insurance-pension', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['insurance-pensions'] });
@@ -44,7 +44,7 @@ export const useUpdatePension = () => {
 export const useSuspendPension = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => suspendPension(id),
+    mutationFn: (id: number) => InsuranceService.suspendPension(id),
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ['insurance-pension', id] });
       queryClient.invalidateQueries({ queryKey: ['insurance-pensions'] });

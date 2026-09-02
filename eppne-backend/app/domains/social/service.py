@@ -96,6 +96,12 @@ class SocialService:
         await self._check_saas_limits(tenant_id, "social")
         return await self.repo.get_global_feed(tenant_id, skip, limit)
 
+    async def get_post(self, post_id: int, tenant_id: int) -> Post:
+        post = await self.repo.get_post(post_id)
+        if not post or post.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("Post not found")
+        return post
+
     # ============================================================
     # 2. الإعجابات – مع Idempotency محسّن
     # ============================================================
@@ -175,6 +181,12 @@ class SocialService:
         # تخزين معرف المجموعة فقط
         if idempotency_key:
             await self._store_idempotency(idempotency_key, {"group_id": group.id})
+        return group
+
+    async def get_group(self, group_id: int, tenant_id: int) -> SocialGroup:
+        group = await self.repo.get_group(group_id, tenant_id)
+        if not group:
+            raise NotFoundError("Group not found")
         return group
 
     # ============================================================
@@ -272,6 +284,12 @@ class SocialService:
         await self.repo.add_signature(contract_id, user_id, tenant_id, signature_hash)
         return {"status": "success", "message": "Contract signed"}
 
+    async def get_contract(self, contract_id: int, tenant_id: int) -> SocialSmartContract:
+        contract = await self.repo.get_contract(contract_id)
+        if not contract or contract.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("Contract not found")
+        return contract
+
     # ============================================================
     # 6. الذكاء الاصطناعي للتوافق (AI Matchmaking)
     # ============================================================
@@ -291,6 +309,12 @@ class SocialService:
                 "is_discoverable": data.get("is_discoverable", True)
             }
         )
+        return profile
+
+    async def get_match_profile(self, user_id: int, tenant_id: int) -> AIMatchProfile:
+        profile = await self.repo.get_match_profile(user_id)
+        if not profile or profile.tenant_id != tenant_id:  # type: ignore
+            raise NotFoundError("Match profile not found")
         return profile
 
     async def get_match_suggestions(self, user_id: int, tenant_id: int, limit: int = 20) -> List[dict]:
@@ -683,6 +707,9 @@ class SocialService:
     async def get_group_features(self, group_id: int, tenant_id: int) -> List[str]:
         await self._check_saas_limits(tenant_id, "social")
         return await self.repo.get_group_features(group_id, tenant_id)
+
+    async def get_group_subscription(self, group_id: int, tenant_id: int) -> Optional[GroupSubscription]:
+        return await self.repo.get_active_subscription_for_group(group_id, tenant_id)
 
     # ============================================================
     # 11. دوال مساعدة

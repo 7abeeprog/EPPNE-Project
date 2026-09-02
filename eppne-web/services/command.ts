@@ -93,6 +93,24 @@ export const CommandService = {
     }
   },
 
+  /**
+   * جلب قائمة البراندات الخاصة بالمستأجر الحالي
+   * GET /command/brands
+   * تدعم X-Tenant-ID
+   */
+  listBrands: async (params?: { skip?: number; limit?: number }, headers?: { 'X-Tenant-ID'?: number }): Promise<BrandSettingsResponse[]> => {
+    try {
+      const { data } = await apiClient.get<BrandSettingsResponse[]>("/command/brands", {
+        params,
+        headers,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب قائمة البراندات");
+    }
+  },
+
   // ==========================================
   // 3. التنبيهات (Alerts)
   // ==========================================
@@ -316,6 +334,22 @@ export const CommandService = {
    * POST /command/metrics
    * تدعم X-Tenant-ID
    */
+  listMetrics: async (
+    params?: { metric_name?: string; start_date?: string; end_date?: string; period?: string; limit?: number },
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<PlatformMetricResponse[]> => {
+    try {
+      const { data } = await apiClient.get<PlatformMetricResponse[]>("/command/metrics", {
+        params,
+        headers,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب قائمة المقاييس");
+    }
+  },
+
   recordMetric: async (data: PlatformMetricCreate, headers?: { 'X-Tenant-ID'?: number }): Promise<PlatformMetricResponse> => {
     try {
       const { data: result } = await apiClient.post<PlatformMetricResponse>("/command/metrics", data, {

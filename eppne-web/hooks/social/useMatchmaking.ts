@@ -1,11 +1,12 @@
 // hooks/social/useMatchmaking.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getMatchProfile, updateMatchProfile, getMatchSuggestions, getConnections, requestConnection, acceptConnection, rejectConnection } from '@/services/social';
+import { acceptConnection, rejectConnection } from '@/services/social';
+import { SocialService } from '@/services/social';
 
 export const useMatchProfile = () => {
   return useQuery({
     queryKey: ['social-match-profile'],
-    queryFn: () => getMatchProfile().then((res) => res.data),
+    queryFn: () => SocialService.getMatchProfile(),
     staleTime: 2 * 60 * 1000,
   });
 };
@@ -13,7 +14,7 @@ export const useMatchProfile = () => {
 export const useUpdateMatchProfile = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Parameters<typeof updateMatchProfile>[0]) => updateMatchProfile(data),
+    mutationFn: (data: Parameters<typeof SocialService.setupMatchProfile>[0]) => SocialService.setupMatchProfile(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['social-match-profile'] });
     },
@@ -23,7 +24,7 @@ export const useUpdateMatchProfile = () => {
 export const useMatchSuggestions = (params?: { limit?: number }) => {
   return useQuery({
     queryKey: ['social-match-suggestions', params],
-    queryFn: () => getMatchSuggestions(params).then((res) => res.data),
+    queryFn: () => SocialService.getMatchSuggestions(params),
     staleTime: 5 * 60 * 1000,
   });
 };
@@ -31,7 +32,7 @@ export const useMatchSuggestions = (params?: { limit?: number }) => {
 export const useConnections = () => {
   return useQuery({
     queryKey: ['social-connections'],
-    queryFn: () => getConnections().then((res) => res.data),
+    queryFn: () => SocialService.getMyConnections(),
     staleTime: 2 * 60 * 1000,
   });
 };
@@ -39,7 +40,7 @@ export const useConnections = () => {
 export const useRequestConnection = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { target_user_id: number; connection_type: string }) => requestConnection(data),
+    mutationFn: (data: Parameters<typeof SocialService.requestConnection>[0]) => SocialService.requestConnection(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['social-connections'] });
     },

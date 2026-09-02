@@ -97,6 +97,9 @@ class TripCompleteRequest(BaseModel):
     actual_end: datetime = Field(description="وقت الانتهاء الفعلي")
     total_distance_km: Decimal = Field(description="المسافة الإجمالية بالكيلومترات")
 
+class AssignDeliveryRequest(BaseModel):
+    trip_id: int = Field(description="معرف الرحلة المطلوب ربط مهمة التوصيل بها")
+
 # ========== Bookings ==========
 class TripBookingCreate(BaseModel):
     trip_id: int = Field(description="معرف الرحلة")

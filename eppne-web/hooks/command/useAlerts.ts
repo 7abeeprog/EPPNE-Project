@@ -1,11 +1,11 @@
 // hooks/command/useAlerts.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getSystemAlerts, resolveAlert, dismissAlert } from '@/services/command';
+import { CommandService } from '@/services/command';
 
 export const useSystemAlerts = (params?: { severity?: string; is_resolved?: boolean; skip?: number; limit?: number }) => {
   return useQuery({
     queryKey: ['command-alerts', params],
-    queryFn: () => getSystemAlerts(params).then((res) => res.data),
+    queryFn: () => CommandService.listAlerts({ severity: params?.severity as any, limit: params?.limit }),
     refetchInterval: 15000,
     staleTime: 5000,
   });
@@ -14,7 +14,7 @@ export const useSystemAlerts = (params?: { severity?: string; is_resolved?: bool
 export const useResolveAlert = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (alertId: number) => resolveAlert(alertId),
+    mutationFn: (alertId: number) => CommandService.resolveAlert(alertId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['command-alerts'] });
     },

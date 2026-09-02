@@ -157,6 +157,29 @@ export const TransportService = {
   },
 
   /**
+   * جلب مركبة واحدة (تشمل موقعها الحالي)
+   * GET /transport/vehicles/{vehicle_id}
+   * تدعم X-Tenant-ID
+   */
+  getVehicle: async (vehicleId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<VehicleResponse> => {
+    try {
+      const id = Number(vehicleId);
+      if (isNaN(id)) throw new Error("معرف المركبة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<VehicleResponse>(`/transport/vehicles/${id}`, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب بيانات المركبة");
+    }
+  },
+
+  /**
    * إنشاء مسار جديد
    * POST /transport/routes
    * تدعم X-Tenant-ID
@@ -174,6 +197,29 @@ export const TransportService = {
       return result;
     } catch (error) {
       throw handleError(error, "فشل إنشاء المسار");
+    }
+  },
+
+  /**
+   * جلب مسار واحد
+   * GET /transport/routes/{route_id}
+   * تدعم X-Tenant-ID
+   */
+  getRoute: async (routeId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<RouteResponse> => {
+    try {
+      const id = Number(routeId);
+      if (isNaN(id)) throw new Error("معرف المسار غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<RouteResponse>(`/transport/routes/${id}`, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب المسار");
     }
   },
 
@@ -270,6 +316,29 @@ export const TransportService = {
   },
 
   /**
+   * جلب رحلة واحدة
+   * GET /transport/trips/{trip_id}
+   * تدعم X-Tenant-ID
+   */
+  getTrip: async (tripId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<TripResponse> => {
+    try {
+      const id = Number(tripId);
+      if (isNaN(id)) throw new Error("معرف الرحلة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<TripResponse>(`/transport/trips/${id}`, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب الرحلة");
+    }
+  },
+
+  /**
    * حجز رحلة
    * POST /transport/bookings
    * تدعم Idempotency-Key و X-Tenant-ID
@@ -315,6 +384,55 @@ export const TransportService = {
       return data;
     } catch (error) {
       throw handleError(error, "فشل جلب حجوزاتي");
+    }
+  },
+
+  /**
+   * جلب قائمة الحجوزات مع التصفية
+   * GET /transport/bookings
+   * تدعم X-Tenant-ID
+   */
+  listBookings: async (
+    params?: { passenger_id?: number; trip_id?: number },
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<TripBookingResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<TripBookingResponse[]>("/transport/bookings", {
+        params,
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب الحجوزات");
+    }
+  },
+
+  /**
+   * إلغاء حجز
+   * PATCH /transport/bookings/{booking_id}/cancel
+   * تدعم X-Tenant-ID
+   */
+  cancelBooking: async (bookingId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<TripBookingResponse> => {
+    try {
+      const id = Number(bookingId);
+      if (isNaN(id)) throw new Error("معرف الحجز غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.patch<TripBookingResponse>(
+        `/transport/bookings/${id}/cancel`,
+        undefined,
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل إلغاء الحجز");
     }
   },
 
@@ -398,6 +516,30 @@ export const TransportService = {
       return result;
     } catch (error) {
       throw handleError(error, "فشل إكمال التوصيل");
+    }
+  },
+
+  /**
+   * ربط مهمة توصيل برحلة
+   * POST /transport/deliveries/{task_id}/assign
+   * تدعم X-Tenant-ID
+   */
+  assignDeliveryToTrip: async (taskId: number, tripId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<DeliveryTaskResponse> => {
+    try {
+      const id = Number(taskId);
+      if (isNaN(id)) throw new Error("معرف المهمة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.post<DeliveryTaskResponse>(
+        `/transport/deliveries/${id}/assign`,
+        { trip_id: tripId },
+        { headers: reqHeaders, withCredentials: true }
+      );
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل ربط مهمة التوصيل بالرحلة");
     }
   },
 };

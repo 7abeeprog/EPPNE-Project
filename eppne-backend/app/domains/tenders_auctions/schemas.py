@@ -24,6 +24,16 @@ class TenderCreate(BaseModel):
             raise ValueError("submission_deadline must be after submission_start")
         return v
 
+class TenderUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, description="عنوان المناقصة")
+    description: Optional[str] = Field(default=None, description="وصف المناقصة")
+    scope_of_work: Optional[Dict[str, Any]] = Field(default=None, description="نطاق العمل")
+    estimated_budget_mrusdt: Optional[Decimal] = Field(default=None, gt=0, description="الميزانية التقديرية")
+    min_bid_mrusdt: Optional[Decimal] = Field(default=None, description="الحد الأدنى للعطاء")
+    max_bid_mrusdt: Optional[Decimal] = Field(default=None, description="الحد الأعلى للعطاء")
+    submission_start: Optional[datetime] = Field(default=None, description="تاريخ بدء التقديم")
+    submission_deadline: Optional[datetime] = Field(default=None, description="تاريخ انتهاء التقديم")
+
 class TenderResponse(TenderCreate):
     id: int = Field(description="معرف المناقصة")
     status: str = Field(description="الحالة")
