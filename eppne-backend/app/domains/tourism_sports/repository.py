@@ -33,6 +33,15 @@ class TourismSportsRepository:
         result = await self.db.execute(query)
         return result.scalars().all()
 
+    async def get_destination(self, dest_id: int, tenant_id: int) -> Optional[TourismDestination]:
+        result = await self.db.execute(
+            select(TourismDestination).where(
+                TourismDestination.id == dest_id,
+                TourismDestination.tenant_id == tenant_id
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def create_accommodation(self, **kwargs) -> AccommodationFacility:
         acc = AccommodationFacility(**kwargs)
         self.db.add(acc)
@@ -46,6 +55,12 @@ class TourismSportsRepository:
         await self.db.commit()
         await self.db.refresh(prog)
         return prog
+
+    async def list_programs(self, tenant_id: int) -> List[TourismProgram]:
+        result = await self.db.execute(
+            select(TourismProgram).where(TourismProgram.tenant_id == tenant_id)
+        )
+        return list(result.scalars().all())
 
     async def create_program_participant(self, **kwargs) -> ProgramParticipant:
         participant = ProgramParticipant(**kwargs)
@@ -94,6 +109,13 @@ class TourismSportsRepository:
         )
         return result.scalar_one_or_none()
 
+    async def list_sports_orgs(self, tenant_id: int, org_type: Optional[str] = None) -> List[SportsOrganization]:
+        query = select(SportsOrganization).where(SportsOrganization.tenant_id == tenant_id)
+        if org_type:
+            query = query.where(SportsOrganization.org_type == org_type)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
     async def create_player_profile(self, **kwargs) -> PlayerProfile:
         player = PlayerProfile(**kwargs)
         self.db.add(player)
@@ -113,12 +135,37 @@ class TourismSportsRepository:
         )
         return result.scalar_one_or_none()
 
+    async def list_player_profiles(self, tenant_id: int, club_id: Optional[int] = None, sport_category: Optional[str] = None) -> List[PlayerProfile]:
+        query = select(PlayerProfile).where(PlayerProfile.tenant_id == tenant_id)
+        if club_id:
+            query = query.where(PlayerProfile.club_id == club_id)
+        if sport_category:
+            query = query.where(PlayerProfile.sport_category == sport_category)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
     async def create_transfer(self, **kwargs) -> PlayerTransfer:
         transfer = PlayerTransfer(**kwargs)
         self.db.add(transfer)
         await self.db.flush()
         await self.db.refresh(transfer)
         return transfer
+
+    async def get_transfer(self, transfer_id: int, tenant_id: int) -> Optional[PlayerTransfer]:
+        result = await self.db.execute(
+            select(PlayerTransfer).where(
+                PlayerTransfer.id == transfer_id,
+                PlayerTransfer.tenant_id == tenant_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_transfers(self, tenant_id: int, status: Optional[str] = None) -> List[PlayerTransfer]:
+        query = select(PlayerTransfer).where(PlayerTransfer.tenant_id == tenant_id)
+        if status:
+            query = query.where(PlayerTransfer.status == status)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
     async def create_tournament(self, **kwargs) -> Tournament:
         tournament = Tournament(**kwargs)

@@ -1240,8 +1240,11 @@ endpoint جديد `PATCH /insurance/claims/{claim_id}` (`update_claim`) كوصل
 `review_claim`؟ أم البقاء superuser-only مقصود (تمييز "تعديل إداري عام"
 عن "قرار مراجعة الكيان")؟
 
-**الحالة:** 🟡 مفتوح — قرار تصميمي بسيط مؤجَّل، صفر ثغرة أمنية فورية
-(البوابة الحالية أضيق لا أوسع). `.claude/reports/frontend-category-b-phase2-session-log.md` قسم insurance.
+**✅ [مُغلَق، 2026-09-04، جلسة `category-b-decision-needed-triage`]:** قرار
+المستخدم صريح — تبقى `update_claim` `superuser`-only كما هي، صفر تعديل.
+التناقض التصميمي موثَّق أعلاه لأي مراجعة مستقبلية، لكنه ليس backlog نشط.
+
+**الحالة:** ✅ مغلق (قرار: البقاء كما هو). `.claude/reports/frontend-category-b-phase2-session-log.md` قسم insurance، `.claude/reports/category-b-decision-needed-triage-session-log.md`.
 
 ---
 
@@ -1380,8 +1383,19 @@ tenant_id)` + `list_transfers(tenant_id, ...)` لـ`repository.py`
 مطلوبة، مجرد استعلامات جديدة)، (ب) تعريض الاثنين عبر `service.py`/
 `router.py`، (ج) بعدها فقط يصبح `TransferCard` قابلًا للبناء.
 
-**الحالة:** 🔴 مفتوح، موثَّق فقط، صفر إصلاح — يمنع بناء `TransferCard`
-حتى إشعار آخر. `.claude/reports/frontend-category-b-item3-components-readiness.md`.
+**✅ [مُغلَق، 2026-09-04، جلسة `category-b-decision-needed-triage`]:** قرار
+مستخدم صريح لتنفيذ فوري (باج حي، مش قرار منتجي). أُضيفت `get_transfer(transfer_id,
+tenant_id)`/`list_transfers(tenant_id, status=None)` لـ`repository.py` +
+أغلفة `service.py` + `GET /tourism-sports/sports/transfers` و
+`GET /tourism-sports/sports/transfers/{transfer_id}` في `router.py`.
+استدعاء `place_transfer_bid` (مسار idempotency-cache) اتصلح ليمرر
+`tenant_id` بعد ما الدالة بقت موجودة فعليًا. تحقق حي: `tests/test_tourism_sports_decision_triage_wiring.py`
+(5 اختبارات إجمالية بما فيها هذا البند + 4 endpoints تانية مرتبطة —
+راجع البند التالي) — PASSED 5/5، exit code صريح `PYTEST_EXIT_CODE=0`.
+`TransferCard` بقى قابلًا للبناء الآن (endpoint list جاهز).
+
+**الحالة:** ✅ مغلق. `.claude/reports/frontend-category-b-item3-components-readiness.md`،
+`.claude/reports/category-b-decision-needed-triage-session-log.md`.
 
 ---
 
@@ -1537,10 +1551,17 @@ list harvests/bio cohorts) موثَّقة في البند التالي كـPhase
 بتستخدمها، وrouter الجلسة دي ماضافش أي endpoint بيستدعيها (تحديث عدد
 المجموعة الحيوانية مش من ضمن الـ19 endpoint المتفَق عليها).
 
-**الحالة:** 🟡 مفتوح، موثَّق فقط، غير عاجل (كود ميت غير مستدعى) — لازم
-يتصلح لو أي جلسة مستقبلية (زي Phase 2 أعلاه) قررت إضافة endpoint لتحديث
-عدد/كتلة مجموعة حيوانية.
-`.claude/reports/agritech-full-domain-build-session-log.md`.
+**✅ [مُغلَق، 2026-09-04، جلسة `category-b-decision-needed-triage`]:** كود
+ميت (صفر استدعاءات في الكودبيز بالكامل، تأكَّد بـgrep) → إصلاح ميكانيكي
+فوري صفر مخاطرة: أُضيف معامل `tenant_id: int` لتوقيع
+`update_bio_cohort_count`، واستُخدم في فلترة الـ`UPDATE` نفسه (`and_(...,
+tenant_id==...)`، نفس نمط باقي الدالة `get_bio_cohort`) وفي استدعاء
+`self.get_bio_cohort(cohort_id, tenant_id)` في نهايتها. تحقَّق حيًا:
+`python -c "from app.domains.agritech import repository"` نجح بلا أخطاء.
+لا يوجد caller حاليًا يستدعي الدالة، فلا أثر على أي سلوك قائم.
+
+**الحالة:** ✅ مغلق. `.claude/reports/agritech-full-domain-build-session-log.md`،
+`.claude/reports/category-b-decision-needed-triage-session-log.md`.
 
 ---
 
@@ -1564,3 +1585,44 @@ list harvests/bio cohorts) موثَّقة في البند التالي كـPhase
 مباشرة) — يحتاج قرار منتجي (هل نضيف تحقق ownership قبل إصدار شهادة/مرحلة
 تتبع؟) في جلسة أمنية مخصَّصة لو حبينا نسدها.
 `.claude/reports/agritech-full-domain-build-session-log.md`.
+
+---
+
+## [2026-09-04] جلسة `category-b-decision-needed-triage` — إغلاق
+
+**السياق:** جرد وتصنيف كل بنود "تحتاج قرار" المتراكمة عبر phase1/phase2/
+agritech لثلاث فئات (فوري/قرار بسيط/قرار كبير)، ثم تنفيذ ما وافق عليه
+المستخدم صراحة فقط. تفاصيل الجدول الكامل والتصنيف:
+`.claude/reports/category-b-decision-needed-triage-session-log.md`.
+
+**نُفِّذ:**
+1. `update_bio_cohort_count-tenant-id-bug` (agritech) — فوري، صفر انتظار قرار (أعلاه).
+2. `tourism-sports-transfer-repository-method-missing` (باج حي في `place_transfer_bid`) — أعلاه.
+3. **4 endpoints جديدة إضافية في tourism-sports** (قرار مستخدم صريح، نفس commit):
+   `GET /destinations/{dest_id}` (`getDestination`)، `GET /programs`
+   (`getPrograms`)، `GET /sports/organizations` (`getSportsOrganizations`)،
+   `GET /sports/players` (`getPlayers`) — كلها mechanical فوق `repository.py`/
+   `service.py` جديدة (فلترة `tenant_id` مزدوجة، نفس نمط `get_sports_org`
+   الموجود). تحقق حي ضمن نفس ملف الاختبار `tests/test_tourism_sports_decision_triage_wiring.py`
+   (5 اختبارات، PASSED 5/5، `PYTEST_EXIT_CODE=0` صريح).
+4. **`transport-formdata-vs-openapi-schema-mismatch`** — تحقُّق فقط (بلا
+   تنفيذ): `GeoAddress`/`Waypoint` sub-models و`sender_id` المحذوف **مُطبَّقون
+   بالفعل** من جلسة `transport-domain-full-build` (2026-09-01) — البند كان
+   stale وقت طرحه. اكتُشف جانبيًا: `eppne-web/src/lib/api-types.ts` المولَّد
+   لسه قديم (`waypoints: Record<string, never>[]`) رغم إصلاح الباك إند —
+   بلا أثر عملي حاليًا لأن `types/transport.ts` اليدوي المستخدَم فعليًا سليم،
+   لكن يستاهل تسجيل كملاحظة منفصلة (نفس فئة `api-types-schema-name-collision-auction-tender-create`).
+5. `insurance-update-claim-permission-asymmetry` — قرار مستخدم: **البقاء
+   superuser-only، صفر تعديل** (أُغلق أعلاه في مكانه).
+
+**لم يُنفَّذ (قرار مستخدم صريح: يبقى backlog):** كل بنود "قرار بسيط"
+المتبقية في command، manufacturing، insurance (stats/`deletePolicy`)،
+tenders-auctions، وsocial — راجع الجدول الكامل في تقرير الجلسة. كذلك
+كل بنود "قرار كبير" (9 بنود، منها `useDrivers`/ميزة المركبات المعدومة في
+transport، دومين Pages بـsocial، فجوة realestate hooks، تصادم schema
+tenders-auctions/دومين آخر، `agritech-phase2-frontend-gaps`) — صفر سؤال
+عنها، موثَّقة كمرشَّحة لجلسات مستقلة لاحقة.
+
+**الحالة:** ✅ الأربعة بنود المطلوبة اتقفلت (فوري واحد + تنفيذان حيّان
++ تأكيد بلا حاجة لتنفيذ). commit واحد شامل يجمع agritech + tourism-sports
++ التوثيق. `.claude/reports/category-b-decision-needed-triage-session-log.md`.

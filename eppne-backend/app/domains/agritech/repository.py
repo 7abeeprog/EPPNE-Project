@@ -143,10 +143,10 @@ class AgriTechRepository:
         )
         return result.scalar_one_or_none()
 
-    async def update_bio_cohort_count(self, cohort_id: int, new_count: Decimal) -> BioAssetCohort:
-        await self.db.execute(update(BioAssetCohort).where(BioAssetCohort.id == cohort_id).values(current_count_or_kg=new_count))
+    async def update_bio_cohort_count(self, cohort_id: int, tenant_id: int, new_count: Decimal) -> BioAssetCohort:
+        await self.db.execute(update(BioAssetCohort).where(and_(BioAssetCohort.id == cohort_id, BioAssetCohort.tenant_id == tenant_id)).values(current_count_or_kg=new_count))
         await self.db.commit()
-        return await self.get_bio_cohort(cohort_id)
+        return await self.get_bio_cohort(cohort_id, tenant_id)
 
     async def create_bio_yield(self, **kwargs) -> BioProductYield:
         yield_record = BioProductYield(**kwargs)

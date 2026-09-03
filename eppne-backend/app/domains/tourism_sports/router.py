@@ -36,6 +36,17 @@ async def list_destinations(
     dests = await service.list_destinations(cast(int, current_user.tenant_id), destination_type)  # ✅ cast
     return dests
 
+@router.get("/destinations/{dest_id}", response_model=DestinationResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_destination(
+    dest_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TourismSportsService(db)
+    dest = await service.get_destination(dest_id, cast(int, current_user.tenant_id))
+    return dest
+
 @router.post("/programs", response_model=TourismProgramResponse, status_code=201)
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_program(
@@ -47,6 +58,16 @@ async def create_program(
     user_id = cast(int, current_user.id)
     prog = await service.create_program(user_id, cast(int, current_user.tenant_id), data.model_dump())  # ✅ cast
     return prog
+
+@router.get("/programs", response_model=list[TourismProgramResponse])
+@rate_limit(max_requests=30, window_seconds=60)
+async def list_programs(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TourismSportsService(db)
+    programs = await service.list_programs(cast(int, current_user.tenant_id))
+    return programs
 
 @router.get("/programs/{program_id}", response_model=TourismProgramResponse)
 @rate_limit(max_requests=30, window_seconds=60)
@@ -129,6 +150,17 @@ async def create_sports_org(
     org = await service.create_sports_org(user_id, cast(int, current_user.tenant_id), data.model_dump())  # ✅ cast
     return org
 
+@router.get("/sports/organizations", response_model=list[SportsOrgResponse])
+@rate_limit(max_requests=30, window_seconds=60)
+async def list_sports_orgs(
+    org_type: Optional[str] = None,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TourismSportsService(db)
+    orgs = await service.list_sports_orgs(cast(int, current_user.tenant_id), org_type)
+    return orgs
+
 @router.get("/sports/organizations/{org_id}", response_model=SportsOrgResponse)
 @rate_limit(max_requests=30, window_seconds=60)
 async def get_sports_org(
@@ -151,6 +183,18 @@ async def create_player_profile(
     user_id = cast(int, current_user.id)
     profile = await service.create_player_profile(user_id, cast(int, current_user.tenant_id), data.model_dump())  # ✅ cast
     return profile
+
+@router.get("/sports/players", response_model=list[PlayerProfileResponse])
+@rate_limit(max_requests=30, window_seconds=60)
+async def list_players(
+    club_id: Optional[int] = None,
+    sport_category: Optional[str] = None,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TourismSportsService(db)
+    players = await service.list_players(cast(int, current_user.tenant_id), club_id, sport_category)
+    return players
 
 @router.get("/sports/players/{profile_id}", response_model=PlayerProfileResponse)
 @rate_limit(max_requests=30, window_seconds=60)
@@ -180,6 +224,28 @@ async def place_transfer_bid(
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
+    return transfer
+
+@router.get("/sports/transfers", response_model=list[TransferBidResponse])
+@rate_limit(max_requests=30, window_seconds=60)
+async def list_transfers(
+    status: Optional[str] = None,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TourismSportsService(db)
+    transfers = await service.list_transfers(cast(int, current_user.tenant_id), status)
+    return transfers
+
+@router.get("/sports/transfers/{transfer_id}", response_model=TransferBidResponse)
+@rate_limit(max_requests=30, window_seconds=60)
+async def get_transfer(
+    transfer_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TourismSportsService(db)
+    transfer = await service.get_transfer(transfer_id, cast(int, current_user.tenant_id))
     return transfer
 
 @router.post("/sports/tournaments", response_model=TournamentResponse)

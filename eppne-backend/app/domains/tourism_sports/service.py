@@ -95,6 +95,13 @@ class TourismSportsService:
         result = await self.repo.list_destinations(tenant_id, destination_type)
         return list(result)
 
+    async def get_destination(self, dest_id: int, tenant_id: int) -> TourismDestination:
+        """جلب وجهة سياحية واحدة مع التأكد من tenant_id."""
+        dest = await self.repo.get_destination(dest_id, tenant_id)
+        if not dest:
+            raise NotFoundError("الوجهة غير موجودة")
+        return dest
+
     async def create_program(
         self,
         user_id: int,
@@ -124,6 +131,11 @@ class TourismSportsService:
         if not program or program.tenant_id != tenant_id:  # type: ignore
             raise NotFoundError("البرنامج غير موجود")
         return program
+
+    async def list_programs(self, tenant_id: int) -> List[TourismProgram]:
+        """قائمة البرامج السياحية."""
+        result = await self.repo.list_programs(tenant_id)
+        return list(result)
 
     # ============================================================
     # 2. حجز برنامج سياحي (مع Idempotency محسّن)
@@ -375,6 +387,11 @@ class TourismSportsService:
             raise NotFoundError("المنظمة الرياضية غير موجودة")
         return org
 
+    async def list_sports_orgs(self, tenant_id: int, org_type: Optional[str] = None) -> List[SportsOrganization]:
+        """قائمة المنظمات الرياضية."""
+        result = await self.repo.list_sports_orgs(tenant_id, org_type)
+        return list(result)
+
     async def create_player_profile(
         self,
         user_id: int,
@@ -401,6 +418,11 @@ class TourismSportsService:
             raise NotFoundError("ملف اللاعب غير موجود")
         return player
 
+    async def list_players(self, tenant_id: int, club_id: Optional[int] = None, sport_category: Optional[str] = None) -> List[PlayerProfile]:
+        """قائمة ملفات اللاعبين."""
+        result = await self.repo.list_player_profiles(tenant_id, club_id, sport_category)
+        return list(result)
+
     # ============================================================
     # 6. تقديم عرض شراء لاعب (مع Idempotency محسّن)
     # ============================================================
@@ -422,7 +444,7 @@ class TourismSportsService:
             if cached is not None:
                 transfer_id = cached.get("transfer_id")
                 if transfer_id:
-                    transfer = await self.repo.get_transfer(transfer_id)
+                    transfer = await self.repo.get_transfer(transfer_id, tenant_id)
                     if transfer:
                         return transfer
                 raise ValidationError("Idempotency record exists but transfer not found.")
@@ -508,6 +530,18 @@ class TourismSportsService:
             await self._store_idempotency(idempotency_key, {"transfer_id": transfer.id})
 
         return transfer
+
+    async def get_transfer(self, transfer_id: int, tenant_id: int) -> PlayerTransfer:
+        """جلب عرض انتقال واحد مع التأكد من tenant_id."""
+        transfer = await self.repo.get_transfer(transfer_id, tenant_id)
+        if not transfer:
+            raise NotFoundError("عرض الانتقال غير موجود")
+        return transfer
+
+    async def list_transfers(self, tenant_id: int, status: Optional[str] = None) -> List[PlayerTransfer]:
+        """قائمة عروض الانتقال."""
+        result = await self.repo.list_transfers(tenant_id, status)
+        return list(result)
 
     async def create_tournament(
         self,
