@@ -3,7 +3,7 @@
 نماذج (Schemas) Pydantic لقطاع الدعوات وخدمة العملاء – النسخة الذهبية
 """
 from pydantic import BaseModel, Field, ConfigDict, field_validator
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 from decimal import Decimal
 from app.domains.invitations.models import (
@@ -62,6 +62,7 @@ class InvitationResponse(InvitationCreate):
     sender_user_id: Optional[int]
     sender_entity_id: Optional[int]
     status: InvitationStatus
+    current_uses: int
     assigned_ai_agent_id: Optional[int]
     click_count: int
     first_clicked_at: Optional[datetime]
@@ -199,6 +200,7 @@ class CampaignUpdate(BaseModel):
 class CampaignResponse(CampaignCreate):
     id: int
     tenant_id: int
+    status: CampaignStatus
     spent_mrusdt: Decimal
     total_leads: int
     converted_leads: int
@@ -216,13 +218,13 @@ class TicketCreate(BaseModel):
     lead_id: Optional[int] = Field(default=None, description="معرف العميل المحتمل")
     subject: str = Field(..., min_length=3, max_length=255, description="موضوع التذكرة")
     description: str = Field(description="وصف التذكرة")
-    priority: str = Field(default="MEDIUM", pattern="^(LOW|MEDIUM|HIGH|URGENT)$", description="الأولوية")
+    priority: Literal["LOW", "MEDIUM", "HIGH", "URGENT"] = Field(default="MEDIUM", description="الأولوية")
 
 
 class TicketUpdate(BaseModel):
     subject: Optional[str] = Field(default=None, description="موضوع التذكرة")
     description: Optional[str] = Field(default=None, description="وصف التذكرة")
-    priority: Optional[str] = Field(default=None, pattern="^(LOW|MEDIUM|HIGH|URGENT)$", description="الأولوية")
+    priority: Optional[Literal["LOW", "MEDIUM", "HIGH", "URGENT"]] = Field(default=None, description="الأولوية")
     status: Optional[TicketStatus] = Field(default=None, description="حالة التذكرة")
     assigned_to: Optional[int] = Field(default=None, description="معرف المسؤول المعين")
 

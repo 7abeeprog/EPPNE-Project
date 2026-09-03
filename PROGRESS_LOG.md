@@ -1350,3 +1350,72 @@ pipe)، ظهر **فشلان حقيقيان** كانا مخفيين:
 **الحالة:** ✅ الثمانية دومينات مكتملة ومتحقَّق منها حيًا (23 اختبار
 PASSED عبر 6 ملفات، exit code صريح مؤكَّد). **البند 3 (مكوّنات UI) لم
 يبدأ بعد** — ينتظر توجيه المستخدم، بما فيه قرار `CreatePostModal` أعلاه.
+
+---
+
+## [2026-09-02] بند Backlog جديد — `tourism-sports-transfer-repository-method-missing`
+
+**الوصف:** اكتُشف أثناء فحص جاهزية مكوّنات البند 3 (`TransferCard`،
+`.claude/reports/frontend-category-b-item3-components-readiness.md`):
+`TourismSportsRepository` **لا تملك `get_transfer`/`list_transfers`
+إطلاقًا** — لا كـmethod، ولا حتى تعريف داخلي. المفاجئ: `service.py:
+place_transfer_bid` (الكود الأصلي، لم يُلمَس في أي جلسة من هذه السلسلة)
+بينادي `self.repo.get_transfer(transfer_id)` في مسار التحقق من
+idempotency-cache — **استدعاء لدالة غير موجودة في `repository.py`
+إطلاقًا**، يعني أي مسار كود بيوصل لهذا السطر (تكرار طلب بنفس
+`idempotency_key`) هيرمي `AttributeError` فورًا.
+
+**الأثر:** (أ) مكوّن UI `TransferCard` مستحيل بناؤه بمعنى حقيقي — صفر
+`list` endpoint لعرض قائمة عمليات الانتقال إطلاقًا. (ب) **أعمق من مجرد
+مكوّن مفقود:** حتى لو حد حاول يبني endpoint جديد بمعزل عن هذا الاكتشاف،
+مسار الـidempotency الموجود بالفعل في `place_transfer_bid` معطوب
+بالفعل وهيفشل بـ`AttributeError` صامت (مبتلَع؟ يحتاج فحص) عند إعادة
+محاولة بنفس المفتاح — نفس فئة أخطاء `get_by_id`/`get_user` التاريخية
+(Backlog #1/#8 أعلاه)، لكن هنا الدالة **غير موجودة إطلاقًا من الأساس**
+مش بس ناقصة معامل.
+
+**الحل المتوقَّع:** جلسة/قرار منفصل: (أ) إضافة `get_transfer(transfer_id,
+tenant_id)` + `list_transfers(tenant_id, ...)` لـ`repository.py`
+(migration؟ الجدول `PlayerTransfer` موجود بالفعل، غالبًا صفر migration
+مطلوبة، مجرد استعلامات جديدة)، (ب) تعريض الاثنين عبر `service.py`/
+`router.py`، (ج) بعدها فقط يصبح `TransferCard` قابلًا للبناء.
+
+**الحالة:** 🔴 مفتوح، موثَّق فقط، صفر إصلاح — يمنع بناء `TransferCard`
+حتى إشعار آخر. `.claude/reports/frontend-category-b-item3-components-readiness.md`.
+
+---
+
+## [2026-09-03] بند Backlog جديد — `frontend-types-null-vs-undefined-mismatch-pattern`
+
+**الوصف:** اكتُشف أثناء بناء 6 مكوّنات UI (`CampaignCard`, `InvitationCard`,
+`InvitationStatusBadge`, `TicketCard`, `TicketStatusBadge`, `CreatePostModal`
+— راجع `.claude/reports/frontend-category-b-item3-components-readiness.md`):
+ملفات الأنواع اليدوية (مش المولَّدة) `eppne-web/types/invitations.ts` و
+`types/social.ts` بتُعرِّف كل حقل اختياري بصيغة `field?: X` (يعني
+`X | undefined`)، بينما الـschemas الفعلية في الباك إند (Pydantic،
+`Optional[X] = None`) بترجع `X | null` في الـJSON — تصادم نوع منهجي
+عبر **كل** حقل اختياري تقريبًا في الملفين، مش محدود بمكوّن واحد.
+
+**الدليل:** نفس فئة الخطأ بالضبط موجودة حاليًا وبشكل مستقل على
+`Lead`/`LeadCard` (مكوّن قديم موجود من قبل أي جلسة من هذه السلسلة —
+`app/(dashboard)/invitations/leads/page.tsx` عنده هذا الخطأ نشطًا الآن،
+لم يُلمَس). يعني هذا التصادم **موجود مسبقًا وعابر للمشروع، مش مقتصر على
+عمل هذه الجلسة** — جلستنا فقط أصلحت الحقول المحدَّدة اللي مكوّناتها
+الستة الجديدة بتستهلكها فعليًا (`SovereignInvitation`, `MarketingCampaign`,
+`SupportTicket`, `TicketComment` في `types/invitations.ts`؛ `Post` في
+`types/social.ts`) — قرار نطاق صريح، مش إصلاح شامل.
+
+**الأثر:** أي مكوّن جديد يُبنى مستقبلًا فوق هذين الملفين هيصطدم بنفس
+الفئة من أخطاء `tsc` (missing property / incompatible types) بمجرد
+أول استخدام حقيقي للبيانات الحية (بدل `any` المُقنَّع من استيراد مكسور
+سابقًا) — تمامًا زي ما حصل هنا مع `CampaignCard`/`InvitationCard`/`TicketCard`.
+
+**الحل المتوقَّع (قرار منفصل إن قررنا توحيده):** إما (أ) تدقيق شامل
+لكل الملفين وتحويل كل `field?: X` إلى `field?: X | null` حيث ينطبق،
+حقل بحقل مقابل الـschema الفعلية، أو (ب) إعادة توليد أنواع Pydantic
+تلقائيًا بدل الاعتماد على ملفات يدوية موازية أصلًا (يحل المشكلة جذريًا
+لكل الدومين، مش بس invitations/social).
+
+**الحالة:** 🟡 مفتوح، موثَّق فقط — نمط معروف الآن، غير عاجل (لا يمنع
+أي عمل حالي، بس هيتكرر كتكلفة صغيرة مع كل مكوّن جديد فوق نفس الملفين).
+`.claude/reports/frontend-category-b-item3-components-readiness.md`.

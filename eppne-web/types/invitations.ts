@@ -12,30 +12,30 @@ export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
 export interface SovereignInvitation {
   id: number;
   tenant_id: number;
-  sender_user_id?: number;
-  sender_entity_id?: number;
+  sender_user_id?: number | null;
+  sender_entity_id?: number | null;
   invitation_type: InvitationType;
   target_type: InvitationTargetType;
-  target_user_id?: number;
-  target_entity_identifier?: string;
-  custom_message?: string;
-  title?: string;
+  target_user_id?: number | null;
+  target_entity_identifier?: string | null;
+  custom_message?: string | null;
+  title?: string | null;
   campaign_type: CampaignType;
   campaign_id: number;
-  discount_percentage: number;
-  gift_coins_amount: number;
+  discount_percentage: number | string;
+  gift_coins_amount: number | string;
   gift_currency: string;
   max_uses: number;
   current_uses: number;
-  expires_at?: string;
+  expires_at?: string | null;
   status: InvitationStatus;
-  assigned_ai_agent_id?: number;
+  assigned_ai_agent_id?: number | null;
   click_count: number;
-  first_clicked_at?: string;
-  last_clicked_at?: string;
+  first_clicked_at?: string | null;
+  last_clicked_at?: string | null;
   created_at: string;
   updated_at: string;
-  invitation_url?: string;
+  invitation_url?: string | null;
 }
 
 export interface Lead {
@@ -79,13 +79,13 @@ export interface MarketingCampaign {
   id: number;
   tenant_id: number;
   name: string;
-  description?: string;
+  description?: string | null;
   campaign_type: CampaignType;
   target_audience: Record<string, any>;
   budget_mrusdt: string;
   spent_mrusdt: string;
   start_date: string;
-  end_date?: string;
+  end_date?: string | null;
   status: CampaignStatus;
   channels: string[];
   total_leads: number;
@@ -98,19 +98,19 @@ export interface MarketingCampaign {
 export interface SupportTicket {
   id: number;
   tenant_id: number;
-  lead_id?: number;
-  user_id?: number;
-  user_name?: string;
-  assigned_to?: number;
-  assigned_to_name?: string;
+  lead_id?: number | null;
+  user_id?: number | null;
+  user_name?: string | null;
+  assigned_to?: number | null;
+  assigned_to_name?: string | null;
   subject: string;
   description: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   status: TicketStatus;
   created_at: string;
   updated_at: string;
-  resolved_at?: string;
-  comments?: TicketComment[];
+  resolved_at?: string | null;
+  comments?: TicketComment[] | null;
 }
 
 export interface TicketComment {
@@ -118,7 +118,7 @@ export interface TicketComment {
   tenant_id: number;
   ticket_id: number;
   user_id: number;
-  user_name?: string;
+  user_name?: string | null;
   comment: string;
   is_internal: boolean;
   created_at: string;

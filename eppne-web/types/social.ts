@@ -6,17 +6,17 @@ export type ConnectionType = 'FOLLOW' | 'FRIEND' | 'COLLEAGUE' | 'MENTOR';
 
 export interface Post {
   id: number;
-  tenant_id: number;
+  tenant_id?: number;
   author_id: number;
   author_name?: string;
   author_avatar?: string;
-  content?: string;
+  content?: string | null;
   post_type: PostType;
   media_urls: string[];
   likes_count: number;
   comments_count: number;
   shares_count: number;
-  share_reward_mr7: number;
+  share_reward_mr7: number | string;
   green_tag_verified: boolean;
   created_at: string;
   is_liked?: boolean;
