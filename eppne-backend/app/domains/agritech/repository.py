@@ -4,6 +4,11 @@ from sqlalchemy import select, update, func, and_
 from typing import Optional, List, cast
 from datetime import datetime
 from app.domains.agritech.models import *
+from app.domains.agritech.schemas import (
+    SmartFarmResponse, FarmZoneResponse, CropCycleResponse,
+    SupplyChainStageResponse, AgriculturalCertificateResponse,
+    SoilSensorReadingResponse,
+)
 from app.core.errors import NotFoundError
 from decimal import Decimal
 from app.core.pagination import PaginatedResponse
@@ -35,7 +40,7 @@ class AgriTechRepository:
         farm_type: Optional[str] = None,
         skip: int = 0,
         limit: int = 100
-    ) -> PaginatedResponse[SmartFarm]:
+    ) -> PaginatedResponse[SmartFarmResponse]:
         query = select(SmartFarm).where(
             and_(SmartFarm.tenant_id == tenant_id, SmartFarm.is_deleted == False)
         )
@@ -50,7 +55,7 @@ class AgriTechRepository:
         result = await self.db.execute(query)
         items = list(result.scalars().all())
 
-        return PaginatedResponse[SmartFarm](
+        return PaginatedResponse[SmartFarmResponse](
             data=items,
             total=total,
             skip=skip,
@@ -71,7 +76,7 @@ class AgriTechRepository:
         )
         return result.scalar_one_or_none()
 
-    async def list_zones(self, farm_id: int, tenant_id: int) -> PaginatedResponse[FarmZone]:
+    async def list_zones(self, farm_id: int, tenant_id: int) -> PaginatedResponse[FarmZoneResponse]:
         query = select(FarmZone).where(FarmZone.farm_id == farm_id)
         query = query.join(SmartFarm, SmartFarm.id == FarmZone.farm_id).where(SmartFarm.tenant_id == tenant_id)
         count_query = select(func.count()).select_from(query.subquery())
@@ -80,7 +85,7 @@ class AgriTechRepository:
         query = query.offset(0).limit(1000)
         result = await self.db.execute(query)
         items = list(result.scalars().all())
-        return PaginatedResponse[FarmZone](
+        return PaginatedResponse[FarmZoneResponse](
             data=items,
             total=total,
             skip=0,
@@ -101,7 +106,7 @@ class AgriTechRepository:
         )
         return result.scalar_one_or_none()
 
-    async def list_crop_cycles(self, zone_id: int, tenant_id: int) -> PaginatedResponse[CropCycle]:
+    async def list_crop_cycles(self, zone_id: int, tenant_id: int) -> PaginatedResponse[CropCycleResponse]:
         query = select(CropCycle).where(CropCycle.zone_id == zone_id)
         query = query.join(FarmZone, FarmZone.id == CropCycle.zone_id).where(FarmZone.tenant_id == tenant_id)
         count_query = select(func.count()).select_from(query.subquery())
@@ -110,7 +115,7 @@ class AgriTechRepository:
         query = query.offset(0).limit(1000)
         result = await self.db.execute(query)
         items = list(result.scalars().all())
-        return PaginatedResponse[CropCycle](
+        return PaginatedResponse[CropCycleResponse](
             data=items,
             total=total,
             skip=0,
@@ -163,7 +168,7 @@ class AgriTechRepository:
         traceable_type: str,
         traceable_id: int,
         tenant_id: int
-    ) -> PaginatedResponse[SupplyChainStage]:
+    ) -> PaginatedResponse[SupplyChainStageResponse]:
         query = select(SupplyChainStage).where(
             and_(
                 SupplyChainStage.traceable_type == traceable_type,
@@ -177,7 +182,7 @@ class AgriTechRepository:
         query = query.offset(0).limit(1000)
         result = await self.db.execute(query)
         items = list(result.scalars().all())
-        return PaginatedResponse[SupplyChainStage](
+        return PaginatedResponse[SupplyChainStageResponse](
             data=items,
             total=total,
             skip=0,
@@ -204,7 +209,7 @@ class AgriTechRepository:
         entity_type: str,
         entity_id: int,
         tenant_id: int
-    ) -> PaginatedResponse[AgriculturalCertificate]:
+    ) -> PaginatedResponse[AgriculturalCertificateResponse]:
         query = select(AgriculturalCertificate).where(
             and_(
                 AgriculturalCertificate.certified_entity_type == entity_type,
@@ -219,7 +224,7 @@ class AgriTechRepository:
         query = query.offset(0).limit(1000)
         result = await self.db.execute(query)
         items = list(result.scalars().all())
-        return PaginatedResponse[AgriculturalCertificate](
+        return PaginatedResponse[AgriculturalCertificateResponse](
             data=items,
             total=total,
             skip=0,
@@ -245,7 +250,7 @@ class AgriTechRepository:
         zone_id: int,
         tenant_id: int,
         limit: int = 100
-    ) -> PaginatedResponse[SoilSensorReading]:
+    ) -> PaginatedResponse[SoilSensorReadingResponse]:
         query = select(SoilSensorReading).where(SoilSensorReading.zone_id == zone_id)
         query = query.join(FarmZone, FarmZone.id == SoilSensorReading.zone_id).where(FarmZone.tenant_id == tenant_id)
         query = query.order_by(SoilSensorReading.recorded_at.desc()).limit(limit)
@@ -254,7 +259,7 @@ class AgriTechRepository:
         total = total_result.scalar() or 0
         result = await self.db.execute(query)
         items = list(result.scalars().all())
-        return PaginatedResponse[SoilSensorReading](
+        return PaginatedResponse[SoilSensorReadingResponse](
             data=items,
             total=total,
             skip=0,

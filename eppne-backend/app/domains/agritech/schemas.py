@@ -72,6 +72,15 @@ class HarvestBatchResponse(HarvestBatchCreate):
     shipment_tracking_number: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
+class HarvestRegistrationResult(BaseModel):
+    id: int
+    cycle_id: int
+    grade: HarvestGrade
+    quantity_kg: Decimal
+    harvest_date: datetime
+    shipment_tracking_number: Optional[str] = None
+    ai_logistics_actions: List[str] = Field(default_factory=list)
+
 # ========== Bio Assets ==========
 class BioAssetCohortCreate(BaseModel):
     bio_type: BioAssetType
@@ -99,6 +108,14 @@ class BioProductYieldResponse(BioProductYieldCreate):
     cohort_id: int
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+class BioYieldRegistrationResult(BaseModel):
+    id: int
+    cohort_id: int
+    product_type: BioProductType
+    quantity_unit: Decimal
+    collection_date: Optional[datetime] = None
+    ai_logistics_actions: List[str] = Field(default_factory=list)
 
 # ========== Supply Chain ==========
 class SupplyChainStageCreate(BaseModel):

@@ -1419,3 +1419,148 @@ tenant_id)` + `list_transfers(tenant_id, ...)` لـ`repository.py`
 **الحالة:** 🟡 مفتوح، موثَّق فقط — نمط معروف الآن، غير عاجل (لا يمنع
 أي عمل حالي، بس هيتكرر كتكلفة صغيرة مع كل مكوّن جديد فوق نفس الملفين).
 `.claude/reports/frontend-category-b-item3-components-readiness.md`.
+
+---
+
+## [2026-09-04] جلسة `agritech-full-domain-build` — إغلاق (البند المفتوح من [2026-09-01] أعلاه)
+
+**الوصف:** تنفيذ القرار الموثَّق سابقًا (بند Backlog `agritech-full-domain-build`،
+2026-09-01 أعلاه): بناء `router.py` جديد بالكامل من الصفر لدومين `agritech`
+وتسجيله في `main.py`. تصميم الـ19 endpoint (farms, zones, crop cycles,
+harvest, bio assets, traceability+QR, certificates, soil sensors, weather
+alerts) عُرض للموافقة الصريحة قبل أي تنفيذ (4 قرارات: prefix بسيط `/agritech`
+مطابق لكل الدومينات التانية، نطاق 19 endpoint فقط بدون توسيع، schema جديدة
+لنتائج register_harvest/register_bio_yield، صلاحية superuser لـissue_certificate
+وcreate_weather_alert) — راجع `.claude/reports/agritech-full-domain-build-session-log.md`.
+
+**اكتشافان حرجان أثناء التحقق الحي (pytest ضد DB حقيقية) — لم يكونا معروفين
+وقت التصميم، لأن الكود لم يُستورَد فعليًا من قبل أبدًا:**
+
+1. **`repository.py` كان بيكسر الاستيراد بالكامل فور محاولة تحميله:** كل
+   دوال `list_*`/`get_*_stages`/`get_entity_certificates`/`get_recent_soil_readings`
+   بترجّع `PaginatedResponse[SmartFarm]` (وأخواتها) — بارامترة الـgeneric
+   كانت **كلاس ORM خام** (SQLAlchemy model)، مش Pydantic schema. كل دومين
+   تاني بيستخدم نفس `PaginatedResponse` (academy, affiliate, ai_agents,
+   commerce, ...) بيمرّر schema فعلية (`PaginatedResponse[CourseResponse]`
+   مثلًا) — agritech وحدها كانت الاستثناء. هذا كان بيفشل بـ
+   `PydanticSchemaGenerationError` فور `import` — وهو **السبب الحقيقي** إن
+   الملف "orphaned" مش بس غياب router، كان حرفيًا مستحيل الاستيراد من
+   الأساس. **الإصلاح:** استبدال الـ6 استخدامات بـschemas الفعلية
+   (`SmartFarmResponse`, `FarmZoneResponse`, `CropCycleResponse`,
+   `SupplyChainStageResponse`, `AgriculturalCertificateResponse`,
+   `SoilSensorReadingResponse`).
+2. **`record_soil_data` في `service.py` كانت بتكسر عند أول استدعاء حقيقي:**
+   `audit_log(details={..., "moisture": data.get("moisture_percent")})` —
+   بتمرر `Decimal` خام لدالة `audit_log()` اللي بتعمل `json.dumps()` **بدون**
+   `default=str` → `TypeError: Object of type Decimal is not JSON serializable`.
+   بما إن `SoilSensorReadingCreate.moisture_percent` من نوع `Decimal` في الـschema،
+   وPydantic v2 `model_dump()` بيحافظ على نوع `Decimal` كما هو — هذا كان
+   هيحصل مع **أي طلب حقيقي فيه moisture_percent** عبر الـrouter، مش حالة
+   اختبار حافة. **الإصلاح:** `float(data["moisture_percent"])` قبل التمرير
+   لـ`audit_log` (نفس النمط المستخدم فعلًا في باقي دوال هذا الملف، مثل
+   `HARVEST_REGISTERED`). باقي الـ10 استدعاءات audit_log في نفس الملف
+   اتفحصت ولا فيها نفس الباج.
+
+**تعديلات إضافية منفَّذة (بموافقة صريحة ضمن القرارات الأربعة):**
+- `services/agritech.ts`: إصلاح 16 سطر URL كانت مكتوبة بمسار مضاعف
+  (`/agritech/agritech/...`) — تم توحيدها لمسار بسيط (`/agritech/...`)
+  اتساقًا مع كل الدومينات التانية في المشروع (كلها بلا استثناء prefix واحد).
+- `schemas.py`: إضافة `HarvestRegistrationResult` و`BioYieldRegistrationResult`
+  (تحافظان على حقل `ai_logistics_actions` المفيد من الـservice).
+- `service.py`: حقن أسماء بديلة (`id`, `cycle_id`, `harvest_date`,
+  `shipment_tracking_number` لـregister_harvest؛ `id`, `cohort_id`,
+  `quantity_unit`, `collection_date` لـregister_bio_yield) في الـdicts
+  المُرجَعة، عشان تطابق التوقع الأصلي في `services/agritech.ts` بدون
+  الحاجة لتعديل فرونت إند إضافي.
+- `requirements.txt`: إضافة `qrcode[pil]>=8.0` — كانت مستخدمة فعليًا في
+  `generate_traceability_qr` (مع `try/except ImportError` صريح) لكن غير
+  مُعلَنة كـdependency إطلاقًا؛ مثبَّتة الآن في venv ومُختبَرة حيًا.
+
+**التحقق الحي المنفَّذ:** اختبار pytest واحد شامل (`tests/test_agritech_router_wiring.py`)
+يمشي الدومين بالكامل ضد DB حقيقية (PostgreSQL، صفر mock): إنشاء مزرعة →
+منطقة → دورة زراعية → حصاد → مجموعة حيوانية → إنتاج حيواني → مرحلة تتبع →
+QR → شهادة → قراءة تربة → تنبيه طقس، + تحقق عزل tenant_id على عيّنتين
+(farms عبر عمود مباشر، soil-readings عبر join مع FarmZone) — **PASSED**.
+تأكيد إضافي: `app.main` يستورد بنجاح (581 route إجمالي)، و19 مسار
+`/api/agritech/*` مسجَّلة بالضبط بلا تكرار وبلا تعارض مع أي دومين تاني.
+تشغيل كامل test suite الباك إند (`pytest -q`) قيد التنفيذ للتأكد من صفر
+regression خارج agritech — نتيجته تُوثَّق في تعليق تالٍ فور اكتماله.
+
+**الحالة:** ✅ مغلق. `router.py` (19 endpoint) موجود ومسجَّل في `main.py`،
+كل الدوال الموجودة فعليًا في `service.py` مكشوفة الآن كـHTTP endpoints،
+الفرونت إند (`services/agritech.ts`) يطابق المسارات الحقيقية بالحرف.
+الفجوات المتبقية (named exports مفقودة، `useStats.ts`، update/delete farm،
+list harvests/bio cohorts) موثَّقة في البند التالي كـPhase 2 منفصلة —
+قرار نطاق صريح من المستخدم، مش نسيان.
+`.claude/reports/agritech-full-domain-build-session-log.md`.
+
+---
+
+## [2026-09-04] بند Backlog جديد — `agritech-phase2-frontend-gaps`
+
+**الوصف:** اكتُشف أثناء جلسة `agritech-full-domain-build` (أعلاه) عند مقارنة
+الـrouter الجديد (19 endpoint، مطابقة 1:1 لدوال service.py الموجودة) مع
+الفرونت إند الموجود مسبقًا (`hooks/agritech/*.ts`, `services/agritech.ts`,
+`app/(dashboard)/agritech/**`). قرار نطاق صريح من المستخدم: هذه الجلسة
+بنت الـ19 endpoint فقط، وأجّلت الفجوات التالية لجلسة Phase 2 منفصلة
+(نفس نمط `phase 2` في commit `1bb70b2` لدومينات تانية):
+
+1. **`services/agritech.ts` يُصدِّر فقط `AgritechService` (object واحد)**،
+   لكن الـhooks بتستورد named exports غير موجودة إطلاقًا: `getFarms`,
+   `getFarm`, `updateFarm`, `deleteFarm` (`useFarms.ts`)، `getZones`,
+   `createZone` (`useZones.ts`)، `getCropCycles` (`useCropCycles.ts`)،
+   `getHarvests` (`useHarvests.ts`)، `getBioCohorts`, `createBioCohort`
+   (`useBioAssets.ts`)، `getWeatherAlerts` (`useSensors.ts`) — استيراد
+   مكسور بالكامل حاليًا (compile error)، **مستقل عن وجود الـbackend router**.
+2. **`hooks/agritech/useStats.ts` غير موجود إطلاقًا** — `app/(dashboard)/agritech/page.tsx`
+   بيستورد `useAgritechStats` منه، فالصفحة الرئيسية للدومين مكسورة حاليًا.
+3. **فجوات في `service.py` نفسه** (مطلوبة من الـhooks بس مش موجودة):
+   `update_farm`, `delete_farm` (الموديل عنده `is_deleted`/`deleted_at`
+   بس لا يوجد service/repo method)، `list_harvests(cycle_id)` (فيه
+   `register_harvest` بس ولا يوجد أي get/list للحصاد)، `list_bio_cohorts(zone_id)`
+   (فيه `add_bio_cohort` بس ولا يوجد أي get/list)، وأي stats aggregation
+   لدعم `useAgritechStats`.
+
+**الحالة:** 🔴 مفتوح، موثَّق فقط، صفر تنفيذ — يحتاج جلسة منفصلة (تصميم
++ موافقة زي أي دومين، خصوصًا update/delete farm وlist endpoints جديدة).
+`.claude/reports/agritech-full-domain-build-session-log.md`.
+
+---
+
+## [2026-09-04] بند Backlog جديد — `update_bio_cohort_count-tenant-id-bug`
+
+**الوصف:** اكتُشف أثناء مراجعة أمنية لـ`agritech/repository.py` ضمن جلسة
+`agritech-full-domain-build`. الدالة `update_bio_cohort_count(self, cohort_id, new_count)`
+(سطر 146) بتستدعي `self.get_bio_cohort(cohort_id)` بمعامل واحد فقط، بينما
+توقيع `get_bio_cohort` الفعلي يتطلب `(cohort_id, tenant_id)` إجباريًا —
+`TypeError` مضمون لو اتنادت. **dead code حاليًا** — ولا دالة في `service.py`
+بتستخدمها، وrouter الجلسة دي ماضافش أي endpoint بيستدعيها (تحديث عدد
+المجموعة الحيوانية مش من ضمن الـ19 endpoint المتفَق عليها).
+
+**الحالة:** 🟡 مفتوح، موثَّق فقط، غير عاجل (كود ميت غير مستدعى) — لازم
+يتصلح لو أي جلسة مستقبلية (زي Phase 2 أعلاه) قررت إضافة endpoint لتحديث
+عدد/كتلة مجموعة حيوانية.
+`.claude/reports/agritech-full-domain-build-session-log.md`.
+
+---
+
+## [2026-09-04] بند Backlog جديد — `agritech-traceability-certificate-idor-defense-gap`
+
+**الوصف:** اكتُشف أثناء الفحص الأمني لـtenant_id scoping في `agritech/service.py`
+ضمن جلسة `agritech-full-domain-build`. الدوال `add_traceability_stage`،
+`issue_certificate`، و`register_harvest`/`register_bio_yield` (لحقول
+`destination_facility_id`/`destination_farm_id`) بتقبل IDs خام
+(`traceable_id`, `certified_entity_id`, ...) **من غير التحقق إن الكيان
+المُشار إليه فعلاً ملك لنفس الـtenant الحالي**. القراءة نفسها بتفضل معزولة
+(كل query في repository.py بيفلتر بـtenant_id)، فمفيش تسريب بيانات مباشر —
+لكن معناه ممكن تُصدر شهادة/مرحلة تتبع بمعرّف كيان مش موجود أصلاً عند
+الـtenant الحالي (garbage reference)، بدون أي رفض من السيرفر.
+
+**القرار المتَّخذ في هذه الجلسة:** تُرك الوضع كما هو (مطابقة لباقي
+الدومينات المشابهة اللي اتبنت بنفس النمط)، وتم توثيقه كـfollow-up منفصل
+بدل حجب الـendpoints أو إضافة تحقق إضافي بدون موافقة صريحة.
+
+**الحالة:** 🟡 مفتوح، موثَّق فقط، غير عاجل (defense-in-depth، مش ثغرة عزل
+مباشرة) — يحتاج قرار منتجي (هل نضيف تحقق ownership قبل إصدار شهادة/مرحلة
+تتبع؟) في جلسة أمنية مخصَّصة لو حبينا نسدها.
+`.claude/reports/agritech-full-domain-build-session-log.md`.

@@ -24,7 +24,7 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 # ==========================================
 from app.core.database_indexes import create_indexes
 
-from app.core.security import get_current_user, get_current_user_optional, require_sector, get_current_active_user, get_current_superuser
+from app.core.security import get_current_user, get_current_user_optional, get_current_active_user, get_current_superuser
 from app.domains.identity.models import User
 
 # ==========================================
@@ -32,6 +32,7 @@ from app.domains.identity.models import User
 # ==========================================
 from app.domains.academy.router import router as academy_router
 from app.domains.affiliate.router import router as affiliate_router
+from app.domains.agritech.router import router as agritech_router
 from app.domains.ai_agents.router import router as ai_agents_router
 from app.domains.ai_governance.router import router as ai_governance_router
 from app.domains.arbitration_syndicates.router import router as arbitration_syndicates_router
@@ -266,6 +267,7 @@ async def performance_middleware(request: Request, call_next):
 routers_config = [
     (academy_router, "/academy", ["Academy"], "academy"),
     (affiliate_router, "/affiliate", ["Affiliate"], "affiliate"),
+    (agritech_router, "/agritech", ["Agritech"], "agritech"),
     (ai_agents_router, "/ai-agents", ["AI Agents"], "ai"),
     (ai_governance_router, "/ai-governance", ["AI Governance"], "ai"),
     (arbitration_syndicates_router, "/arbitration", ["Arbitration Syndicates"], "arbitration"),
@@ -298,11 +300,13 @@ routers_config = [
 ]
 
 for router_obj, prefix_path, tags_list, sector in routers_config:
+    # 🔥 require_sector() أُلغيت هنا (لا يوجد sector claim على التوكن —
+    # راجع .claude/reports/require-sector-removal-subscription-fix-session-log.md).
+    # الفحص الوحيد المتبقي لوصول أي دومين هو require_subscription على مستوى الـendpoint.
     fastapi_app.include_router(
         router_obj,
         prefix="/api",
         tags=tags_list,
-        dependencies=[Depends(require_sector(sector))]
     )
 
 fastapi_app.include_router(identity_router, prefix="/api", tags=["Identity"])

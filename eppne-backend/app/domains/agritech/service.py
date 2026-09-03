@@ -279,9 +279,13 @@ class AgriTechService:
 
         result = {
             "harvest_id": harvest.id,
+            "id": harvest.id,
+            "cycle_id": cycle.id,
             "grade": harvest.grade.value,
             "quantity_kg": float(Decimal(str(harvest.quantity_kg))),
+            "harvest_date": harvest.harvest_date,
             "tracking_number": harvest.shipment_tracking_number,
+            "shipment_tracking_number": harvest.shipment_tracking_number,
             "ai_logistics_actions": ai_logistics_actions
         }
         await self._store_idempotency(idempotency_key, result)
@@ -382,8 +386,12 @@ class AgriTechService:
 
         result = {
             "yield_id": yield_record.id,
+            "id": yield_record.id,
+            "cohort_id": yield_record.cohort_id,
             "product_type": yield_record.product_type.value,
             "quantity": float(Decimal(str(yield_record.quantity_unit))),
+            "quantity_unit": float(Decimal(str(yield_record.quantity_unit))),
+            "collection_date": yield_record.collection_date,
             "ai_logistics_actions": actions
         }
 
@@ -599,7 +607,7 @@ class AgriTechService:
                 "tenant_id": self.tenant_id,
                 "reading_id": reading.id,
                 "zone_id": zone.id,
-                "moisture": data.get("moisture_percent")
+                "moisture": float(data["moisture_percent"]) if data.get("moisture_percent") is not None else None
             }
         )
 
