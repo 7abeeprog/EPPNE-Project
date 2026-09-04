@@ -1644,3 +1644,89 @@ tenders-auctions/دومين آخر، `agritech-phase2-frontend-gaps`) — صفر
 **الحالة:** ✅ الأربعة بنود المطلوبة اتقفلت (فوري واحد + تنفيذان حيّان
 + تأكيد بلا حاجة لتنفيذ). commit واحد شامل يجمع agritech + tourism-sports
 + التوثيق. `.claude/reports/category-b-decision-needed-triage-session-log.md`.
+
+---
+
+## [2026-09-04] بند Backlog مؤجَّل عمدًا — `api-types-full-regeneration-deferred-until-backend-queue-clear`
+
+**السياق:** جلسة `api-types-schema-collision-investigation` — تحقيق فقط
+(صفر تنفيذ). راجع
+`.claude/reports/api-types-schema-collision-investigation-session-log.md`
+للتفاصيل الكاملة.
+
+**النتيجة الأساسية:** افتراض "تصادم اسم class عبر دومينين" (اللي كان
+مسجَّل في بند `api-types-schema-name-collision-auction-tender-create`
+أعلاه) **غير صحيح** — أُثبت بأرشيف git إنه لا يوجد أي تصادم اسم حقيقي في
+أي نقطة زمنية. السبب الجذري الموحَّد لكل الانحرافات المكتشَفة (tenders/
+auctions **و**transport) هو: `eppne-backend/openapi.json` ملف **ثابت**
+مُلتزَم في git، يتولَّد منه `api-types.ts` عبر `openapi-typescript`
+يدويًا بدون أي سكريبت/CI تلقائي، ولم يُعَد توليده منذ commit `0d9c55b`
+(2026-07-21) — **45 يوم** حتى تاريخ هذه الجلسة، رغم ~40 commit لمست
+`schemas.py`/`router.py` عبر معظم دومينات المشروع خلال هذه الفترة. يعني
+الانحراف الحقيقي أوسع من الحالتين المكتشَفتين لحد الآن.
+
+**قرار المستخدم الصريح [2026-09-04]:** تأجيل الـregeneration الكامل
+(`openapi.json` من سيرفر حي + `api-types.ts` منه + `tsc --noEmit`) إلى
+**جلسة أخيرة مخصَّصة بعد الانتهاء من كل تعديلات الباك إند المخطَّط لها
+حاليًا** (transport vehicles/drivers، Referral+Affiliate، وأي بند آخر في
+الطابور بيلمس `schemas.py`). **السبب:** تجنب تكرار عملية الـregeneration
+أكتر من مرة — كل تعديل schema جديد في الطابور هيخلي أي regeneration
+مبكرة قديمة تاني بمجرد ما يتنفَّذ، فالأفضل انتظار استقرار كل تعديلات
+schemas.py المخطَّطة أولاً ثم regeneration واحدة شاملة نهائية.
+
+**الحالة:** 🟡 مؤجَّل عمدًا (قرار مستخدم صريح، مش نسيان) — **لا تنفَّذ
+regeneration قبل التأكد إن طابور تعديلات الباك إند المخطَّطة (transport
+vehicles/drivers، Referral+Affiliate، وغيرها) خلص فعليًا.** عند فتح
+الجلسة الأخيرة المخصَّصة لهذا البند، ابدأ من
+`.claude/reports/api-types-schema-collision-investigation-session-log.md`
+مباشرة — التحقيق والدليل جاهزين بالكامل، الخطوة الوحيدة الناقصة هي
+التنفيذ.
+
+---
+
+## [2026-09-04] `iot-translation-service-method-mismatches` — 3 أعطال حقيقية
+اتصلحت بعد كشفها خلف باج rename سابق (commit `cf98a74`)
+
+**السياق:** جلسة `frontend-mechanical-fix-all-domains-pass1` (2026-08-31)
+كانت عملت rename ميكانيكي (`iotService`→`IoTService`،
+`translationService`→`TranslationService`) بدون تدقيق كل استدعاء. بعده
+ظهرت 3 أعطال حقيقية منفصلة تمامًا كانت مخفية خلف باج الاستيراد القديم،
+عبر 7 ملفات فرونت إند + الباك إند:
+
+1. **rename بسيط (method لا يوجد إطلاقًا):** `AssetsManager.tsx` و
+   `IoTDashboardStats.tsx` بينادوا `IoTService.getAssets({limit:1000})`
+   غير موجود أصلاً — الصح `listMyAssets({limit})`. اكتُشف كمان إن
+   `limit:1000` كانت أصلاً خاطئة بغض النظر عن اسم الميثود (الباك إند
+   `le=200`) — اتصلحت لـ`200`.
+2. **service file بيتجاهل رد الـAPI (مش مجرد type mismatch):**
+   `CarbonCreditPanel.tsx` بينادي `settleCarbon()` بلا الآرجيومنت
+   المطلوب (`CarbonSettlementRequest`)، و`iot.service.ts`'s `settleCarbon`
+   كانت موقّعة `Promise<void>` رغم إن الباك إند فعليًا بيرجّع
+   `total_credits_settled`/`monetary_value_added_mrusdt` — الكومبوننت
+   كانت بتقرأ حقول من نتيجة متجاهَلة عمدًا. اتصلح الاستدعاء
+   (`settleCarbon({})`) + الـservice بقت بترجع النتيجة الفعلية + أُضيفت
+   `CarbonSettlementResponse` schema صريحة في الباك إند
+   (`POST /iot/carbon/settle` كانت بلا `response_model` إطلاقًا).
+3. **تصادم توقيع مع مكتبة react-query v5 نفسها (اكتشاف غير متوقَّع):**
+   `BatchTranslator.tsx`/`ChatTranslator.tsx`/`TextTranslator.tsx` كانوا
+   بيمرروا `TranslationService.translate`/... مباشرة كـ`mutationFn`.
+   الباراميتر الثاني الاختياري `headers?` في الـservice methods اصطدم
+   موضعيًا مع الآرجيومنت الجديد `context: MutationFunctionContext` اللي
+   react-query v5 بيبعته لـ`mutationFn` — مش نفس نمط idempotencyKey
+   الخام المفترَض أصلاً. الإصلاح: لف كل استدعاء بـlambda محلي، صفر لمس
+   لـ`translation.service.ts` (الـheaders param مقصودة لدعم X-Tenant-ID
+   مستقبلي، مؤكَّد بلا أي استخدام حالي عبر grep).
+
+**اكتشاف إضافي أثناء التحقق الحي:** إصلاح #1 كشف باج تاني كان مخفي خلف
+`any[]` — `types/iot.ts`'s `SmartAsset.location_gps`/`iot_wallet_address`
+كانوا أضيق (required/`{lat,lng}`) من الشكل الفعلي المولَّد
+(optional/`Record<string,number>`). اتصلح بتوسيع النوعين فقط، صفر تغيير
+سلوك وقت التشغيل.
+
+**التحقق الحي:** `tsc --noEmit` نظيف على كل الملفات المتأثرة +
+`pytest tests/test_iot_carbon_settlement_response_schema.py` (اختبار
+جديد، DB حقيقية صفر mock) — 2 passed، يغطي حالتَي SUCCESS و NO_CREDITS
+ضد الـschema الجديدة.
+
+**الحالة:** ✅ مكتمل ومُتحقَّق منه حيًا. تقرير الجلسة الكامل:
+`.claude/reports/iot-translation-service-mismatches-session-log.md`.
