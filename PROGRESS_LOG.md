@@ -1281,6 +1281,24 @@ realestate أو invoicing) بيغلب في توليد OpenAPI (FastAPI/Pydantic
 واحد). `.claude/reports/frontend-category-b-phase2-session-log.md` قسم
 tenders-auctions.
 
+**⚠️ توسيع [2026-09-04، جلسة `category-b-decision-needed-triage`]:** اكتُشف
+جانبيًا أثناء التحقق من `transport-formdata-vs-openapi-schema-mismatch`
+(البند اتأكد إنه اتحل بالفعل بالباك إند في جلسة `transport-domain-full-build`
+2026-09-01 — `GeoAddress`/`Waypoint` sub-models حقيقية موجودة في
+`transport/schemas.py`) إن **`api-types.ts` المولَّد لسه قديم ومايعكسش
+الإصلاح**: `RouteCreate.waypoints`/`RouteResponse.waypoints` لسه
+`Record<string, never>[]` بدل شكل `Waypoint` الحقيقي. بلا أثر عملي حاليًا
+(الفرونت إند بيستخدم `types/transport.ts` اليدوي السليم، مش النوع المولَّد
+مباشرة) — لكنها **نفس فئة المشكلة بالضبط**: schema generation قديم/ملوَّث
+في `api-types.ts` مش متزامن مع الباك إند الفعلي، عبر دومينين مختلفين
+(tenders-auctions بتصادم اسم، transport بعدم إعادة توليد بعد إصلاح
+schema). **مرشَّح قوي لجلسة واحدة تراجع الاتنين مع بعض** (تتبع كل
+الانحرافات + إعادة توليد `api-types.ts` شاملة واحدة، بدل جلستين منفصلتين
+لنفس الأداة).
+
+**الحالة:** 🔴 لسه مفتوح (لم يتغيّر) — البعد الجديد (transport) موثَّق هنا
+فقط للتجميع، صفر إصلاح. `.claude/reports/category-b-decision-needed-triage-session-log.md`.
+
 ---
 
 ## [2026-09-02] بند Backlog جديد — `social-createpostmodal-missing-component-decision`
