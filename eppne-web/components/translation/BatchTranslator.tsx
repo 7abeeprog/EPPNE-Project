@@ -10,7 +10,7 @@ export function BatchTranslator() {
   const [results, setResults] = useState<string[] | null>(null);
 
   const { mutate, isPending } = useMutation({
-    mutationFn: TranslationService.batchTranslate,
+    mutationFn: (data: Parameters<typeof TranslationService.batchTranslate>[0]) => TranslationService.batchTranslate(data),
     onSuccess: (data) => setResults(data),
   });
 

@@ -11,7 +11,7 @@ export function TextTranslator() {
   const [result, setResult] = useState<TranslateResponse | null>(null);
 
   const { mutate, isPending, error } = useMutation({
-    mutationFn: TranslationService.translate,
+    mutationFn: (data: Parameters<typeof TranslationService.translate>[0]) => TranslationService.translate(data),
     onSuccess: (data) => setResult(data),
     onError: (err) => console.error('Translation failed:', err),
   });

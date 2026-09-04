@@ -107,3 +107,11 @@ class MaintenanceLogResponse(MaintenanceLogCreate):
 
 class CarbonSettlementRequest(BaseModel):
     asset_ids: Optional[List[int]] = Field(default=None, description="معرفات الأصول (إذا ترك فارغاً، يتم تسييل الكل)")
+
+
+class CarbonSettlementResponse(BaseModel):
+    status: str = Field(description="SUCCESS أو NO_CREDITS")
+    message: Optional[str] = Field(default=None, description="رسالة توضيحية (عند عدم وجود أرصدة)")
+    total_credits_settled: Optional[float] = Field(default=None, description="إجمالي أطنان الكربون المسواة")
+    monetary_value_added_mrusdt: Optional[float] = Field(default=None, description="القيمة المالية المضافة")
+    readings_processed: Optional[int] = Field(default=None, description="عدد القراءات المعالَجة")

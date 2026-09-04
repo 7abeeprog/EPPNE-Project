@@ -21,7 +21,7 @@ export function CarbonCreditPanel() {
   const totalValue = totalCredits * 50;
 
   const settleMutation = useMutation({
-    mutationFn: () => IoTService.settleCarbon(),
+    mutationFn: () => IoTService.settleCarbon({}),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['iot-readings'] });
       queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });

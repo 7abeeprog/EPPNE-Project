@@ -9,11 +9,11 @@ export interface SmartAsset {
   asset_code: string;
   asset_class: AssetClass;
   owner_id: number | null;
-  location_gps: { lat: number; lng: number } | null;
+  location_gps?: Record<string, number> | null;
   specs: Record<string, any>;
   is_online: boolean;
   health_status: DeviceHealth;
-  iot_wallet_address: string | null;
+  iot_wallet_address?: string | null;
   created_at: string;
 }
 

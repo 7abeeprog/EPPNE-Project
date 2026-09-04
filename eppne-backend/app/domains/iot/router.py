@@ -174,7 +174,7 @@ async def get_readings(
 # 4. تسييل الكربون (Carbon Settlement)
 # ============================================================
 
-@router.post("/carbon/settle")
+@router.post("/carbon/settle", response_model=CarbonSettlementResponse)
 @rate_limit(max_requests=5, window_seconds=300)
 async def settle_carbon(
     request: Request,

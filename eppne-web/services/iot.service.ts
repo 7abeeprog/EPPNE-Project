@@ -12,6 +12,15 @@ type UtilityGridResponse = components['schemas']['UtilityGridResponse'];
 type UtilityReadingCreate = components['schemas']['UtilityReadingCreate'];
 type UtilityReadingResponse = components['schemas']['UtilityReadingResponse'];
 type CarbonSettlementRequest = components['schemas']['CarbonSettlementRequest'];
+// api-types.ts لسه ما اتولّدش من openapi.json بعد إضافة CarbonSettlementResponse
+// (توليد api-types.ts خطوة يدوية منفصلة، راجع PROGRESS_LOG.md - مشكلة drift موثقة).
+type CarbonSettlementResponse = {
+  status: string;
+  message?: string | null;
+  total_credits_settled?: number | null;
+  monetary_value_added_mrusdt?: number | null;
+  readings_processed?: number | null;
+};
 type MaintenanceLogCreate = components['schemas']['MaintenanceLogCreate'];
 type MaintenanceLogResponse = components['schemas']['MaintenanceLogResponse'];
 
@@ -162,11 +171,12 @@ export const IoTService = {
    * تسوية الكربون
    * POST /iot/carbon/settle
    */
-  settleCarbon: async (data: CarbonSettlementRequest): Promise<void> => {
+  settleCarbon: async (data: CarbonSettlementRequest): Promise<CarbonSettlementResponse> => {
     try {
-      await apiClient.post("/iot/carbon/settle", data, {
+      const { data: result } = await apiClient.post<CarbonSettlementResponse>("/iot/carbon/settle", data, {
         withCredentials: true,
       });
+      return result;
     } catch (error) {
       throw handleError(error, "فشل تسوية الكربون");
     }

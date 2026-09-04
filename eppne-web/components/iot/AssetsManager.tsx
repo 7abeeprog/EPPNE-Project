@@ -10,7 +10,7 @@ export function AssetsManager() {
 
   const { data: assets = [], isLoading } = useQuery({
     queryKey: ['iot-assets'],
-    queryFn: () => IoTService.getAssets({ limit: 1000 }),
+    queryFn: () => IoTService.listMyAssets({ limit: 200 }),
     staleTime: 1000 * 60,
   });
 

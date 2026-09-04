@@ -11,7 +11,7 @@ export function ChatTranslator() {
   const [history, setHistory] = useState<ChatTranslateResponse[]>([]);
 
   const { mutate, isPending } = useMutation({
-    mutationFn: TranslationService.chatTranslate,
+    mutationFn: (data: Parameters<typeof TranslationService.chatTranslate>[0]) => TranslationService.chatTranslate(data),
     onSuccess: (data) => setHistory((prev) => [...prev, data]),
   });
 
