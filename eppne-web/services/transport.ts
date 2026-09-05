@@ -7,9 +7,12 @@ import { generateIdempotencyKey } from "@/lib/utils";
 type TransportHubCreate = components['schemas']['TransportHubCreate'];
 type TransportHubResponse = components['schemas']['TransportHubResponse'];
 type FleetCreate = components['schemas']['FleetCreate'];
+type FleetUpdate = components['schemas']['FleetUpdate'];
 type FleetResponse = components['schemas']['FleetResponse'];
 type VehicleCreate = components['schemas']['VehicleCreate'];
+type VehicleUpdate = components['schemas']['VehicleUpdate'];
 type VehicleResponse = components['schemas']['VehicleResponse'];
+type DriverResponse = components['schemas']['DriverResponse'];
 type RouteCreate = components['schemas']['RouteCreate'];
 type RouteResponse = components['schemas']['RouteResponse'];
 type TripCreate = components['schemas']['TripCreate'];
@@ -88,6 +91,108 @@ export const TransportService = {
   },
 
   /**
+   * جلب كل الأساطيل (نشطة فقط — is_active=false مستبعدة)
+   * GET /transport/fleets
+   * تدعم X-Tenant-ID
+   */
+  listFleets: async (
+    params?: { skip?: number; limit?: number },
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<FleetResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<FleetResponse[]>("/transport/fleets", {
+        params,
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب الأساطيل");
+    }
+  },
+
+  /**
+   * تعديل اسم أسطول
+   * PATCH /transport/fleets/{fleet_id}
+   * تدعم X-Tenant-ID
+   */
+  updateFleet: async (
+    fleetId: number,
+    data: FleetUpdate,
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<FleetResponse> => {
+    try {
+      const id = Number(fleetId);
+      if (isNaN(id)) throw new Error("معرف الأسطول غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.patch<FleetResponse>(`/transport/fleets/${id}`, data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تعديل الأسطول");
+    }
+  },
+
+  /**
+   * حذف أسطول (soft delete — is_active=false)
+   * DELETE /transport/fleets/{fleet_id}
+   * تدعم X-Tenant-ID
+   */
+  deleteFleet: async (fleetId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<void> => {
+    try {
+      const id = Number(fleetId);
+      if (isNaN(id)) throw new Error("معرف الأسطول غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      await apiClient.delete(`/transport/fleets/${id}`, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+    } catch (error) {
+      throw handleError(error, "فشل حذف الأسطول");
+    }
+  },
+
+  /**
+   * جلب المستخدمين النشطين لنفس التينانت — لاختيار سائق عند جدولة رحلة.
+   * بدون كيان/دور "سائق" منفصل [قرار مستخدم، جلسة
+   * transport-vehicles-drivers-feature-build، 2026-09-04]: create_trip
+   * أصلًا بتقبل أي user_id كـdriver_id بلا فحص دور.
+   * GET /transport/drivers
+   * تدعم X-Tenant-ID
+   */
+  listDrivers: async (
+    params?: { skip?: number; limit?: number },
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<DriverResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<DriverResponse[]>("/transport/drivers", {
+        params,
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب السائقين");
+    }
+  },
+
+  /**
    * إنشاء مركبة جديدة
    * POST /transport/vehicles
    * تدعم X-Tenant-ID
@@ -153,6 +258,80 @@ export const TransportService = {
       return data;
     } catch (error) {
       throw handleError(error, "فشل جلب المركبات المتاحة");
+    }
+  },
+
+  /**
+   * جلب كل المركبات (بدون فلتر حالة إجباري، عكس getAvailableVehicles)
+   * GET /transport/vehicles
+   * تدعم X-Tenant-ID
+   */
+  listVehicles: async (
+    params?: { fleet_id?: number | null; status?: string | null; skip?: number; limit?: number },
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<VehicleResponse[]> => {
+    try {
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data } = await apiClient.get<VehicleResponse[]>("/transport/vehicles", {
+        params,
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return data;
+    } catch (error) {
+      throw handleError(error, "فشل جلب المركبات");
+    }
+  },
+
+  /**
+   * تعديل بيانات مركبة (غير الموقع — له مسار منفصل updateVehicleLocation)
+   * PATCH /transport/vehicles/{vehicle_id}
+   * تدعم X-Tenant-ID
+   */
+  updateVehicle: async (
+    vehicleId: number,
+    data: VehicleUpdate,
+    headers?: { 'X-Tenant-ID'?: number }
+  ): Promise<VehicleResponse> => {
+    try {
+      const id = Number(vehicleId);
+      if (isNaN(id)) throw new Error("معرف المركبة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      const { data: result } = await apiClient.patch<VehicleResponse>(`/transport/vehicles/${id}`, data, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+      return result;
+    } catch (error) {
+      throw handleError(error, "فشل تعديل المركبة");
+    }
+  },
+
+  /**
+   * حذف مركبة (hard delete — يُرفض لو لها تاريخ رحلات)
+   * DELETE /transport/vehicles/{vehicle_id}
+   * تدعم X-Tenant-ID
+   */
+  deleteVehicle: async (vehicleId: number, headers?: { 'X-Tenant-ID'?: number }): Promise<void> => {
+    try {
+      const id = Number(vehicleId);
+      if (isNaN(id)) throw new Error("معرف المركبة غير صحيح");
+      const reqHeaders: Record<string, string> = {};
+      if (headers?.['X-Tenant-ID'] !== undefined && headers['X-Tenant-ID'] !== null) {
+        reqHeaders['X-Tenant-ID'] = String(headers['X-Tenant-ID']);
+      }
+      await apiClient.delete(`/transport/vehicles/${id}`, {
+        headers: reqHeaders,
+        withCredentials: true,
+      });
+    } catch (error) {
+      throw handleError(error, "فشل حذف المركبة");
     }
   },
 

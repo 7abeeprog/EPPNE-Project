@@ -31,6 +31,9 @@ class FleetResponse(FleetCreate):
     created_at: datetime = Field(description="تاريخ الإنشاء")
     model_config = ConfigDict(from_attributes=True)
 
+class FleetUpdate(BaseModel):
+    name: str = Field(description="اسم الأسطول")
+
 class VehicleCreate(BaseModel):
     fleet_id: int = Field(description="معرف الأسطول")
     license_plate: str = Field(description="لوحة الترخيص")
@@ -46,6 +49,25 @@ class VehicleResponse(VehicleCreate):
     status: VehicleStatus = Field(description="الحالة")
     current_location: Optional[Dict[str, float]] = Field(default=None, description="الموقع الحالي")
     created_at: datetime = Field(description="تاريخ الإنشاء")
+    model_config = ConfigDict(from_attributes=True)
+
+class VehicleUpdate(BaseModel):
+    fleet_id: Optional[int] = Field(default=None, description="معرف الأسطول")
+    license_plate: Optional[str] = Field(default=None, description="لوحة الترخيص")
+    vehicle_type: Optional[TransportType] = Field(default=None, description="نوع المركبة")
+    capacity_kg: Optional[Decimal] = Field(default=None, description="السعة بالكيلوغرام")
+    capacity_passengers: Optional[int] = Field(default=None, description="السعة بالركاب")
+    fuel_type: Optional[str] = Field(default=None, description="نوع الوقود")
+    carbon_per_km: Optional[Decimal] = Field(default=None, description="انبعاثات الكربون لكل كم")
+    smart_asset_id: Optional[int] = Field(default=None, description="معرف الأصل الذكي من IoT")
+
+# ========== Drivers (بدون كيان منفصل — سرد مستخدمين نشطين فقط) ==========
+class DriverResponse(BaseModel):
+    id: int = Field(description="معرف المستخدم")
+    username: Optional[str] = Field(default=None, description="اسم المستخدم")
+    email: Optional[str] = Field(default=None, description="البريد الإلكتروني")
+    name_ar: Optional[str] = Field(default=None, description="الاسم بالعربية")
+    name_en: Optional[str] = Field(default=None, description="الاسم بالإنجليزية")
     model_config = ConfigDict(from_attributes=True)
 
 # ========== Routes ==========

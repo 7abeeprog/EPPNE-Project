@@ -25,6 +25,17 @@ class UserRepository:
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
+    async def list_active_by_tenant(self, tenant_id: int, skip: int = 0, limit: int = 50) -> List[User]:
+        query = (
+            select(User)
+            .where(User.tenant_id == tenant_id, User.is_active == True)  # noqa: E712
+            .order_by(User.id)
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
     async def get_by_username_or_email(self, login: str, tenant_id: int) -> Optional[User]:
         query = select(User).where(
             and_(

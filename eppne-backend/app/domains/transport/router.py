@@ -84,6 +84,20 @@ async def get_available_vehicles(
     vehicles = await service.get_available_vehicles(cast(int, current_user.tenant_id), fleet_id)  # ✅ cast
     return vehicles
 
+@router.get("/vehicles", response_model=list[VehicleResponse])
+@rate_limit(max_requests=30, window_seconds=60)
+async def list_vehicles(
+    fleet_id: Optional[int] = None,
+    status: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 50,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TransportService(db)
+    vehicles = await service.list_vehicles(cast(int, current_user.tenant_id), fleet_id, status, skip, limit)
+    return vehicles
+
 @router.get("/vehicles/{vehicle_id}", response_model=VehicleResponse)
 @rate_limit(max_requests=30, window_seconds=60)
 async def get_vehicle(
@@ -94,6 +108,76 @@ async def get_vehicle(
     service = TransportService(db)
     vehicle = await service.get_vehicle(vehicle_id, cast(int, current_user.tenant_id))
     return vehicle
+
+@router.patch("/vehicles/{vehicle_id}", response_model=VehicleResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def update_vehicle(
+    vehicle_id: int,
+    data: VehicleUpdate,
+    current_user: User = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TransportService(db)
+    vehicle = await service.update_vehicle(cast(int, current_user.tenant_id), vehicle_id, data.model_dump(exclude_unset=True))
+    return vehicle
+
+@router.delete("/vehicles/{vehicle_id}", status_code=204)
+@rate_limit(max_requests=10, window_seconds=60)
+async def delete_vehicle(
+    vehicle_id: int,
+    current_user: User = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TransportService(db)
+    await service.delete_vehicle(cast(int, current_user.tenant_id), vehicle_id)
+
+# ========== Fleets (list/update/delete) ==========
+@router.get("/fleets", response_model=list[FleetResponse])
+@rate_limit(max_requests=30, window_seconds=60)
+async def list_fleets(
+    skip: int = 0,
+    limit: int = 50,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TransportService(db)
+    fleets = await service.list_fleets(cast(int, current_user.tenant_id), skip, limit)
+    return fleets
+
+@router.patch("/fleets/{fleet_id}", response_model=FleetResponse)
+@rate_limit(max_requests=10, window_seconds=60)
+async def update_fleet(
+    fleet_id: int,
+    data: FleetUpdate,
+    current_user: User = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TransportService(db)
+    fleet = await service.update_fleet(cast(int, current_user.tenant_id), fleet_id, data.name)
+    return fleet
+
+@router.delete("/fleets/{fleet_id}", status_code=204)
+@rate_limit(max_requests=10, window_seconds=60)
+async def delete_fleet(
+    fleet_id: int,
+    current_user: User = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TransportService(db)
+    await service.delete_fleet(cast(int, current_user.tenant_id), fleet_id)
+
+# ========== Drivers (سرد مستخدمين نشطين — بدون كيان/دور منفصل) ==========
+@router.get("/drivers", response_model=list[DriverResponse])
+@rate_limit(max_requests=30, window_seconds=60)
+async def list_drivers(
+    skip: int = 0,
+    limit: int = 50,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = TransportService(db)
+    drivers = await service.list_drivers(cast(int, current_user.tenant_id), skip, limit)
+    return drivers
 
 # ========== Routes ==========
 @router.post("/routes", response_model=RouteResponse, status_code=201)

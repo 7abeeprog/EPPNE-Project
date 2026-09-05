@@ -8601,6 +8601,7 @@ export interface components {
             id: number;
             /** Tenant Id */
             tenant_id: number;
+            status: components["schemas"]["CampaignStatus"];
             /** Spent Mrusdt */
             spent_mrusdt: string;
             /** Total Leads */
@@ -10374,6 +10375,11 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** FleetUpdate */
+        FleetUpdate: {
+            /** Name */
+            name: string;
+        };
         /** FleetResponse */
         FleetResponse: {
             /** Name */
@@ -11217,6 +11223,8 @@ export interface components {
             /** Sender Entity Id */
             sender_entity_id: number | null;
             status: components["schemas"]["InvitationStatus"];
+            /** Current Uses */
+            current_uses: number;
             /** Assigned Ai Agent Id */
             assigned_ai_agent_id: number | null;
             /** Click Count */
@@ -16267,7 +16275,7 @@ export interface components {
              * Priority
              * @default MEDIUM
              */
-            priority: string;
+            priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
         };
         /** TicketPurchase */
         TicketPurchase: {
@@ -17248,6 +17256,37 @@ export interface components {
              */
             created_at: string;
         };
+        /** VehicleUpdate */
+        VehicleUpdate: {
+            /** Fleet Id */
+            fleet_id?: number | null;
+            /** License Plate */
+            license_plate?: string | null;
+            vehicle_type?: components["schemas"]["TransportType"] | null;
+            /** Capacity Kg */
+            capacity_kg?: number | string | null;
+            /** Capacity Passengers */
+            capacity_passengers?: number | null;
+            /** Fuel Type */
+            fuel_type?: string | null;
+            /** Carbon Per Km */
+            carbon_per_km?: number | string | null;
+            /** Smart Asset Id */
+            smart_asset_id?: number | null;
+        };
+        /** DriverResponse */
+        DriverResponse: {
+            /** Id */
+            id: number;
+            /** Username */
+            username?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Name Ar */
+            name_ar?: string | null;
+            /** Name En */
+            name_en?: string | null;
+        };
         /**
          * VehicleStatus
          * @enum {string}
@@ -17713,7 +17752,7 @@ export interface components {
              * Priority
              * @default MEDIUM
              */
-            priority: string;
+            priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
             /** Id */
             id: number;
             /** Tenant Id */

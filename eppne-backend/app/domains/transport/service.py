@@ -6,6 +6,7 @@
 # app/domains/transport/service.py (الإصدار النهائي المتكامل المصحح)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta
 from decimal import Decimal
 import uuid
@@ -160,6 +161,73 @@ class TransportService:
         if not vehicle:
             raise NotFoundError("Vehicle not found")
         return vehicle
+
+    async def list_vehicles(
+        self,
+        tenant_id: int,
+        fleet_id: Optional[int] = None,
+        status: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50,
+    ) -> List[Vehicle]:
+        await self._check_saas_limits(tenant_id, "transport")
+        result = await self.repo.list_vehicles(tenant_id, fleet_id, status, skip, limit)
+        return list(result)
+
+    async def update_vehicle(self, tenant_id: int, vehicle_id: int, data: Dict[str, Any]) -> Vehicle:
+        await self._check_saas_limits(tenant_id, "transport")
+        existing = await self.repo.get_vehicle(vehicle_id, tenant_id)
+        if not existing:
+            raise NotFoundError("Vehicle not found")
+        update_data = {k: v for k, v in data.items() if v is not None}
+        if "license_plate" in update_data:
+            update_data["license_plate"] = bleach.clean(update_data["license_plate"], tags=[], strip=True)
+        result = await self.repo.update_vehicle(vehicle_id, tenant_id, **update_data)
+        return cast(Vehicle, result)
+
+    async def delete_vehicle(self, tenant_id: int, vehicle_id: int) -> None:
+        existing = await self.repo.get_vehicle(vehicle_id, tenant_id)
+        if not existing:
+            raise NotFoundError("Vehicle not found")
+        try:
+            await self.repo.delete_vehicle(vehicle_id, tenant_id)
+        except IntegrityError:
+            await self.db.rollback()
+            raise ValidationError("Cannot delete a vehicle with existing trip history")
+
+    # ============================================================
+    # 2.1 الأساطيل (Fleets) — قراءة/تعديل/حذف
+    # ============================================================
+    async def list_fleets(self, tenant_id: int, skip: int = 0, limit: int = 50) -> List[Fleet]:
+        await self._check_saas_limits(tenant_id, "transport")
+        result = await self.repo.list_fleets(tenant_id, skip, limit)
+        return list(result)
+
+    async def update_fleet(self, tenant_id: int, fleet_id: int, name: str) -> Fleet:
+        await self._check_saas_limits(tenant_id, "transport")
+        existing = await self.repo.get_fleet(fleet_id, tenant_id)
+        if not existing:
+            raise NotFoundError("Fleet not found")
+        sanitized_name = bleach.clean(name, tags=[], strip=True)
+        result = await self.repo.update_fleet(fleet_id, tenant_id, name=sanitized_name)
+        return cast(Fleet, result)
+
+    async def delete_fleet(self, tenant_id: int, fleet_id: int) -> None:
+        existing = await self.repo.get_fleet(fleet_id, tenant_id)
+        if not existing:
+            raise NotFoundError("Fleet not found")
+        await self.repo.delete_fleet(fleet_id, tenant_id)
+
+    # ============================================================
+    # 2.2 السائقون (Drivers) — بدون كيان/دور منفصل [قرار مستخدم، جلسة
+    # transport-vehicles-drivers-feature-build، 2026-09-04]: create_trip
+    # أصلًا بتقبل أي user_id كـdriver_id بلا أي فحص دور، فده مجرد سرد
+    # للمستخدمين النشطين بنفس التينانت — صفر migration، صفر تعديل على
+    # identity/models.py أو SystemRole.
+    # ============================================================
+    async def list_drivers(self, tenant_id: int, skip: int = 0, limit: int = 50) -> List[User]:
+        await self._check_saas_limits(tenant_id, "transport")
+        return await self.user_repo.list_active_by_tenant(tenant_id, skip, limit)
 
     # ============================================================
     # 3. المسارات (Routes)

@@ -2,7 +2,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useVehicles, useCreateVehicle, useDeleteVehicle } from '@/hooks/transport/useVehicles';
+import { useVehicles, useCreateVehicle, useUpdateVehicle, useDeleteVehicle } from '@/hooks/transport/useVehicles';
 import { useFleets } from '@/hooks/transport/useFleets';
 import VehicleStatusBadge from '@/components/transport/VehicleStatusBadge';
 import { Loader2, Plus, Trash2, Edit, Truck, X } from 'lucide-react';
@@ -28,30 +28,53 @@ const statusOptions: { value: VehicleStatus; label: string }[] = [
   { value: 'OUT_OF_SERVICE', label: 'خارج الخدمة' },
 ];
 
+const emptyFormData = {
+  fleet_id: 0,
+  license_plate: '',
+  vehicle_type: 'CAR' as TransportType,
+  capacity_kg: undefined as number | undefined,
+  capacity_passengers: undefined as number | undefined,
+  fuel_type: 'ELECTRIC',
+  carbon_per_km: 0,
+};
+
 export default function VehiclesPage() {
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({
-    fleet_id: 0,
-    license_plate: '',
-    vehicle_type: 'CAR' as TransportType,
-    capacity_kg: undefined as number | undefined,
-    capacity_passengers: undefined as number | undefined,
-    fuel_type: 'ELECTRIC',
-    carbon_per_km: 0,
-  });
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [formData, setFormData] = useState(emptyFormData);
 
   const { data: vehicles, isLoading } = useVehicles();
   const { data: fleets } = useFleets();
   const createVehicle = useCreateVehicle();
+  const updateVehicle = useUpdateVehicle();
   const deleteVehicle = useDeleteVehicle();
 
-  const handleSubmit = () => {
-    createVehicle.mutate(formData, {
-      onSuccess: () => {
-        setShowForm(false);
-        setFormData({ fleet_id: 0, license_plate: '', vehicle_type: 'CAR', capacity_kg: undefined, capacity_passengers: undefined, fuel_type: 'ELECTRIC', carbon_per_km: 0 });
-      },
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+    setFormData(emptyFormData);
+  };
+
+  const handleEdit = (vehicle: NonNullable<typeof vehicles>[number]) => {
+    setEditingId(vehicle.id);
+    setFormData({
+      fleet_id: vehicle.fleet_id,
+      license_plate: vehicle.license_plate,
+      vehicle_type: vehicle.vehicle_type,
+      capacity_kg: vehicle.capacity_kg ? Number(vehicle.capacity_kg) : undefined,
+      capacity_passengers: vehicle.capacity_passengers ?? undefined,
+      fuel_type: vehicle.fuel_type,
+      carbon_per_km: Number(vehicle.carbon_per_km),
     });
+    setShowForm(true);
+  };
+
+  const handleSubmit = () => {
+    if (editingId !== null) {
+      updateVehicle.mutate({ id: editingId, data: formData }, { onSuccess: closeForm });
+    } else {
+      createVehicle.mutate(formData, { onSuccess: closeForm });
+    }
   };
 
   if (isLoading) {
@@ -73,7 +96,7 @@ export default function VehiclesPage() {
           <p className="text-sm text-muted-foreground/70">إدارة المركبات في الأساطيل</p>
         </div>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => (showForm ? closeForm() : setShowForm(true))}
           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-medium shadow-[0_0_30px_rgba(var(--primary-rgb),0.3)] hover:shadow-[0_0_50px_rgba(var(--primary-rgb),0.5)] transition-all duration-300"
         >
           <Plus className="w-4 h-4" />
@@ -83,7 +106,9 @@ export default function VehiclesPage() {
 
       {showForm && (
         <div className="p-6 rounded-2xl bg-card/30 backdrop-blur-xl border border-white/10 space-y-4">
-          <h3 className="text-lg font-semibold text-foreground/90">✏️ إضافة مركبة جديدة</h3>
+          <h3 className="text-lg font-semibold text-foreground/90">
+            {editingId !== null ? '✏️ تعديل المركبة' : '✏️ إضافة مركبة جديدة'}
+          </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-sm text-muted-foreground/60">الأسطول</label>
@@ -156,14 +181,14 @@ export default function VehiclesPage() {
           <div className="flex gap-3 pt-2">
             <button
               onClick={handleSubmit}
-              disabled={createVehicle.isPending || !formData.license_plate || !formData.fleet_id}
+              disabled={createVehicle.isPending || updateVehicle.isPending || !formData.license_plate || !formData.fleet_id}
               className="px-6 py-2 rounded-xl bg-primary text-primary-foreground font-medium disabled:opacity-50 flex items-center gap-2"
             >
-              {createVehicle.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              إضافة
+              {(createVehicle.isPending || updateVehicle.isPending) ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {editingId !== null ? 'حفظ' : 'إضافة'}
             </button>
             <button
-              onClick={() => { setShowForm(false); setFormData({ fleet_id: 0, license_plate: '', vehicle_type: 'CAR', capacity_kg: undefined, capacity_passengers: undefined, fuel_type: 'ELECTRIC', carbon_per_km: 0 }); }}
+              onClick={closeForm}
               className="px-6 py-2 rounded-xl border border-white/10 hover:bg-white/5 transition-colors"
             >
               إلغاء
@@ -184,7 +209,10 @@ export default function VehiclesPage() {
                 <h4 className="font-medium text-foreground/80">{vehicle.license_plate}</h4>
               </div>
               <div className="flex items-center gap-1">
-                <button className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                <button
+                  onClick={() => handleEdit(vehicle)}
+                  className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                >
                   <Edit className="w-3.5 h-3.5 text-muted-foreground/50" />
                 </button>
                 <button

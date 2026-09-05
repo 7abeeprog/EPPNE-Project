@@ -1,108 +1,79 @@
-// hooks/transport/useTrips.ts
+// hooks/transport/useVehicles.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  getTrips,
-  getTrip,
-  createTrip,
-  startTrip,
-  completeTrip,
-  cancelTrip,
-  getMyTrips,
-} from '@/services/transport';
-import type { TripFormData, TripStatus } from '@/types/transport';
+import { TransportService } from '@/services/transport';
+import type { VehicleFormData, VehicleStatus } from '@/types/transport';
 
-export const useTrips = (params?: { status?: TripStatus; driver_id?: number; skip?: number; limit?: number }) => {
+export const useVehicles = (params?: { fleet_id?: number; status?: VehicleStatus; skip?: number; limit?: number }) => {
   return useQuery({
-    queryKey: ['transport-trips', params],
-    queryFn: () => getTrips(params).then((res) => res.data),
+    queryKey: ['transport-vehicles', params],
+    queryFn: () => TransportService.listVehicles(params),
     staleTime: 2 * 60 * 1000,
-    refetchInterval: (data) => {
-      if (data?.some((trip) => trip.status === 'ONGOING' || trip.status === 'SCHEDULED')) {
-        return 15000;
-      }
-      return false;
-    },
   });
 };
 
-export const useMyTrips = (params?: { status?: TripStatus; skip?: number; limit?: number }) => {
+export const useAvailableVehicles = (params?: { fleet_id?: number }) => {
   return useQuery({
-    queryKey: ['transport-my-trips', params],
-    queryFn: () => getMyTrips(params).then((res) => res.data),
-    staleTime: 2 * 60 * 1000,
-    refetchInterval: (data) => {
-      if (data?.some((trip) => trip.status === 'ONGOING' || trip.status === 'SCHEDULED')) {
-        return 15000;
-      }
-      return false;
-    },
+    queryKey: ['transport-available-vehicles', params],
+    queryFn: () => TransportService.getAvailableVehicles(params),
+    staleTime: 60 * 1000,
   });
 };
 
-export const useTrip = (id: number) => {
+export const useVehicle = (id: number) => {
   return useQuery({
-    queryKey: ['transport-trip', id],
-    queryFn: () => getTrip(id).then((res) => res.data),
+    queryKey: ['transport-vehicle', id],
+    queryFn: () => TransportService.getVehicle(id),
     enabled: !!id,
     staleTime: 60 * 1000,
-    refetchInterval: (data) => {
-      if (data?.status === 'ONGOING') return 10000;
-      return false;
-    },
   });
 };
 
-export const useCreateTrip = () => {
+export const useCreateVehicle = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: TripFormData) => createTrip(data),
+    mutationFn: (data: VehicleFormData) => TransportService.createVehicle(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['transport-trips'] });
-      queryClient.invalidateQueries({ queryKey: ['transport-my-trips'] });
-      queryClient.invalidateQueries({ queryKey: ['transport-stats'] });
-    },
-  });
-};
-
-export const useStartTrip = () => {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ tripId, actualStart }: { tripId: number; actualStart: string }) =>
-      startTrip(tripId, actualStart),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['transport-trip', variables.tripId] });
-      queryClient.invalidateQueries({ queryKey: ['transport-trips'] });
-      queryClient.invalidateQueries({ queryKey: ['transport-my-trips'] });
-      queryClient.invalidateQueries({ queryKey: ['transport-stats'] });
       queryClient.invalidateQueries({ queryKey: ['transport-vehicles'] });
+      queryClient.invalidateQueries({ queryKey: ['transport-available-vehicles'] });
+      queryClient.invalidateQueries({ queryKey: ['transport-stats'] });
     },
   });
 };
 
-export const useCompleteTrip = () => {
+export const useUpdateVehicle = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ tripId, actualEnd, totalDistance }: { tripId: number; actualEnd: string; totalDistance: number }) =>
-      completeTrip(tripId, actualEnd, totalDistance),
+    mutationFn: ({ id, data }: { id: number; data: Partial<VehicleFormData> }) =>
+      TransportService.updateVehicle(id, data),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['transport-trip', variables.tripId] });
-      queryClient.invalidateQueries({ queryKey: ['transport-trips'] });
-      queryClient.invalidateQueries({ queryKey: ['transport-my-trips'] });
-      queryClient.invalidateQueries({ queryKey: ['transport-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['transport-vehicle', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['transport-vehicles'] });
+      queryClient.invalidateQueries({ queryKey: ['transport-available-vehicles'] });
     },
   });
 };
 
-export const useCancelTrip = () => {
+export const useDeleteVehicle = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (tripId: number) => cancelTrip(tripId),
-    onSuccess: (_, tripId) => {
-      queryClient.invalidateQueries({ queryKey: ['transport-trip', tripId] });
-      queryClient.invalidateQueries({ queryKey: ['transport-trips'] });
-      queryClient.invalidateQueries({ queryKey: ['transport-my-trips'] });
+    mutationFn: (id: number) => TransportService.deleteVehicle(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transport-vehicles'] });
+      queryClient.invalidateQueries({ queryKey: ['transport-available-vehicles'] });
       queryClient.invalidateQueries({ queryKey: ['transport-stats'] });
+    },
+  });
+};
+
+export const useUpdateVehicleLocation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, location }: { id: number; location: Record<string, number> }) =>
+      TransportService.updateVehicleLocation(id, location),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['transport-vehicle', variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['transport-vehicles'] });
+      queryClient.invalidateQueries({ queryKey: ['transport-available-vehicles'] });
     },
   });
 };

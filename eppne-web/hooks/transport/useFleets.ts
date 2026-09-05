@@ -1,12 +1,11 @@
 // hooks/transport/useFleets.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getFleets, updateFleet, deleteFleet } from '@/services/transport';
 import { TransportService } from '@/services/transport';
 
-export const useFleets = () => {
+export const useFleets = (params?: { skip?: number; limit?: number }) => {
   return useQuery({
-    queryKey: ['transport-fleets'],
-    queryFn: () => getFleets().then((res) => res.data),
+    queryKey: ['transport-fleets', params],
+    queryFn: () => TransportService.listFleets(params),
     staleTime: 2 * 60 * 1000,
   });
 };
@@ -26,7 +25,7 @@ export const useUpdateFleet = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: { name: string } }) =>
-      updateFleet(id, data),
+      TransportService.updateFleet(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-fleets'] });
     },
@@ -36,7 +35,7 @@ export const useUpdateFleet = () => {
 export const useDeleteFleet = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => deleteFleet(id),
+    mutationFn: (id: number) => TransportService.deleteFleet(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-fleets'] });
       queryClient.invalidateQueries({ queryKey: ['transport-stats'] });

@@ -763,9 +763,13 @@ FK → tenants.id` — **لا يوجد جدول باسم `tenants` في قاعد
   رغم إن `TransportService` في `services/transport.ts` عنده فعلًا
   `createVehicle`, `updateVehicleLocation`, `getAvailableVehicles` جاهزين
   ومُنفَّذين. **صفر لمس** — يحتاج جلسة تصميم/تنفيذ منفصلة (كتابة كود
-  hooks مركبات جديد بالكامل، مش إصلاح استيراد). | 🔴 **مفتوح، أولوية
-  عالية — ميزة كاملة معدومة رغم جاهزية الباك إند** |
-  `.claude/reports/frontend-missing-exports-multidomain-session-log.md` |
+  hooks مركبات جديد بالكامل، مش إصلاح استيراد). | ✅ **مُغلَق [2026-09-05]،
+  جلسة `transport-vehicles-drivers-feature-build`** — أُعيد كتابة
+  `useVehicles.ts` بالكامل (list/vehicle واحدة/available/create/update/
+  delete/location) + بُنيت الـendpoints الناقصة بالباك إند، مُتحقَّق حيًا
+  بـ7 pytest ضد DB حقيقية |
+  `.claude/reports/frontend-missing-exports-multidomain-session-log.md`،
+  `.claude/reports/transport-vehicles-drivers-session-log.md` |
 | — | **`transport-formdata-vs-openapi-schema-mismatch`** [2026-08-31] —
   بعد إصلاح استيراد `createDelivery`/`createRoute` (فئة "نمط استيراد
   غلط") في نفس مرحلة transport، ظهر TS2345 جديد كان مخفيًا: `DeliveryFormData`
@@ -784,6 +788,26 @@ FK → tenants.id` — **لا يوجد جدول باسم `tenants` في قاعد
   المشكلة، على جانب القراءة مش الكتابة. | 🟡 **مفتوح، أولوية متوسطة —
   يحتاج قرار: إصلاح schema الباك إند أم ترقيع frontend** |
   `.claude/reports/frontend-missing-exports-multidomain-session-log.md` |
+| — | **`transport-trips-page-driver-display-and-cancel-trip-missing`**
+  [2026-09-05] — اكتشاف جانبي أثناء جلسة
+  `transport-vehicles-drivers-feature-build` (بناء `useDrivers.ts` كشف
+  الباج ده، مش سببه): **مرتبط مباشرة ببند `transport-formdata-vs-openapi-
+  schema-mismatch` فوق** (نفس الصفحة `trips/page.tsx`، نفس فئة "قراءة حقل
+  غير موجود")، لكنه موضع مختلف: `trips/page.tsx:168` بيحاول يقرأ
+  `driver.name` من عنصر قائمة السائقين (مش `trip.driver_name` بتاع البند
+  التاني) — `DriverResponse` (النوع الجديد من هذه الجلسة، مطابق تمامًا
+  لـ`schemas.py` الفعلي) بيعرض `username`/`email`/`name_ar`/`name_en` بس،
+  صفر حقل `name`. **مؤكَّد حيًا بـ`tsc`**: كان الخطأ قبل هذه الجلسة
+  "Cannot find module '@/hooks/transport/useDrivers'" (module كان معدوم)،
+  وبعد ما اتبنى الملف صح، تحوَّل لخطأ أوضح "Property 'name' does not
+  exist on type ...DriverResponse". **بالإضافة:** نفس الصفحة فيها
+  `useCancelTrip` مستوردة من `useTrips.ts` لكن غير مُصدَّرة منها إطلاقًا
+  (`TS2305`) — الصفحة معطوبة ببواقي أخطاء أخرى غير مرتبطة كمان، مش جاهزة
+  للعمل ككل. **صفر لمس** — خارج نطاق هذه الجلسة (كانت مقصورة على
+  vehicles/fleets/drivers، مش trips). | 🔴 **مفتوح، أولوية متوسطة —
+  الصفحة معطوبة ببواقي أخطاء متعددة، يحتاج جلسة تصميم/تنفيذ منفصلة لـ
+  trips/page.tsx كاملة** |
+  `.claude/reports/transport-vehicles-drivers-session-log.md` |
 | — | **`frontend-hooks-misplaced-files-phase2-warning`** [2026-08-31] —
   أثناء إصلاح transport، اتكشف إن `hooks/useFleets.ts` و`hooks/useHubs.ts`
   كانوا موجودين فعليًا (بمحتوى سليم ومطابق لاسمهم) لكن في `hooks/`
@@ -992,9 +1016,74 @@ FK → tenants.id` — **لا يوجد جدول باسم `tenants` في قاعد
   — موثَّق سابقًا `transport-vehicles-hook-file-wrong-content` (أسفل)،
   لسه بلا لمس. أيضًا `*_name` enrichment (`driver_name`, `passenger_name`,
   `sender_name`, `receiver_name`) غائب من كل الـResponse schemas — الفرونت
-  إند يتوقعها جاهزة، الباك إند بيرجّع `*_id` بس. | 🔴 **مفتوح، backlog
-  منظَّم لجلسة/جلسات لاحقة (باك إند + إعادة كتابة `services/transport.ts`
-  + `useVehicles.ts` من الصفر)** | `.claude/reports/transport-domain-full-build-session-log.md` §2, §8 |
+  إند يتوقعها جاهزة، الباك إند بيرجّع `*_id` بس. | 🟡 **مفتوح جزئيًا
+  [تحديث 2026-09-05، جلسة `transport-vehicles-drivers-feature-build`]** —
+  **Fleets (list/update/delete) وVehicles (list/update/delete) اتقفلوا
+  بالكامل** (باك إند + `services/transport.ts` + `useVehicles.ts`/
+  `useFleets.ts` مُعاد كتابتهم، مُتحقَّق حيًا بـ7 pytest). **Drivers**
+  اتحل بتصميم مختلف عن المفترَض هنا أصلًا — مفيش `getBookings`-مثيل، بس
+  `GET /transport/drivers` (سرد مستخدمين نشطين، صفر كيان سائق منفصل، راجع
+  التقرير المرجعي الجديد §3-4). **لسه مفتوح فعليًا:** Hubs
+  (`updateHub`/`deleteHub`)، Routes (الخمسة كلهم)، Trips (`getTrips` عام/
+  `getTrip`/`cancelTrip`)، Bookings (`getBookings` إداري)، Deliveries
+  (`getDeliveries`/`getMyDeliveries`)، Stats (`getTransportStats`)،
+  و`getVehicleLocation` (تتبع حي لـ`useLiveTracking.ts` تحديدًا — مختلف
+  عن `updateVehicleLocation` الموجودة). `*_name` enrichment لسه غائب
+  بالكامل زي ما هو. | `.claude/reports/transport-domain-full-build-session-log.md` §2, §8،
+  `.claude/reports/transport-vehicles-drivers-session-log.md` |
+| — | **`transport-saas-catalog-entry-missing-in-dev`** [2026-09-05] —
+  اكتُشف حيًا أثناء جلسة `transport-vehicles-drivers-feature-build`
+  (تحقُّق pytest ضد DB حقيقية): `saas_service_catalog` في بيئة الديف
+  الحالية **عندها صفر صف بـ`code='transport'`** — السبب: جلسة
+  `transport-domain-migration-and-hold-funds` [2026-09-01] زرعت صف مؤقت
+  لتحقُّقها الحي الخاص، ونظَّفته بالكامل في نهايتها عمدًا (§7.9 من تقرير
+  تلك الجلسة، تنظيف متعمَّد صحيح، مش سهو). **الأثر:** أي استدعاء لأي
+  service method بتنادي `_check_saas_limits(tenant_id, "transport")` —
+  ده يشمل **الدومين بالكامل، القديم والجديد**: `list_hubs`,
+  `create_vehicle`, `create_fleet`, `create_route`, `book_trip`,
+  `create_delivery`, `pay_delivery`, `get_my_trips`, وكل دوال هذه الجلسة
+  الجديدة (`list_vehicles`, `update_vehicle`, `list_fleets`,
+  `update_fleet`, `list_drivers`) — **بيرجع `PermissionDeniedError` لأي
+  تينانت، دايمًا، في هذه البيئة تحديدًا.** يمنع فعليًا أي اختبار متصفح
+  حقيقي أو استخدام فعلي للدومين بالكامل حاليًا (راجع بند
+  `transport-vehicles-drivers-phase9-browser-verification-gap` تحت —
+  نفس السبب الجذري). **قرار مطلوب، لم يُتَّخذ بعد:** (أ) زرع صف
+  `saas_service_catalog`/`saas_service_plans`/`saas_tenant_subscriptions`/
+  `saas_tenant_service_access` **دائم** (غير throwaway) لتينانت(ات) الديف
+  الأساسية، أم (ب) تعديل `_check_saas_limits`/آلية الفحص لتتجاوز بيئة
+  الديف (متغير بيئة، مثلًا). **صفر لمس في هذه الجلسة** — الاختبارات
+  الجديدة بتزرع نفس المنحة مؤقتًا وتنضّفها بالكامل بعد كل test (idempotent
+  get-or-create + تنظيف مؤكَّد مستقل، راجع التقرير المرجعي). | 🔴 **مفتوح،
+  أولوية عالية نسبيًا — يحجب أي استخدام فعلي/اختبار متصفح للدومين بالكامل
+  حتى يُتَّخذ القرار** | `.claude/reports/transport-vehicles-drivers-session-log.md` §6(أ) |
+| — | **`transport-vehicles-drivers-phase9-browser-verification-gap`**
+  [2026-09-05] — في نفس جلسة `transport-vehicles-drivers-feature-build`،
+  بعد تنفيذ كامل (باك إند + فرونت إند، `tsc` نظيف على كل ملف مُعدَّل +
+  7/7 pytest ضد DB حقيقية) — **التحقق الحي الكامل في متصفح فعلي لم يحصل**:
+  امتداد Chrome غير متصل بهذه الجلسة (نفس القيد الموثَّق سابقًا في بند
+  `frontend-decimal-fix-live-browser-render-unverified`)، **رغم محاولة
+  حقيقية فعلية** (شُغِّل الباك إند فعليًا عبر `uvicorn` وتأكَّد `LISTENING`
+  على المنفذ 8000 قبل محاولة الاتصال بالمتصفح). **فجوة تحقق إضافية
+  مكتشَفة أثناء المحاولة:** حتى لو اتصل المتصفح فعليًا، أي تحميل حقيقي
+  لصفحات `/transport/vehicles`/`/transport/fleets` كان هيرجع
+  `403 PermissionDeniedError` لكل الطلبات بسبب بند
+  `transport-saas-catalog-entry-missing-in-dev` أعلاه — يعني حتى مع
+  اتصال ناجح، الـgolden path مكنش هيتفحص فعليًا اليوم بلا قرار SaaS
+  منفصل. **التحقق المنطقي المكافئ المُنفَّذ بدلًا منه (بموافقة مستخدم
+  صريحة):** تتبّع تدفق البيانات يدويًا لكل صفحة مستهلِكة
+  (`vehicles/page.tsx`, `fleets/page.tsx`) من الـhook → `TransportService`
+  → endpoint → service → repository، مقارنةً بنفس المسارات المُتحقَّق
+  منها حيًا في الـ7 pytest، زائد `tsc --noEmit` نظيف. **صفر دليل بصري/DOM
+  حقيقي حتى الآن** إن الصفحات بترندر بلا كسر layout/CSS أو أخطاء console
+  في متصفح حقيقي، وصفر تأكيد إن استجابة HTTP الفعلية (بعد
+  `X-Tenant-ID` header + JSON serialization حقيقي) مطابقة تمامًا لما
+  اختبرته الـservice مباشرة. **خطوات الإغلاق المقترَحة:** (1) إعادة نفس
+  التحقق بعد ما اتصال Chrome يرجع + بعد حل بند SaaS catalog أعلاه؛
+  (2) فتح `/transport/vehicles`, `/transport/fleets`, `/transport/trips`
+  فعليًا بمستخدم superuser (المطلوب لـ`create`/`update`/`delete`) من
+  `.claude/reports/throwaway-test-users.md`. | 🟡 **مفتوح، أولوية متوسطة
+  — فجوة تحقق حقيقية موثَّقة بوضوح، مش خطأ معروف ولا ادّعاء نجاح لم
+  يحصل** | `.claude/reports/transport-vehicles-drivers-session-log.md` §8 |
 
 ---
 
@@ -1730,3 +1819,26 @@ vehicles/drivers، Referral+Affiliate، وغيرها) خلص فعليًا.** ع�
 
 **الحالة:** ✅ مكتمل ومُتحقَّق منه حيًا. تقرير الجلسة الكامل:
 `.claude/reports/iot-translation-service-mismatches-session-log.md`.
+
+---
+
+## [2026-09-05] `transport-vehicles-drivers-feature-build` — بناء ميزة المركبات/الأساطيل/السائقين من الصفر (فرونت إند معدوم رغم باك إند جزئي)
+
+نفَّذت الترتيب المرحلي الكامل (1→9) المعتمَد من المستخدم: باك إند
+Vehicle (list/update/delete hard-delete مع حماية FK) + Fleet
+(list/update/delete soft-delete) + Driver (`GET /transport/drivers`،
+زيرو-flag بدون كيان منفصل، قرار مستخدم صريح) — 7/7 pytest حي ضد DB
+حقيقية، ثم فرونت إند كامل (`services/transport.ts`, `api-types.ts`,
+`useVehicles.ts` مُعاد كتابته بالكامل، `useFleets.ts` مُصلَح،
+`useDrivers.ts` جديد، زرار تعديل `vehicles/page.tsx` مُفعَّل) — `tsc`
+740→733 خطأ (تحسّن)، صفر تراجع في أي ملف مُعدَّل. مرحلة 9 (اختبار متصفح
+حي) اصطدمت بقيدين بيئيين حقيقيين موثَّقين كبنود Backlog منفصلة فوق
+(`transport-saas-catalog-entry-missing-in-dev`,
+`transport-vehicles-drivers-phase9-browser-verification-gap`) — استُبدلت
+بتحقق منطقي مكافئ بموافقة صريحة. اكتشاف جانبي إضافي وُثِّق
+(`transport-trips-page-driver-display-and-cancel-trip-missing`). تفاصيل
+كاملة (كل قرار تصميم، كل اكتشاف حي، الجداول الكاملة): **الحالة:** ✅
+التنفيذ المتفَق عليه مكتمل بالكامل ومُتحقَّق منه (حيًا للباك إند، `tsc`+
+تتبّع منطقي للفرونت إند) — فجوتان بيئيتان موثَّقتان صراحة، مش ادّعاء نجاح
+لم يحصل. تقرير الجلسة الكامل:
+`.claude/reports/transport-vehicles-drivers-session-log.md`.

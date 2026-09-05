@@ -1,6 +1,6 @@
 # app/domains/transport/repository.py (الإصدار النهائي المُعدّل)
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func, and_
+from sqlalchemy import select, update, delete, func, and_
 from sqlalchemy.orm import selectinload
 from typing import Optional, List
 from datetime import datetime
@@ -61,6 +61,37 @@ class TransportRepository:
         )
         return result.scalar_one_or_none()
 
+    async def list_fleets(self, tenant_id: int, skip: int = 0, limit: int = 50):
+        query = (
+            select(Fleet)
+            .where(Fleet.tenant_id == tenant_id, Fleet.is_active == True)  # noqa: E712
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await self.db.execute(query)
+        return result.scalars().all()
+
+    async def update_fleet(self, fleet_id: int, tenant_id: int, **kwargs) -> Optional[Fleet]:
+        if kwargs:
+            await self.db.execute(
+                update(Fleet).where(Fleet.id == fleet_id, Fleet.tenant_id == tenant_id).values(**kwargs)
+            )
+            await self.db.commit()
+        return await self.get_fleet(fleet_id, tenant_id)
+
+    async def delete_fleet(self, fleet_id: int, tenant_id: int) -> bool:
+        # Soft delete (is_active=False) — عكس Vehicle: Fleet.is_active
+        # موجود بالفعل بالموديل، وVehicle.fleet_id هو FK غير NULLABLE،
+        # فحذف hard هيتصادم مع أي أسطول فيه مركبات [قرار مستخدم، جلسة
+        # transport-vehicles-drivers-feature-build، 2026-09-04].
+        result = await self.db.execute(
+            update(Fleet)
+            .where(Fleet.id == fleet_id, Fleet.tenant_id == tenant_id, Fleet.is_active == True)  # noqa: E712
+            .values(is_active=False)
+        )
+        await self.db.commit()
+        return result.rowcount > 0
+
     async def create_vehicle(self, tenant_id: int, **kwargs) -> Vehicle:
         vehicle = Vehicle(tenant_id=tenant_id, **kwargs)
         self.db.add(vehicle)
@@ -88,6 +119,42 @@ class TransportRepository:
             query = query.where(Vehicle.fleet_id == fleet_id)
         result = await self.db.execute(query)
         return result.scalars().all()
+
+    async def list_vehicles(
+        self,
+        tenant_id: int,
+        fleet_id: Optional[int] = None,
+        status: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50,
+    ):
+        query = select(Vehicle).where(Vehicle.tenant_id == tenant_id)
+        if fleet_id:
+            query = query.where(Vehicle.fleet_id == fleet_id)
+        if status:
+            query = query.where(Vehicle.status == status)
+        query = query.offset(skip).limit(limit)
+        result = await self.db.execute(query)
+        return result.scalars().all()
+
+    async def update_vehicle(self, vehicle_id: int, tenant_id: int, **kwargs) -> Optional[Vehicle]:
+        if kwargs:
+            await self.db.execute(
+                update(Vehicle).where(Vehicle.id == vehicle_id, Vehicle.tenant_id == tenant_id).values(**kwargs)
+            )
+            await self.db.commit()
+        return await self.get_vehicle(vehicle_id, tenant_id)
+
+    async def delete_vehicle(self, vehicle_id: int, tenant_id: int) -> bool:
+        # Hard delete — Trip.vehicle_id هو FK غير NULLABLE بلا ON DELETE
+        # صريح، فالحذف بيتصادم طبيعيًا (IntegrityError) لأي مركبة لها تاريخ
+        # رحلات، بلا داعٍ لعمود is_active إضافي على Vehicle [قرار مستخدم،
+        # جلسة transport-vehicles-drivers-feature-build، 2026-09-04].
+        result = await self.db.execute(
+            delete(Vehicle).where(Vehicle.id == vehicle_id, Vehicle.tenant_id == tenant_id)
+        )
+        await self.db.commit()
+        return result.rowcount > 0
 
     # ---------- Routes ----------
     async def create_route(self, tenant_id: int, **kwargs) -> Route:
