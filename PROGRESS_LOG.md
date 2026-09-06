@@ -1842,3 +1842,252 @@ Vehicle (list/update/delete hard-delete مع حماية FK) + Fleet
 تتبّع منطقي للفرونت إند) — فجوتان بيئيتان موثَّقتان صراحة، مش ادّعاء نجاح
 لم يحصل. تقرير الجلسة الكامل:
 `.claude/reports/transport-vehicles-drivers-session-log.md`.
+
+---
+
+## [2026-09-06] `referral-affiliate-unified-system-implementation` —
+توحيد 3 أنظمة إحالة/عمولة منفصلة (A/B/C) على نظام واحد مربوط بنطاقات
+
+**السياق:** جلستان سابقتان (`referral-affiliate-system-design`،
+`referral-affiliate-unified-system-implementation` design phase) كشفتا
+3 أنظمة إحالة/عمولة منفصلة تمامًا في المشروع: `affiliate` domain
+(10 مستويات، Product-Scoped، ميت تشغيليًا)، `commerce` domain (10
+مستويات Sponsor Chain، الحي فعليًا لكن بلا تمايز منتج)، والـ12 دومين
+(`ActionCommission`، مستوى واحد، معطَّلة بسبب `User.referred_by` مفقود).
+قرار المستخدم النهائي: التوحيد على نظام `affiliate` (الأذكى تصميميًا)،
+حذف نظام `commerce` بالكامل، ربط الـ12 دومين بنفس الآلية، + مفهوم
+`AffiliateScope` جديد (بدل ربط مباشر بـ`product_id`) يسمح بشجر/عمولات
+منفصلة تمامًا لكل نطاق (منتج فردي/مجموعة/كل مبيعات الـtenant).
+
+**التنفيذ (9 مراحل، بالترتيب 0→1→2→3→(4،7)→5→6→8، تحقق حي بعد كل
+مرحلة):**
+- **Phase 0 (migration 045):** `AffiliateScope`+`AffiliateScopeMember`
+  جديدتان (Enum حقيقي `scope_type`، فهارس جزئية مزدوجة تمنع تكرار
+  عضوية دومين كامل). `CommissionTier.target_product_id`→`target_scope_id`.
+  `Commission` عُمِّمت لتقبل أي مصدر بيع (`order_id`/`order_item_id`/
+  `product_id` صاروا nullable، + `source_type`/`source_id`/`scope_id`
+  جدد). `ReferralTree.entity_id` صار FK حقيقي لـ`affiliate_scopes.id`.
+  حذف `affiliate_action_commissions` (نظام C) و`affiliate_trees`/
+  `commission_records`/`affiliate_configs` (نظام B) بالكامل. `TRUNCATE`
+  صريح على 3 جداول (بيانات اختبارية بحتة، مؤكَّد). `users.referred_by_user_id`
+  جديد. Seed صف `saas_service_catalog(code='affiliate')` — **اكتُشف
+  ناقصًا من أول كتابة وأُضيف قبل التطبيق** (بدونه Phase 7 مستحيلة
+  تشغيليًا). **باجان اكتُشفا وأُصلحا أثناء التطبيق الفعلي** (مش نظريًا):
+  ENUM مزدوج الإنشاء (`DuplicateObjectError`)، وdowngrade كان هيمسح
+  بيانات اختبار سابقة غير مرتبطة (`ForeignKeyViolationError` على
+  اشتراك SaaS حي لـ`tenant_id=16`) — الحل: عدم عكس الـseed إطلاقًا
+  (بنفس فلسفة عدم قابلية التراجع عن TRUNCATE). round-trip
+  `downgrade -1`→`upgrade head` نجح بالكامل بعد الإصلاحين.
+- **Phase 1-2 (Models/Repository):** إضافة الموديلات الجديدة، حذف
+  `ActionCommission`. **إصلاح باج `MultipleResultsFound` الموثَّق سابقًا**
+  في `get_referral_tree` — بقت تفلتر بـ`scope_id` صريح بدل `referred_id`
+  وحده، فالقيد الفريد الموجود أصلاً يضمن الآن صفًا واحدًا فعليًا لا
+  نظريًا فقط.
+- **Phase 3 (Service، أكبر مرحلة):** `distribute_commissions`→
+  `distribute_commissions_for_order` (تقسيم العمولة حسب نطاق كل منتج
+  في سلة مختلطة) + `distribute_commissions_for_sale_event` جديدة (لأي
+  بيع بلا Order تجاري) + `ensure_referral_link` عامة. تعديل ضيّق مسحوب
+  من Phase 4 (ضرورة حتمية): `CommissionBase`/`CommissionTierBase`
+  schemas عُدِّلت لتطابق الأعمدة الجديدة (كانت هتكسر `GET /affiliate/commissions`
+  فورًا). `commerce/service.py`: حذف `register_affiliate`/`distribute_commissions`
+  (B)، `checkout()` بقت تنادي المسار الموحَّد.
+- **Phase 4/7:** Scope CRUD endpoints جديدة (`/affiliate/admin/scopes*`)
+  + hook تلقائي في `SaaSControlService.create_subscription`: أول
+  اشتراك فعّال على `service_code="affiliate"` لأي tenant ينشئ تلقائيًا
+  نطاق `ENTITY_WIDE` افتراضي (idempotent).
+- **Phase 5 (academy):** **اكتشاف جديد** — تسجيل الكورس بكود إحالة كان
+  يسجّل الشجرة فقط، **صفر توزيع عمولة فعلي من أي وقت مضى**. أُصلح:
+  توزيع فعلي الآن لو الدفع اكتمل بمبلغ حقيقي.
+- **Phase 6 (12 دومين):** كل الـ12 (`zamakana`, `transport`, `insurance`,
+  `tourism_sports`, `tenders_auctions`, `service_marketplace`,
+  `employment`, `realestate`, `manufacturing`, `arbitration_syndicates`,
+  `invitations`, `digital_twin`) — `user.referred_by`→`user.referred_by_user_id`
+  + استبدال `register_commission`/`ActionCommission` (مستوى واحد) بنفس
+  خط أنابيب `Commission` الموحَّد (10 مستويات فعلية).
+- **Phase 8 (Celery):** إصلاح 3 أعطال توقيع مستقلة في `tasks/affiliate.py`
+  (موثَّقة سابقًا في تقارير قديمة) + تسجيل `clean_expired_links` فعليًا
+  في `beat_schedule` لأول مرة (كانت موجودة بلا أي جدولة من البداية) —
+  ونمط "loop عبر كل الـtenants النشطين" جديد بالكامل بالمشروع (لا سابقة
+  مماثلة).
+
+**تحقق حي شامل (Phase 9 جزئي):** `python -c "import app.main"` ناجح
+بعد كل مرحلة تراكميًا (كل الـ35+ دومين يستوردون بلا خطأ). اختبار حي
+كامل end-to-end (بيانات throwaway تحت `tenant_id=16` الموجود بالفعل،
+منظَّفة بالكامل بعده عبر CASCADE): إنشاء scope → tier → affiliate
+profile → `ensure_referral_link` → `get_referral_tree` (بعد إصلاح
+الباج) → `distribute_commissions_for_sale_event` → **صف `Commission`
+حقيقي أُنشئ فعليًا** (`level=1, amount=10.00, scope_id=1`) — يثبت
+المسار الكامل الجديد يعمل صح على DB حقيقية، مش مجرد `import` ناجح.
+
+**الحالة:** ✅ التصميم + Phases 0-8 مكتملة ومُتحقَّق منها حيًا. **متبقٍ
+صراحة (لم يُنفَّذ في هذه الجلسة):** ملف اختبار `pytest` رسمي دائم
+(Phase 9 الكاملة بالمعنى الرسمي — التحقق الحي تم عبر سكريبت مؤقت غير
+مُلتزَم)، وتنظيف بقايا صغيرة غير حرجة (`Store.is_affiliate_enabled`
+تحديد نهائي لدوره، مراجعة أعمق لـ`@rate_limit` decorator غير الفعّال
+الموثَّق في تقرير Phase 10 القديم — خارج نطاق هذه الجلسة). تقرير
+الجلسة الكامل (تصميم + تنفيذ + كل قرار وكل اكتشاف حي):
+`.claude/reports/referral-affiliate-unified-implementation-session-log.md`
+و`.claude/reports/referral-affiliate-unified-implementation-phase0-execution-session-log.md`.
+
+---
+
+## [2026-09-06] `saas-check-feature-access-missing-service-id-binding` —
+بند Backlog أمني (توثيق فقط، صفر تنفيذ) — اكتُشف أثناء Phase 9 من
+جلسة `referral-affiliate-unified-system-implementation`
+
+**السياق:** أثناء محاولة اختبار Phase 7 hook (تفعيل affiliate كخدمة
+SaaS) عبر `SaaSControlService.create_subscription` الحقيقية، اكتُشف
+إن `POST /saas/subscriptions/{plan_id}` معطَّل بالكامل حاليًا لأي
+tenant/خدمة (باج `get_plan_by_id` chicken-and-egg — تفاصيل كاملة في
+`.claude/reports/saas-get-plan-by-id-security-tradeoff-note.md`)، وإن
+إصلاحه بمعزل عن بند أمني موثَّق سابقًا سيعيد فتح ثغرة كامنة. **قرار
+المستخدم [2026-09-06]: عدم لمس `get_plan_by_id` في هذه الجلسة، وتسجيل
+هذا البند صراحة كـbacklog أمني منفصل قبل المتابعة.**
+
+**(1) الثغرة الكامنة (موثَّقة أصلًا من `saas-feature-flags-drift-session-log.md`
+§6، لم تُحَل من وقتها):** `SaaSControlService.check_feature_access`
+تمنح الوصول لأي `feature` string لو وُجد داخل `plan.features` (JSON)
+لأي اشتراك نشط للـtenant — **بلا أي تحقق إن هذا الاشتراك ينتمي فعلًا
+لنفس service الدومين اللي بيطلب الفحص.** لا يوجد ربط رسمي
+`feature → service_id` في الـschema الحالي. لو تفعّل مسار اشتراك حي
+(`create_subscription`)، أي tenant admin يقدر (نظريًا) يشترك بخطة
+رخيصة/غير متعلقة تحتوي بالصدفة (أو عمدًا) على نص feature يخص خدمة
+تانية أغلى، ويكسبها مجانًا عبر أي دومين يستخدم `check_feature_access`.
+
+**(2) `get_plan_by_id` (`saas/repository.py:55-75`) بيمنع الاستغلال
+حاليًا — لكن بالصدفة، مش كحماية مقصودة:** الدالة تشترط وجود اشتراك
+`ACTIVE`/`TRIAL` **سابق** لنفس `(plan_id, tenant_id)` عشان ترجّع أي
+نتيجة أصلًا — يعني **مفيش tenant يقدر ينشئ أي اشتراك جديد عبر الـAPI
+الحي من الأساس، لأي خطة كانت.** أي إصلاح لهذا الباج بمعزل عن (1) يفتح
+الثغرة فورًا (موثَّق صراحة كتحذير داخل الكود نفسه، `saas/service.py:138-147`).
+
+**(3) اكتشاف جديد اليوم — الكودبيز فيه آليتان مختلفتان، مش آلية واحدة
+موحَّدة:** فحص جزئي (`zamakana` مقابل `insurance`) أظهر إن بعض
+الدومينات تستخدم `SaaSSubscriptionService.can_access_service` (آمنة —
+مفحوصة بـ`service_code` مباشر، بلا علاقة بالثغرة) بينما دومينات تانية
+(`insurance` مؤكَّد) تستخدم `check_feature_access` (المعرَّضة فعليًا).
+**docstring الدالة نفسها بيدّعي "تُستخدَم من 12 دومين" — رقم غير دقيق،
+لم يُحصَ بدقة.** العدد الحقيقي للدومينات المعرَّضة فعليًا غير محصور —
+يحتاج فحص كامل لكل الـ14-15 ملف اللي بيستخدموا
+`check_feature_access`/`_check_saas_limits` (القائمة الأولية: `digital_twin`,
+`invitations`, `arbitration_syndicates`, `manufacturing`, `realestate`,
+`employment`, `service_marketplace`, `tenders_auctions`, `tourism_sports`,
+`insurance`, `transport`, `zamakana`, `social`, `logistics` — بعضهم
+(زي `zamakana`) قد يكون آمنًا فعليًا، والبعض الآخر لسه غير مفحوص).
+
+**الحالة:** 🟡 **مفتوح — توثيق فقط، صفر تنفيذ.** يحتاج جلسة أمنية
+مخصَّصة منفصلة (خارج نطاق أي جلسة referral/affiliate) تبدأ بفحص كامل
+للـ14-15 ملف لتحديد العدد الدقيق للدومينات المعرَّضة فعليًا، ثم تقرر
+بين: (أ) إصلاح ضيّق (`get_plan_by_id` + معامل `service_id` إجباري في
+`check_feature_access` يقيّد اللف على نفس الخدمة بس)، أو (ب) حل جذري
+(ربط رسمي `feature → service_id` على مستوى الـschema، migration
+جديدة). **لا تصلح `get_plan_by_id` في أي جلسة مستقبلية بمعزل عن هذا
+البند — نفس التحذير الأصلي لسه ساري.** تفاصيل كاملة:
+`.claude/reports/saas-get-plan-by-id-security-tradeoff-note.md`.
+
+---
+
+## [2026-09-07] `referral-affiliate-systems-unified-into-scope-based-model` —
+توحيد 3 أنظمة إحالة/عمولة متضاربة في نظام واحد (feat)
+
+**ما تغيَّر:** 3 أنظمة منفصلة تمامًا (affiliate domain 10-مستويات
+Product-Scoped الميت تشغيليًا، commerce Sponsor Chain الحي بلا تمايز
+منتج، والـ12 دومين بمستوى واحد معطَّل) اتوحَّدوا في نظام واحد قائم على
+مفهوم جديد `AffiliateScope`/`AffiliateScopeMember` — نطاق عمولة (منتج
+فردي/مجموعة/كل مبيعات الـtenant) بدل الربط المباشر بـ`product_id`، يسمح
+بشجر/عمولات منفصلة تمامًا لكل نطاق بلا تداخل. نظام `commerce` القديم
+(`AffiliateTree`/`CommissionRecord`/`AffiliateConfig`) حُذف بالكامل.
+الـ12 دومين (`zamakana`, `transport`, `insurance`, `tourism_sports`,
+`tenders_auctions`, `service_marketplace`, `employment`, `realestate`,
+`manufacturing`, `arbitration_syndicates`, `invitations`, `digital_twin`)
+بقوا يستخدموا نفس خط أنابيب `Commission` الموحَّد (10 مستويات فعلية)
+عبر `User.referred_by_user_id` الجديد، بدل `ActionCommission` (مستوى
+واحد، كان معطَّلًا أصلًا). خدمة affiliate بقت قابلة للتفعيل كـSaaS لكل
+tenant عبر `saas_service_catalog`، بـhook تلقائي ينشئ نطاق `ENTITY_WIDE`
+افتراضي عند أول اشتراك.
+
+**التحقق:** migration `045` مطبَّقة فعليًا على DB (`eppne_v2`)، round-trip
+`downgrade→upgrade` ناجح. `pytest tests/test_referral_affiliate_unified_system.py`
+— 6/6 ناجحة (سيناريوهات: عمولة أساسية، سلة بنطاقين مختلطة مع تقسيم
+صحيح، تفعيل SaaS + idempotency، zamakana كمرجع، digital_twin كحالة
+خاصة، تخطٍّ صامت عند عدم التفعيل).
+
+**تفاصيل كاملة:**
+`.claude/reports/referral-affiliate-system-design-session-log.md`
+(التحقيق الأولي واكتشاف الأنظمة الثلاثة)،
+`.claude/reports/referral-affiliate-unified-implementation-session-log.md`
+(التصميم التفصيلي الكامل)،
+`.claude/reports/referral-affiliate-unified-implementation-phase0-execution-session-log.md`
+(سجل التنفيذ الفعلي لكل مرحلة)،
+`.claude/reports/referral-affiliate-unified-system-final-summary.md`
+(ملخص فهرسي نهائي).
+
+---
+
+## [2026-09-07] `fix-get-referral-tree-multiple-results-found` —
+إصلاح باج MultipleResultsFound موثَّق سابقًا (fix)
+
+**السبب الجذري (كان):** `AffiliateRepository.get_referral_tree(user_id,
+tenant_id)` كانت تفلتر بـ`referred_id` وحده — لو نفس المستخدم له صفوف
+`ReferralTree` متعددة (نطاقات مختلفة، سيناريو معتمَد صراحة في التصميم
+الجديد)، `scalar_one_or_none()` كانت ترمي `MultipleResultsFound`.
+
+**الإصلاح:** التوقيع بقى `get_referral_tree(user_id, tenant_id, scope_id)`
+— يفلتر بـ`entity_type='SCOPE' AND entity_id=scope_id` صراحة، والمشي
+عبر السلسلة (`_distribute_levels`) بقى يمرّر نفس `scope_id` في كل
+استدعاء متكرر — القيد الفريد الموجود بالفعل (`ix_referral_trees_unique_referred_scope`)
+بقى يضمن صفًا واحدًا حقيقيًا لا نظريًا فقط.
+
+**التحقق:** مؤكَّد حيًا في اختبار `test_basic_referral_creates_level1_commission`
+(`tests/test_referral_affiliate_unified_system.py`) + الاختبار اليدوي
+الأولي قبله. تفاصيل كاملة:
+`.claude/reports/referral-affiliate-unified-implementation-phase0-execution-session-log.md`
+(قسم Phase 1-2).
+
+---
+
+## [2026-09-07] `fix-academy-enrollment-affiliate-commission-never-distributed` —
+تسجيل كورس بكود إحالة كان يسجّل الشجرة بس، صفر عمولة توزَّعت أبدًا (fix)
+
+**الاكتشاف:** `academy/service.py` (تسجيل كورس عبر `affiliate_code`) كان
+يستدعي `track_referral` فقط — يسجّل `ReferralTree` بلا أي استدعاء لدالة
+توزيع عمولة بعدها. **هذا يعني: أي عمولة "متوقَّعة" من تسجيل كورس بكود
+إحالة لم تتولَّد فعليًا من أي وقت مضى في الإنتاج** — فشل صامت موجود منذ
+كتابة الكود الأصلي، لم يكن موثَّقًا صراحة في أي تقرير سابق.
+
+**الإصلاح:** بعد `track_referral`، لو الدفع اكتمل بمبلغ حقيقي
+(`amount > 0 and payment_status == "COMPLETED"`)، يُستدعى
+`distribute_commissions_for_sale_event` فعليًا (`source_type=
+"ACADEMY_ENROLLMENT"`). لو النطاق غير موجود (خدمة affiliate غير مفعَّلة
+SaaS للـtenant)، يتخطَّى بصمت — نفس نمط الحماية الأصلي.
+
+**تفاصيل كاملة:**
+`.claude/reports/referral-affiliate-unified-implementation-phase0-execution-session-log.md`
+(قسم Phase 5).
+
+---
+
+## [2026-09-07] `fix-affiliate-celery-tasks-signature-bugs-and-beat-schedule` —
+3 أعطال توقيع مستقلة في tasks/affiliate.py + تسجيل أول جدولة فعلية (fix)
+
+**3 أعطال مستقلة (موثَّقة سابقًا في تقارير Phase 10 قديمة، أُصلحت الآن
+فعليًا):**
+1. `distribute_commissions_task`: كانت تنادي `service.distribute_commissions(order_id, tenant_id)`
+   بتوقيع غير موجود أصلًا → `service.distribute_commissions_for_order(order_id)`.
+2. `release_commissions_task`: كانت ناقصة `tenant_id` في توقيع الـtask
+   نفسها (مش بس في استدعاء `AffiliateService`) — أُضيف كمعامل جديد.
+   اكتشاف جانبي: كانت كمان تتجاهل `idempotency_key` الممرَّر لها بالكامل
+   — أُصلح كمان.
+3. `clean_expired_links_task`: كانت تنادي `delete_expired_invitations`
+   بمعامل واحد بينما التوقيع الحقيقي يتطلب `tenant_id` إجباري. **أول
+   نمط "loop عبر كل الـtenants النشطين" بالمشروع** (لا سابقة مماثلة في
+   `saas_tasks.py`/`agritech.py`) — استعلام `AcademyTenant` لكل tenant
+   نشط ثم loop.
+
+**+ تسجيل فعلي في `beat_schedule`** (`core/celery_config.py`) —
+`clean_expired_links` كانت مُعرَّفة بالكود منذ البداية **بلا أي جدولة
+Celery Beat تنادي عليها إطلاقًا** — أُضيف entry جديد (5:00 صباحًا يوميًا).
+
+**تفاصيل كاملة:**
+`.claude/reports/referral-affiliate-unified-implementation-phase0-execution-session-log.md`
+(قسم Phase 8).

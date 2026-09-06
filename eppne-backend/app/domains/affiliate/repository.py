@@ -11,10 +11,11 @@ from app.domains.affiliate.models import (
     AffiliateProfile,
     ReferralTree,
     Commission,
-    ActionCommission,
     CommissionTier,
     AffiliateLink,
     AffiliateClickLog,
+    AffiliateScope,
+    AffiliateScopeMember,
 )
 from app.domains.identity.models import User
 from app.core.errors import NotFoundError
@@ -77,42 +78,31 @@ class AffiliateRepository:
     # ==========================================
     # 2. شجرة الإحالة (Referral Tree) – مع tenant_id
     # ==========================================
-    async def get_referral_tree(self, user_id: int, tenant_id: int) -> Optional[ReferralTree]:
+    async def get_referral_tree(self, user_id: int, tenant_id: int, scope_id: int) -> Optional[ReferralTree]:
+        """إصلاح باج MultipleResultsFound (migration 045 §2): يفلتر
+        بـ(entity_type='SCOPE', entity_id=scope_id) وليس referred_id
+        وحده — القيد الفريد `ix_referral_trees_unique_referred_scope`
+        يضمن الآن صفًا واحدًا كحد أقصى فعليًا، مش مجرد نظريًا."""
         result = await self.db.execute(
             select(ReferralTree)
             .join(User, User.id == ReferralTree.referred_id)
-            .where(and_(ReferralTree.referred_id == user_id, User.tenant_id == tenant_id))
+            .where(and_(
+                ReferralTree.referred_id == user_id,
+                ReferralTree.entity_type == "SCOPE",
+                ReferralTree.entity_id == scope_id,
+                User.tenant_id == tenant_id,
+            ))
         )
         return result.scalar_one_or_none()
 
-    async def get_referral_by_scope(
-        self,
-        referred_id: int,
-        entity_type: str,
-        tenant_id: int,
-        entity_id: Optional[int] = None,
-    ) -> Optional[ReferralTree]:
-        query = (
-            select(ReferralTree)
-            .join(User, User.id == ReferralTree.referred_id)
-            .where(
-                and_(
-                    ReferralTree.referred_id == referred_id,
-                    ReferralTree.entity_type == entity_type,
-                    User.tenant_id == tenant_id
-                )
-            )
-        )
-        if entity_id is not None:
-            query = query.where(ReferralTree.entity_id == entity_id)
-        else:
-            query = query.where(ReferralTree.entity_id.is_(None))
-        result = await self.db.execute(query)
-        return result.scalar_one_or_none()
-
-    async def get_referral_tree_with_sponsors(self, user_id: int, tenant_id: int, max_depth: int = 10) -> List[dict]:
+    async def get_referral_tree_with_sponsors(
+        self, user_id: int, tenant_id: int, scope_id: int, max_depth: int = 10,
+    ) -> List[dict]:
+        """يمشي عبر السلسلة **داخل نفس scope_id فقط** في كل مستوى —
+        لو راعٍ في مستوى ما له راعٍ خاص به في نطاق مختلف، السلسلة
+        تتوقف هناك بدل القفز لنطاق آخر (قرار التصميم: النطاقات لا تتداخل)."""
         chain = []
-        current = await self.get_referral_tree(user_id, tenant_id)
+        current = await self.get_referral_tree(user_id, tenant_id, scope_id)
         while current and len(chain) < max_depth:
             referrer_id = cast(int, current.referrer_id)
             profile = await self.get_affiliate_profile(referrer_id, tenant_id)
@@ -123,7 +113,7 @@ class AffiliateRepository:
                 "entity_type": current.entity_type,
                 "entity_id": current.entity_id,
             })
-            current = await self.get_referral_tree(referrer_id, tenant_id)
+            current = await self.get_referral_tree(referrer_id, tenant_id, scope_id)
         return chain
 
     async def create_referral_tree(self, tenant_id: int, **kwargs) -> ReferralTree:
@@ -138,13 +128,6 @@ class AffiliateRepository:
     # ==========================================
     async def create_commission(self, tenant_id: int, **kwargs) -> Commission:
         commission = Commission(tenant_id=tenant_id, **kwargs)
-        self.db.add(commission)
-        await self.db.commit()
-        await self.db.refresh(commission)
-        return commission
-
-    async def create_action_commission(self, tenant_id: int, **kwargs) -> ActionCommission:
-        commission = ActionCommission(tenant_id=tenant_id, **kwargs)
         self.db.add(commission)
         await self.db.commit()
         await self.db.refresh(commission)
@@ -247,23 +230,23 @@ class AffiliateRepository:
                 and_(
                     CommissionTier.tenant_id == tenant_id,
                     CommissionTier.entity_type == "GLOBAL",
-                    CommissionTier.target_product_id.is_(None)
+                    CommissionTier.target_scope_id.is_(None)
                 )
             )
         )
         return result.scalar_one_or_none()
 
-    async def get_commission_tier_by_product(
+    async def get_commission_tier_by_scope(
         self,
         tenant_id: int,
-        product_id: int,
+        scope_id: int,
     ) -> Optional[CommissionTier]:
         result = await self.db.execute(
             select(CommissionTier).where(
                 and_(
                     CommissionTier.tenant_id == tenant_id,
-                    CommissionTier.entity_type == "PRODUCT",
-                    CommissionTier.target_product_id == product_id
+                    CommissionTier.entity_type == "SCOPE",
+                    CommissionTier.target_scope_id == scope_id
                 )
             )
         )
@@ -395,3 +378,71 @@ class AffiliateRepository:
         )
         await self.db.commit()
         return result.rowcount
+
+    # ==========================================
+    # 8. نطاقات العمولة (Affiliate Scopes) – مع tenant_id
+    # ==========================================
+    async def get_scope(self, scope_id: int, tenant_id: int) -> Optional[AffiliateScope]:
+        result = await self.db.execute(
+            select(AffiliateScope).where(
+                and_(AffiliateScope.id == scope_id, AffiliateScope.tenant_id == tenant_id)
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_scopes(self, tenant_id: int) -> List[AffiliateScope]:
+        result = await self.db.execute(
+            select(AffiliateScope).where(AffiliateScope.tenant_id == tenant_id)
+        )
+        return list(result.scalars().all())
+
+    async def get_default_scope(self, tenant_id: int) -> Optional[AffiliateScope]:
+        """النطاق الوحيد من نوع ENTITY_WIDE لكل tenant — يُنشأ تلقائيًا
+        وقت تفعيل خدمة affiliate كـSaaS (راجع Phase 7)."""
+        result = await self.db.execute(
+            select(AffiliateScope).where(
+                and_(
+                    AffiliateScope.tenant_id == tenant_id,
+                    AffiliateScope.scope_type == "ENTITY_WIDE",
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def create_scope(self, tenant_id: int, name: str, scope_type: str) -> AffiliateScope:
+        scope = AffiliateScope(tenant_id=tenant_id, name=name, scope_type=scope_type)
+        self.db.add(scope)
+        await self.db.commit()
+        await self.db.refresh(scope)
+        return scope
+
+    async def add_scope_member(
+        self, scope_id: int, member_type: str, member_id: Optional[int] = None,
+    ) -> AffiliateScopeMember:
+        member = AffiliateScopeMember(scope_id=scope_id, member_type=member_type, member_id=member_id)
+        self.db.add(member)
+        await self.db.commit()
+        await self.db.refresh(member)
+        return member
+
+    async def get_scope_member(
+        self, tenant_id: int, member_type: str, member_id: Optional[int] = None,
+    ) -> Optional[AffiliateScopeMember]:
+        """يبحث عن عضوية محدَّدة (منتج/كورس/دومين) — مقيَّد بـtenant_id
+        عبر join على AffiliateScope (الجدول نفسه بلا tenant_id مباشر)."""
+        query = (
+            select(AffiliateScopeMember)
+            .join(AffiliateScope, AffiliateScope.id == AffiliateScopeMember.scope_id)
+            .where(
+                and_(
+                    AffiliateScope.tenant_id == tenant_id,
+                    AffiliateScopeMember.member_type == member_type,
+                )
+            )
+        )
+        if member_id is not None:
+            query = query.where(AffiliateScopeMember.member_id == member_id)
+        else:
+            query = query.where(AffiliateScopeMember.member_id.is_(None))
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()

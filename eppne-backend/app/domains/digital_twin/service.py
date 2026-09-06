@@ -68,35 +68,35 @@ class DigitalTwinService:
             if not user:
                 return
 
-            referrer_id = user.referred_by
+            referrer_id = user.referred_by_user_id
             if not referrer_id and not affiliate_code:
                 return
 
             if affiliate_code and not referrer_id:
                 referrer = await affiliate_service.get_user_by_code(affiliate_code)
                 if referrer:
-                    referrer_id = referrer.user_id  # AffiliateProfile.user_id — register_commission's affiliate_id متوقع user_id، مش profile id
+                    referrer_id = referrer.user_id  # AffiliateProfile.user_id — referrer_id متوقع user_id، مش profile id
 
             if not referrer_id:
                 return
 
             if action_type == "TWIN_CREATION":
                 commission_amount = Decimal("5.00")
-                description = f"Affiliate commission for creating Digital Twin (User: {user_id})"
             elif action_type == "TWIN_INTERACTION":
                 commission_amount = amount * Decimal("0.10")
-                description = f"Affiliate commission for paid interaction (User: {user_id})"
             else:
                 return
 
             if commission_amount > 0:
-                await affiliate_service.register_commission(  # type: ignore
-                    affiliate_id=referrer_id,
-                    user_id=user_id,
-                    amount=commission_amount,
-                    description=description,
-                    status="PENDING"
-                )
+                scope_id = await affiliate_service.resolve_scope_id_for_member("DIGITAL_TWIN")
+                if scope_id:
+                    await affiliate_service.ensure_referral_link(referrer_id, user_id, scope_id)
+                    await affiliate_service.distribute_commissions_for_sale_event(
+                        referred_user_id=user_id,
+                        scope_id=scope_id,
+                        sale_amount=commission_amount,
+                        source_type="DIGITAL_TWIN",
+                    )
         except Exception as e:
             logger.error(f"Affiliate registration failed: {e}")
 

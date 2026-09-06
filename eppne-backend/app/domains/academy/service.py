@@ -391,12 +391,27 @@ class AcademyService:
                 try:
                     from app.domains.affiliate.service import AffiliateService
                     affiliate_service = AffiliateService(self.db, self.tenant_id)
-                    await affiliate_service.track_referral(
-                        referrer_code=affiliate_code,
-                        referred_user_id=user_id,
-                        entity_type="COURSE",
-                        entity_id=course_id,
-                    )
+                    scope_id = await affiliate_service.resolve_scope_id_for_member("COURSE", course_id)
+                    if scope_id:
+                        await affiliate_service.track_referral(
+                            referrer_code=affiliate_code,
+                            referred_user_id=user_id,
+                            scope_id=scope_id,
+                        )
+                        # اكتشاف من جلسة referral-affiliate-unified-implementation
+                        # (2026-09-06): هذا الاستدعاء كان يسجّل الشجرة فقط بلا أي
+                        # توزيع عمولة فعلي من قبل — صفر عمولة أُنشئت أبدًا من
+                        # تسجيل كورس. الآن يوزَّع فعليًا لو الدفع اكتمل بمبلغ حقيقي.
+                        if amount > 0 and payment_status == "COMPLETED":
+                            await affiliate_service.distribute_commissions_for_sale_event(
+                                referred_user_id=user_id,
+                                scope_id=scope_id,
+                                sale_amount=Decimal(str(amount)),
+                                source_type="ACADEMY_ENROLLMENT",
+                                source_id=cast(int, enrollment.id),
+                            )
+                    # scope_id=None يعني خدمة affiliate غير مفعَّلة SaaS لهذا
+                    # الـtenant بعد (Phase 7) — تخطَّ بصمت، نفس نمط "لا مبلغ" أدناه
                 except Exception as e:
                     print(f"⚠️ [Affiliate Tracking] Failed to track referral: {str(e)}")
 

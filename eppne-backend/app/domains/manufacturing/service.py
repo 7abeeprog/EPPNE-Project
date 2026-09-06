@@ -60,15 +60,17 @@ class ManufacturingService:
         affiliate_service = AffiliateService(self.db, tenant_id)
         try:
             user = await self._get_user(user_id, tenant_id)
-            if user and user.referred_by:  # type: ignore
+            if user and user.referred_by_user_id:  # type: ignore
                 commission = Decimal("10.00") if action_type == "FACILITY_CREATED" else Decimal("5.00")
-                await affiliate_service.register_commission(  # type: ignore
-                    affiliate_id=user.referred_by,  # type: ignore
-                    user_id=user_id,
-                    amount=commission,
-                    description=f"Affiliate commission for {action_type}",
-                    status="PENDING"
-                )
+                scope_id = await affiliate_service.resolve_scope_id_for_member("MANUFACTURING")
+                if scope_id:
+                    await affiliate_service.ensure_referral_link(user.referred_by_user_id, user_id, scope_id)  # type: ignore
+                    await affiliate_service.distribute_commissions_for_sale_event(
+                        referred_user_id=user_id,
+                        scope_id=scope_id,
+                        sale_amount=commission,
+                        source_type="MANUFACTURING",
+                    )
         except Exception as e:
             logger.error(f"Affiliate registration failed: {e}")
 

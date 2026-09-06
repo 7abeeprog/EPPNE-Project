@@ -105,50 +105,13 @@ async def get_my_orders(
 
 
 # ============================================================
-# 4. الإحالات (Affiliate)
+# 4. الإحالات (Affiliate) — حُذفت بالكامل في migration 045 (نظام B)
 # ============================================================
-
-@router.post("/affiliate/link", response_model=AffiliateTreeResponse)
-async def set_affiliate_sponsor(
-    sponsor_code: str,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    tenant_id = cast(int, current_user.tenant_id)
-    service = CommerceService(db, tenant_id)
-    tree = await service.register_affiliate(
-        user_id=cast(int, current_user.id),
-        sponsor_code=sponsor_code
-    )
-    return tree
-
-
-@router.get("/affiliate/commissions", response_model=List[CommissionResponse])
-async def get_my_commissions(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    tenant_id = cast(int, current_user.tenant_id)
-    service = CommerceService(db, tenant_id)
-    result = await service.get_user_commissions(
-        user_id=cast(int, current_user.id),
-        skip=skip,
-        limit=limit
-    )
-    return result.data
-
-
-@router.post("/affiliate/commissions/release")
-async def release_my_commissions(
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db)
-):
-    tenant_id = cast(int, current_user.tenant_id)
-    service = CommerceService(db, tenant_id)
-    await service.release_commissions(beneficiary_id=cast(int, current_user.id))
-    return {"message": "تم تحرير العمولات المعلقة بنجاح"}
+# `POST /affiliate/link`, `GET /affiliate/commissions`,
+# `POST /affiliate/commissions/release` القديمة (Sponsor Chain) حُذفت —
+# استبدلتها endpoints دومين affiliate الموحَّد:
+# `GET /affiliate/track/{code}`, `GET /affiliate/commissions`,
+# `POST /affiliate/commissions/release` (راجع app/domains/affiliate/router.py).
 
 
 # ============================================================

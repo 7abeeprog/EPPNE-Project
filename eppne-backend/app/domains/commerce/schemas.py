@@ -144,35 +144,9 @@ class OrderResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ========== Affiliate ==========
-class AffiliateConfigResponse(BaseModel):
-    id: int
-    tenant_id: int
-    is_active: bool
-    levels: Dict[str, float]  # {"1": 10.0, "2": 5.0, ...}
-    system_fee_pct: float
-    model_config = ConfigDict(from_attributes=True)
-
-
-class AffiliateTreeResponse(BaseModel):
-    user_id: int
-    sponsor_id: int
-    network_depth: int
-    created_at: datetime
-    model_config = ConfigDict(from_attributes=True)
-
-
-class CommissionResponse(BaseModel):
-    id: int
-    beneficiary_id: int
-    order_id: int
-    level_earned: int
-    amount: float
-    currency: str
-    status: str
-    created_at: datetime
-    model_config = ConfigDict(from_attributes=True)
-
+# نظام الإحالة/العمولة القديم لـcommerce (AffiliateConfigResponse/
+# AffiliateTreeResponse/CommissionResponse — النظام B) حُذف بالكامل في
+# migration 045 — استبدلته schemas دومين affiliate الموحَّد.
 
 # ========== طرق الدفع ==========
 class PaymentRequestCreate(BaseModel):

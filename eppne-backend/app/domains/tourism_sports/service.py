@@ -578,14 +578,16 @@ class TourismSportsService:
             from app.domains.identity.repository import UserRepository
             user_repo = UserRepository(self.db)
             user = await user_repo.get_by_id(user_id, tenant_id)
-            if user and user.referred_by:
+            if user and user.referred_by_user_id:
                 commission = amount * Decimal("0.05")
-                await affiliate_service.register_commission(  # type: ignore[attr-defined]
-                    affiliate_id=user.referred_by,
-                    user_id=user_id,
-                    amount=commission,
-                    description=f"Affiliate commission for {action_type}",
-                    status="PENDING"
-                )
+                scope_id = await affiliate_service.resolve_scope_id_for_member("TOURISM_SPORTS")
+                if scope_id:
+                    await affiliate_service.ensure_referral_link(user.referred_by_user_id, user_id, scope_id)
+                    await affiliate_service.distribute_commissions_for_sale_event(
+                        referred_user_id=user_id,
+                        scope_id=scope_id,
+                        sale_amount=commission,
+                        source_type="TOURISM_SPORTS",
+                    )
         except Exception as e:
             logger.error(f"Affiliate registration failed: {e}")

@@ -14,7 +14,6 @@ from app.domains.affiliate.models import (
     AffiliateProfile,
     ReferralTree,
     Commission,
-    ActionCommission,
     CommissionTier,
     AffiliateLink,
     AffiliateClickLog,
@@ -165,12 +164,42 @@ class AffiliateService:
     # 3. تتبع الإحالة (مع tenant_id)
     # ==========================================
 
+    async def ensure_referral_link(
+        self,
+        referrer_user_id: int,
+        referred_user_id: int,
+        scope_id: int,
+    ) -> tuple[Optional[ReferralTree], bool]:
+        """يُنشئ صف ReferralTree لو غير موجود لهذا (referred × scope)، أو
+        يرجّع الموجود بلا إنشاء (المعامل الثاني `created` يميّز الحالتين).
+        عام بما يكفي ليُستخدَم مباشرة بـuser_id (الـ12 دومين، مصدره
+        User.referred_by_user_id) أو عبر `track_referral` (commerce/
+        academy، مصدره referral_code نصي)."""
+        if referrer_user_id == referred_user_id:
+            return None, False
+
+        existing = await self.repo.get_referral_tree(referred_user_id, self.tenant_id, scope_id)
+        if existing:
+            return existing, False
+
+        referrer_tree = await self.repo.get_referral_tree(referrer_user_id, self.tenant_id, scope_id)
+        depth = getattr(referrer_tree, "depth", 0) + 1 if referrer_tree else 1
+
+        new_tree = await self.repo.create_referral_tree(
+            tenant_id=self.tenant_id,
+            referrer_id=referrer_user_id,
+            referred_id=referred_user_id,
+            entity_type="SCOPE",
+            entity_id=scope_id,
+            depth=depth,
+        )
+        return new_tree, True
+
     async def track_referral(
         self,
         referrer_code: str,
         referred_user_id: int,
-        entity_type: str = "GLOBAL",
-        entity_id: Optional[int] = None,
+        scope_id: int,
     ) -> Optional[ReferralTree]:
         referrer = await self.repo.get_affiliate_by_code(referrer_code, self.tenant_id)
         if not referrer or not getattr(referrer, "is_active", False):
@@ -181,33 +210,54 @@ class AffiliateService:
         if not referred_user:
             return None
 
-        existing = await self.repo.get_referral_by_scope(
-            referred_id=referred_user_id,
-            entity_type=entity_type,
-            tenant_id=self.tenant_id,
-            entity_id=entity_id,
-        )
-        if existing:
-            return None
-
         referrer_id = cast(int, referrer.user_id)
-        referrer_tree = await self.repo.get_referral_tree(referrer_id, self.tenant_id)
-        depth = getattr(referrer_tree, "depth", 0) + 1 if referrer_tree else 1
+        tree, created = await self.ensure_referral_link(referrer_id, referred_user_id, scope_id)
+        if not created:
+            return None
 
         await self.repo.update_affiliate_stats(
             referrer_id,
             self.tenant_id,
             total_conversions=getattr(referrer, "total_conversions", 0) + 1,
         )
+        return tree
 
-        return await self.repo.create_referral_tree(
-            tenant_id=self.tenant_id,
-            referrer_id=referrer_id,
-            referred_id=referred_user_id,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            depth=depth,
-        )
+    # ==========================================
+    # 3.ب نطاقات العمولة (Affiliate Scopes)
+    # ==========================================
+
+    async def get_default_scope_id(self) -> Optional[int]:
+        """النطاق الافتراضي (ENTITY_WIDE) لهذا الـtenant — يُنشأ تلقائيًا
+        وقت تفعيل خدمة affiliate كـSaaS (Phase 7). `None` يعني الخدمة
+        غير مفعَّلة لهذا الـtenant بعد."""
+        scope = await self.repo.get_default_scope(self.tenant_id)
+        return cast(int, scope.id) if scope else None
+
+    async def resolve_scope_id_for_member(
+        self,
+        member_type: str,
+        member_id: Optional[int] = None,
+    ) -> Optional[int]:
+        """يحل النطاق الواجب تطبيقه على "شيء قابل للبيع" (منتج/كورس/حدث
+        دومين): يفضّل عضوية محدَّدة (AffiliateScopeMember) لو موجودة،
+        وإلا يسقط للنطاق الافتراضي (ENTITY_WIDE) لنفس الـtenant. `None`
+        يعني لا نطاق محدَّد ولا نطاق افتراضي — الخدمة غير مفعَّلة."""
+        member = await self.repo.get_scope_member(self.tenant_id, member_type, member_id)
+        if member:
+            return cast(int, member.scope_id)
+        return await self.get_default_scope_id()
+
+    async def list_scopes(self):
+        return await self.repo.list_scopes(self.tenant_id)
+
+    async def create_scope(self, name: str, scope_type: str):
+        return await self.repo.create_scope(self.tenant_id, name, scope_type)
+
+    async def add_scope_member(self, scope_id: int, member_type: str, member_id: Optional[int] = None):
+        scope = await self.repo.get_scope(scope_id, self.tenant_id)
+        if not scope:
+            raise NotFoundError("النطاق غير موجود")
+        return await self.repo.add_scope_member(scope_id, member_type, member_id)
 
     async def track_click(
         self,
@@ -259,7 +309,18 @@ class AffiliateService:
     # 4. توزيع العمولات (مع tenant_id)
     # ==========================================
 
-    async def distribute_commissions(self, order_id: int) -> List[Commission]:
+    async def distribute_commissions_for_order(
+        self,
+        order_id: int,
+        affiliate_code: Optional[str] = None,
+    ) -> List[Commission]:
+        """توزيع عمولات طلب commerce — لكل عنصر في السلة، يُحلّ نطاقه
+        (scope) عبر AffiliateScopeMember، وتُقسَّم العمولة حسب نطاق كل
+        منتج على حدة (قرار معتمد: سلة بنطاقات مختلطة تُقسَّم لا تُرفَض).
+        لو affiliate_code مُمرَّر (كود الإحالة وقت الـcheckout)، يُنشئ
+        رابط الإحالة أولًا (idempotent) قبل التوزيع — بديل استدعاء
+        register_affiliate/distribute_commissions المنفصلين في نظام
+        commerce القديم (النظام B، محذوف بالكامل)."""
         order = await self.commerce_repo.get_order(order_id, self.tenant_id)
         if not order:
             return []
@@ -278,26 +339,29 @@ class AffiliateService:
             logger.warning(f"Could not fetch order items: {e}")
             return []
 
+        customer_id = cast(int, getattr(order, "customer_id", 0))
+        referrer_id: Optional[int] = None
+        if affiliate_code:
+            referrer_profile = await self.repo.get_affiliate_by_code(affiliate_code, self.tenant_id)
+            if referrer_profile and getattr(referrer_profile, "is_active", False):
+                referrer_id = cast(int, referrer_profile.user_id)
+
         all_commissions: List[Commission] = []
         tiers = await self.repo.get_commission_tiers(self.tenant_id)
 
         for item in order_items:
-            product_id = getattr(item, "product_id", 0)
+            product_id = cast(int, getattr(item, "product_id", 0))
+            scope_id = await self.resolve_scope_id_for_member("PRODUCT", product_id)
+            if not scope_id:
+                # لا نطاق افتراضي لهذا الـtenant — خدمة affiliate غير
+                # مفعَّلة (Phase 7)، تخطَّ هذا العنصر بصمت (نفس نمط
+                # "لا referral موجود" الأصلي)
+                continue
 
-            referral = await self.repo.get_referral_by_scope(
-                referred_id=getattr(order, "customer_id", 0),
-                entity_type="PRODUCT",
-                tenant_id=self.tenant_id,
-                entity_id=product_id,
-            )
+            if referrer_id is not None:
+                await self.ensure_referral_link(referrer_id, customer_id, scope_id)
 
-            if not referral:
-                referral = await self.repo.get_referral_by_scope(
-                    referred_id=getattr(order, "customer_id", 0),
-                    entity_type="GLOBAL",
-                    tenant_id=self.tenant_id,
-                )
-
+            referral = await self.repo.get_referral_tree(customer_id, self.tenant_id, scope_id)
             if not referral:
                 continue
 
@@ -305,24 +369,55 @@ class AffiliateService:
             level_commissions = await self._distribute_levels(
                 referral=referral,
                 item_amount=item_amount,
-                order_id=order_id,
-                product_id=product_id,
-                order_item_id=getattr(item, "id", 0),
+                scope_id=scope_id,
                 tiers=tiers,
+                source_type="COMMERCE_ORDER",
+                source_id=cast(int, getattr(item, "id", 0)),
+                order_id=order_id,
+                order_item_id=cast(int, getattr(item, "id", 0)),
+                product_id=product_id,
             )
 
             all_commissions.extend(level_commissions)
 
         return all_commissions
 
+    async def distribute_commissions_for_sale_event(
+        self,
+        referred_user_id: int,
+        scope_id: int,
+        sale_amount: Decimal,
+        source_type: str,
+        source_id: Optional[int] = None,
+    ) -> List[Commission]:
+        """نقطة الدخول العامة لأي حدث بيع بلا Order تجاري — academy
+        enrollment، أو حدث من أحد الـ12 دومين. تفترض إن ReferralTree
+        موجود بالفعل لهذا (referred_user_id × scope_id) — استدعِ
+        `ensure_referral_link` أولًا لو لسه غير مؤكَّد."""
+        tiers = await self.repo.get_commission_tiers(self.tenant_id)
+        referral = await self.repo.get_referral_tree(referred_user_id, self.tenant_id, scope_id)
+        if not referral:
+            return []
+        return await self._distribute_levels(
+            referral=referral,
+            item_amount=sale_amount,
+            scope_id=scope_id,
+            tiers=tiers,
+            source_type=source_type,
+            source_id=source_id,
+        )
+
     async def _distribute_levels(
         self,
         referral: ReferralTree,
         item_amount: Decimal,
-        order_id: int,
-        product_id: int,
-        order_item_id: int,
+        scope_id: int,
         tiers: Optional[CommissionTier],
+        source_type: str,
+        source_id: Optional[int] = None,
+        order_id: Optional[int] = None,
+        order_item_id: Optional[int] = None,
+        product_id: Optional[int] = None,
     ) -> List[Commission]:
         commissions: List[Commission] = []
         current_referral = referral
@@ -334,17 +429,17 @@ class AffiliateService:
             referrer_id = cast(int, current_referral.referrer_id)
             referrer_profile = await self.repo.get_affiliate_profile(referrer_id, self.tenant_id)
             if not referrer_profile or not getattr(referrer_profile, "is_active", False):
-                current_referral = await self.repo.get_referral_tree(referrer_id, self.tenant_id)
+                current_referral = await self.repo.get_referral_tree(referrer_id, self.tenant_id, scope_id)
                 continue
 
             rate = await self._get_commission_rate(
                 tiers=tiers,
                 level=level,
-                product_id=product_id,
+                scope_id=scope_id,
             )
 
             if rate <= 0:
-                current_referral = await self.repo.get_referral_tree(referrer_id, self.tenant_id)
+                current_referral = await self.repo.get_referral_tree(referrer_id, self.tenant_id, scope_id)
                 continue
 
             commission_amount = item_amount * Decimal(rate) / Decimal(100)
@@ -357,18 +452,21 @@ class AffiliateService:
                     order_id=order_id,
                     order_item_id=order_item_id,
                     product_id=product_id,
+                    source_type=source_type,
+                    source_id=source_id,
+                    scope_id=scope_id,
                     item_amount=item_amount,
                     order_amount=Decimal(0),
                     commission_rate=Decimal(rate),
                     commission_amount=commission_amount,
                     currency="MR_USDT",
                     referral_level=level,
-                    entity_type="PRODUCT",
+                    entity_type="SCOPE",
                     status="PENDING",
                 )
                 commissions.append(commission)
 
-            current_referral = await self.repo.get_referral_tree(referrer_id, self.tenant_id)
+            current_referral = await self.repo.get_referral_tree(referrer_id, self.tenant_id, scope_id)
 
         return commissions
 
@@ -376,14 +474,14 @@ class AffiliateService:
         self,
         tiers: Optional[CommissionTier],
         level: int,
-        product_id: int,
+        scope_id: int,
     ) -> Decimal:
-        product_tier = await self.repo.get_commission_tier_by_product(
+        scope_tier = await self.repo.get_commission_tier_by_scope(
             tenant_id=self.tenant_id,
-            product_id=product_id,
+            scope_id=scope_id,
         )
-        if product_tier:
-            return getattr(product_tier, f"level_{level}_pct", Decimal(0))
+        if scope_tier:
+            return getattr(scope_tier, f"level_{level}_pct", Decimal(0))
 
         if tiers:
             return getattr(tiers, f"level_{level}_pct", Decimal(0))
@@ -555,8 +653,8 @@ class AffiliateService:
     # 8. شجرة الإحالة (مع tenant_id)
     # ==========================================
 
-    async def get_referral_tree(self, user_id: int, max_depth: int = 5) -> List[dict]:
-        return await self.repo.get_referral_tree_with_sponsors(user_id, self.tenant_id, max_depth)
+    async def get_referral_tree(self, user_id: int, scope_id: int, max_depth: int = 5) -> List[dict]:
+        return await self.repo.get_referral_tree_with_sponsors(user_id, self.tenant_id, scope_id, max_depth)
 
     # ==========================================
     # 9. إدارة العمولات (Admin) – مع tenant_id
@@ -580,20 +678,20 @@ class AffiliateService:
             **data.model_dump(exclude_unset=True)
         )
 
-    async def create_product_tier(
+    async def create_scope_tier(
         self,
         data: CommissionTierCreate,
     ) -> CommissionTier:
-        product_id = data.target_product_id
-        if product_id is None:
-            raise ValidationError("يجب تحديد معرف المنتج")
+        scope_id = data.target_scope_id
+        if scope_id is None:
+            raise ValidationError("يجب تحديد معرف النطاق (scope)")
 
-        existing = await self.repo.get_commission_tier_by_product(
+        existing = await self.repo.get_commission_tier_by_scope(
             tenant_id=self.tenant_id,
-            product_id=product_id,
+            scope_id=scope_id,
         )
         if existing:
-            raise ValidationError("توجد بالفعل إعدادات عمولات لهذا المنتج")
+            raise ValidationError("توجد بالفعل إعدادات عمولات لهذا النطاق")
 
         return await self.repo.create_commission_tier(
             tenant_id=self.tenant_id,
@@ -653,40 +751,12 @@ class AffiliateService:
     # ==========================================
     # 11. عمولات الأحداث العابرة للدومينات (Backlog #10)
     # ==========================================
-    # ملاحظة: هذه السجلات منفصلة عن `Commission` (التجاري، مرتبط بـOrder
-    # إجباريًا) وتُخزَّن في `ActionCommission`. غير مدموجة حاليًا في
-    # get_affiliate_stats/withdraw_commissions/release_commissions —
-    # قرار نطاق صريح، راجع تقرير الجلسة قسم 10 وبند Backlog جديد في
-    # PROGRESS_LOG.md.
-
-    async def register_commission(
-        self,
-        affiliate_id: int,
-        user_id: int,
-        amount: Decimal,
-        description: str,
-        status: str = "PENDING",
-        entity_type: str = "CROSS_DOMAIN",
-        action_type: Optional[str] = None,
-    ) -> ActionCommission:
-        """تسجيل عمولة إحالة لحدث عابر للدومينات (بلا Order تجاري).
-
-        `affiliate_id` هنا هو user_id الخاص بالمُحيل (نفس القيمة
-        الممرَّرة من كل مواضع الاستدعاء الـ12 كـ`user.referred_by`) — يتم
-        حل ملفه (`AffiliateProfile`) تلقائيًا عبر `get_or_create_profile`
-        لتفادي التباس نطاق users.id/affiliate_profiles.id.
-        """
-        profile = await self.get_or_create_profile(affiliate_id)
-        return await self.repo.create_action_commission(
-            tenant_id=self.tenant_id,
-            affiliate_profile_id=cast(int, profile.id),
-            user_id=user_id,
-            amount=amount,
-            description=description,
-            status=status,
-            entity_type=entity_type,
-            action_type=action_type,
-        )
+    # `register_commission`/`ActionCommission` (مستوى واحد مباشر،
+    # منفصل عن التصعيد متعدد المستويات) حُذفا بالكامل في migration 045
+    # — الـ12 دومين تستخدم الآن نفس خط أنابيب Commission الموحَّد عبر
+    # `distribute_commissions_for_sale_event` (+ `ensure_referral_link`
+    # أولًا لو الرابط غير مؤكَّد بعد)، بنفس منطق تصعيد 10 مستويات
+    # المطبَّق على commerce/academy — قرار معتمد صراحة من المستخدم.
 
     async def get_user_by_code(self, referral_code: str) -> Optional[AffiliateProfile]:
         """جلب ملف الداعي عبر كود الإحالة (wrapper حول repo)."""

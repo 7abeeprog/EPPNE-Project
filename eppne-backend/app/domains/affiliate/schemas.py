@@ -69,10 +69,14 @@ class ReferralTreeResponse(ReferralTreeBase):
 class CommissionBase(BaseModel):
     affiliate_id: int
     user_id: int
-    order_id: int
-    order_item_id: int
-    product_id: int
+    # nullable الآن (migration 045) — تُملأ فقط لو source_type == "COMMERCE_ORDER"
+    order_id: Optional[int] = None
+    order_item_id: Optional[int] = None
+    product_id: Optional[int] = None
     tenant_id: int
+    source_type: str
+    source_id: Optional[int] = None
+    scope_id: int
     item_amount: Decimal
     order_amount: Decimal
     commission_rate: Decimal
@@ -107,7 +111,7 @@ class CommissionResponse(CommissionBase):
 class CommissionTierBase(BaseModel):
     tenant_id: int
     entity_type: str = "GLOBAL"
-    target_product_id: Optional[int] = None
+    target_scope_id: Optional[int] = None
     level_1_pct: Decimal = Decimal('10.0')
     level_2_pct: Decimal = Decimal('5.0')
     level_3_pct: Decimal = Decimal('3.0')
@@ -126,7 +130,7 @@ class CommissionTierCreate(CommissionTierBase):
 
 class CommissionTierUpdate(BaseModel):
     entity_type: Optional[str] = None
-    target_product_id: Optional[int] = None
+    target_scope_id: Optional[int] = None
     level_1_pct: Optional[Decimal] = None
     level_2_pct: Optional[Decimal] = None
     level_3_pct: Optional[Decimal] = None
@@ -238,5 +242,38 @@ class CommissionBulkReleaseResponse(BaseModel):
     total_amount: float
     currency: str
     tx_hash: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ==========================================
+# 9. نطاقات العمولة (Affiliate Scopes)
+# ==========================================
+
+class AffiliateScopeCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
+    scope_type: str = Field(description="SINGLE_PRODUCT, PRODUCT_GROUP, ENTITY_WIDE")
+
+class AffiliateScopeResponse(BaseModel):
+    id: int
+    tenant_id: int
+    name: str
+    scope_type: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class AffiliateScopeMemberCreate(BaseModel):
+    member_type: str = Field(description="PRODUCT, COURSE, ZAMAKANA, TRANSPORT, ...")
+    member_id: Optional[int] = Field(None, description="معرّف فردي، أو NULL لعضوية دومين كامل")
+
+class AffiliateScopeMemberResponse(BaseModel):
+    id: int
+    scope_id: int
+    member_type: str
+    member_id: Optional[int] = None
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

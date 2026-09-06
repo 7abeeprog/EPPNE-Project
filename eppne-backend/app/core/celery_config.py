@@ -68,4 +68,13 @@ beat_schedule = {
         "schedule": crontab(hour=1, minute=0),  # 1:00 AM يومياً
         "options": {"queue": "agritech.low"},
     },
+    # ========== مهام Affiliate المتكررة ==========
+    # كانت مُعرَّفة في tasks/affiliate.py منذ البداية بلا أي جدولة —
+    # لا Celery Beat كان بينادي عليها إطلاقًا (اكتشاف من جلسة
+    # referral-affiliate-unified-implementation، 2026-09-06).
+    "clean-expired-affiliate-links": {
+        "task": "affiliate.clean_expired_links",
+        "schedule": crontab(hour=5, minute=0),  # 5:00 AM يومياً
+        "options": {"queue": "affiliate"},
+    },
 }

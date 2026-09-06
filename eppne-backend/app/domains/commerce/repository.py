@@ -7,10 +7,9 @@ from datetime import datetime
 import json
 
 from app.domains.commerce.schemas import (
-    ProductResponse, 
-    AddressResponse, 
-    OrderResponse, 
-    CommissionResponse
+    ProductResponse,
+    AddressResponse,
+    OrderResponse
 )
 from app.domains.commerce.models import *
 from app.domains.identity.models import User  # ✅ إضافة الاستيراد المفقود
@@ -205,91 +204,10 @@ class CommerceRepository:
         schema_items = [OrderResponse.model_validate(item) for item in items]
         return PaginatedResponse(data=schema_items, total=total, skip=skip, limit=limit)
 
-    # ========== Affiliate ==========
-    async def get_affiliate_tree(self, user_id: int, tenant_id: int) -> AffiliateTree | None:
-        result = await self.db.execute(
-            select(AffiliateTree)
-            .join(User, User.id == AffiliateTree.user_id)
-            .where(
-                and_(AffiliateTree.user_id == user_id, User.tenant_id == tenant_id)
-            )
-        )
-        return result.scalar_one_or_none()
-
-    async def create_affiliate_tree(self, **kwargs) -> AffiliateTree:
-        tree = AffiliateTree(**kwargs)
-        self.db.add(tree)
-        await self.db.commit()
-        await self.db.refresh(tree)
-        return tree
-
-    async def get_sponsor_chain(self, user_id: int, tenant_id: int, max_depth: int = 10):
-        chain = []
-        current = await self.get_affiliate_tree(user_id, tenant_id)
-        while current and len(chain) < max_depth:
-            sponsor_id = cast(int, current.sponsor_id)
-            chain.append(sponsor_id)
-            current = await self.get_affiliate_tree(sponsor_id, tenant_id)
-        return chain
-
-    # ========== Commissions ==========
-    async def create_commission(self, **kwargs) -> CommissionRecord:
-        comm = CommissionRecord(**kwargs)
-        self.db.add(comm)
-        await self.db.commit()
-        await self.db.refresh(comm)
-        return comm
-
-    async def get_pending_commissions(self, beneficiary_id: int, tenant_id: int, skip: int = 0, limit: int = 20) -> PaginatedResponse[CommissionResponse]:
-        query = select(CommissionRecord).where(
-            CommissionRecord.beneficiary_id == beneficiary_id,
-            CommissionRecord.status == "PENDING"
-        )
-        query = query.join(User, User.id == CommissionRecord.beneficiary_id).where(User.tenant_id == tenant_id)
-        
-        count_query = select(func.count()).select_from(query.subquery())
-        total_result = await self.db.execute(count_query)
-        total = total_result.scalar() or 0
-        
-        paginated_query = query.offset(skip).limit(limit)
-        result = await self.db.execute(paginated_query)
-        items = result.scalars().all()
-        
-        schema_items = [CommissionResponse.model_validate(item) for item in items]
-        return PaginatedResponse(data=schema_items, total=total, skip=skip, limit=limit)
-
-    async def release_commission(self, commission_id: int, tx_hash: str) -> CommissionRecord:
-        # WARNING: هذا الـcommit() بيغطي كمان كتابة finance.transfer() جوه
-        # service.release_commissions (اللي فيها flush() بس، بلا commit مستقل خاص بيها) —
-        # لا تحوّل الـcommit() ده لـflush() بدون إضافة commit() صريح لـrelease_commissions أولًا.
-        await self.db.execute(
-            update(CommissionRecord).where(CommissionRecord.id == commission_id).values(
-                status="RELEASED", release_date=func.now(), release_tx_hash=tx_hash
-            )
-        )
-        await self.db.commit()
-        return await self.get_commission(commission_id)
-
-    async def get_commission(self, commission_id: int) -> CommissionRecord | None:
-        result = await self.db.execute(select(CommissionRecord).where(CommissionRecord.id == commission_id))
-        return result.scalar_one_or_none()
-
-    # ========== Affiliate Config ==========
-    async def get_affiliate_config(self, tenant_id: int) -> AffiliateConfig | None:
-        result = await self.db.execute(select(AffiliateConfig).where(AffiliateConfig.tenant_id == tenant_id))
-        return result.scalar_one_or_none()
-
-    async def create_or_update_config(self, tenant_id: int, **kwargs) -> AffiliateConfig:
-        config = await self.get_affiliate_config(tenant_id)
-        if config:
-            for key, value in kwargs.items():
-                setattr(config, key, value)
-        else:
-            config = AffiliateConfig(tenant_id=tenant_id, **kwargs)
-            self.db.add(config)
-        await self.db.commit()
-        await self.db.refresh(config)
-        return config
+    # نظام الإحالة/العمولة القديم لـcommerce (AffiliateTree/CommissionRecord/
+    # AffiliateConfig) حُذف بالكامل في migration 045 — استبدله
+    # app.domains.affiliate (ReferralTree/Commission/CommissionTier)،
+    # موصول الآن عبر AffiliateService.distribute_commissions_for_order.
 
     # ========== Payment Requests ==========
     async def get_payment_request_by_idempotency_key(self, idempotency_key: str, tenant_id: int) -> PaymentRequest | None:

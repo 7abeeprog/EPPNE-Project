@@ -216,7 +216,35 @@ class SaaSControlService:
         await self.db.commit()
 
         logger.info(f"Subscription created: tenant {self.tenant_id}, plan {plan_id}, trial until {trial_end}")
+
+        await self._activate_affiliate_default_scope_if_needed(service_id)
+
         return subscription
+
+    async def _activate_affiliate_default_scope_if_needed(self, service_id: int) -> None:
+        """Hook تفعيل affiliate كخدمة SaaS (migration 045 / Phase 7، راجع
+        .claude/reports/referral-affiliate-unified-implementation-session-log.md
+        §4): أول اشتراك على service_code="affiliate" لهذا الـtenant ينشئ
+        تلقائيًا نطاق ENTITY_WIDE افتراضي — بدونه أي محاولة توزيع عمولة
+        تفشل بصمت (لا نطاق = لا referral link ممكن). idempotent
+        (get_default_scope_id أولًا) لأن هذا المسار قد يُستدعى أكتر من
+        مرة (تجديد/تغيير خطة) بعد إلغاء اشتراك سابق.
+
+        مُستخرَجة كدالة مستقلة (بدل كتلة inline داخل create_subscription)
+        عمدًا لتكون قابلة للاختبار مباشرة — `create_subscription` نفسها
+        محجوبة حاليًا عبر الـAPI الحي ببَج منفصل تمامًا (`get_plan_by_id`
+        chicken-and-egg، راجع
+        .claude/reports/saas-get-plan-by-id-security-tradeoff-note.md)،
+        فاختبارات Phase 9 بتنادي هذه الدالة مباشرة بعد seed اشتراك عبر
+        الـrepo، بدل المرور بـ`create_subscription` كاملة."""
+        service = await self.repo.get_service_by_id(service_id)
+        if service and cast(str, service.code) == "affiliate":
+            from app.domains.affiliate.service import AffiliateService
+            affiliate_service = AffiliateService(self.db, self.tenant_id)
+            if not await affiliate_service.get_default_scope_id():
+                await affiliate_service.create_scope(
+                    name="كل مبيعات المستأجر", scope_type="ENTITY_WIDE",
+                )
 
     async def cancel_subscription(self, subscription_id: int) -> TenantSubscription:
         subscription = await self.repo.get_subscription(subscription_id, self.tenant_id)

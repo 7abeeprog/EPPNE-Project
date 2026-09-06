@@ -491,15 +491,17 @@ class ServiceMarketplaceService:
         try:
             affiliate_service = AffiliateService(self.db, tenant_id)
             user = await self._get_user(user_id, tenant_id)
-            if user and user.referred_by:
+            if user and user.referred_by_user_id:
                 commission_amount = amount * Decimal("0.10")
                 if commission_amount > 0:
-                    await affiliate_service.register_commission(
-                        affiliate_id=user.referred_by,
-                        user_id=user_id,
-                        amount=commission_amount,
-                        description=description,
-                        status="PENDING"
-                    )
+                    scope_id = await affiliate_service.resolve_scope_id_for_member("SERVICE_MARKETPLACE")
+                    if scope_id:
+                        await affiliate_service.ensure_referral_link(user.referred_by_user_id, user_id, scope_id)
+                        await affiliate_service.distribute_commissions_for_sale_event(
+                            referred_user_id=user_id,
+                            scope_id=scope_id,
+                            sale_amount=commission_amount,
+                            source_type="SERVICE_MARKETPLACE",
+                        )
         except Exception as e:
             logger.error(f"Affiliate registration failed: {e}")

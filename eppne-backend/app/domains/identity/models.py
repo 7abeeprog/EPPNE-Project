@@ -62,6 +62,11 @@ class User(Base):
     is_system_account = Column(Boolean, default=False, nullable=False, server_default="false")
     session_version = Column(Integer, default=1)
 
+    # مصدر "من أحال من" الموحَّد (migration 045) — يُملأ فقط وقت
+    # POST /identity/register، immutable بعد ذلك على مستوى التطبيق
+    # (لا قيد DB يمنع UPDATE — نفس نمط created_at في هذا المشروع).
+    referred_by_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
     last_login_at = Column(DateTime(timezone=True), nullable=True)
     last_login_ip = Column(String(45), nullable=True)
     last_login_user_agent = Column(String(255), nullable=True)

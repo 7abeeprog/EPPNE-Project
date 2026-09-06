@@ -187,70 +187,11 @@ class OrderItem(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
-# ========== نظام الإحالة (Affiliate 10x) ==========
-class AffiliateTree(Base):
-    __tablename__ = "affiliate_trees"
-    __table_args__ = (
-        Index("ix_affiliate_trees_user_id", "user_id", unique=True),
-        Index("ix_affiliate_trees_sponsor_id", "sponsor_id"),
-        Index("ix_affiliate_trees_network_depth", "network_depth"),
-    )
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
-    sponsor_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    network_depth = Column(Integer, default=1)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
-
-class CommissionRecord(Base):
-    __tablename__ = "commission_records"
-    __table_args__ = (
-        Index("ix_commission_records_beneficiary_id", "beneficiary_id"),
-        Index("ix_commission_records_order_id", "order_id"),
-        Index("ix_commission_records_status", "status"),
-        Index("ix_commission_records_level_earned", "level_earned"),
-    )
-
-    id = Column(Integer, primary_key=True, index=True)
-    beneficiary_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
-    level_earned = Column(Integer, nullable=False)
-    amount = Column(Numeric(30, 8), nullable=False)
-    currency = Column(String(20), default="MR_USDT")
-    status = Column(String(50), default="PENDING")
-    release_date = Column(DateTime(timezone=True), nullable=True)
-    release_tx_hash = Column(String(100), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
-
-class AffiliateConfig(Base):
-    __tablename__ = "affiliate_configs"
-    __table_args__ = (
-        Index("ix_affiliate_configs_tenant_id", "tenant_id", unique=True),
-    )
-
-    id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
-    is_active = Column(Boolean, default=True)
-
-    level_1_pct = Column(Numeric(5, 2), default=10.0)
-    level_2_pct = Column(Numeric(5, 2), default=5.0)
-    level_3_pct = Column(Numeric(5, 2), default=1.0)
-    level_4_pct = Column(Numeric(5, 2), default=1.0)
-    level_5_pct = Column(Numeric(5, 2), default=1.0)
-    level_6_pct = Column(Numeric(5, 2), default=1.0)
-    level_7_pct = Column(Numeric(5, 2), default=1.0)
-    level_8_pct = Column(Numeric(5, 2), default=0.0)
-    level_9_pct = Column(Numeric(5, 2), default=0.0)
-    level_10_pct = Column(Numeric(5, 2), default=0.0)
-
-    system_fee_pct = Column(Numeric(5, 2), default=5.0)
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+# نظام الإحالة القديم (Affiliate 10x — Sponsor Chain، النظام B) حُذف
+# بالكامل في migration 045 (توحيد على affiliate domain — راجع
+# .claude/reports/referral-affiliate-unified-implementation-session-log.md).
+# AffiliateTree/CommissionRecord/AffiliateConfig لم تعد موجودة —
+# استبدلها ReferralTree/Commission/CommissionTier في app.domains.affiliate.
 
 
 # ========== طرق الدفع الإضافية (مع tenant_id) ==========

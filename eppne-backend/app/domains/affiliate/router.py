@@ -186,6 +186,7 @@ async def get_affiliate_stats(
 @router.get("/tree", response_model=List[dict])
 @rate_limit(max_requests=10, window_seconds=60)
 async def get_referral_tree(
+    scope_id: int = Query(..., description="معرّف النطاق (AffiliateScope) — راجع GET /affiliate/admin/scopes"),
     max_depth: int = Query(5, ge=1, le=10),
     current_user: User = Depends(get_current_active_user),
     tenant: SimpleTenant = Depends(get_current_tenant),
@@ -194,6 +195,7 @@ async def get_referral_tree(
     service = AffiliateService(db, tenant.id)
     return await service.get_referral_tree(
         user_id=cast(int, current_user.id),
+        scope_id=scope_id,
         max_depth=max_depth
     )
 
@@ -263,13 +265,52 @@ async def update_commission_tiers(
 
 @router.post("/admin/tiers/product", response_model=CommissionTierResponse)
 @rate_limit(max_requests=10, window_seconds=60)
-async def create_product_commission_tier(
+async def create_scope_commission_tier(
     data: CommissionTierCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_superuser),
 ):
     service = AffiliateService(db, current_user.tenant_id)
-    return await service.create_product_tier(data)
+    return await service.create_scope_tier(data)
+
+
+# ==========================================
+# 9. نطاقات العمولة (Affiliate Scopes، Admin Only)
+# ==========================================
+
+@router.get("/admin/scopes", response_model=List[AffiliateScopeResponse])
+@rate_limit(max_requests=20, window_seconds=60)
+async def list_affiliate_scopes(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_superuser),
+):
+    service = AffiliateService(db, current_user.tenant_id)
+    return await service.list_scopes()
+
+
+@router.post("/admin/scopes", response_model=AffiliateScopeResponse, status_code=status.HTTP_201_CREATED)
+@rate_limit(max_requests=10, window_seconds=60)
+async def create_affiliate_scope(
+    data: AffiliateScopeCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_superuser),
+):
+    service = AffiliateService(db, current_user.tenant_id)
+    return await service.create_scope(name=data.name, scope_type=data.scope_type)
+
+
+@router.post("/admin/scopes/{scope_id}/members", response_model=AffiliateScopeMemberResponse, status_code=status.HTTP_201_CREATED)
+@rate_limit(max_requests=20, window_seconds=60)
+async def add_affiliate_scope_member(
+    scope_id: int,
+    data: AffiliateScopeMemberCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_superuser),
+):
+    service = AffiliateService(db, current_user.tenant_id)
+    return await service.add_scope_member(
+        scope_id=scope_id, member_type=data.member_type, member_id=data.member_id,
+    )
 
 
 @router.post("/admin/commissions/bulk-release", status_code=status.HTTP_202_ACCEPTED)

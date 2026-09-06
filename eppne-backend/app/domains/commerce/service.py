@@ -12,7 +12,6 @@ from app.domains.commerce.repository import CommerceRepository
 from app.domains.commerce.models import StoreProfile, Product, Order, PaymentRequest, CommerceAuditLog
 from app.domains.commerce.schemas import ProductCreate, CheckoutRequest, VisaWebhookPayload
 from app.domains.finance.service import FinanceService
-from app.core.system_account_service import get_or_create_system_account
 from app.core.errors import InsufficientBalanceError, NotFoundError, PermissionDeniedError, ValidationError
 from app.core.logging_conf import logger
 from app.core.idempotency import get_idempotency_result, store_idempotency_result
@@ -217,10 +216,11 @@ class CommerceService:
         await self.db.commit()
 
         if checkout_data.affiliate_code and cast(bool, store.is_affiliate_enabled):  # type: ignore
-            await self.distribute_commissions(
+            from app.domains.affiliate.service import AffiliateService
+            affiliate_service = AffiliateService(self.db, self.tenant_id)
+            await affiliate_service.distribute_commissions_for_order(
                 cast(int, order.id),
-                checkout_data.affiliate_code,
-                cast(Decimal, total)
+                affiliate_code=checkout_data.affiliate_code,
             )
 
         return order
@@ -228,95 +228,15 @@ class CommerceService:
     async def get_user_orders(self, user_id: int, skip: int = 0, limit: int = 20):
         return await self.repo.get_user_orders(user_id, self.tenant_id, skip, limit)
 
-    # ============================================================
-    # 3. نظام الإحالة (Affiliate)
-    # ============================================================
-
-    async def register_affiliate(self, user_id: int, sponsor_code: str):
-        sponsor_id = int(sponsor_code) if sponsor_code.isdigit() else None
-        if not sponsor_id or sponsor_id == user_id:
-            raise PermissionDeniedError("كود الداعي غير صالح")
-
-        from app.domains.identity.repository import UserRepository
-        user_repo = UserRepository(self.db)
-        user = await user_repo.get_by_id(user_id, self.tenant_id)
-        if not user:
-            raise NotFoundError("المستخدم غير موجود")
-
-        sponsor = await user_repo.get_by_id(sponsor_id, self.tenant_id)
-        if not sponsor:
-            raise PermissionDeniedError("كود الداعي غير صالح")
-
-        sponsor_tree = await self.repo.get_affiliate_tree(sponsor_id, self.tenant_id)
-        depth = sponsor_tree.network_depth + 1 if sponsor_tree else 1
-
-        return await self.repo.create_affiliate_tree(
-            user_id=user_id,
-            sponsor_id=sponsor_id,
-            network_depth=depth
-        )
-
-    async def distribute_commissions(self, order_id: int, affiliate_code: str, order_total: Decimal):
-        sponsor_id = int(affiliate_code) if affiliate_code.isdigit() else None
-        if not sponsor_id:
-            return
-
-        chain = await self.repo.get_sponsor_chain(sponsor_id, self.tenant_id, max_depth=10)
-        if not chain:
-            return
-
-        config = await self.repo.get_affiliate_config(self.tenant_id)
-        if not config or not config.is_active:  # type: ignore
-            return
-
-        order_total_decimal = Decimal(str(order_total))
-
-        for level, beneficiary_id in enumerate(chain, start=1):
-            if level > 10:
-                break
-
-            pct = getattr(config, f"level_{level}_pct", Decimal(0))
-            if pct <= 0:
-                continue
-
-            amount = order_total_decimal * Decimal(str(pct)) / Decimal(100)
-            if amount <= 0:
-                continue
-
-            await self.repo.create_commission(
-                beneficiary_id=beneficiary_id,
-                order_id=order_id,
-                level_earned=level,
-                amount=amount,
-                currency="MR_USDT",
-                status="PENDING"
-            )
-
-        await self._create_audit_log(
-            user_id=sponsor_id,
-            order_id=order_id,
-            action="COMMISSION_DISTRIBUTED",
-            details={"levels": len(chain), "tenant_id": self.tenant_id}
-        )
-
-    async def get_user_commissions(self, user_id: int, skip: int = 0, limit: int = 20):
-        return await self.repo.get_pending_commissions(user_id, self.tenant_id, skip, limit)
-
-    async def release_commissions(self, beneficiary_id: int):
-        commissions = await self.repo.get_pending_commissions(beneficiary_id, self.tenant_id)
-        system_account = await get_or_create_system_account(self.db, self.tenant_id)
-        for item in commissions.data:
-            comm = cast(Any, item)
-            idempotency_key = f"release-{comm.id}-{uuid.uuid4().hex[:12]}"
-            await self.finance.transfer(
-                sender_id=cast(int, system_account.id),
-                receiver_email=await self._get_user_email(beneficiary_id),
-                currency=comm.currency,
-                amount=Decimal(str(comm.amount)),
-                idempotency_key=idempotency_key,
-                notes=f"Commission release for order {comm.order_id}"
-            )
-            await self.repo.release_commission(cast(int, comm.id), f"REL-{uuid.uuid4().hex[:12].upper()}")
+    # نظام الإحالة/العمولة القديم لـcommerce (register_affiliate/
+    # distribute_commissions/get_user_commissions/release_commissions —
+    # Sponsor Chain، النظام B) حُذف بالكامل في migration 045. الطلبات
+    # التجارية توزَّع الآن عبر app.domains.affiliate.AffiliateService
+    # .distribute_commissions_for_order (مستدعاة مباشرة من checkout()
+    # أعلاه) — نفس منطق تصعيد 10 مستويات، لكن مربوط بنطاقات (scopes)
+    # بدل سلسلة رعاة عامة بلا تمايز منتج. عرض/سحب العمولات صار عبر
+    # endpoints دومين affiliate الموحَّد (`GET/POST /affiliate/commissions*`)
+    # بدل `/commerce/affiliate/*` المحذوفة.
 
     # ============================================================
     # 4. طرق الدفع

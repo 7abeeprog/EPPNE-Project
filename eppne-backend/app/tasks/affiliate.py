@@ -63,8 +63,8 @@ def distribute_commissions_task(self, order_id: int, tenant_id: int):
     try:
         async def _run():
             async with SessionLocal() as db:
-                service = AffiliateService(db)
-                commissions = await service.distribute_commissions(order_id, tenant_id)
+                service = AffiliateService(db, tenant_id)
+                commissions = await service.distribute_commissions_for_order(order_id)
                 await db.commit()
                 logger.info(f"✅ Distributed {len(commissions)} commissions for order {order_id}")
                 return {"status": "success", "count": len(commissions)}
@@ -90,7 +90,7 @@ def distribute_commissions_task(self, order_id: int, tenant_id: int):
     time_limit=600,          # 10 دقائق (لأنها تشمل تحويلات مالية)
     soft_time_limit=480,     # 8 دقائق إنذار
 )
-def release_commissions_task(self, user_id: int, idempotency_key: str):
+def release_commissions_task(self, user_id: int, tenant_id: int, idempotency_key: str):
     """
     تحرير العمولات المعلقة للمستخدم.
     - تتحقق من Idempotency لمنع الدفع المزدوج.
@@ -99,8 +99,8 @@ def release_commissions_task(self, user_id: int, idempotency_key: str):
     try:
         async def _run():
             async with SessionLocal() as db:
-                service = AffiliateService(db)
-                result = await service.release_commissions(user_id)
+                service = AffiliateService(db, tenant_id)
+                result = await service.release_commissions(user_id, idempotency_key=idempotency_key)
                 await db.commit()
                 logger.info(f"✅ Released commissions for user {user_id}: {result.get('count', 0)} commissions")
                 return result
@@ -128,20 +128,43 @@ def release_commissions_task(self, user_id: int, idempotency_key: str):
 )
 def clean_expired_links_task(self):
     """
-    تنظيف روابط الدعوة المنتهية الصلاحية.
+    تنظيف روابط الدعوة المنتهية الصلاحية — لكل الـtenants النشطين.
     تُستدعى بشكل دوري (مثلاً يومياً) عبر جدولة Celery Beat.
+
+    ملاحظة (migration 045 / Phase 8): `delete_expired_invitations`
+    تتطلب `tenant_id` إجباريًا (لا يوجد "كل الـtenants" على مستوى
+    الـrepository) — هذا أول نمط "loop عبر كل الـtenants" بالمشروع
+    لمهمة Celery دورية (لا سابقة مماثلة في saas_tasks.py/agritech.py
+    وقت كتابة هذا الكود، راجع تقرير الجلسة §3).
     """
     try:
         async def _run():
             async with SessionLocal() as db:
-                # 🔥 استخدام Repository مباشرة
+                from sqlalchemy import select
+                from app.domains.academy.models import AcademyTenant
+
                 repo = AffiliateRepository(db)
-                # تنفيذ منطق التنظيف: حذف الروابط المنتهية منذ أكثر من 30 يوماً
-                cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)  # 🔥 استخدام timezone.utc بدلاً من utcnow()
-                deleted_count = await repo.delete_expired_invitations(cutoff_date)
+                cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)
+
+                tenant_ids_result = await db.execute(
+                    select(AcademyTenant.id).where(AcademyTenant.is_active.is_(True))
+                )
+                tenant_ids = [row[0] for row in tenant_ids_result.all()]
+
+                total_deleted = 0
+                for tid in tenant_ids:
+                    total_deleted += await repo.delete_expired_invitations(cutoff_date, tid)
+
                 await db.commit()
-                logger.info(f"🧹 Cleaned {deleted_count} expired affiliate links")
-                return {"status": "success", "deleted_count": deleted_count}
+                logger.info(
+                    f"🧹 Cleaned {total_deleted} expired affiliate links "
+                    f"across {len(tenant_ids)} active tenants"
+                )
+                return {
+                    "status": "success",
+                    "deleted_count": total_deleted,
+                    "tenants_processed": len(tenant_ids),
+                }
 
         result = _run_async(_run())
         logger.info("✅ Expired affiliate links cleaned successfully.")
