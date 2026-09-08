@@ -9,7 +9,7 @@ import json
 
 from app.domains.invitations.repository import InvitationsRepository
 from app.domains.ai_agents.service import AIAgentsService
-from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService, FeatureAccessStatus
+from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
 from app.domains.finance.service import FinanceService
@@ -39,11 +39,15 @@ class InvitationsService:
     # ============================================================
 
     async def _check_saas_limits(self, tenant_id: int, feature: str = "crm"):
+        # [2026-09-07] موحَّد على can_access_service (زي insurance/employment/
+        # digital_twin/arbitration_syndicates/realestate/manufacturing/
+        # logistics/zamakana/transport/tourism_sports/tenders_auctions/
+        # social/service_marketplace بالظبط) — بعد ما can_access_service
+        # نفسها بقت بتفحص saas_plan_service_access (many-to-many) بدل
+        # ServicePlan.service_id القديم. راجع PROGRESS_LOG.md.
         saas_service = SaaSSubscriptionService(self.db, tenant_id)
-        check = await saas_service.check_feature_access(tenant_id, feature)
-        if check.status == FeatureAccessStatus.NO_ACTIVE_SUBSCRIPTION:
-            raise PermissionDeniedError("No active subscription found.")
-        if check.status == FeatureAccessStatus.FEATURE_NOT_INCLUDED:
+        has_access = await saas_service.can_access_service(feature)
+        if not has_access:
             raise PermissionDeniedError("CRM feature is not included in your current plan.")
 
     async def _get_user(self, user_id: int, tenant_id: int) -> Optional[User]:
@@ -108,7 +112,7 @@ class InvitationsService:
             tenant_id=invitation.tenant_id,  # type: ignore
             role="SUPPORT"
         )
-        return agents[0] if agents else None
+        return agents.data[0] if agents.data else None
 
     async def _create_user_from_invitation(self, data: dict, tenant_id: int, invitation_id: int):
         from app.domains.identity.service import UserService
@@ -165,9 +169,9 @@ class InvitationsService:
                         return invitation
                 raise ValidationError("Idempotency record exists but invitation not found.")
 
-        sanitized_title = bleach.clean(data.get("title", ""), tags=[], strip=True)
-        sanitized_message = bleach.clean(data.get("custom_message", ""), tags=[], strip=True)
-        sanitized_identifier = bleach.clean(data.get("target_entity_identifier", ""), tags=[], strip=True)
+        sanitized_title = bleach.clean(data.get("title") or "", tags=[], strip=True)
+        sanitized_message = bleach.clean(data.get("custom_message") or "", tags=[], strip=True)
+        sanitized_identifier = bleach.clean(data.get("target_entity_identifier") or "", tags=[], strip=True)
 
         client_insight = None
         if analyze_target and data.get("target_user_id"):

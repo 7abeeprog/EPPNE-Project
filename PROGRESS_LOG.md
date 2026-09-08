@@ -6,131 +6,58 @@
 
 ---
 
-## 📌 بانر الحالة [آخر تحديث: 2026-08-20]
+## 📌 بانر الحالة [آخر تحديث: 2026-09-07]
 
-آخر إغلاق رسمي: **`entity-membership-foundation` — بناء الأساس العام لنظام
-`EntityMembership` (الجلسة 1 من 2، مسار الصلاحيات الجديد) [2026-08-20]**
-— ✅ **مُغلَق رسميًا، مُتحقَّق منه حيًا بالكامل.**
+آخر إغلاق رسمي: **إغلاق كامل لمسار `check_feature_access`→`can_access_service`
+عبر 8 دومينات [2026-09-07]** — ✅ **مُغلَق رسميًا، مُتحقَّق منه حيًا بالكامل.**
 
-خلفية الجلسة: امتداد تنفيذي مباشر لأربعة مستندات رؤية/تصميم متتالية بلا
-كود (`multilevel-referral-system-design-vision.md` ←
-`entity-permissions-and-lifecycle-vision.md` ←
-`entity-membership-system-vision.md` ←
-`entity-membership-technical-design.md`، كلها [2026-08-19]) — أول جلسة
-تنفيذية فعلية (كود + migration) في مسار توحيد صلاحيات/عضوية الكيانات،
-بعد أن عُلِّق هذا المسار مؤقتًا لصالح جلسة `security-deps-unification`
-الأمنية العاجلة.
+خلفية المسار: قرار تصميم بداية اليوم — استبدال الاعتماد على
+`plan.features` (JSONB نص حر بلا schema enforcement) بجدول ربط
+many-to-many جديد (`saas_plan_service_access`، migrations 046/047).
+Pilot أول على `insurance` وحده (اختبار حي أثبت إصلاح فعلي لعيب تطابق
+نصي وهمي في `plan.features`)، ثم توحيد `can_access_service` نفسها على
+الجدول الجديد، ثم تحويل الـ7 دومينات الباقيين (`employment`,
+`digital_twin`, `arbitration_syndicates`, `realestate`, `manufacturing`,
+`logistics`, `invitations`) — كل واحد بجلسة منفصلة وموافقة صريحة، ديف
+محصور في سطر واحد استدعاء داخل `_check_saas_limits()` بكل دومين + استيراد،
+seed حقيقي (5 صفوف/دومين عبر `docker exec psql` مباشر) + اختبار E2E حي
+فعلي (نجاح 200/201 لتينانت معه صلاحية + رفض 403 لتينانت من غيرها) لكل
+دومين، موثَّق بالكامل بالـtraceback والـstatus codes الفعلية.
 
-**النطاق (Foundation فقط، Strangler Fig — الجلسة 1 من 2):** ثلاثة جداول
-جديدة كليًا في `app/core/`، تعميمًا لنظام `EntityRole`/`EntityRepresentative`/
-`can_sign_contracts` الحالي في `sovereign_entities`، **بمعزل تام عنه**.
+**قاعدة إلزامية اتفعّلت أثناء المسار:** أي `INSERT` مباشر بـ`id=` صريح
+على جدول `SERIAL` لازم يتبعه `setval()` فوري على نفس الجدول — بعد حادثة
+تصادم `UniqueViolationError` فعلية سببها seed بدون `setval` (تفصيل في
+تقرير الجلسة).
 
-**الموديلات الثلاثة (`app/core/models.py`، ملف جديد):**
-- `EntityMembership` — `id`, `tenant_id` (FK `academy_tenants.id`)،
-  `entity_type` (`VARCHAR(50)`)، `entity_id` (بلا FK — Polymorphic)،
-  `user_id` (FK `users.id`)، `role` (Enum `EntityMembershipRole`:
-  `OWNER`/`EXECUTIVE_DIRECTOR`/`SIGNATORY`/`REPRESENTATIVE`)،
-  `created_at`/`updated_at`. `UNIQUE(entity_type, entity_id, user_id)` +
-  فهرسا `(entity_type, entity_id)` و`(user_id, tenant_id)`.
-- `EntityPermissionOverride` — نفس أعمدة الـPolymorphic + `permission`
-  (`VARCHAR(100)`)، `granted` (`BOOLEAN NOT NULL`)، `granted_by` (FK
-  `users.id`، `ondelete=RESTRICT`)، `granted_at`, `reason`.
-  `UNIQUE(entity_type, entity_id, user_id, permission)` — **صف واحد
-  يُحدَّث في مكانه دائمًا (state لا سجل تاريخي)**.
-- `PermissionAuditLog` — `scope` (Enum `PLATFORM`/`ENTITY`)، `tenant_id`،
-  `entity_type`/`entity_id` (`NULLABLE`)، `target_user_id`, `permission`,
-  `action` (Enum `GRANT`/`REVOKE`), `performed_by` (FK `users.id`،
-  `ondelete=RESTRICT`), `performed_at`, `reason`. فهارس منفصلة على
-  `performed_by`/`target_user_id`/`performed_at`. **جدول موحَّد واحد
-  لكل تغييرات الصلاحيات (منصة + كياني معًا)** — بعكس فصل جداول
-  الـoverrides نفسها (قرار متعمَّد، موثَّق في `entity-membership-technical-design.md` §5).
+**تحقُّق نهائي (`grep` مباشر):** `check_feature_access` بقت **dead code
+فعليًا** — صفر مُستدعٍ لها في كل `app/` (لسه موجودة في تعريفها كما طُلب،
+لم تُلمَس). **14 دومين** دلوقتي على `can_access_service`
+(الـ8 المذكورين + `zamakana`/`transport`/`tourism_sports`/
+`tenders_auctions`/`social`/`service_marketplace` اللي كانوا عليها
+أصلًا).
 
-**قرار تسمية متعمَّد:** `EntityMembershipRole` Enum **منفصل تمامًا** عن
-`sovereign_entities.EntityRole` رغم تطابق القيم الأربعة حرفيًا — لتفادي
-أي استيراد من `sovereign_entities` داخل `app/core/` (عكس اتجاه الاعتمادية
-الذي يحذّر منه المستند التقني، ويكسر "صفر لمس" حرفيًا).
+**5 بنود backlog مفتوحة نتيجة هذا المسار (تفاصيل كاملة في §8.5 من
+`.claude/reports/remaining-7-domains-can-access-service-migration-session-log.md`):**
+1. فرع `PAST_DUE` في `can_access_service` غير قابل للوصول فعليًا (dead code) — يحتاج قرار تصميمي.
+2. ✅ **اتحل جزئيًا [تحديث 2026-09-08]** — `tests/test_saas_active_subscription.py` بيفترض سلوك `plan.features` النصي القديم — ضرب `insurance` ثم `realestate`/`invitations`. Seed تينانت 1 لخدمتي `insurance`(101)/`real_estate`(107) اكتمل (نفس نمط تينانت 16) — بوابة `can_access_service` بقت بتعدي للأربعة اختبارات. اختباري `insurance` نجحا بالكامل (`2 passed`). اختباري `realestate` لسه فاشلين، لكن بمشاكل fixture منفصلة تمامًا عن بوابة الـSaaS — راجع البندين الجديدين `realestate-test-fixture-landlord-not-registered-land-owner`/`realestate-ai-agent-exception-silently-swallowed` تحت في جدول الـBacklog، وتفصيل كامل في §2 من هذا الملف (بند التاريخ [2026-09-07]) و`.claude/reports/plan-features-tests-fix-session-log.md`.
+3. ✅ **اتحل** — تناقض بورت Redis/Celery في `.env`. الفرضية الأصلية (تناقض `CELERY_BROKER_URL`/`CELERY_RESULT_BACKEND` عن `REDIS_URL`) كانت غير دقيقة — تحقيق كامل (`.claude/reports/redis-celery-port-mismatch-investigation-session-log.md`) كشف السبب الجذري الحقيقي: `config.py` كان بيحمّل `.env` بمسار نسبي (يعتمد على `cwd`)، وملف `.env` تاني قديم موجود على جذر الريبو (`E:\cc\.env`، بورت 6379، بلا باسورد) كان بيتقرأ بدل النسخة الصحيحة (`eppne-backend/.env`، بورت 6380) لو أي عملية اتشغّلت من جذر الريبو. اكتشاف جانبي: `CELERY_BROKER_URL`/`CELERY_RESULT_BACKEND` كانوا قيم ميتة بالكامل — صفر سطر كود بيقرأهم (`celery_app.py` بيستخدم `REDIS_URL` حصريًا لكل من الـbroker والـbackend). **الإصلاح المُنفَّذ** (`.claude/reports/redis-celery-env-path-fix-session-log.md`): (1) `config.py` بقى بيحسب مسار `.env` بشكل مطلق (`Path(__file__).resolve()`) بدل الاعتماد على `cwd` — تحقُّق حي أثبت نجاح الاتصال بـRedis من جذر الريبو بعد التعديل. (2) حذف `CELERY_BROKER_URL`/`CELERY_RESULT_BACKEND` من `eppne-backend/.env` (قيم ميتة مؤكَّدة) — تحقُّق على 3 مستويات (`Settings`، اتصال Redis حي، `celery_app.conf` الفعلي) أثبت عدم كسر أي شيء. Regression: 25 فشل، كلهم pre-existing غير متعلقين (WIP في دومينات أخرى + بند backlog #2 المعروف). **بند مفتوح متبقٍّ (منخفض الأولوية، لم يُنفَّذ عمدًا):** قرار بشأن `E:\cc\.env` (الجذر) — لسه موجود بقيمته القديمة (غير ذي صلة الآن بعد الإصلاح، لكن ممكن يلخبط أي حد يفتحه بالغلط)، وقرار بنيوي أوسع بشأن تفعيل `docker-compose.yml` بالكامل مقابل الحاويات اليدوية الحالية — كلاهما مؤجَّل لجلسة منفصلة.
+4. `backlog-affiliate-commission-registration-systemwide-broken` — `_register_affiliate_commission` بتفشل عبر 11 دومين، أولوية عالية.
+5. ✅ **اتحل** — `backlog-invitations-create-invitation-broken` (`create_invitation` كانت بترجع 500 دايمًا بسبب `_assign_ai_agent`/`PaginatedResponse`). تفاصيل الحل الكاملة في القسم المخصص تحت.
 
-**اكتشاف جانبي مُصحَّح بموافقة صريحة أثناء التخطيط:**
-`entity-membership-technical-design.md` §3/§4 يكتب حرفيًا `tenant_id ...
-FK → tenants.id` — **لا يوجد جدول باسم `tenants` في قاعدة الكود فعليًا**
-(تحقق بحث شامل). الجدول الحقيقي `academy_tenants`
-(`app/domains/academy/models.py:13`)، وهو ما يستخدمه بالفعل كل FK مشابه
-قائم اليوم (`sovereign_entities.tenant_id`،
-`affiliate_action_commissions.tenant_id`). استُخدم `academy_tenants.id`
-فعليًا في الجدولين — **تطبيق لنية المستند (denormalized FK لجدول الـtenant
-الحقيقي)، لا انحراف عنه** — موثَّق كملاحظة تكميلية في سجل الجلسة.
+**تقارير الجلسات الكاملة لهذا المسار (بالترتيب الزمني):**
+`.claude/reports/plan-service-mapping-data-audit-session-log.md` →
+`.claude/reports/saas-plan-service-access-migration-session-log.md` →
+`.claude/reports/saas-plan-service-access-restrict-fix-session-log.md` →
+`.claude/reports/insurance-can-access-service-pilot-session-log.md` →
+`.claude/reports/can-access-service-unification-review-session-log.md` →
+`.claude/reports/can-access-service-unification-session-log.md` →
+`.claude/reports/remaining-7-domains-can-access-service-migration-session-log.md`
+(§8 فيه الملخص الختامي الشامل الكامل لكل الـ7 دومينات).
 
-**Migration `029_create_entity_membership_foundation`**
-(`down_revision='028_create_affiliate_action_commissions'`) — إنشاء
-الجداول الثلاثة فقط، **صفر لمس على أي جدول موجود**. طُبِّقت فعليًا على
-القاعدة الحية (`eppne_v2`، حاوية `eppne_db`، منفذ 5435)؛ تحقق `\d` مباشر
-على الجداول الثلاثة طابق الموثَّق بالضبط (كل عمود، `NOT NULL`، القيم
-الافتراضية، القيود الفريدة، الفهارس، كل الـFK بما فيها `ondelete='RESTRICT'`
-على `granted_by`/`performed_by`). تعديل مصاحب وحيد على ملف موجود:
-`migrations/env.py` — إضافة `from app.core.models import *` لتسجيل
-الموديلات في `Base.metadata`.
-
-**منطق CRUD — Repository + Service جديدان في `app/core/`** (نفس نمط
-`sovereign_entities/repository.py`+`service.py` القائم فعليًا):
-
-- **`app/core/entity_membership_repository.py`** — `EntityMembershipRepository(db)`:
-  `add_member(*, entity_type, entity_id, user_id, tenant_id, role) -> EntityMembership`،
-  `update_member_role(*, entity_type, entity_id, user_id, new_role) -> Optional[EntityMembership]`،
-  `remove_member(*, entity_type, entity_id, user_id) -> None`،
-  `get_member(*, entity_type, entity_id, user_id) -> Optional[EntityMembership]`،
-  `list_members(*, entity_type, entity_id) -> List[EntityMembership]`،
-  `list_entities_for_user(*, user_id, tenant_id) -> List[EntityMembership]`،
-  زائد دالتين **داخليتين** (بادئة `_`، لا تُستدعيان إلا من الـService):
-  `_upsert_override(...)` (INSERT ON CONFLICT DO UPDATE على القيد الفريد)
-  و`has_permission_override(*, entity_type, entity_id, user_id, permission) -> Optional[bool]`،
-  و`_insert_audit_row(...)`.
-- **`app/core/entity_membership_service.py`** — `EntityMembershipService(db)`:
-  تمرير مباشر لعمليات العضوية (`add_member`/`change_role`/`remove_member`/
-  `get_members`/`get_user_entities`)، زائد `grant_permission(*, entity_type,
-  entity_id, user_id, tenant_id, permission, granted_by, reason=None) -> EntityPermissionOverride`
-  و`revoke_permission(...)` (نفس التوقيع، `revoked_by`) — **المسار الوحيد
-  المتاح في الكودبيس لتعديل `entity_permission_overrides`**، كل واحدة
-  تستدعي `_upsert_override` و`_insert_audit_row` **في نفس الـtransaction،
-  commit واحد** — يضمن تسجيل `permission_audit_log` تلقائيًا بلا أي مسار
-  استدعاء يسمح بتخطيه. و`check_permission(...) -> Optional[bool]`.
-  **`EntityMembershipService` لا تستورد أي شيء من `sovereign_entities` أو
-  أي دومين وظيفي آخر** (تحقق مباشر)، وdocstring صريح يوضح أن فحص التفويض
-  ("هل current_user مسموح له يستدعي هذه الدوال؟") مسؤولية الدومين
-  المستدعي وقت الدمج في الجلسة 2 — **غير مُطبَّق في هذه الجلسة عمدًا**.
-
-**تحقق حي مزدوج (يدوي ثم Regression دائم):**
-1. سكريبت تحقق يدوي عبر `EntityMembershipService` مباشرة، بيانات throwaway
-   (`entity_type="_TEST_ENTITY"`, `entity_id` وهمي كبير، مستخدمان/tenant
-   حقيقيون كـFK صالح فقط) — كل نتيجة تحقَّق منها بـ`psql` مستقل تمامًا
-   (جلسة منفصلة، لا ثقة بالقيمة المُرجَعة): القيد الفريد فشل كما يجب
-   (`IntegrityError`)، `list_members`/`list_entities_for_user` صحيحان
-   (الفهرسان)، `grant_permission`→`revoke_permission` لنفس التركيبة أنتجا
-   **نفس صف الـoverride دائمًا** (`COUNT`=1، upsert مؤكَّد)، و**صفَّي audit
-   بالضبط** (`GRANT` ثم `REVOKE`) بلا أي استدعاء منفصل لدالة الـaudit من
-   طرف السكريبت — الضمان الأساسي محقَّق فعليًا. تنظيف كامل بعدها، `COUNT`=0
-   نهائي.
-2. **Regression test دائم:** `tests/test_entity_membership_foundation.py`
-   (8 اختبارات) + `tests/test_entity_membership_foundation.md` (README).
-   يغطي نفس السيناريوهات بمنهجية pytest حقيقية (بيانات throwaway جديدة لكل
-   اختبار، تحقق مستقل عبر `AsyncSessionLocal` منفصلة حيث ينطبق، تنظيف كامل
-   في `finally`). **اكتشاف جانبي أثناء الكتابة (مُصحَّح فورًا، لا يمس الكود
-   المُنتَج):** اختبار القيد الفريد أول تشغيلة فشل بـ`sqlalchemy.exc.MissingGreenlet`
-   لأن إعادة استخدام نفس جلسة `db` بعد `IntegrityError` (حتى بعد
-   `rollback()`) تُسمِّم الجلسة — **نمط معروف وموثَّق مسبقًا في المشروع
-   نفسه** (نفس احتياط `test_ai_agents_execute_action.py`/
-   `test_saas_active_subscription.py`)؛ الإصلاح: عزل المحاولة المتوقَّع
-   فشلها في `AsyncSessionLocal` مستقلة تمامًا. نتيجة نهائية: **8 passed
-   ×2 تشغيلتان متتاليتان، صفر تذبذب**، تحقق `psql` مستقل بعد كل تشغيلة
-   أكَّد صفر بيانات throwaway متبقية.
-
-**✅ تأكيد صريح:** صفر لمس على `sovereign_entities` في هذه الجلسة —
-لا الموديلات (`EntityRole`, `EntityRepresentative`, عمود
-`can_sign_contracts`)، لا `service.py`، لا الراوتر (تحقق `git status`
-مباشر: 4 ملفات جديدة + تعديل سطر واحد في `migrations/env.py` فقط).
-**الجلسة 2 (الربط الفعلي بـ`sovereign_entities` + حذف الموديلات القديمة،
-موصوفة في `entity-membership-technical-design.md` §6) لم تبدأ بعد.**
-
-تقرير كامل بكل قرار + التحقق الحي الكامل خطوة بخطوة:
+**ملاحظة (إغلاق رسمي سابق، محفوظ بالكامل في `📋 الجلسات المُقفلة` تحت):**
+`entity-membership-foundation` [2026-08-20] — بناء الأساس العام لنظام
+`EntityMembership` (الجلسة 1 من 2، مسار الصلاحيات الجديد)، ✅ مُغلَق
+رسميًا. راجع السجل الكامل في قائمة الجلسات المُقفلة، أو
 `.claude/reports/entity-membership-foundation-session-log.md`.
 
 ---
@@ -2091,3 +2018,1218 @@ Celery Beat تنادي عليها إطلاقًا** — أُضيف entry جديد
 **تفاصيل كاملة:**
 `.claude/reports/referral-affiliate-unified-implementation-phase0-execution-session-log.md`
 (قسم Phase 8).
+
+---
+
+## [2026-09-07] — قرار تصميم: توحيد check_feature_access/can_access_service عبر جدول many-to-many جديد
+
+**السبب:** `check_feature_access` (8 دومينات: `employment`, `digital_twin`,
+`arbitration_syndicates`, `realestate`, `manufacturing`, `logistics`,
+`insurance`, `invitations`) بتفحص `plan.features` كنص حر بلا schema
+enforcement، بلا ربط فعلي بـ`service_id`. مؤكَّدة كمعرَّضة عبر جلستين
+مستقلتين:
+1. جلسة grep على الكود عبر الـ8 دومينات —
+   `.claude/reports/check-feature-access-vs-can-access-service-audit-session-log.md`.
+2. جلسة تدقيق بيانات (dev DB) —
+   `.claude/reports/plan-service-mapping-data-audit-session-log.md`.
+
+**اكتشاف داعم:** `ServicePlan.service_id` (FK) حاليًا single-service بس،
+وحقل `features` (JSONB حر) فيه تناقض دلالي مؤكَّد مع الـFK في صف واحد
+(`plan_id=2`: `service_id` بيشاور على service اسمه
+`P-SAAS9-VERIFY-CATALOG-8fa402`، لكن `features` محتواه
+`["real_estate", "insurance"]` — قطاعات تانية تمامًا). الصف ده test
+artifact، اتجاهل كداتا إنتاج فعلية، بس هو الدليل المباشر على وجود مصدرين
+متعارضين للحقيقة (FK مقابل نص حر).
+
+**القرار:** جدول ربط جديد `saas_plan_service_access(plan_id, service_id)`
+many-to-many. Services بس مبدئيًا (بلا granularity على مستوى feature جوه
+الخدمة).
+
+**المؤجَّل صراحة (منتجي، بعد الإطلاق):** feature-level granularity جوه
+الخدمة الواحدة.
+
+**استراتيجية الانتقال:** Expand-Contract — العمود القديم `service_id`
+يفضل `nullable` مؤقتًا في migration الإنشاء، وتُحذف في migration منفصلة
+بعد تحقق فعلي (grep) إن صفر كود بيستخدمه.
+
+**ملاحظة بيانات:** مفيش داتا عملاء إنتاج حاليًا — كل صفوف
+`saas_service_plans`/`saas_service_catalog` الحالية test artifacts، عدا
+مثال ذهني متفق عليه (أكاديمية + أفلييت + متجر) هيُستخدم كأساس اختبار.
+
+**الحالة:** قرار تصميم موثَّق فقط — لم يُنفَّذ أي migration أو تعديل كود
+بعد.
+
+---
+
+## [2026-09-07] `backlog-can-access-service-past-due-dead-branch` — فرع `PAST_DUE` في `can_access_service` غير قابل للوصول فعليًا (backlog، مش fix)
+
+**الاكتشاف:** أثناء مراجعة `can_access_service`
+(`app/domains/saas/service.py:328-350`) قبل تحويل دومين `insurance`
+عليها، لوحظ إن الفرع الخاص بحالة `PAST_DUE` (سطور 342-348، بيدي فترة
+سماح `grace_period_end_date` قبل ما يحوّل الاشتراك لـ`EXPIRED`) **غير
+قابل للوصول فعليًا في الوقت الحالي** — الاستعلام اللي بيجيب الاشتراك
+(`get_active_subscription`, `app/domains/saas/repository.py:133-151`)
+بيفلتر `status.in_(["ACTIVE", "TRIAL"])` صراحة في الـSQL نفسه، فمستحيل
+يرجع صف بحالة `PAST_DUE` أصلًا عشان الكود بعده (`if subscription.status
+== "PAST_DUE"`) يتنفذ. النتيجة: أي تينانت فعليًا بحالة `PAST_DUE` هيوصل
+لسطر `return subscription.status in ["ACTIVE", "TRIAL"]` (لو رجع أصلًا،
+وهو مش هيرجع) أو ببساطة `subscription is None` في سطر 339 لأن الاستعلام
+مستبعده من الأساس — يعني منطق "فترة السماح" **مُعطَّل فعليًا لكل
+التينانتات، بدون أي رسالة خطأ أو تحذير يوضح كده**.
+
+**لماذا backlog مش fix:** الإصلاح يحتاج قرار تصميمي (هل `get_active_subscription`
+تتوسّع لتشمل `PAST_DUE` كمان، ولا فرع `PAST_DUE` في `can_access_service`
+يتشال كـdead code، ولا حل تالت) — قرار خارج نطاق أي من الجلستين اللي
+اكتُشف فيهم (مراجعة `can_access_service-unification-review` ثم توحيد
+`insurance` عليها)، وممنوع صراحة لمسه في جلسة التوحيد نفسها. راجع
+`.claude/reports/can-access-service-unification-review-session-log.md`
+§1 (أول توثيق للاكتشاف) و
+`.claude/reports/can-access-service-unification-session-log.md` (جلسة
+التوحيد اللي أكَّدت عدم اللمس).
+
+**الحالة:** backlog مفتوح — لسه محتاج قرار تصميم بشري قبل أي إصلاح.
+
+---
+
+## [2026-09-07] `check-feature-access-to-can-access-service-unification-day-summary` — ملخص شامل: مسار توحيد check_feature_access/can_access_service من القرار للتنفيذ عبر 7 دومينات
+
+**القرار الأساسي (بداية اليوم):** بدل الاعتماد على `plan.features`
+(JSONB نص حر بلا schema enforcement) لتحديد الخدمات المتاحة لخطة معيّنة
+— قرار جدول ربط **many-to-many جديد** (`saas_plan_service_access`
+بأعمدة `plan_id`/`service_id`، composite PK). **Services بس مبدئيًا**
+(بلا granularity على مستوى feature جوه الخدمة الواحدة — ده مؤجَّل صراحة
+لمرحلة منتجية لاحقة). راجع البند الأول
+`design-decision-plan-service-access-many-to-many` أعلى هذا الملف
+للتفاصيل الكاملة (السبب، الاكتشاف الداعم، استراتيجية Expand-Contract).
+
+**migrations 046/047 (إنشاء الجدول + RESTRICT):**
+- `046_create_saas_plan_service_access`: إنشاء `saas_plan_service_access`
+  (FKs بـ`ondelete='CASCADE'` كخطوة أولى) + جعل `saas_service_plans.service_id`
+  **nullable** (Expand-Contract، العمود القديم لسه موجود، الحذف الفعلي
+  مؤجَّل). راجع `.claude/reports/saas-plan-service-access-migration-session-log.md`.
+- `047_saas_plan_service_access_fk_restrict`: تعديل الـFKين نفسهم من
+  `CASCADE` إلى `RESTRICT` (عبر drop/recreate constraint، إجباري في
+  Postgres لتغيير `ondelete`). راجع
+  `.claude/reports/saas-plan-service-access-restrict-fix-session-log.md`.
+- الاتنين اتعمل لهم round-trip test كامل (`downgrade -1` ثم `upgrade head`)
+  وأكَّدوا نجاح تام قبل ما يُعتبروا مستقرين.
+
+**Pilot ثم التوحيد الكامل (7 دومينات):**
+- **Pilot أول** على دومين `insurance` وحده (دالتين مؤقتتين
+  `can_access_service_via_plan`/`has_any_active_subscription` في
+  `saas/service.py`)، اختبار حي كامل (granted + denied) أثبت إصلاح فعلي
+  لعيب حقيقي: تينانت كان بيتمنح وصول insurance خطأً بسبب تطابق نصي محض
+  في `features` خطة غير متعلقة. راجع
+  `.claude/reports/insurance-can-access-service-pilot-session-log.md`.
+- **مراجعة قبل التنفيذ** (`can_access_service` الحالية كاملة + خريطة
+  backfill المقترح دقيقة صف-بصف). راجع
+  `.claude/reports/can-access-service-unification-review-session-log.md`.
+- **التوحيد الكامل الفعلي:** تعديل `can_access_service` نفسها (سطر واحد:
+  `get_active_subscription` → `get_active_subscription_via_plan_access`،
+  فحص `TenantServiceAccess` وفرع `PAST_DUE` لم يُلمَسا)، حذف الدالتين
+  المؤقتتين، وإرجاع `insurance/service.py::_check_saas_limits` لنفس نمط
+  الـ6 دومينات اللي كانت أصلًا بتستخدم `can_access_service` (`zamakana`,
+  `transport`, `tourism_sports`, `tenders_auctions`, `social`,
+  `service_marketplace`). اختبار حي فعلي لكل الـ7 دومينات (6 نجحوا
+  200/201 بوضوح، السابع — `service_marketplace` — نجح على مستوى الـSaaS
+  gate نفسه لكن فشل لاحقًا بمشكلة Redis/Celery منفصلة تمامًا، راجع البند
+  التالت تحت). راجع
+  `.claude/reports/can-access-service-unification-session-log.md`
+  للتفاصيل الكاملة (diffs حرفية، كل الطلبات/الردود، تحليل الـ500).
+
+**4 بنود backlog اتكشفوا اليوم — كل واحد يحتاج جلسة/قرار منفصل، ولسه
+مفتوحين كلهم:**
+
+1. **فرع `PAST_DUE` في `can_access_service` غير قابل للوصول فعليًا
+   (dead code)** — موثَّق بالتفصيل في البند
+   `backlog-can-access-service-past-due-dead-branch` فوق مباشرة في هذا
+   الملف. يحتاج قرار تصميمي (توسيع الاستعلام ليشمل `PAST_DUE`، أو حذف
+   الفرع الميت) قبل أي إصلاح.
+
+2. **`tests/test_saas_active_subscription.py` بيفترض السلوك القديم
+   (الخاطئ) كـ"النجاح المتوقَّع" لـ`insurance`** — اختبارين
+   (`test_insurance_subscribe_saas_check_passes`,
+   `test_insurance_review_claim_saas_check_passes_then_hits_known_bug`)
+   بيفشلوا الآن **بشكل صحيح ومتوقَّع** بعد التوحيد، لأنهم بيعتمدوا على
+   `TENANT_ID=1` اللي كان بيتمنح وصول insurance وهميًا بسبب تطابق نصي
+   عرضي في خطة غير متعلقة (نفس العيب اللي اتصلح). الاختبارات دي لسه لم
+   تُعدَّل — محتاجة seed حقيقي جديد لخدمة insurance الفعلية بدل الاعتماد
+   على التطابق النصي القديم. تفصيل كامل في §8.1 من
+   `.claude/reports/can-access-service-unification-session-log.md`.
+   **(تحديث لاحق: البند اتوسّع بعد جلسة `remaining-7-domains` ليشمل
+   `realestate` كمان — راجع القائمة الموسَّعة في بانر الحالة أعلى
+   الملف، بند 2، و§8.5 من
+   `.claude/reports/remaining-7-domains-can-access-service-migration-session-log.md`.)**
+
+   **الحالة [تحديث 2026-09-08]: ✅ اتحل جزئيًا** — بوابة
+   `can_access_service` اتفتحت للأربعة اختبارات كلهم (seed تينانت 1
+   مكتمل: صف `saas_tenant_subscriptions` + صف
+   `saas_tenant_service_access` لكل من `insurance`(101)/`real_estate`(107)،
+   بنفس نمط تينانت 16 الموجود مسبقًا). **اختباري `insurance` نجحا
+   بالكامل (`2 passed`)** — `test_insurance_subscribe_saas_check_passes`
+   و`test_insurance_review_claim_saas_check_passes_then_hits_known_bug`.
+   **اختباري `realestate` (`test_realestate_rent_unit_saas_check_passes`،
+   `test_realestate_buy_fractional_ownership_saas_check_passes_then_hits_known_bug`)
+   لسه فاشلين** — لكن ببرهان traceback مباشر إن بوابة الـSaaS نفسها
+   عدّت بنجاح تام؛ الفشل الحالي راجع لمشاكل fixture منفصلة تمامًا
+   ببوابة الـSaaS (راجع البندين الجديدين تحت: `realestate-test-fixture-landlord-not-registered-land-owner`
+   و`realestate-ai-agent-exception-silently-swallowed`). تفصيل كامل
+   في `.claude/reports/plan-features-tests-fix-investigation-session-log.md`
+   و`.claude/reports/plan-features-tests-fix-session-log.md`.
+
+3. **تناقض بورت Redis/Celery في `.env` (موجود من قبل، غير مرتبط
+   بالتوحيد)** — `REDIS_URL` بيشاور صح على `127.0.0.1:6380` (مطابق
+   لحاوية Docker الفعلية)، لكن `CELERY_BROKER_URL`/`CELERY_RESULT_BACKEND`
+   لسه بيشاوروا على `127.0.0.1:6379` (بورت غلط) — أي `.delay()` لأي
+   Celery task هيفشل بـ`ConnectionRefusedError`. اكتُشف عبر اختبار
+   `service_marketplace` الحي (فشل بـ500 بعد ما الـSaaS gate نجح فعليًا).
+   لم يُصلَح — تفصيل كامل في §7 من
+   `.claude/reports/can-access-service-unification-session-log.md`.
+
+4. **الـ7 دومينات الباقيين لسه على `check_feature_access` القديمة**
+   (`employment`, `digital_twin`, `arbitration_syndicates`, `realestate`,
+   `manufacturing`, `logistics`, `invitations`) — كل واحد محتاج نفس نمط
+   تحويل `insurance` (استبدال استدعاء `check_feature_access` بـ
+   `can_access_service`)، بجلسة منفصلة وموافقة صريحة لكل دومين على حدة.
+   `check_feature_access` نفسها **لم تُلمَس** ولسه موجودة لحد ما آخر
+   دومين يتحول.
+
+**⚠️ ملاحظة بيانات مهمة قبل أي seed إنتاجي حقيقي:** جدول
+`saas_plan_service_access` فيه دلوقتي **12 صف إجمالًا**، وكلهم بيانات
+اختبار/backfill من جلسات اليوم (7 من الـbackfill الأصلي + 5 من seed
+اختبار الدومينات الـ5 الإضافية في جلسة التوحيد) — **صفر بيانات إنتاج
+حقيقية**. **لازم تتراجع/تتنضف صراحة قبل أي seed إنتاجي حقيقي لأي دومين**،
+وإلا هتختلط صفوف اختبار (`*-pilot-plan`, `TEST_*`) مع بيانات حقيقية في
+جدول واحد بلا تمييز واضح غير الأسماء النصية.
+
+## [2026-09-07] backlog-affiliate-commission-registration-systemwide-broken — ✅ اتحقَّق منه، لا حاجة لإصلاح كود
+
+✅ **اتحقَّق منه — مفيش regression حقيقي.** تحقيق كامل
+(`.claude/reports/affiliate-commission-registration-investigation-session-log.md`)
+أثبت حيًا إن الكود شغّال صح بعد commit `2960d9d`: العمود
+`User.referred_by_user_id` بقى موجود فعليًا، والدالة بترجع بصمت (بلا
+log) لمستخدم بلا محيل — سلوك صحيح منطقيًا، مش عطل. الفشل في الـ10
+اختبارات سببه إنها كُتبت قبل 19 يوم من التوحيد وكانت تتوقع
+`AttributeError` قديم (لما العمود مكانش موجود) كدليل نجاح — دليل قاطع:
+كل الـ10 فشل بـ`AssertionError` بسيط، صفر `TypeError`/`AttributeError`
+في أي منهم.
+
+**تصحيح خطأ تصنيف:** `social` من ضمن قائمة الـ11 دومين الأصلية بالغلط —
+`_register_affiliate_commission` غير موجودة أصلًا في
+`social/service.py`، والملف لم يُلمَس بـcommit `2960d9d`. فشله بند
+منفصل تمامًا (راجع البند الجديد تحت،
+`backlog-social-get-user-email-tenant-mismatch-behavior`).
+
+**الحالة النهائية:** لا حاجة لإصلاح كود. backlog متبقٍّ (منخفض
+الأولوية): تحديث الـ10 اختبارات لتعكس السلوك الصحيح الجديد (غياب log
+لمستخدم بلا محيل = نجاح)، أو توسيعها لتغطي سيناريو "مستخدم معاه محيل
+فعلي" فعليًا.
+
+## [2026-09-07] backlog-social-get-user-email-tenant-mismatch-behavior — ✅ اتحل [تحديث 2026-09-08] — الكود سليم كما هو، تم تحديث الاختبار ليتوقّع NotFoundError صريح بدل fallback نصي قديم
+
+اختبار `test_social_get_user_email_correct_and_wrong_tenant` كان بيفشل
+لأنه بيتوقع `_get_user_email` (`social/service.py:718-724`) ترجّع
+fallback نصي (`f"user_{user.id}@eppne.com"`) لـtenant خاطئ، لكن الكود
+الفعلي بيرمي `NotFoundError` صراحة. مكتشَف أثناء تحقيق
+`backlog-affiliate-commission-registration-systemwide-broken` (بند فوق)
+بالصدفة — غير مرتبط إطلاقًا بـcommit `2960d9d` أو بمنطق العمولة
+(`social/service.py` لم يُلمَس بالتوحيد، والدالة المعنية مختلفة كليًا).
+كان محتاج قرار تصميمي: استثناء صريح صح (والاختبار قديم)، ولا fallback
+مطلوب فعليًا (والكود ناقص)؟ راجع
+`.claude/reports/affiliate-commission-registration-investigation-session-log.md`
+§5 للتفاصيل الكاملة عن الاكتشاف الأصلي.
+
+**[تحديث 2026-09-08] القرار اتحسم: صفر تعديل على الكود الإنتاجي.**
+`_get_user_email` رمي `NotFoundError("Receiver not found in your
+tenant")` صراحة لـtenant خاطئ هو السلوك الصحيح المتعمَّد — لا يوجد أي
+مسار fallback في الدالة أصلًا، ومتّسق مع تعليق موجود بالفعل عند نقطة
+استدعاء شقيقة (`social/service.py:578`، `# raises NotFoundError if
+receiver is outside your tenant`). الاختبار القديم حُدِّث ليتوقّع
+`pytest.raises(NotFoundError)` بدل الـfallback النصي غير الموجود أصلًا
+(نفس الـimport ونفس النمط المستخدَمين أصلًا في باقي الملف). شُغِّل
+الاختبار حيًا بعد التعديل ونجح (`1 passed`). راجع
+`.claude/reports/social-get-user-email-test-fix-session-log.md`
+للتفاصيل الكاملة. **الحالة النهائية: backlog مُغلَق، لا حاجة لأي إصلاح
+كود إضافي.**
+
+## [2026-09-07] backlog-invitations-create-invitation-broken
+
+`InvitationsService.create_invitation` (`POST /api/invitations/`)
+بترجع `500` دايمًا لأي تينانت عنده صلاحية CRM فعلية (اتأكَّد حيًا أثناء
+اختبار جلسة تحويل دومين `invitations` من `check_feature_access`).
+السبب الجذري: `_assign_ai_agent` (`invitations/service.py`, سطر
+~108-115) بتحاول `agents[0]` على نتيجة `AIAgentsRepository.list_agents()`
+اللي بترجع `PaginatedResponse[AIAgentResponse]` — غير قابلة للفهرسة
+مباشرة، فترفع `TypeError`. الاستدعاء غير مشروط (بلا `if` قبله)، يعني
+كل طلب لهذا الـendpoint هيفشل بغض النظر عن أي شيء تاني. مؤكَّد إنه
+غير مرتبط بمسار `check_feature_access`→`can_access_service` (العطل
+بعد بوابة الـSaaS بمراحل، صفر لمس لـ`create_invitation`/`_assign_ai_agent`
+في أي جلسة من مسار التوحيد). ملاحظة إضافية غير حرجة من نفس التحقيق:
+`data.get("custom_message", "")`/`target_entity_identifier` بيرجعوا
+`None` صراحة مش `""` بسبب `Optional[str] = None` في الـschema، بيكسر
+`bleach.clean()` قبل ما يوصل لعطل `_assign_ai_agent` أصلًا لو الحقول
+فاضية. راجع `.claude/reports/remaining-7-domains-can-access-service-migration-session-log.md`
+§7.4.1 للتفاصيل الكاملة والـtraceback.
+
+**الحالة: ✅ اتحل.** تحقيق كامل
+(`.claude/reports/invitations-create-invitation-investigation-session-log.md`)
+كشف 4 أعطال بترتيب تنفيذ (مش 2 زي ما كان موثَّق أول مرة): (1)
+`bleach.clean(None)` على `title` (سطر 172) — مكتشَف حديثًا، أول عطل
+فعليًا في ترتيب التنفيذ. (2)+(3) نفس العطل على
+`custom_message`/`target_entity_identifier` (سطر 173-174) — معروفين
+مسبقًا. (4) `_assign_ai_agent` بتحاول `agents[0]` على
+`PaginatedResponse` غير قابلة للفهرسة (سطر 115) — العطل الجذري
+الحقيقي، بيمنع أي طلب ناجح بغض النظر عن باقي الحقول.
+
+الإصلاح المُنفَّذ
+(`.claude/reports/invitations-create-invitation-fix-session-log.md`):
+4 أسطر فقط — `data.get(key) or ""` بدل `data.get(key, "")` للثلاثة
+حقول، و`agents.data[0] if agents.data else None` بدل
+`agents[0] if agents else None`. اختبار حي مزدوج (حقول فاضية + حقول
+حقيقية) نجح بالكامل (`id=71`, `id=72`). مقارنة baseline صارمة عبر
+`git stash` أثبتت تطابق حرفي للـ16 فشل regression قبل وبعد الإصلاح —
+صفر أثر جانبي.
+
+## [2026-09-07] backlog-paginatedresponse-misuse-automation-list-available-agents
+
+✅ اتحل. تدقيق شامل عبر المشروع كله
+(`.claude/reports/paginatedresponse-misuse-audit-session-log.md`)
+كشف 3 حالات حقيقية (مش حالة واحدة زي ما كان موثَّق أول مرة):
+(1) `invoicing/router.py:159` — الأخطر، بيصيب المسار الافتراضي
+لـ`GET /invoices` لأي مستخدم عادي (أغلبية الاستخدام الفعلي)، وكشف
+كمان عطل ثانٍ مخفي (`repository.py:110` — اسم حقل غلط `items=`
+بدل `data=`) اتصلح بموافقة صريحة موسَّعة. (2) `academy/router.py:248`
+(`GET /store/courses`) — بترجع كائن `PaginatedResponse` كامل تحت
+`response_model` غير متوافق. (3) `automation/service.py:1045`
+(`list_available_agents`) — العطل الأصلي المكتشَف، نفس فئة عطل
+`invitations`.
+
+الإصلاح (`.claude/reports/paginatedresponse-misuse-fix-session-log.md`):
+كل حالة اتصلحت في جلسة منفصلة بموافقة صريحة، واختُبرت حيًا بنجاح
+فعلي (200 + بيانات حقيقية في الرد لكل حالة، مش استنتاج من الكود).
+التدقيق فحص ~33 نقطة استدعاء عبر المشروع كله — الباقي (~30) صحيح
+أو كود ميت (موثَّق بالتفصيل في تقرير التدقيق).
+
+## [2026-09-07] backlog-privacy-double-pagination-offset-limit — ✅ اتحقّق منه — مفيش عطل وظيفي
+
+اكتُشف بالصدفة أثناء تدقيق `PaginatedResponse` الشامل: دالة
+`list_erasure_requests` في `privacy/repository.py` (سطر 143 ثم 148)
+بتطبّق `query.offset(skip).limit(limit)` مرتين على نفس الـquery.
+تحقيق مخصص (`.claude/reports/privacy-double-pagination-investigation-session-log.md`)
+أثبت: **مفيش عطل وظيفي**. SQLAlchemy بيستبدل قيمة `offset`/`limit` عند
+كل استدعاء (`_offset_clause`/`_limit_clause`) — مش بيتراكم — مؤكَّد
+بتجربة مباشرة ضد SQLAlchemy 2.0.36 (استدعاء بقيم مختلفة أثبت إن آخر
+استدعاء بيغلب بالكامل). وبما إن الاستدعائين في الكود بيمرروا نفس قيم
+`skip`/`limit` بالظبط، الناتج النهائي مطابق 100% لاستدعاء واحد.
+اختبار حي ضد Postgres حقيقي (25 صف مُدخَلة مؤقتًا، صفحتين بـ
+`limit=20`) أكّد كده عمليًا: صفحة 1 = 20 عنصر صح، صفحة 2 = 5 عناصر
+صح، `total` صح في الاثنين، دمج الصفحتين طابق الترتيب الكامل المتوقَّع
+بلا أي تكرار أو فقدان بيانات؛ كل بيانات الاختبار اتنضّفت بعدها والجدول
+رجع فاضي زي ما كان.
+
+**التصنيف الصحيح:** كود زائد/مكرر (redundant chaining) — سطر 148
+بيعيد ضبط نفس القيمة اللي اتحطت في سطر 143 من غير داعٍ وظيفي — مش
+باج. **الحالة النهائية: backlog مُغلَق كتحقيق، لا حاجة لأي إصلاح
+عاجل.** أي تعديل مستقبلي (حذف السطر المكرر) هيكون تنظيف كود اختياري
+بحت بدون أثر على السلوك. راجع التقرير أعلاه للتفاصيل الكاملة (بما فيها
+حصر شامل بالـgrep أثبت إن باقي دوال الملف بتطبّق offset/limit مرة
+واحدة بس، مفيش تراكب فيها).
+
+## [2026-09-08] backlog-realestate-test-fixture-landlord-not-registered-land-owner — 🔴 مفتوح (توثيق فقط)
+
+اكتُشف أثناء seed تينانت 1 لخدمتي `insurance`/`real_estate` في
+`saas_tenant_subscriptions`/`saas_tenant_service_access` (متابعة بند
+Backlog #2 أعلاه). بعد ما بوابة `can_access_service` بقت تعدي، ظهر إن
+`test_realestate_rent_unit_saas_check_passes`
+(`tests/test_saas_active_subscription.py:168-211`) بيفشل بـ
+`PermissionDeniedError("ليس لديك صلاحية تعديل هذه الوحدة")`
+(`realestate/service.py:463`) — **مش بسبب بوابة الـSaaS** (اتحققت
+بنجاح تام، دليل traceback مباشر).
+
+**السبب الجذري:** الاختبار بينشئ مستخدم `landlord` جديد عشوائي في كل
+تشغيلة ويمرره كـ`landlord_id` لـ`rent_unit`، لكن
+`_get_land_owner_for_unit` (`realestate/service.py:683-695`) بتجيب
+المالك الحقيقي حصريًا من `land_assets.owner_id` — وصف `land_assets`
+المشترك (`id=1`، `EXISTING_LAND_ASSET_ID` في ملف الاختبار سطر 119) له
+`owner_id=47` **ثابت** (تحقُّق DB مباشر). الفحص `owner.id !=
+landlord_id` بيرفض بحق لأن `landlord` المُنشأ حديثًا فعلًا مش نفس
+`user_id=47`.
+
+**تأكيد إضافي مستقل — مربوط ببند `realestate-hooks-layer-design-decision`
+[2026-08-31]:** نفس الجلسة القديمة دي طبّقت **نفس نمط فحص الملكية
+بالحرف** (`_get_land_owner_for_unit`) على `PATCH`/`DELETE
+/realestate/units/{id}` واختبرته حيًا بـ10 اختبارات pytest ناجحة، **و**
+وثَّقت وقتها صراحةً "3 فشلات موجودة *قبل* هذه الجلسة (drift بيئي في
+SaaS feature flags لـ`tenant_id=1`، غير مرتبطة)" — يعني تينانت 1 كان
+عليه بالفعل drift بيانات معروف ومُوثَّق من قبل في نفس منطقة
+`realestate`/SaaS، بشكل مستقل تمامًا عن هذا الاكتشاف. هذا يرجّح إن فجوة
+fixture الاختبار الحالية (استخدام `landlord`/`owner` عشوائيين بدل
+المالك الحقيقي المسجَّل) نمط متكرر في اختبارات الدومين، مش حالة معزولة.
+
+**الإصلاح المقترح (غير مُنفَّذ — قرار مستخدم مطلوب):** تمرير
+`landlord_id=47` (المالك المسجَّل فعليًا لـ`land_assets` رقم 1) بدل
+إنشاء `landlord` عشوائي جديد، أو إنشاء `land_asset` throwaway منفصل
+مملوك للمستخدم الجديد نفسه.
+
+**المرجع:** `.claude/reports/plan-features-tests-fix-session-log.md`
+§2.3/§5.1، `.claude/reports/plan-features-tests-fix-investigation-session-log.md`،
+`.claude/reports/realestate-design-decision-session-log.md`
+(بند `realestate-hooks-layer-design-decision` [2026-08-31]).
+
+## [2026-09-08] backlog-realestate-ai-agent-exception-silently-swallowed — ✅ اتحل — تمييز NotFoundError/PermissionDeniedError عن باقي الأخطاء
+
+اكتُشف عرضًا في نفس تحقيق seed تينانت 1 أعلاه، أثناء فحص
+`test_realestate_buy_fractional_ownership_saas_check_passes_then_hits_known_bug`
+(بعد ما بوابة الـSaaS بقت تعدي بنجاح لهذا الاختبار كمان).
+
+**العطل المباشر (سبب فشل الاختبار حاليًا):** `buyer` بينشأ في الاختبار
+برصيد `0` (افتراضي `_create_funded_user` بلا تمرير `mr_usdt`)، فتكلفة
+شراء 10% من وحدة سعرها `500` (=`50 MR_USDT`) بترمي
+`InsufficientBalanceError` → `PermissionDeniedError("Insufficient
+balance")` (`realestate/service.py:313`) قبل الوصول لأي منطق تاني —
+هذا مجرد فجوة تمويل في fixture الاختبار، غير خطير لوحده.
+
+**الاكتشاف الأخطر (كود إنتاجي، غير مُصلَح):** بالقراءة المباشرة لسطر
+365-368 من `realestate/service.py`، اتضح إن استدعاء
+`AIAgentsService.execute_agent_action()` (جزء من منطق
+`buy_fractional_ownership`) بقى ملفوفًا بـ`try/except Exception`
+بيسجّل الخطأ فقط (`logger.error(...)`) **بلا `raise`**. يعني أي فشل في
+تحليل الـAI Agent لعملية الشراء — بما فيه بج Backlog #16 المُوثَّق
+مسبقًا (معامل `tenant_id=` الزايد على `execute_agent_action`، اللي
+التقرير الأصلي [2026-08-19] وثَّقه كـ"لسه موجود فعليًا بالقراءة
+المباشرة" بمعنى إنه بيتصدَّر كـ`TypeError` غير مُمسوك وقتها) — **بقى
+مُبتلَعًا صمتًا بالكامل** في هذا الموضع تحديدًا. العملية المالية
+(تحويل الملكية + `finance.transfer`) بتكمل وتنجح بغض النظر تمامًا عن
+نجاح أو فشل تحليل الـAI Agent، بلا أي إشارة للمستخدم أو للمُطوِّر إن
+التحليل فشل.
+
+**لماذا أولوية بارزة، ومربوط بنمط `silent-write-regression` الموثَّق
+سابقًا:** المشروع عنده بالفعل بند backlog قائم (`silent-write-regression`
+— جدول الـBacklog النشط أعلى الملف، بند #4) بيوثّق فئة كاملة من
+الأعطال حيث الـAPI/العملية "بتنجح" ظاهريًا بينما جزء من الكتابة/المنطق
+بيفشل صامتًا بلا أثر (`saas.cancel_subscription` — اتصلح، +حالتان
+غير مؤكَّدتين `saas.process_auto_renewals`/`saas.can_access_service`).
+هذا الاكتشاف **حالة رابعة محتملة من نفس الفئة**: نجاح ظاهري
+(`buy_fractional_ownership` بترجع 201/نجاح) مع فشل صامت غير مُسجَّل
+بوضوح لمستخدم/مراقب خارجي (فقط `logger.error` داخلي) لمنطق فرعي مهم
+(تحليل AI للعملية). **القرار المطلوب صراحةً:** هل ابتلاع بج #16 صمتًا
+هنا **سلوك مقصود** (تريث متعمَّد: فشل تحليل AI مش لازم يوقف عملية
+شراء مالية حقيقية) أم **رجعة غير مقصودة** نتجت عرضًا عن إضافة
+`try/except` عام لسبب تاني (مثلاً منع كراش الـendpoint الأساسي)
+وأخفت بج #16 بدل ما تصلحه؟ **لم يُتحقَّق متى بالضبط اتضاف هذا
+`try/except` ولا في أي جلسة** — خارج نطاق هذا التحقيق (seed بيانات
+فقط، صفر لمس كود).
+
+**الإصلاح المقترح (غير مُنفَّذ — قرار مستخدم مطلوب أولاً):**
+1. تمويل `buyer` في الاختبار برصيد كافٍ (`>= 50 MR_USDT`) لتجاوز
+   العطل السطحي، **ثم**
+2. قرار تصميمي صريح بشأن `try/except Exception` حول
+   `execute_agent_action`: تسجيل مرئي/قابل للرصد (مش `logger.error`
+   داخلي فقط) على الأقل، أو إعادة `raise` مضبوطة لو التحليل جزء
+   إلزامي من العملية.
+
+**المرجع:** `.claude/reports/plan-features-tests-fix-session-log.md`
+§2.4/§5.2، `.claude/reports/plan-features-tests-fix-investigation-session-log.md`،
+خلفية بج #16 الأصلي: `.claude/reports/backlog-16-begin-nested-commit-session-log.md`،
+نمط `silent-write-regression`: جدول الـBacklog النشط أعلى الملف، بند #4.
+
+**الحالة:** ✅ اتحل — تمييز `NotFoundError`/`PermissionDeniedError`
+(`warning`) عن أي استثناء تاني (`error`، رسالة 'unexpectedly')، بلا
+`raise`، بلا تغيير سلوك مالي. تحقيق التوقيت
+(`.claude/reports/realestate-ai-agent-silent-swallow-investigation-session-log.md`)
+أثبت إن النمط سياسة عامة متعمَّدة عبر 16 موضع تاني في المشروع (مش
+استثناء)، بس الفجوة (عدم تمييز نوع الفشل) كانت حقيقية وغير مدروسة —
+اتحلت لـrealestate بس، الـ15 موضع الباقي لم يُلمَسوا (قرار نطاق ضيق
+متعمَّد). اختبار حي مزدوج (`NotFoundError` حقيقي + `TypeError`
+مصطنع) أثبت الفصل صح، والعملية المالية غير متأثرة في الحالتين.
+تفاصيل التنفيذ والتحقق الحي:
+`.claude/reports/realestate-ai-agent-exception-differentiation-fix-session-log.md`.
+
+## [2026-09-08] backlog-notification-delivery-stub-empty-non-inapp-channels — 🔴🔴 أولوية بارزة
+
+اكتُشف أثناء فحص read-only تحضيرًا لتصميم فترة سماح/إشعارات
+`PAST_DUE` في `saas`. `send_notification_task` معرَّفة مرتين
+متضاربتين بنفس الاسم بالظبط:
+
+1. `app/core/celery_app.py:64-75` — stub صريح موثَّق كمؤقت
+   (`@shared_task(name="send_notification_task")`، جسمها `pass`
+   بالكامل، وكذلك `send_email_task` المجاورة).
+2. `app/domains/communications/tasks.py:1-28` — نسخة تبدو "حقيقية"
+   (تستورد `send_fcm`/`send_smtp_email`/`send_twilio_sms` فعليًا في
+   أعلى الملف) لكن الفروع الثلاثة `PUSH`/`EMAIL`/`SMS` كلها كود
+   مُعلَّق بـ`pass`، ولا استدعاء فعلي واحد لأي من الدوال
+   المستوردة. الدالة كمان مُعرَّفة على تطبيق Celery منفصل تمامًا
+   (`Celery("communications", broker=settings.REDIS_URL)`) مش نفس
+   `celery_app` المركزي المُحمَّل من `app/core/celery_app.py`.
+
+**الأثر العملي:** `CommunicationsService.send_notification(...)`
+(النمط الحي المُستخدَم فعليًا من transport/automation/realestate)
+بتخزن الصف في جدول `notifications` بنجاح وتستدعي
+`send_notification_task.delay(...)` بنجاح (الـtask بتتقبل من
+الـbroker وترجع `{"status": "sent"}` وهمي)، لكن **صفر تسليم فعلي**
+لأي مستخدم عبر أي قناة بره `IN_APP` في المشروع كله — لا FCM push
+حقيقي، لا إيميل SMTP، لا SMS عبر Twilio. `IN_APP` هي القناة الوحيدة
+الكاملة فعليًا (لأنها مجرد صف يُقرأ لاحقًا من الجدول نفسه، بلا حاجة
+لتسليم خارجي).
+
+**المرجع:**
+`.claude/reports/past-due-grace-period-notifications-investigation-session-log.md`
+§3ب.
+
+**الحالة:** 🔴 مفتوح، لم يُصلَح. يحتاج إما بناء تكامل تسليم حقيقي
+(SMTP فعلي لـEMAIL، FCM فعلي لـPUSH، Twilio فعلي لـSMS) أو قرار صريح
+بإزالة الادعاء بدعم هذه القنوات (توثيق `IN_APP` كقناة الدعم الوحيدة
+حاليًا) لحد ما يُبنى التكامل الحقيقي.
+
+## [2026-09-08] backlog-saas-tasks-calling-nonexistent-methods — 🔴 أولوية عالية
+
+اكتُشف في نفس فحص read-only أعلاه، أثناء قراءة
+`app/tasks/saas_tasks.py` كاملًا مقابل `SaaSControlService` الفعلية
+في `app/domains/saas/service.py`. 4 من أصل 6 مهام Celery معرَّفة في
+`saas_tasks.py` بتستدعي دوال على `SaaSControlService` **غير موجودة
+إطلاقًا** (بحث `grep` شامل في `app/domains/saas/` أكَّد الغياب
+الكامل لكل الأربعة):
+
+- `generate_monthly_invoices` — مُستدعاة من
+  `generate_monthly_invoices_task`، **ومجدولة فعليًا** في
+  `beat_schedule` (`celery_config.py`، أول كل شهر 3 صباحًا) —
+  هتفشل بـ`AttributeError` عند أول تنفيذ فعلي.
+- `check_and_expire_trials` — مُستدعاة من `check_expired_trials_task`،
+  **ومجدولة فعليًا** أيضًا (يوميًا 4 صباحًا) — نفس المصير.
+- `send_trial_expiry_reminders` — مُستدعاة من
+  `send_trial_expiry_reminders_task`، **غير مجدولة** في
+  `beat_schedule` حاليًا، لكن الدالة نفسها غير موجودة لو اتنادت
+  يدويًا أو أُضيفت جدولتها لاحقًا بدون تأكد أولًا.
+- `cleanup_cancelled_subscriptions` — مُستدعاة من
+  `cleanup_cancelled_subscriptions_task`، نفس وضع البند السابق
+  (غير مجدولة، غير موجودة).
+
+كل الأربعة معلَّمة في الكود نفسه بـ`# type: ignore[attr-defined]`
+مع تعليق "تأكد من وجود الدالة" — إشارة إلى إن الكاتب الأصلي كان
+عارف إنها غير مؤكَّدة وقت الكتابة ولم يُتحقَّق منها لاحقًا.
+
+**المرجع:**
+`.claude/reports/past-due-grace-period-notifications-investigation-session-log.md`
+§4.
+
+**الحالة:** 🔴 مفتوح، لم يُصلَح. يحتاج إما بناء الدوال الأربعة من
+الصفر على `SaaSControlService` (`generate_monthly_invoices`,
+`check_and_expire_trials`, `send_trial_expiry_reminders`,
+`cleanup_cancelled_subscriptions`)، أو تعطيل جدولة المهمتين
+المجدولتين فعليًا (`generate-monthly-invoices`,
+`check-expired-trials`) مؤقتًا في `beat_schedule` لحد ما يتوفر
+تنفيذ حقيقي، لمنع فشل صامت متكرر في الإنتاج.
+
+## [2026-09-08] backlog-process-auto-renewals-task-constructor-typeerror — 🔴🔴🔴 أولوية حرجة
+
+اكتُشف أثناء تنفيذ مهمة `check_past_due_subscriptions_task` الجديدة
+(بند فترة سماح `PAST_DUE`/تنبيهات، خيار ب). `process_auto_renewals_task`
+(`app/tasks/saas_tasks.py`) بتستدعي `SaaSControlService(db)` **بلا**
+`tenant_id` — باراميتر إجباري بلا `default` في
+`SaaSControlService.__init__(self, db, tenant_id: int)`. على الأرجح
+بيرمي `TypeError: missing 1 required positional argument: 'tenant_id'`
+فورًا عند محاولة الإنشاء، **قبل** الوصول لأي منطق داخل
+`process_auto_renewals()` نفسها.
+
+**الأثر المحتمل الأخطر:** `process_auto_renewals_task` هي نفسها
+المصدر الوحيد الموثَّق حاليًا للتحويل التلقائي `ACTIVE → PAST_DUE`
+(عبر `InsufficientBalanceError` في `process_auto_renewals`،
+service.py) — أساس كل شغل فترة السماح المُنفَّذ اليوم. لو الـ`TypeError`
+ده بيحصل فعليًا في كل تشغيلة، فالتحويل التلقائي **ممكن يكون مش بيحصل
+خالص حاليًا** رغم وجود الكود والجدولة الكاملة في `beat_schedule`
+(2 صباحًا يوميًا) — يعني كل بنية فترة السماح/التنبيهات المُنفَّذة
+اليوم (`check_past_due_subscriptions_task`) هتفضل بلا أي اشتراك
+`PAST_DUE` تفحصه في الإنتاج، لحد ما هذا البج يتصلح.
+
+**نفس القصور موجود حرفيًا في مهام أخرى بنفس الملف**
+(`generate_monthly_invoices_task`, `check_expired_trials_task`,
+`send_trial_expiry_reminders_task`, `cleanup_cancelled_subscriptions_task`
+— كل الخمسة بتستدعي `SaaSControlService(db)` بنفس الشكل)، لكن دول
+أصلًا بيفشلوا لسبب آخر موثَّق مسبقًا (دوال غير موجودة —
+`backlog-saas-tasks-calling-nonexistent-methods` أعلاه) فمفيش فرصة
+عملية لاحظ فيها أثر الـ`TypeError` بمعزل — `process_auto_renewals_task`
+هي الوحيدة اللي دالتها (`process_auto_renewals`) موجودة وكاملة
+فعليًا، فهي أول مكان يظهر فيه هذا البج بوضوح لو اتأكد حيًا.
+
+**لم يُختبَر حيًا بعد** — اكتشاف بالقراءة المباشرة للكود فقط (مقارنة
+`SaaSControlService.__init__` بكل نداءات `SaaSControlService(db)` في
+`saas_tasks.py` عبر `grep`)، مش بتشغيل فعلي للـworker. **أولوية فحص
+فورية في الاختبار الحي القادم لفترة السماح** — لو اتأكد، فترة
+السماح/التنبيهات المُنفَّذة اليوم مش هيبقى ليها أثر عملي في الإنتاج
+غير مرتبطة بإصلاح هذا البج أولًا.
+
+**المرجع:**
+`.claude/reports/past-due-grace-period-notifications-implementation-session-log.md`
+§2ج.
+
+**الحالة:** 🔴 مفتوح، لم يُصلَح. يحتاج إما تمرير `tenant_id` صريح (مثلًا
+نمط `SaaSControlService(db, 0)` المُستخدَم فعليًا في
+`saas/router.py:273`، مع التأكد إن `process_auto_renewals(tenant_id=
+None)` معدَّلة كمان عشان متقعش على `self.tenant_id` بدل فحص كل
+المستأجرين — راجع نفس القصور في `trigger_renewals`، §2ج من نفس
+التقرير)، أو تعديل `SaaSControlService.__init__` ليقبل `tenant_id`
+اختياري لحالات الاستخدام الإدارية/عبر-المستأجرين. قرار تصميمي يحتاج
+جلسة منفصلة.
+
+## [2026-09-08] backlog-process-auto-renewals-task-tenant-zero-noop — ✅ اتحل بالكامل [تحديث 2026-09-08]
+
+اكتُشف كمتابعة مباشرة لـ`backlog-process-auto-renewals-task-constructor-
+typeerror` أعلاه: بعد إصلاح الـ`TypeError` (`SaaSControlService(db, 0)`)،
+`process_auto_renewals_task` بقت تشتغل بلا كراش لكن بترجع نتيجة فاضية
+دايمًا (`total: 0`) — لأن `process_auto_renewals` (service.py) كانت
+بتحوّل `tenant_id=None` (الحالة الوحيدة اللي `saas_tasks.py` بينادي بيها
+الدالة) لـ`self.tenant_id` (=0، سنتينل إداري بلا تينانت حقيقي بهذا الـid)
+عبر `target_tenant = tenant_id if tenant_id is not None else self.
+tenant_id`، بدل معالجة كل التينانتات فعليًا.
+
+**إصلاح جزئي [2026-09-08] — جلسة منفصلة تالية:** قبل التعديل، فُحص كل
+المشروع (`grep -rn "process_auto_renewals(\|trigger_renewals("`) — 3 نقاط
+استدعاء فقط، صفر استخدام حي بيعتمد على الـfallback عمدًا لتحديد تينانت
+حقيقي بعينه (الاستخدام الوحيد اللي بيمرر `tenant_id` صريح، عبر
+`/admin/trigger-renewals?tenant_id=X`، غير متأثر). بناءً عليه: `process_
+auto_renewals` (service.py) عُدِّلت لتمرر `tenant_id` مباشرة لـ
+`get_subscriptions_for_renewal` (كانت أصلًا بتدعم `None`="كل التينانتات"،
+بلا تعديل مطلوب فيها) بدل الـfallback، مع استبدال كل استخدام لـ
+`target_tenant` جوّه الحلقة بـ`sub.tenant_id` الحقيقي لكل اشتراك (نفس نمط
+`check_past_due_subscriptions`). `process_auto_renewals_task` (saas_
+tasks.py) عُدِّلت لتستدعي `service.process_auto_renewals(tenant_id=None)`
+صراحةً.
+
+**التحقق الحي أثبت نجاح جزء الإصلاح المستهدف:** اشتراكان حقيقيان مستحقان
+للتجديد تحت تينانت 1 (غير 0) اتلقطوا بنجاح عبر `process_auto_renewals_
+task.run()` (`total: 2`، مش `0`) — طبقة اختيار/تكرار الاشتراكات عبر كل
+التينانتات **بقت شغّالة ومؤكَّدة**.
+
+**لكن اتكشف مانع تاني منفصل تمامًا وقف دون إتمام التنفيذ الفعلي (تجديد
+ناجح أو تحويل `PAST_DUE`):** الاثنين فشلوا بـ`NotFoundError("المستلم غير
+موجود")` بدل `SUCCESS`/`PAST_DUE` المتوقَّعين — راجع البند الجديد
+`backlog-financeservice-tenant-binding-blocks-cross-tenant-operations`
+تحت لتفاصيل السبب الجذري الكامل (طبقة مختلفة تمامًا، `FinanceService` مش
+`SaaSControlService` نفسها).
+
+**المرجع:**
+`.claude/reports/past-due-grace-period-notifications-implementation-session-log.md`
+§6 (الاكتشاف والإصلاح الأول لـ`TypeError`)، §9 (الإصلاح الجزئي لهذا البند
++ الاكتشاف الجديد).
+
+**الحالة:** 🟡 جزئي — طبقة اختيار الاشتراكات اتصلحت ومؤكَّدة (`total:2`)،
+لكن التنفيذ الفعلي (تجديد/`PAST_DUE`) لسه معطوب بمانع تاني منفصل (راجع
+البند الجديد).
+
+**⚠️ تحديث [2026-09-08، جلسة `financeservice-tenant-binding-fix`]:**
+المانع التاني (`backlog-financeservice-tenant-binding-blocks-cross-
+tenant-operations` تحت) اتصلح. أُعيد بالظبط نفس سيناريو التحقق الحي
+هنا (اشتراكان حقيقيان تحت تينانت 1، رخيص/باهظ، عبر
+`SaaSControlService(db, 0)`) كـregression test حقيقي ضد DB حي
+(`tests/test_financeservice_tenant_binding_fix.py`) — **النتيجة دلوقتي:
+الرخيص → `SUCCESS` فعلي (معاملة + فاتورة `PENDING` حقيقيتان على القرص)،
+الباهظ → `InsufficientBalanceError` → `PAST_DUE` فعلي
+(`grace_period_end_date` مضروب +3 أيام)، مؤكَّدان الاثنان عبر جلسة DB
+مستقلة.** أول مرة نشوف الحلقة الكاملة (اختيار الاشتراكات + تنفيذ
+العملية المالية الفعلي) شغّالة من طرف لطرف. **الحالة النهائية: ✅ اتحل
+بالكامل.** تفاصيل كاملة:
+`.claude/reports/financeservice-tenant-binding-fix-session-log.md`.
+
+## [2026-09-08] backlog-financeservice-tenant-binding-blocks-cross-tenant-operations — ✅ اتحل [تحديث 2026-09-08]
+
+اكتُشف أثناء الاختبار الحي لإصلاح `backlog-process-auto-renewals-task-
+tenant-zero-noop` أعلاه. `SaaSControlService.__init__` (service.py:59-63)
+بيبني `self.finance = FinanceService(db, tenant_id)` — كائن `FinanceService`
+**ثابت طول عمر الـinstance**، مربوط بقيمة `tenant_id` اللي اتبنى بيها
+الـ`SaaSControlService` نفسه وقت الإنشاء، مش بتينانت العملية الفعلية وقت
+كل استدعاء.
+
+**الأثر المؤكَّد حيًا:** أي عملية مالية (`self.finance.transfer(...)`) من
+`SaaSControlService` instance مبني بـ`tenant_id` سنتينل (زي `(db, 0)` —
+النمط الإداري المُستخدَم في `process_auto_renewals_task`/`router.py:273`)
+بتفشل لأي تينانت حقيقي مختلف — `FinanceService.transfer` (finance/
+service.py:78) بيدوّر على المستلم عبر `get_by_email(receiver_email,
+self.tenant_id)` حيث `self.tenant_id` هنا هو تينانت الـ`FinanceService`
+الثابت (0)، مش تينانت الاشتراك/العملية الحقيقي — فميرجّعش حساب النظام
+الحقيقي لتينانت 1 (أو أي تينانت تاني)، ويرمي `NotFoundError("المستلم غير
+موجود")` **قبل** ما يوصل لمنطق فحص الرصيد أصلًا (`InsufficientBalanceError`
+مستحيل يتحقق في هذا المسار).
+
+**تأكيد حي:** اشتراكان حقيقيان تحت تينانت 1 (واحد بسعر رخيص يفترض
+`SUCCESS`، واحد بسعر باهظ عمدًا يفترض `InsufficientBalanceError→PAST_DUE`)
+اتلقطوا بنجاح عبر `process_auto_renewals` (بعد إصلاح البند أعلاه) لكن
+الاثنين فشلا بنفس `NotFoundError` بالحرف، بدل الوصول لأي من المسارين
+المتوقَّعين.
+
+**نفس النمط المعماري اللي ظهر مرتين النهارده في نفس الدومين (`SaaSControlService`
+نفسها):** تينانت مربوط بلحظة إنشاء الـinstance بدل كل عملية على حدة —
+لكن هنا في مكوّن مختلف تمامًا (`FinanceService`)، **مُستخدَم عبر دومينات
+كتير غير `saas`** (أي دومين بينادي `FinanceService(db, tenant_id)` مباشرة
+مُعرَّض لنفس القصور لو حاول يعالج أكتر من تينانت من نفس الـinstance).
+**مرتبط أيضًا بـ`trigger_renewals`/`router.py:273` بنفس القصور** — أي
+استدعاء لـ`/admin/trigger-renewals` (بتينانت محدد أو بلا تحديد) هيمر عبر
+نفس `self.finance` الثابتة على `tenant_id=0`، فمعرَّض لنفس الفشل.
+
+**هذا مش رقعة سريعة — يحتاج مراجعة معمارية مخصصة:** هل `FinanceService`
+لازم تتبنى نمط per-operation (تُبنى/تُستدعى بـtenant_id لكل عملية على
+حدة) بدل per-instance (تينانت ثابت وقت الإنشاء)؟ التغيير المحدود الممكن
+(بناء `FinanceService` جديدة داخل حلقة `process_auto_renewals` بـ
+`sub.tenant_id` بدل `self.finance` الثابتة) بيحل هذه الحالة تحديدًا بس
+مش الأثر الأعمّ عبر باقي استخدامات `FinanceService` في المشروع — قرار
+تصميمي يحتاج جلسة منفصلة.
+
+**المرجع:**
+`.claude/reports/past-due-grace-period-notifications-implementation-session-log.md`
+§9-ج/د.
+
+**⚠️ تحديث [2026-09-08، جلسة `financeservice-tenant-binding-fix`]:**
+**الحالة النهائية: ✅ اتحل** (داخل `SaaSControlService` تحديدًا —
+النطاق الفعلي الوحيد المؤكَّد لهذه المشكلة، راجع
+`financeservice-tenant-binding-investigation-session-log.md` §3: صفر
+دومين تاني بيعاني من نفس النمط فعليًا). الإصلاح المُنفَّذ هو الخيار
+(ب) من تقييم الجلسة السابقة (نطاق ضيق، صفر لمس على `FinanceService`
+نفسها أو أي دومين تاني): حذف `self.finance = FinanceService(db,
+tenant_id)` الثابتة من `SaaSControlService.__init__`، وبناء
+`FinanceService` محلية جوّه كل دالة على حدة بالتينانت الصح ليها —
+`FinanceService(self.db, sub_tenant_id)` لكل اشتراك على حدة داخل حلقة
+`process_auto_renewals` (كانت هي مصدر الباج المؤكَّد)، و
+`FinanceService(self.db, self.tenant_id)` داخل `pay_invoice` (كانت
+أصلًا بتستخدم نفس تينانت الـinstance، إعادة بناء محلية فقط بلا تغيير
+سلوك). **الاختبار الحي أثبت الحلقة الكاملة شغّالة** (راجع تحديث البند
+`backlog-process-auto-renewals-task-tenant-zero-noop` فوق للتفاصيل
+الكاملة). **Regression:** 3 ملفات اختبار بتستخدم `SaaSControlService`
+مباشرة — `cancel_subscription` (2/2 ✅، لا تستخدم `self.finance`
+أصلًا)، `referral_affiliate` (6/6 ✅)، `saas_active_subscription` (2/4،
+الفشلان الاتنان مؤكَّدان **غير مرتبطين** بهذا الإصلاح عبر traceback
+كامل — مشاكل مسبقة داخل `realestate/service.py` نفسه [`landlord`
+مختلف عن مالك الوحدة الفعلي: راجع `backlog-realestate-test-fixture-
+landlord-not-registered-land-owner` أعلاه؛ ورصيد مشتري اختباري صفري
+كشفته إصلاح باج #16 سابق غير مرتبط]، ومفيش أي منهم بيبني
+`SaaSControlService` أو يلمس `self.finance`). **ملاحظة جانبية اتكشفت
+أثناء الإصلاح، خارج نطاقه، فُتح لها بند backlog جديد منفصل تحت
+(`backlog-trigger-renewals-admin-endpoint-missing-commit-silent-write`).**
+النطاق الأعمّ المذكور فوق (هل `FinanceService` نفسها تتبنى per-operation
+API عبر كل استخدامتها في المشروع؟) **لسه قرار معماري منفصل مؤجَّل** —
+لم يُتخذ اليوم، خارج نطاق الإصلاح الضيق المطلوب. تفاصيل كاملة:
+`.claude/reports/financeservice-tenant-binding-fix-session-log.md`،
+`tests/test_financeservice_tenant_binding_fix.py`.
+
+## [2026-09-08] backlog-finance-router-hardcoded-tenant-id-1 — 🟡 توثيق فقط، صفر تحقق حي
+
+اكتُشف أثناء فحص read-only شامل (جرد كل نقاط إنشاء `FinanceService(...)`
+عبر المشروع) لتوثيق حجم تأثير
+`backlog-financeservice-tenant-binding-blocks-cross-tenant-operations`
+أعلاه. `finance/router.py:121` بيبني الـservice بـ`tenant_id` مكتوب
+صريح بدل قراءته من `current_user`:
+
+```python
+service = FinanceService(db, 1)   # سطر 121 — مقارنة بباقي الـ7 endpoints في نفس الملف
+```
+
+باقي الـ7 نقاط استدعاء في نفس الملف (29, 45, 75, 102, 135, 146, 158,
+182) كلهم `FinanceService(db, cast(int, current_user.tenant_id))` —
+السطر 121 هو الشاذ الوحيد. **مختلف عن مشكلة `SaaSControlService`
+(instance ثابتة عبر عدة عمليات)** — هنا كل request بيبني instance
+جديدة (دورة حياة request-scoped طبيعية)، لكن الـtenant المُستخدَم
+مكتوب صريح `1` بدل تينانت المستخدم الفعلي الحالي — أي مستخدم من أي
+تينانت غير `1` بيستدعي هذا الـendpoint هيتعامل مع بيانات تينانت `1`
+بدل تينانته هو (أو العكس: عزل تينانت مكسور بالكامل لهذا الـendpoint
+تحديدًا). **لم يُحدَّد بعد أي endpoint بالضبط (لم تُقرأ الدالة
+المحيطة بعمق — خارج نطاق الفحص المخصص لـ`FinanceService` نفسها).**
+صفر تعديل كود، صفر تحقق حي — يحتاج جلسة تشخيص مستقلة لتحديد الـendpoint
+وتأكيد الأثر الفعلي (هل ده كود ميت/مش مربوط براوتر فعّال؟).
+
+**المرجع:**
+`.claude/reports/financeservice-tenant-binding-investigation-session-log.md`
+§2 ("`finance/router.py` نفسه").
+
+## [2026-09-08] ربط بباجات constructor-mismatch القديمة: commerce/tasks.py + تأكيد invoicing/router.py:330
+
+اكتُشفا كملاحظتين جانبيتين أثناء نفس الجرد الشامل لكل نقاط إنشاء
+`FinanceService(...)` (نفس الجلسة أعلاه) — **نفس عائلة الباج القديمة
+`constructor-mismatch` (service constructors بمعاملات ناقصة)، صفر علاقة
+بمشكلة تينانت-البايندنغ نفسها، مذكورين هنا فقط للأمانة والربط.**
+
+**(أ) `invoicing/router.py:330` — `InvoicingService(db)` بمعامل واحد
+بدل اتنين:** **موثَّق مسبقًا بالفعل** كبند backlog قائم بذاته —
+`invoicing-process-overdue-invoices-missing-tenant-id-arg` [2026-08-29]
+(الجدول أعلاه، قرب السطر الموصوف بـ`POST /invoicing/admin/process-overdue`،
+تفاصيل كاملة في `.claude/reports/invoicing-21-metadata-collision-session-log.md`
+§5). **صفر معلومة جديدة** — نفس السطر، نفس التوقيع الناقص، أعيد رصده
+بالصدفة أثناء الـgrep الشامل لهذه الجلسة. لا داعي لبند backlog منفصل؛
+هذا مجرد ربط/تأكيد إضافي للبند الموجود، موثَّق كاملًا في
+`.claude/reports/financeservice-tenant-binding-investigation-session-log.md`
+§3 (قسم "خارج النطاق لكن مُلاحَظ أثناء الفحص").
+
+**(ب) `app/tasks/commerce.py` — `CommerceService(db)` بمعامل واحد بدل
+اتنين، 5 مواضع (أسطر 71, 122, 165, 214, 254):** **لم يوجد بند backlog
+سابق مخصَّص له** (بعد بحث في `PROGRESS_LOG.md` والأرشيف — الإشارة
+الوحيدة الموجودة سابقًا لـ`commerce`/`tasks/commerce.py` هي ملاحظة
+سياق تكامل عابرة في جلسة Phase 10 لـ`affiliate` [أرشيف ~1010-1020]،
+مش بند backlog فعلي). `CommerceService.__init__` (`commerce/service.py:24`)
+`def __init__(self, db: AsyncSession, tenant_id: int)` — `tenant_id`
+إجباري بلا default، بينما كل الخمس مهام في `tasks/commerce.py`
+(`distribute_commissions_task` وأخواتها) بتنادي `CommerceService(db)`
+بمعامل واحد بس. **الأثر المتوقَّع (غير مؤكَّد حيًا):** `TypeError`
+فوري وقت الإنشاء، قبل أي منطق دومين — نفس النمط بالحرف الموثَّق سابقًا
+لـ`InvoicingService(db)`/`FinanceService(db)` في جلسة `constructor-mismatch`
+الأصلية (`PROGRESS_LOG_ARCHIVE_2026-08-18.md:2989` وما حولها). **بند
+backlog صغير جديد مقترَح:** `backlog-commerce-tasks-constructor-missing-tenant-id`
+— 🔴 مفتوح، لم يبدأ فحص، يحتاج تأكيد هل الـ5 مهام دي مربوطة فعليًا
+بـcelery beat schedule/استدعاء حي قبل تحديد الأولوية الحقيقية (نفس
+منهجية بند `invoicing-process-overdue-invoices-missing-tenant-id-arg`
+المذكور فوق). صفر تعديل كود، صفر تحقق حي في هذه الجلسة.
+
+**المرجع:**
+`.claude/reports/financeservice-tenant-binding-investigation-session-log.md`
+§3 (قسم "خارج النطاق لكن مُلاحَظ أثناء الفحص").
+
+**الحالة:** 🔴 مفتوح، لم يُصلَح.
+
+## [2026-09-08] إصلاح ضيق: FinanceService tenant binding في SaaSControlService — النطاق الأصلي (الخيار ب من التقييم)
+
+**تنفيذًا للخيار (ب)** من تقييم
+`backlog-financeservice-tenant-binding-blocks-cross-tenant-operations`
+(راجع `.claude/reports/financeservice-tenant-binding-investigation-session-log.md`
+§4) — إصلاح محصور في `app/domains/saas/service.py` بس، صفر لمس على
+`FinanceService` نفسها أو أي دومين تاني.
+
+**التعديل:** حذف `self.finance = FinanceService(db, tenant_id)` الثابتة
+من `__init__` (سطر 63). فحص الدالتين الوحيدتين اللي كانتا بتستخدماها:
+`process_auto_renewals` (بتتعامل مع تينانتات متعددة — `sub.tenant_id`
+لكل اشتراك، مختلف عن `self.tenant_id`) و`pay_invoice` (بتتعامل دايمًا
+مع نفس تينانت الـinstance، `self.tenant_id`، لأن `get_invoice` بتفلتر
+بيه أصلًا). الحل: بناء `FinanceService` محلية جديدة جوّه كل دالة —
+`FinanceService(self.db, sub_tenant_id)` داخل حلقة `process_auto_renewals`
+(تُبنى من جديد لكل اشتراك على حدة)، و`FinanceService(self.db,
+self.tenant_id)` محليًا جوّه `pay_invoice`.
+
+**الاختبار الحي — أول مرة نشوف الحلقة الكاملة شغّالة من طرف لطرف:**
+كررت بالضبط نفس السيناريو اللي كان فشل قبل الإصلاح (اشتراكان تحت
+تينانت 1، رخيص/باهظ، عبر `SaaSControlService(db, 0)` — نفس نمط
+السنتينل الإداري الحقيقي في `saas_tasks.py`/`router.py:273`)، كـ
+regression test حقيقي ضد DB حي (`tests/test_financeservice_tenant_binding_fix.py`،
+صفر mock). **قبل الإصلاح:** الاثنان كانا بيفشلا بنفس
+`NotFoundError("المستلم غير موجود")`. **بعد الإصلاح:** الرخيص →
+`SUCCESS` فعلي (معاملة حقيقية + فاتورة `PENDING` حقيقية على القرص)،
+الباهظ → `InsufficientBalanceError` → `PAST_DUE` فعلي (`grace_period_end_date`
+مضروب +3 أيام)، مؤكَّدان الاثنان عبر جلسة DB مستقلة (`AsyncSessionLocal()`
+جديدة). تفاصيل كاملة + ملاحظة تقنية جانبية (باج `missing-commit` مستقل
+في فرع `except InsufficientBalanceError`، لم يُلمَس) في
+`.claude/reports/financeservice-tenant-binding-fix-session-log.md` §3.
+
+**Regression:** 3 ملفات اختبار بتستخدم `SaaSControlService` مباشرة —
+`test_saas_cancel_subscription_silent_write.py` (2/2 ✅، `cancel_subscription`
+لا تستخدم `self.finance` أصلًا)، `test_referral_affiliate_unified_system.py`
+(6/6 ✅)، `test_saas_active_subscription.py` (2/4 — الفشلان الاتنان
+مؤكَّدان **غير مرتبطين** بإصلاح اليوم عبر traceback كامل: مشاكل داخل
+`realestate/service.py` نفسه — تعارض بيانات `landlord`/مالك الوحدة،
+ورصيد مشتري اختباري صفري كشفته إصلاح باج #16 القديم غير المرتبط — كلا
+الاختبارين بيمرا فقط عبر `can_access_service`، المؤكَّد إنها لا تلمس
+`self.finance`/`FinanceService` إطلاقًا، و`realestate/service.py` كان
+أصلًا معدَّل uncommitted من قبل بداية هذه الجلسة). تفاصيل التحليل
+الكامل في `.claude/reports/financeservice-tenant-binding-fix-session-log.md`
+§4.
+
+**تحديث حالة البندين:**
+- `backlog-financeservice-tenant-binding-blocks-cross-tenant-operations`
+  (أعلاه) → **✅ اتحل** (داخل `SaaSControlService` تحديدًا — النطاق
+  الفعلي الوحيد المؤكَّد لهذه المشكلة، راجع تقرير الفحص §3).
+- `backlog-process-auto-renewals-task-tenant-zero-noop` (أعلاه) →
+  **✅ اتحل بالكامل** — الاختبار الحي أثبت الحلقة الكاملة (اختيار
+  الاشتراكات عبر كل التينانتات + تنفيذ العملية المالية الفعلي، SUCCESS
+  حقيقي وPAST_DUE حقيقي) شغّالة من طرف لطرف لأول مرة.
+
+**المرجع:** `.claude/reports/financeservice-tenant-binding-fix-session-log.md`
+(كامل)، `tests/test_financeservice_tenant_binding_fix.py`.
+
+## [2026-09-08] backlog-trigger-renewals-admin-endpoint-missing-commit-silent-write — 🔴 أولوية عالية
+
+اكتُشف كملاحظة جانبية أثناء الاختبار الحي لإصلاح
+`backlog-financeservice-tenant-binding-blocks-cross-tenant-operations`
+أعلاه (`.claude/reports/financeservice-tenant-binding-fix-session-log.md`
+§3) — **صفر لمس، توثيق فقط**.
+
+`POST /admin/trigger-renewals` (`saas/router.py:265-275`) بينادي
+`service.trigger_renewals(tenant_id)` (`saas/service.py:617-620`) اللي
+بدورها بتنادي `process_auto_renewals(target)` — **بلا أي `db.commit()`
+بعد الاستدعاء** (`get_db()` مفيهاش commit تلقائي، `router.py` نفسه
+مفيهوش أي `await db.commit()` صريح). فرع `except InsufficientBalanceError`
+جوّه `process_auto_renewals` (`service.py`، سطر ~319-327) بيعمل
+`repo.update_subscription(..., status="PAST_DUE", ...)` عبر `flush()`
+بس (`SaaSRepository.update_subscription`، بلا `commit()` مستقل) — نفس
+نمط "الكتابة الصامتة" (`silent-write`) الموثَّق سابقًا ومتكرر في المشروع
+(زي `saas-cancel-subscription-silent-write-fix` القديم، وبند
+`process_auto_renewals` نفسه فرع #4 في الجدول أعلى الملف).
+
+**عكس ذلك تمامًا:** `process_auto_renewals_task` (الـcelery task
+اليومي، `saas_tasks.py:69-75`) عندها `await db.commit()` **صريح مباشرة
+بعد** استدعاء `service.process_auto_renewals(tenant_id=None)` — فأي
+تحويل `PAST_DUE` عبر المسار التلقائي اليومي بيتحفظ فعليًا (مؤكَّد حيًا
+في جلسة اليوم، راجع تحديث `backlog-process-auto-renewals-task-tenant-
+zero-noop` فوق).
+
+**الأثر المتوقَّع (غير مؤكَّد حيًا بعد لهذا الـendpoint تحديدًا — الاختبار
+الحي اليوم استخدم مسار الخدمة المباشر + `commit()` يدوي يحاكي التاسك،
+مش الـHTTP endpoint نفسه):** أي استدعاء إداري حقيقي لـ`POST
+/admin/trigger-renewals` (بتينانت محدد أو بلا تحديد) لاشتراك هيفشل
+تجديده بـ`InsufficientBalanceError`، الكود بيحوّل حالته لـ`PAST_DUE`
+في الذاكرة (ويرجّع `{"status": "PAST_DUE"}` في الـresponse كنجاح
+ظاهري)، **لكن الكتابة بتتفقد صامتة عند إغلاق الـsession** (`get_db()`
+بترولباك أي ترانزاكشن معلَّقة بلا commit) — الاشتراك بيفضل فعليًا
+بحالته القديمة (`ACTIVE`) على القرص، بلا `grace_period_end_date`،
+رغم رد الـHTTP الناجح الكاذب.
+
+**غير محتاج تحقق حي منفصل لإثبات النمط نفسه** — نفس الآلية بالحرف
+(`flush()`-only + غياب `commit()` محيط) موثَّقة ومؤكَّدة حيًا مسبقًا
+لمرات عديدة في المشروع (`saas-cancel-subscription-silent-write-fix`،
+وغيرها) — لكن **التحقق الحي المحدد لهذا الـendpoint نفسه (`POST
+/admin/trigger-renewals` عبر HTTP فعلي) لم يحصل بعد.**
+
+**الإصلاح المقترَح (لم يُنفَّذ، خارج نطاق جلسة اليوم):** إضافة `await
+db.commit()` في `router.py` بعد `await service.trigger_renewals(tenant_id)`
+مباشرة — أبسط حل، نفس نمط `process_auto_renewals_task`. البديل الأعمّ
+(نقل `commit()` جوّه `process_auto_renewals`/`trigger_renewals` نفسها
+بدل الاعتماد على المستدعي) يحتاج مراجعة كل نقاط الاستدعاء التانية
+(الـcelery task) عشان مايتكررش commit مزدوج — قرار تصميم بسيط لكن
+يحتاج جلسة منفصلة.
+
+**المرجع:** `.claude/reports/financeservice-tenant-binding-fix-session-log.md`
+§3.
+
+**الحالة:** 🔴 مفتوح، أولوية عالية — صفر تحقق حي، صفر إصلاح.
+
+---
+
+## [2026-09-08] تحديث backlog-trigger-renewals-admin-endpoint-missing-commit-silent-write — ✅ اتحل
+
+**جلسة 1 (تحقق حي، صفر تعديل كود):** استُدعيت دالة الراوتر
+`trigger_renewals` فعليًا (نفس الكائن المسجَّل تحت `POST
+/admin/trigger-renewals`) بجلسة `AsyncSessionLocal()` تُفتح وتُغلق بنفس
+نمط `get_db()` الحقيقي بالضبط (بلا commit إضافي) — سيناريو اشتراك باهظ
+واحد → `InsufficientBalanceError` → PAST_DUE. **الباج تأكَّد حيًا لأول
+مرة**: رد الـAPI رجّع `PAST_DUE`، لكن الاشتراك في الـDB (جلسة مستقلة بعد
+إغلاق جلسة الطلب) فضل `status="ACTIVE"` و`grace_period_end_date=None`.
+فُحصت كمان الفروع التلاتة في `process_auto_renewals` بدقة: SUCCESS آمن
+تمامًا (`self.db.commit()` خاص بيه، `service.py:314`، مستقل عن أي
+commit خارجي)، FAILED صفر كتابة DB، فرع PAST_DUE هو **الوحيد** المعتمِد
+على commit خارجي غائب. المرجع الكامل:
+`.claude/reports/trigger-renewals-missing-commit-investigation-session-log.md`.
+
+**جلسة 2 (إصلاح ضيق):** أُضيف `await self.db.commit()` داخل
+`SaaSControlService.trigger_renewals` (`saas/service.py:618-622`) بس —
+مباشرة بعد `results = await self.process_auto_renewals(target)` وقبل
+الـ`return`، نفس نمط `saas_tasks.py:75` تمامًا:
+
+```python
+async def trigger_renewals(self, tenant_id: Optional[int] = None):
+    target = tenant_id if tenant_id is not None else self.tenant_id
+    results = await self.process_auto_renewals(target)
+    await self.db.commit()
+    return results
+```
+
+**صفر لمس على `router.py` أو `process_auto_renewals` نفسها.** تحقق حي
+بعد الإصلاح (نفس الاشتراك الباهظ، نفس منهجية الاستدعاء): رد الـAPI
+`PAST_DUE`، والاشتراك في الـDB أصبح فعليًا `status="PAST_DUE"` بـ
+`grace_period_end_date` مضروب — تطابق كامل. اختبار SUCCESS إضافي عبر
+نفس المسار (اشتراك رخيص) أكّد إن `self.db.commit()` الإضافي بعد commit
+داخلي سابق (فرع SUCCESS، سطر 314) **لا يسبب أي خطأ "double commit"** —
+commit على session بلا ترانزاكشن معلَّقة no-op آمن في SQLAlchemy.
+4 اختبارات مرّت (`test_trigger_renewals_endpoint_missing_commit.py`
+اتنين + `test_financeservice_tenant_binding_fix.py` اتنين كـregression،
+صفر تأثر). المرجع الكامل:
+`.claude/reports/trigger-renewals-missing-commit-fix-session-log.md`.
+
+**الحالة النهائية:** ✅ اتحل بالكامل ومؤكَّد حيًا (الملاحظة القديمة فوق
+تفضل كما هي — سجل تراكمي — لكنها متجاوَزة بهذا التحديث).
+
+---
+
+## [2026-09-08] تحديث backlog-notification-delivery-stub-empty-non-inapp-channels — 🟡 قرار مُتَّخذ
+
+**النطاق:** توثيق فقط — صفر تغيير وظيفي، منطق الـstubs نفسه لم يتغيّر
+حرفًا واحدًا.
+
+أُضيف تعليق بارز فوق تعريف `send_notification_task` في المكانين
+(`app/core/celery_app.py:67`، `app/domains/communications/tasks.py:10`)
+يوضّح إن القنوات EMAIL/SMS/PUSH غير مُفعَّلة حاليًا وإن IN_APP هي
+القناة الوحيدة المدعومة فعليًا، مع إشارة صريحة لهذا البند.
+
+**grep شامل عن كل نقطة استدعاء فعلية لـ`CommunicationsService.send_notification(...)`
+في المشروع (`.send_notification(` عبر `app/domains/`)** — 5 نقاط
+استدعاء فعلية بس، **كلها بتستخدم `IN_APP` بالفعل** (صراحة أو عبر
+القيمة الافتراضية لتوقيع الدالة نفسها):
+
+| الملف:السطر | القناة الفعلية |
+|---|---|
+| `app/domains/transport/service.py:875` (عبر `_send_notification` helper) | `channel="IN_APP"` صراحة |
+| `app/domains/realestate/service.py:729` (عبر `_send_notification` helper) | `channel="IN_APP"` صراحة |
+| `app/domains/automation/service.py:553` | استدعاء بمعاملات موضعية بلا `channel` — يقع على القيمة الافتراضية `NotificationChannel.IN_APP` في توقيع `send_notification` (`communications/service.py:49`) |
+| `app/domains/saas/service.py:396` | `channel="IN_APP"` صراحة |
+| `app/domains/communications/router.py:105` | `channel="IN_APP"` صراحة (مُثبَّتة صراحة في جسم الراوتر — مش من الطلب) |
+
+**صفر نقطة في المشروع كله بتحاول تمرر `EMAIL`/`SMS`/`PUSH` فعليًا** —
+تأكَّد ببحث إضافي عن `channel="EMAIL"/"SMS"/"PUSH"` و
+`NotificationChannel.EMAIL/SMS/PUSH` في كل الباك إند: التطابق الوحيد
+كان `communication_templates.channel` (`communications/models.py:164`،
+`default=NotificationChannel.EMAIL`) — عمود schema افتراضي لجدول
+قوالب البريد، **مش استدعاء فعلي لـ`send_notification`**، خارج نطاق
+هذا الفحص تمامًا.
+
+**بما إن صفر نقطة فعلية بتحاول تستخدم قناة معطَّلة، القرار الثنائي
+المطروح أصلًا (تغييرها لـIN_APP دلوقتي / تركها كـbacklog منفصل) أصبح
+غير ذي موضوع — لا يوجد استدعاء يحتاج تغيير.**
+
+**الحالة الجديدة:** 🟡 قرار مُتَّخذ — IN_APP هي القناة الرسمية الوحيدة
+حاليًا، موثَّقة في الكود (تعليقات واضحة). التكامل الحقيقي
+(SMTP/FCM/Twilio) مؤجَّل لحد ما تتوفر حسابات/مفاتيح فعلية من الفريق —
+ليس قرارًا تقنيًا معلَّقًا، بل يعتمد على بنية تحتية خارجية غير متاحة
+حاليًا.
+
+**المرجع:**
+`.claude/reports/notification-channels-inapp-only-decision-documentation-session-log.md`.
+
+## [2026-09-08] backlog-saas-tasks-calling-nonexistent-methods — تحديث: `check_expired_trials_task` اتحل بالكامل
+
+متابعة لبند `backlog-saas-tasks-calling-nonexistent-methods` أعلاه
+(البند القديم **لم يُعدَّل** — راجعه للسياق الكامل الأصلي). واحدة من
+الأربعة المذكورة فيه، `check_expired_trials_task`، اتصلحت بالكامل
+النهارده في جلسة منفصلة، عبر بَجين كانا متراكبين فوق بعض:
+
+1. **`SaaSControlService(db)` بلا `tenant_id`** (نفس بَج
+   `backlog-process-auto-renewals-task-constructor-typeerror`) — اتصلح
+   بتغيير الاستدعاء في `app/tasks/saas_tasks.py` (`check_expired_trials_task`)
+   لـ`SaaSControlService(db, 0)`، بنفس نمط
+   `process_auto_renewals_task`/`check_past_due_subscriptions_task`.
+2. **دالة `check_and_expire_trials` غير موجودة أصلًا** — اتبنت من
+   الصفر على `SaaSControlService` (`app/domains/saas/service.py`)، بنفس
+   بنية `check_past_due_subscriptions` (المبنية النهارده كمان):
+   - `SaaSRepository.get_trial_subscriptions` (`repository.py`) اتوسَّعت
+     لتقبل `tenant_id: Optional[int] = None` (بلا فلتر = كل
+     المستأجرين، بنفس نمط `get_past_due_subscriptions`) + باراميتر
+     جديد `expired_only: bool = False` بيضيف فلتر فعلي
+     `trial_end_date <= now()`. **قرار تصميم مهم:** الفلتر الزمني
+     اتحط خلف باراميتر اختياري افتراضيه `False`، **مش تعديل مباشر
+     للسلوك الافتراضي** — عشان المستدعي الوحيد الموجود مسبقًا
+     (`AcademyService._cancel_related_free_trials`،
+     `academy/service.py:479-484`) محتاج فعليًا **كل** اشتراكات TRIAL
+     للتينانت بغض النظر عن تاريخ الانتهاء (بيلغيها كلها عند إلغاء
+     enrollment مرتبط)، مش بس المنتهية زمنيًا — تعديل الفلتر الافتراضي
+     كان هيكسر هذا الاستدعاء الموجود بصمت.
+   - `check_and_expire_trials(tenant_id: Optional[int] = None) -> int`
+     دالة جديدة: تجيب `get_trial_subscriptions(tenant_id,
+     expired_only=True)`، تحوّل كل واحد لـ`EXPIRED` عبر
+     `update_subscription_status` الموجودة، `try/except` حول كل
+     اشتراك على حدة (فشل واحد ما يوقفش الباقي)، وترجع `int` (عدد
+     الاشتراكات اللي اتحوّلت فعليًا).
+
+**اختبار حي فعلي (مش mocked):** زُرع اشتراكان `TRIAL` مباشرة عبر SQL
+(`tenant_id=1`, `plan_id=48`) — id=158 بـ`trial_end_date` في الماضي
+(قبل يومين)، id=159 بـ`trial_end_date` في المستقبل (بعد 10 أيام).
+تشغيل `check_expired_trials_task.run()` فعليًا (بعد `import app.main`
+لتسجيل كل الـmappers، بنفس منهجية الجلسة السابقة) رجع
+`{'status': 'success', 'expired_count': 1, ...}`. تحقُّق مستقل عبر
+`SELECT` مباشر بعد التشغيل: **id=158 → `EXPIRED`** (`updated_at`
+اتغيّر)، **id=159 → لسه `TRIAL`** (بلا أي تغيير) — بالظبط النتيجتان
+المتوقَّعتان. الصفان اتحذفا بعدها (`DELETE ... WHERE id IN (158,159)`)
+لإرجاع القاعدة لحالتها الأصلية (23 `ACTIVE` + 1 `CANCELLED`، صفر
+`TRIAL`، مطابق تمامًا لما كان قبل الزرع).
+
+**Regression:** كل الاختبارات الموجودة اللي بتلمس
+`SaaSControlService`/`get_trial_subscriptions`
+(`test_trigger_renewals_endpoint_missing_commit.py`,
+`test_financeservice_tenant_binding_fix.py`,
+`test_referral_affiliate_unified_system.py`,
+`test_saas_cancel_subscription_silent_write.py`,
+`test_saas_active_subscription.py`) — **14 نجحوا، فشلان اثنان
+موجودان مسبقًا وموثَّقان بالفعل** (`test_realestate_rent_unit_saas_check_passes`
+و`test_realestate_buy_fractional_ownership_saas_check_passes_then_hits_known_bug`
+— راجع الإدخالين بتاريخ [2026-09-08] أعلاه اللي بيوثقوا هذين الفشلين
+كمشكلة fixture/بَج معروف منفصل تمامًا في دومين `realestate`، غير
+مرتبط بـSaaS trial expiry). **صفر رجوع (regression) ناتج عن هذا
+التعديل.**
+
+**الحالة المحدَّثة للأربعة الأصليين:**
+- ✅ `check_expired_trials_task` / `check_and_expire_trials` —
+  **اتحل بالكامل واتأكد حيًا** (هذا الإدخال).
+- 🔴 `generate_monthly_invoices_task` / `generate_monthly_invoices` —
+  **لسه مفتوح** (مجدولة فعليًا، أول كل شهر 3ص — لسه هتفشل).
+- 🔴 `send_trial_expiry_reminders_task` / `send_trial_expiry_reminders`
+  — **لسه مفتوح** (غير مجدولة حاليًا).
+- 🔴 `cleanup_cancelled_subscriptions_task` / `cleanup_cancelled_subscriptions`
+  — **لسه مفتوح** (غير مجدولة حاليًا، ويحتاج قرار نطاق صريح
+  PDPL/GDPR قبل أي بناء — راجع
+  `.claude/reports/saas-nonexistent-methods-investigation-session-log.md`
+  §4).
+
+**المرجع:** `.claude/reports/check-expired-trials-task-fix-session-log.md`.
+
+---
+
+## [2026-09-09] backlog-saas-tasks-calling-nonexistent-methods — تحديث: `generate_monthly_invoices_task` اتحل بالكامل
+
+متابعة لبند `backlog-saas-tasks-calling-nonexistent-methods` أعلاه
+(البند القديم **لم يُعدَّل**). ثانية من الأربعة، `generate_monthly_invoices_task`،
+اتصلحت بالكامل، عبر نفس فئتي البَج المتراكبين:
+
+1. **`SaaSControlService(db)` بلا `tenant_id`** — اتصلح لـ
+   `SaaSControlService(db, 0)`، نفس نمط التلاتة المُصلَحين قبلها.
+2. **دالة `generate_monthly_invoices` غير موجودة أصلًا** — اتبنت من
+   الصفر على `SaaSControlService`:
+   - `SaaSRepository.get_subscriptions_for_manual_billing`
+     (`repository.py`) — استعلام جديد: `status="ACTIVE"`,
+     `auto_renew=False`, `next_billing_date <= now()`. **بنفس معيار
+     الاستحقاق بالضبط** في `get_subscriptions_for_renewal` الموجودة،
+     لكن بفلتر `auto_renew=False` بدل `True` — دالة منفصلة تمامًا
+     (مش توسيع لـ`get_subscriptions_for_renewal` بباراميتر)، لأن الاسم
+     والمعنى مختلفان جوهريًا (تجديد تلقائي مقابل فوترة يدوية). بلا
+     فلتر `tenant_id` افتراضيًا (عبر كل المستأجرين).
+   - `generate_monthly_invoices(tenant_id: Optional[int] = None) -> int`
+     دالة جديدة: تخص حصريًا الاشتراكات ACTIVE بـ`auto_renew=False`
+     (عملاء الدفع اليدوي — بعكس `process_auto_renewals` اللي تخص
+     `auto_renew=True`، **صفر تداخل/تكرار بين الاثنين**، مؤكَّد حيًا
+     تحت). لكل اشتراك مستحق: تستدعي `_generate_invoice` الموجودة
+     أصلًا (idempotent عبر `idempotency_key`، نفس الدالة المُستخدَمة
+     جوّه `process_auto_renewals`) **بلا أي استدعاء لـ`FinanceService`/
+     `transfer` وبلا أي خصم فوري من المحفظة** — الفرق الجوهري عن
+     `process_auto_renewals`؛ الدفع الفعلي بيحصل لاحقًا عبر
+     `pay_invoice` الموجودة. بعد الإصدار، `next_billing_date` بيتحدّث
+     +30 يوم (نفس منطق `process_auto_renewals` بالضبط) عشان الفاتورة
+     الجاية متتصدرش تاني الشهر ده. `try/except` حول كل اشتراك على حدة،
+     وترجع `int` (عدد الفواتير المُصدرة فعليًا).
+
+**اختبار حي فعلي (مش mocked):** زُرع اشتراكان `ACTIVE` مباشرة عبر SQL
+(`tenant_id=1`, `plan_id=48`, كلاهما `next_billing_date` في الماضي
+بساعة) — id=163 بـ`auto_renew=false` (الهدف)، id=164 بـ`auto_renew=true`
+(كنترول، لإثبات عدم التأثر/عدم التكرار مع `process_auto_renewals`).
+تشغيل `generate_monthly_invoices_task.run()` فعليًا (بعد `import
+app.main`، بنفس منهجية الجلسات السابقة) رجع `{'status': 'success',
+'issued_count': 1, ...}`. تحقُّق مستقل عبر `SELECT` مباشر بعد التشغيل:
+**id=163** → فاتورة `PENDING` حقيقية اتصدرت (`INV-6EEA4EADE936`،
+`amount=0.00000000` مطابق لسعر الخطة)، `next_billing_date` اتحدّث
+لـ+30 يوم فعليًا (`2026-10-08`)، **id=164** → **بلا أي تغيير إطلاقًا**
+(`next_billing_date`/`updated_at` زي وقت الزرع بالظبط — لم يُلمَس،
+إثبات حي إن الفلترة صح ومفيش تداخل مع `process_auto_renewals`).
+تأكيد إضافي: صفر صف جديد في جدول `transactions` (بحث `WHERE
+created_at > now() - interval '10 minutes'` رجع `0`) — **صفر خصم من
+أي محفظة**، الفرق الجوهري عن `process_auto_renewals` مؤكَّد حيًا لا
+نظريًا فقط. **اختبار idempotency إضافي:** إعادة تشغيل
+`generate_monthly_invoices_task.run()` فورًا بعد كده رجعت
+`issued_count: 0` — id=163 مبقاش مرشَّحًا (next_billing_date اتحرك
+للمستقبل)، صفر فاتورة مكررة. الصفان اتحذفا بعدها (`DELETE FROM
+saas_invoices WHERE subscription_id IN (163,164); DELETE FROM
+saas_tenant_subscriptions WHERE id IN (163,164)`) لإرجاع القاعدة
+لحالتها الأصلية (تحقُّق `GROUP BY status, auto_renew` بعد الحذف طابق
+تمامًا الحالة قبل الزرع).
+
+**Regression:** نفس الخمسة اختبارات اللي بتلمس
+`SaaSControlService`/`get_subscriptions_for_renewal` — **14 نجحوا،
+نفس الفشلان الاثنان الموجودان مسبقًا** (`test_realestate_rent_unit_saas_check_passes`
+و`test_realestate_buy_fractional_ownership_saas_check_passes_then_hits_known_bug`
+— بَج fixture/`realestate` معروف ومنفصل تمامًا، موثَّق مسبقًا). **صفر
+رجوع (regression) ناتج عن هذا التعديل.**
+
+**الحالة المحدَّثة للأربعة الأصليين:**
+- ✅ `check_expired_trials_task` / `check_and_expire_trials` — اتحل
+  بالكامل واتأكد حيًا [2026-09-08].
+- ✅ `generate_monthly_invoices_task` / `generate_monthly_invoices` —
+  **اتحل بالكامل واتأكد حيًا** (هذا الإدخال).
+- 🔴 `send_trial_expiry_reminders_task` / `send_trial_expiry_reminders`
+  — **لسه مفتوح** (غير مجدولة حاليًا).
+- 🔴 `cleanup_cancelled_subscriptions_task` / `cleanup_cancelled_subscriptions`
+  — **لسه مفتوح** (غير مجدولة حاليًا، ويحتاج قرار نطاق صريح
+  PDPL/GDPR قبل أي بناء — راجع
+  `.claude/reports/saas-nonexistent-methods-investigation-session-log.md`
+  §4).
+
+**المرجع:** `.claude/reports/generate-monthly-invoices-task-fix-session-log.md`.
+
+## [2026-09-09] backlog-saas-tasks-calling-nonexistent-methods — تحديث: `send_trial_expiry_reminders_task` اتحل بالكامل
+
+**النطاق:** بناء + إصلاح `send_trial_expiry_reminders_task` بالكامل — تالت
+واحدة من الأربعة المذكورين في
+`.claude/reports/saas-nonexistent-methods-investigation-session-log.md`،
+بنفس منهجية `check_expired_trials_task` [2026-09-08] و
+`generate_monthly_invoices_task` [2026-09-09] بالضبط.
+
+**أ) الـconstructor:** نفس بَج `SaaSControlService(db)` بلا `tenant_id`
+(`TypeError` مؤكَّد نظريًا، نفس النمط في التلاتة التانيين) — اتصلح لـ
+`SaaSControlService(db, 0)` (سنتينل إداري، نفس نمط
+`check_past_due_subscriptions_task`).
+
+**ب) الدالة المفقودة:** `send_trial_expiry_reminders` مضافة في
+`app/domains/saas/service.py` (بعد `check_and_expire_trials` مباشرة)،
+بنفس بنية `check_past_due_subscriptions` تمامًا — بتستخدم
+`get_trial_subscriptions(tenant_id, expired_only=False)` الموجودة
+بالفعل (من جلسة `check_expired_trials_task`)، مع فلتر إضافي محلي:
+`now <= trial_end_date <= now + يومين` (نافذة تذكير "باقي يومين").
+لكل اشتراك مطابق: `CommunicationsService.send_notification(channel=
+"IN_APP", idempotency_key=f"SUB-TRIAL-REMIND-{sub_id}", ...)` —
+`try/except` حول كل اشتراك على حدة، بترجع `int` (عدد التذكيرات
+اللي اتبعتت فعليًا) مباشرة، مطابق لتوقع `saas_tasks.py`
+(`# type: ignore[attr-defined]` اتشال). **قناة `EMAIL` لم تُستخدَم
+إطلاقًا** — الـstub الفاضي موثَّق في backlog منفصل
+(`backlog-notification-delivery-stub-empty-non-inapp-channels`)، ودوكستring
+المهمة نفسها في `saas_tasks.py` اتعدّل عشان يوضّح كده صراحة (كانت
+بتقول "إشعارات In-App وبريد إلكتروني" بالغلط).
+
+**ج) اختبار حي فعلي — بيانات مزروعة + تشغيلتان منفصلتان (idempotency) +
+تحقق مستقل:**
+
+زرع 3 اشتراكات `TRIAL` تحت تينانت1 (`plan_id=48`، نفس النمط المرجعي
+من جلسة `check_expired_trials_task`): `id=173` (`trial_end_date` =
+الآن+1.5 يوم، لازم يتبعتله تذكير)، `id=174` (الآن+7 أيام، لازم ما
+يتبعتلوش)، `id=175` (الآن+1.5 يوم برضو، لاختبار idempotency). قبل
+الزرع: صفر `TRIAL` في القاعدة — عزل تام.
+
+**تشغيلة 1** (`send_trial_expiry_reminders_task.run()`، سكريبت Python
+منفصل بعد `import app.main`) رجعت `{'status': 'success',
+'reminders_sent': 2, ...}` — لوج: `Trial expiry reminder sent:
+subscription 173` و`175` (مش `174`، مطابق تمامًا للتوقع). **تشغيلة 2**
+(عملية Python منفصلة تمامًا — استدعاء `.run()` مرتين في نفس العملية
+بيرمي `AttributeError` بسبب تسريب event loop مغلق من `_run_async`،
+نفس الملاحظة التقنية الموثَّقة في جلسة `past-due-grace-period-
+notifications-implementation-session-log.md` §"ملاحظة تقنية عن
+سكريبت الاختبار") رجعت بردو `reminders_sent: 2` (متوقَّع — الكود
+بيعتبر أي `send_notification` ناجح "مُرسَل" بصرف النظر عن كونه idempotent
+duplicate، بنفس فلسفة `check_past_due_subscriptions`؛ الدليل الحاسم
+على الـidempotency الفعلية هو صفوف جدول `notifications` مش الرقم
+المرجَع من الـtask).
+
+**تحقق مستقل على القرص بعد التشغيلتين:**
+```
+SELECT id, user_id, idempotency_key, title, channel, created_at
+FROM notifications WHERE idempotency_key LIKE 'SUB-TRIAL-REMIND-%';
+
+ id | user_id |   idempotency_key    | channel |          created_at
+----+---------+----------------------+---------+-------------------------------
+ 30 |       1 | SUB-TRIAL-REMIND-173 | IN_APP  | 2026-09-08 21:27:33 (تشغيلة 1)
+ 31 |       1 | SUB-TRIAL-REMIND-175 | IN_APP  | 2026-09-08 21:27:38 (تشغيلة 1)
+```
+**صفان بالظبط** رغم التشغيلتين — التشغيلة التانية (الساعة 21:29) صفر
+صف جديد. صفر `SUB-TRIAL-REMIND-174` — التذكير اتبعت للاشتراكين
+المستهدَفين بس. حالة الاشتراكات التلاتة بعد التشغيلتين: **`TRIAL`
+بلا أي تغيير** (الدالة دي بترسل تذكيرات بس، ما بتلمسش `status` —
+بعكس `check_and_expire_trials`). التنظيف: `DELETE FROM notifications
+WHERE idempotency_key LIKE 'SUB-TRIAL-REMIND-%'` +
+`DELETE FROM saas_tenant_subscriptions WHERE id IN (173,174,175)` —
+تحقُّق بعدي: صفر `TRIAL` في القاعدة، صفر صف `SUB-TRIAL-REMIND-%`
+متبقٍّ.
+
+**Regression:** نفس الخمسة اختبارات اللي بتلمس
+`SaaSControlService`/`get_trial_subscriptions` — **14 نجحوا، نفس
+الفشلان الاثنان الموجودان مسبقًا** (`test_realestate_rent_unit_saas_check_passes`
+و`test_realestate_buy_fractional_ownership_saas_check_passes_then_hits_known_bug`
+— بَج fixture/`realestate` معروف ومنفصل تمامًا، موثَّق مسبقًا). **صفر
+رجوع (regression) ناتج عن هذا التعديل.**
+
+**الحالة المحدَّثة للأربعة الأصليين:**
+- ✅ `check_expired_trials_task` / `check_and_expire_trials` — اتحل
+  بالكامل واتأكد حيًا [2026-09-08].
+- ✅ `generate_monthly_invoices_task` / `generate_monthly_invoices` —
+  اتحل بالكامل واتأكد حيًا [2026-09-09].
+- ✅ `send_trial_expiry_reminders_task` / `send_trial_expiry_reminders`
+  — **اتحل بالكامل واتأكد حيًا** (هذا الإدخال).
+- 🔴 `cleanup_cancelled_subscriptions_task` / `cleanup_cancelled_subscriptions`
+  — **لسه مفتوح** (غير مجدولة حاليًا، ويحتاج قرار نطاق صريح
+  PDPL/GDPR قبل أي بناء — راجع
+  `.claude/reports/saas-nonexistent-methods-investigation-session-log.md`
+  §4).
+
+**المرجع:** `.claude/reports/send-trial-expiry-reminders-task-fix-session-log.md`.

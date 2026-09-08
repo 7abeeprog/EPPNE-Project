@@ -13,7 +13,7 @@ from app.domains.realestate.repository import RealEstateRepository
 from app.domains.finance.service import FinanceService
 from app.domains.invoicing.service import InvoicingService
 from app.domains.affiliate.service import AffiliateService
-from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService, FeatureAccessStatus
+from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.ai_agents.service import AIAgentsService
 from app.domains.ai_governance.service import AIGovernanceService
 from app.core.errors import NotFoundError, InsufficientBalanceError, PermissionDeniedError, IdempotencyError, ValidationError
@@ -58,11 +58,14 @@ class RealEstateService:
 
     # ========== التحقق من صلاحيات SaaS ==========
     async def _check_saas_limits(self, tenant_id: int, feature: str = "real_estate"):
+        # [2026-09-07] موحَّد على can_access_service (زي insurance/employment/
+        # digital_twin/arbitration_syndicates/zamakana/transport/
+        # tourism_sports/tenders_auctions/social/service_marketplace بالظبط)
+        # — بعد ما can_access_service نفسها بقت بتفحص saas_plan_service_access
+        # (many-to-many) بدل ServicePlan.service_id القديم. راجع PROGRESS_LOG.md.
         saas = SaaSSubscriptionService(self.db, tenant_id)
-        check = await saas.check_feature_access(tenant_id, feature)
-        if check.status == FeatureAccessStatus.NO_ACTIVE_SUBSCRIPTION:
-            raise PermissionDeniedError("No active subscription found.")
-        if check.status == FeatureAccessStatus.FEATURE_NOT_INCLUDED:
+        has_access = await saas.can_access_service(feature)
+        if not has_access:
             raise PermissionDeniedError("Real Estate feature is not included in your current plan.")
 
     # ========== التحقق من حوكمة الذكاء الاصطناعي ==========
@@ -361,8 +364,10 @@ class RealEstateService:
 
         try:
             await ai.execute_agent_action(agent_id=2, action_type="ANALYZE_PROJECT", payload={"unit_id": unit_id, "price": float(cost), "percentage": float(percentage), "buyer_id": buyer_id}, executor_user_id=buyer_id, idempotency_key=f"REALESTATE-FRAC-T{tenant_id}-{idempotency_key or uuid.uuid4().hex[:8]}")
+        except (NotFoundError, PermissionDeniedError) as e:
+            logger.warning(f"AI analysis skipped for fractional ownership purchase (unit {unit_id}): {e}")
         except Exception as e:
-            logger.error(f"AI analysis failed for fractional ownership purchase (unit {unit_id}): {e}")
+            logger.error(f"AI analysis failed unexpectedly for fractional ownership purchase (unit {unit_id}): {e}")
 
         try:
             await invoicing.create_invoice(  # type: ignore

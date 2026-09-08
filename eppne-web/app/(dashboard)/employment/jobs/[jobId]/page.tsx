@@ -3,7 +3,8 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getJob, applyToJob, getJobApplications, reviewApplication } from '@/services/employment';
+import { getJob } from '@/services/employment';
+import { EmploymentService } from '@/services/employment';
 import { useEmploymentStore } from '@/store/employmentStore';
 import { ArrowLeft, Loader2, CheckCircle, XCircle, Clock, User, FileText, MapPin, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -27,12 +28,12 @@ export default function JobDetailPage() {
 
   const { data: applications, isLoading: appsLoading } = useQuery({
     queryKey: ['job-applications', jobId],
-    queryFn: () => getJobApplications(jobId).then(res => res.data),
+    queryFn: () => EmploymentService.getJobApplications(jobId).then(res => res.data),
     staleTime: 2 * 60 * 1000,
   });
 
   const applyMutation = useMutation({
-    mutationFn: () => applyToJob({ job_id: jobId, cover_letter: coverLetter, resume_url: resumeUrl }),
+    mutationFn: () => EmploymentService.applyToJob({ job_id: jobId, cover_letter: coverLetter, resume_url: resumeUrl }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['job-applications', jobId] });
       setShowApplyForm(false);
@@ -41,7 +42,7 @@ export default function JobDetailPage() {
 
   const reviewMutation = useMutation({
     mutationFn: ({ appId, approve }: { appId: number; approve: boolean }) =>
-      reviewApplication(appId, approve),
+      EmploymentService.reviewApplication(appId, approve),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['job-applications', jobId] });
     },

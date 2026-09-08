@@ -1,11 +1,12 @@
 // hooks/arbitration-syndicates/useCases.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getMyCases, getCase, createCase } from '@/services/arbitration-syndicates';
+import { getCase, createCase } from '@/services/arbitration-syndicates';
+import { ArbitrationSyndicatesService } from '@/services/arbitration-syndicates';
 
 export const useMyCases = () => {
   return useQuery({
     queryKey: ['arbitration-cases'],
-    queryFn: () => getMyCases().then((res) => res.data),
+    queryFn: () => ArbitrationSyndicatesService.getMyCases().then((res) => res.data),
     staleTime: 2 * 60 * 1000,
   });
 };

@@ -240,7 +240,7 @@ export default function MyLearningDashboard() {
 
                     <Button
                       onClick={() =>
-                        router.push(`/academy/classroom/${enrollment.course_id}`)
+                        router.push(`/academy/${enrollment.course_id}/learn`)
                       }
                       className="w-full h-12 bg-primary font-black text-md rounded-xl shadow-[0_0_15px_rgba(var(--primary-rgb),0.3)] hover:scale-105 transition-transform"
                     >

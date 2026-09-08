@@ -10,7 +10,7 @@ import bleach
 from app.domains.arbitration_syndicates.repository import ArbitrationSyndicatesRepository
 from app.domains.finance.service import FinanceService
 from app.domains.ai_agents.service import AIAgentsService
-from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService, FeatureAccessStatus
+from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
 from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, IdempotencyError, ValidationError
@@ -36,11 +36,14 @@ class ArbitrationSyndicatesService:
     # ========== التحقق من صلاحيات SaaS ==========
 
     async def _check_saas_limits(self, tenant_id: int, feature: str = "arbitration_syndicates"):
+        # [2026-09-07] موحَّد على can_access_service (زي insurance/employment/
+        # digital_twin/zamakana/transport/tourism_sports/tenders_auctions/
+        # social/service_marketplace بالظبط) — بعد ما can_access_service
+        # نفسها بقت بتفحص saas_plan_service_access (many-to-many) بدل
+        # ServicePlan.service_id القديم. راجع PROGRESS_LOG.md.
         saas_service = SaaSSubscriptionService(self.db, tenant_id)
-        check = await saas_service.check_feature_access(tenant_id, feature)
-        if check.status == FeatureAccessStatus.NO_ACTIVE_SUBSCRIPTION:
-            raise PermissionDeniedError("No active subscription found.")
-        if check.status == FeatureAccessStatus.FEATURE_NOT_INCLUDED:
+        has_access = await saas_service.can_access_service(feature)
+        if not has_access:
             raise PermissionDeniedError("Arbitration & Syndicates feature is not included in your current plan.")
 
     # ========== دوال مساعدة (معدلة لتوافق الأنواع) ==========

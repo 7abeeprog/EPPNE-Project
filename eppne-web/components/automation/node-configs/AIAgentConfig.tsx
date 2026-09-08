@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getAvailableAgents } from '@/services/automation.service';
+import { AutomationService } from '@/services/automation.service';
 import { Loader2, AlertTriangle, Shield, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 

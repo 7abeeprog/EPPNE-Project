@@ -3,7 +3,7 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { useInvoices, usePayInvoice, useCancelInvoice } from "@/hooks/saas";
+import { useInvoices, usePayInvoice, useCancelInvoice } from "@/hooks/saas/useInvoices";
 import { InvoiceCard } from "@/components/saas/InvoiceCard";
 import { InvoiceDetailModal } from "@/components/saas/InvoiceDetailModal";
 import { Skeleton } from "@/components/ui/skeleton";

@@ -3,7 +3,7 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { useServices, useServiceAccess, useToggleService } from "@/hooks/saas";
+import { useServices, useServiceAccess, useToggleService } from "@/hooks/saas/useServices";
 import { ServiceCard } from "@/components/saas/ServiceCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";

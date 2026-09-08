@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { updateMyProfile } from '@/services/health';
+import { updateMyProfile } from '@/services/health.service';
 import { Loader2, Leaf, PawPrint, Droplet, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TargetEntityType, MedicalProfile } from '@/types/health';

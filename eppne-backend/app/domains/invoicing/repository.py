@@ -108,7 +108,7 @@ class InvoicingRepository:
         items = [InvoiceResponse.model_validate(inv) for inv in result.scalars().all()]
 
         return PaginatedResponse[InvoiceResponse](
-            items=items,
+            data=items,
             total=total,
             skip=skip,
             limit=limit

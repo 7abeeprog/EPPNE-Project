@@ -3,7 +3,7 @@
 
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getKYBDocuments, uploadKYBDocument } from '@/services/sovereign-entities';
+import { SovereignEntitiesService } from '@/services/sovereign-entities';
 import { Upload, File, CheckCircle, XCircle, Loader2, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { EntityDocument } from '@/types/sovereign-entities';
@@ -36,13 +36,13 @@ export default function KYBDocumentUploader({ entityId, canUpload = false }: KYB
 
   const { data, isLoading } = useQuery({
     queryKey: ['kyb-documents', entityId],
-    queryFn: () => getKYBDocuments(entityId).then(res => res.data),
+    queryFn: () => SovereignEntitiesService.getKYBDocuments(entityId).then(res => res.data),
     staleTime: 2 * 60 * 1000,
   });
 
   const uploadMutation = useMutation({
     mutationFn: (payload: { document_type: string; document_url: string }) =>
-      uploadKYBDocument(entityId, payload),
+      SovereignEntitiesService.uploadKYBDocument(entityId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kyb-documents', entityId] });
       setFile(null);

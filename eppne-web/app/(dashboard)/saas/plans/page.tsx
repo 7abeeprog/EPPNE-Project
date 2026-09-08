@@ -3,8 +3,8 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { usePlans, useCreatePlan, useUpdatePlan, useDeletePlan } from "@/hooks/saas";
-import { useServices } from "@/hooks/saas";
+import { usePlans, useCreatePlan, useUpdatePlan, useDeletePlan } from "@/hooks/saas/usePlans";
+import { useServices } from "@/hooks/saas/useServices";
 import { PlanCard } from "@/components/saas/PlanCard";
 import { PlanComparison } from "@/components/saas/PlanComparison";
 import { CreatePlanModal } from "@/components/saas/CreatePlanModal";

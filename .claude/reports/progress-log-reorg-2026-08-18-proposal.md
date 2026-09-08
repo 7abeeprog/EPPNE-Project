@@ -1,0 +1,106 @@
+# مقترح إعادة هيكلة PROGRESS_LOG.md [2026-08-18] — للمراجعة، لسه غير مُطبَّق
+
+**الحالة: 🟡 مسودة للمراجعة — صفر عملية نسخ/استبدال فعلية تمت على `PROGRESS_LOG.md`/`PROGRESS_LOG_ARCHIVE_2026-08-18.md` حتى الآن.**
+
+## السياق والخطة المتفَق عليها
+
+`PROGRESS_LOG.md` الحالي أكبر من 3400 سطر (append-only تراكمي). الخطة المطلوبة:
+1. نسخة كاملة حرفية (صفر تلخيص/حذف) من `PROGRESS_LOG.md` الحالي → `PROGRESS_LOG_ARCHIVE_2026-08-18.md`.
+2. `PROGRESS_LOG.md` جديد يحتوي: سطر إحالة للأرشيف، البانر الحالي، جدول Backlog نشط كامل (يُحدَّث بالتعديل في مكانه من الآن)، قائمة مختصرة للجلسات المُقفلة.
+3. صفر لمس على محتوى الأرشيف بعد إنشائه.
+
+**المنهجية:** استخراج أولي عبر فورك قرأ الملف كامل، ثم مراجعة وتصحيح يدوي مباشر مني على نقطتين حدَّدهما المستخدم (انقسام Backlog #11 لـ11a/11b، وبند `sovereign_entities` بمرحلتيه).
+
+**تحذير شفافية صريح (موجود داخل المسودة نفسها كمان):** لم يُجرَ تدقيق شامل 100% يضمن أن كل اكتشاف تاريخي في الأرشيف الحالي انعكس في هذا الجدول — فقط ما استخرجه الفورك (27 بند) + بندا `sovereign_entities` المُضافين يدويًا. أي بند قديم يظهر لاحقًا وغير موجود هنا، الأرشيف هو المرجع النهائي.
+
+---
+
+## المحتوى الكامل المقترَح لـ`PROGRESS_LOG.md` الجديد
+
+```markdown
+# سجل التقدم (Progress Log)
+
+للسياق التاريخي الكامل قبل 2026-08-18، راجع `PROGRESS_LOG_ARCHIVE_2026-08-18.md`.
+
+سجل تراكمي لكل مهمة مكتملة في المشروع. **بدءًا من 2026-08-18، جدول الـBacklog تحت هو مصدر الحقيقة الوحيد لحالة كل بند — يُحدَّث بالتعديل في مكانه، مش بالإضافة في الآخر.** قائمة الجلسات المُقفلة بس هي append-only (سطرين لكل جلسة جديدة تُقفَل).
+
+---
+
+## 📌 بانر الحالة [آخر تحديث: 2026-08-18]
+
+آخر إغلاق رسمي: **Backlog #11a (فرع `invitations` فقط)** — راجع الجدول تحت. **⚠️ تصحيح صريح على القرار السابق:** بند #11 **مُغلَق جزئيًا بس** — الفرع الأصلي (#11b: `realestate`/`service_marketplace`/`insurance`/`arbitration_syndicates`، نفس السبب الجذري `commit()`-جوه-`begin_nested()` لكن عبر `InvoicingService.create_invoice` مش `identity`) **لسه مفتوح تمامًا، صفر إصلاح عليه، يحتاج جلسة منفصلة.**
+
+صفر قيد نشط حاليًا يمنع فتح أي بند تاني (القيد السابق على Backlog #9 اتشال [2026-08-18]).
+
+**استثناء throwaway-cleanup نشط (تنظيف روتيني غير عاجل، مش عاجل):** `users id=52` (دليل جلسة `invitations`) و`users id=71/72`/دعوات `sovereign_invitations_v2 id=2,3` (بيانات تحقق حي لنفس الجلسة).
+
+---
+
+## 🗂️ جدول الـBacklog النشط
+
+**ملاحظة منهجية:** هذا الجدول أُعيد بناؤه [2026-08-18] من مسح كامل لـ`PROGRESS_LOG_ARCHIVE_2026-08-18.md` (27 بند: 25 مرقّم من قائمة الانتظار الرسمية + بندان بالاسم أُضيفا لاحقًا)، **زائد بندين إضافيين من `sovereign_entities` أُضيفا يدويًا بناءً على توجيه صريح**. **لم يُجرَ تدقيق شامل يضمن أن كل اكتشاف تاريخي في الأرشيف انعكس هنا** — أي بند تاريخي يظهر لاحقًا وغير موجود في هذا الجدول، ارجع للأرشيف كمرجع نهائي وأضِفه هنا وقتها.
+
+| # | العنوان المختصر | الحالة | مرجع |
+|---|---|---|---|
+| 1 | `user-repository-get-by-id-audit` — 15 موضع `tenant_id` ناقص في `UserRepository.get_by_id` | 🔴 مفتوح — أولوية مرفوعة (فقدان عمولات affiliate صامت مؤكَّد حيًا) | أرشيف ~3068 |
+| 2 | `duplicate-kwarg-audit` — 4+ حالات `multiple values for keyword` | 🔴 مفتوح | أرشيف ~3069 |
+| 3 | استكمال Phase 16 الأصلي | 🟡 غير واضح — علاقته بـ`.claude/reports/phase16-session-log.md` (commits `2d4ef59`/`ab73c8c`) غير مؤكَّدة 100% | أرشيف ~3070 |
+| 4 | `silent-write-regression` — حالتان غير مؤكَّدتين DB-level (`saas.process_auto_renewals` فرع except، `saas.can_access_service`) | 🔴 مفتوح | أرشيف ~3071 |
+| 5 | `sovereign_entities` — قرار منتجي معلَّق (4 endpoints) | 🔴 مفتوح — تطوّر لاحقًا لاكتشاف أخطر (راجع بند `sovereign_entities-auth` تحت) | أرشيف ~3072 |
+| 6 | `commerce.visa_webhook` مراجعة أمنية | 🔴 مفتوح، لم يبدأ | أرشيف ~3073 |
+| 7 | `redis-client-wrapper-missing-methods` (`hincrbyfloat`, `setnx`) | 🔴 مفتوح | أرشيف ~3074 |
+| 8 | `user-repository-get-user-audit` (method غير موجودة، 6 مواضع) | 🔴 مفتوح | أرشيف ~3075 |
+| 9 | `saas-control-service-missing-methods` (`get_active_subscription`) | 🟢 **مسموح البدء الآن** — القيد السابق (بانتظار إغلاق #11a) اتشال [2026-08-18] | أرشيف ~3076 |
+| 10 | `affiliate-service-missing-methods` | 🔴 مفتوح | أرشيف ~3077 |
+| 11a | `invitations-user-registration-savepoint-leak` (امتداد #11، فرع `invitations`) | ✅ **مُغلَق رسميًا [2026-08-18]** | `.claude/reports/invitations-savepoint-leak-session-log.md` |
+| 11b | `realestate-invoicing-savepoint-conflict` (الفرع الأصلي: `realestate`/`service_marketplace`/`insurance`/`arbitration_syndicates`، عبر `InvoicingService.create_invoice`) | 🔴 **مفتوح تمامًا — نفس السبب الجذري زي 11a، لم يُصلَح، يحتاج جلسة منفصلة** | أرشيف ~3078، 3104، 3132 |
+| 12 | `saas-control-service-wrong-arity-call` | 🔴 مفتوح | أرشيف ~3111 |
+| 13 | `invoicing-create-invoice-wrong-kwarg` | 🔴 مفتوح | أرشيف ~3114 |
+| 14 | `audit-log-wrong-kwargs` | 🔴 مفتوح، أولوية عالية (grep شامل غير منفَّذ) — تأكيد إضافي [2026-08-18] داخل `invitations.accept_invitation` نفسها | أرشيف ~3137، 3407 |
+| 15 | `ai-governance-check-and-consume-wrong-kwarg` | 🔴 مفتوح | أرشيف ~3138 |
+| 16 | `ai-agents-execute-agent-action-wrong-kwarg` | 🔴 مفتوح (محمي جزئيًا بـ`try/except` في بعض المواضع) | أرشيف ~3158 |
+| 17 | `arbitration-case-model-idempotency-key-mismatch` | 🔴 مفتوح — عائق بنيوي | أرشيف ~3159 |
+| 18 | `finance-service-create-invoice-does-not-exist` (`transport`) | 🔴 مفتوح | أرشيف ~3160 |
+| 19 | `cross-tenant-scheduled-task-vs-constructor-mismatch` (8+1 مواضع) | 🔴 مفتوح، توثيق فقط بقرار صريح | أرشيف ~3161-3162 |
+| 20 | `missing-tenant-id-in-background-task-signature` | 🔴 مفتوح | أرشيف ~3163 |
+| 21 | `billing-tasks-saas-subscription-import-error` (حاجب موديول) | 🔴 مفتوح — يحجب كل tasks الملف | أرشيف ~3164 |
+| 22 | `finance-transfer-tx-hash-type-mismatch` (نمط في 8 ملفات، 2 مؤكَّدة) | 🔴 مفتوح، 6 ملفات غير مؤكَّدة بعد | أرشيف ~3165 |
+| 23 | `invoicing-list-invoices-wrong-kwarg` | 🔴 مفتوح | أرشيف ~3168 |
+| 24 | `invoicing-get-invoice-stats-wrong-arity` | 🔴 مفتوح | أرشيف ~3169 |
+| 25 | `invoicing-get-invoice-null-tenant-admin-bypass-broken` | 🔴 مفتوح | أرشيف ~3171 |
+| — | `invitations-missing-expiry-max_uses-validation` | 🔴 مفتوح، أولوية أعلى من العادي | أرشيف ~3344 |
+| — | `sovereign_invitations_v2` أعمدة nullable بلا `NOT NULL`/server-default | 🟡 مفتوح، أولوية منخفضة | أرشيف ~3380 |
+| — | **`sovereign_entities-unauthenticated-endpoints`** — 4 endpoints (`list_entities`, `get_entity`, `list_templates`, `list_components`) بلا `current_user` في توقيعها؛ **مصححة لاحقًا لكامنة (latent) مش حية حاليًا** — محمية بالصدفة بباج `SimpleTenant` مستقل (نفس نمط "حماية بالصدفة" زي Backlog #9/#11a)؛ إصلاح ذاك الباج بمعزل عن هذا سيفتح تسريب `treasury_balance_mrusdt`/`kyb_status` عبر تينانتات لحسابات `SUPER_ADMIN`/`EXECUTIVE_DIRECTOR` | 🔴 **صفر إصلاح — بانتظار توجيه/قرار منتجي صريح** | أرشيف ~2778-2842 (بلا ملف تقرير مستقل، جوه سياق `.claude/reports/simpletenant-fix-session-log.md`) |
+| — | `sovereign_entities.review_kyb`/`update_entity` — فقدان كتابة صامت (الـresponse بيرجع القيمة الجديدة، الـDB فاضلة بالقديمة؛ `repo.update_entity` flush-only بلا `begin_nested()`/`commit()` محيط) + 3 حالات مشابهة في `saas` | 🟡 **غير مصنَّف — يحتاج تأكيد لاحقًا** (نُقل كمرجع فقط، بلا فحص كود إضافي؛ قد يتداخل مع بند #4) | أرشيف ~2846-2863 (بلا ملف تقرير مستقل، جوه سياق `.claude/reports/simpletenant-fix-session-log.md`) |
+
+---
+
+## 📋 الجلسات المُقفلة
+
+- **P0 إصلاح الثغرات الأمنية الحرجة [2026-08-08]** — ✅ مكتمل. عزل `tenant_id` في `iot`/`privacy` (10 migrations)، حماية `PUT /api/ai/routing`، توحيد حماية `auth_router`. 5/5 smoke tests ناجحة. بلا ملف تقرير مستقل — موثَّق كاملًا في الأرشيف.
+- **P1 Backend — آلية جلسة `identity` حقيقية (Phase 0+1) [2026-08-08]** — ✅ مكتمل ومُتحقَّق E2E (تخزين/إبطال refresh tokens فعلي). بلا ملف تقرير مستقل.
+- **Phase 2 Frontend — توحيد auth→identity على كوكيز [2026-08-09]** — ✅ مكتمل (commit `5b1d241`)، `AuthProvider.tsx` يستعلم `GET /identity/me`. بلا ملف تقرير مستقل.
+- **Phase 3 Frontend — Rename `components/auth`→`identity` [~2026-08-09/10]** — ✅ الكود مكتمل ومتحقَّق (`tsc` نظيف + مقارنة `git worktree` baseline). ⏸️ اختبار logout اليدوي بالمتصفح **لسه معلَّق** — باج منفصل تمامًا (`lit`/`@reown/appkit-ui`) غير مرتبط بـPhase 3 نفسها.
+- **Phase 4 Backend — حذف دومين `auth` بالكامل [2026-08-10]** — ✅ مكتمل، مع بند واحد مؤجَّل صراحة (تأكيد `pytest`/`GET /docs` خالي من `/auth/*`). خطة: `.claude/plans/phase4-remove-auth-backend.md`.
+- **transaction-savepoint-bug — إصلاح منهجي `commit()`-جوه-`begin_nested()` عبر 24 دومين [2026-08-13]** — 🟡 **مكتمل كودًا، لكن غير مُغلَقة بالكامل** — التحقق الحي (DB-level، مش status code) أُنجز لـ3 دومين فقط من الـ24. تقرير: `.claude/reports/transaction-savepoint-bug-session-log.md`.
+- **simpletenant-fix — إصلاح `SimpleTenant` type-mismatch [~2026-08-13]** — 🟡 مختلط: أصلحت `finance`/`command` بنجاح مؤكَّد، لكن كشفت 4 دومينات إضافية متأثرة + اكتشافين حرجين منفصلين تمامًا (`sovereign_entities`-auth أعلاه، و`review_kyb`/`update_entity` فقدان كتابة صامت) لم يُغلَقا. تقرير: `.claude/reports/simpletenant-fix-session-log.md`.
+- **constructor-mismatch (+ batch3) — service constructors بمعاملات ناقصة، 111 موضع [2026-08-14 → 2026-08-17]** — ✅ نطاقها الضيق (توقيعات الـconstructor نفسها) يبدو مكتملًا عبر الدفعات الثلاث، **لكنها فتحت 25 بند Backlog جانبي غير مُغلَقين** (راجع الجدول فوق). تقارير: `.claude/reports/constructor-mismatch-session-log.md`, `.claude/reports/constructor-mismatch-batch3-session-log.md`, `.claude/reports/constructor-mismatch-backlog-classification.md`.
+- **invitations-savepoint-leak — يوزر بلا محفظة عبر `accept_invitation` [2026-08-18]** — ✅ **مُغلَق رسميًا** (Backlog #11a). نقل استدعاء إنشاء اليوزر بره `begin_nested()` + تثبيت `idempotency_key`، تحقق حي كامل (سيناريو نظيف + retry). تقرير: `.claude/reports/invitations-savepoint-leak-session-log.md`.
+
+**⚠️ لم تُراجَع بثقة كافية في هذا الفهرس (موجودة كملفات في `.claude/reports/` لكن حالتها النهائية غير مُدمَجة هنا):** `silent-write-regression-session-log.md`، `phase16-session-log.md`، ملفات `.claude/reports/CRITICAL-*.md` الأخرى غير المذكورة أعلاه. راجع الأرشيف أو الملفات نفسها عند الحاجة.
+```
+
+---
+
+## عدّ البنود (تأكيد بعدّ فعلي للصفوف، مش حساب وصفي)
+
+**30 صف بيانات في الجدول** (`grep` مباشر على سطور الجدول، صفوف 45-74 في هذا الملف): 10 بنود مرقّمة (#1-#10) + بند #11 الأصلي منقسم لصفين (`11a`, `11b`) + 14 بند مرقّم (#12-#25) + 4 بنود بالاسم (`invitations-missing-expiry-max_uses-validation`، أعمدة `sovereign_invitations_v2` nullable، `sovereign_entities-unauthenticated-endpoints`، `sovereign_entities.review_kyb`/`update_entity`) = **10+2+14+4 = 30**. صفر صف مفقود — الرقم "29" في الرسالة السابقة كان خطأ حسابي، تم تصحيحه هنا.
+
+## خطوات التنفيذ المتبقية (بعد موافقتك على هذا المحتوى تحديدًا)
+
+1. `git status`/تأكيد عدم وجود تعديلات غير محفوظة على `PROGRESS_LOG.md` الحالي قبل النسخ.
+2. نسخ حرفي: `PROGRESS_LOG.md` → `PROGRESS_LOG_ARCHIVE_2026-08-18.md`.
+3. استبدال محتوى `PROGRESS_LOG.md` بالمحتوى أعلاه بالحرف.
+4. عرض `git diff`/`git status` خام بعد التنفيذ.
+
+**الحالة: 🟡 بانتظار قرارك.**

@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createAgent } from '@/services/ai-agents';
+import { AIAgentsService } from '@/services/ai-agents.service';
 import { 
   Loader2, 
   Shield, 
@@ -39,7 +39,7 @@ export default function AgentForm() {
   });
 
   const mutation = useMutation({
-    mutationFn: () => createAgent(formData),
+    mutationFn: () => AIAgentsService.createAgent(formData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agents'] });
       router.push('/ai-agents');

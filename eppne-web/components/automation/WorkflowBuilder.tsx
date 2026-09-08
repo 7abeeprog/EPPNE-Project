@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ReactFlow, Controls, Background, useNodesState, useEdgesState, addEdge, Connection, Node, Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { createWorkflow, updateWorkflow } from '@/services/automation.service';
+import { AutomationService } from '@/services/automation.service';
 import { Loader2, Save, Play, X, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import DOMPurify from 'dompurify';
@@ -225,9 +225,9 @@ export default function WorkflowBuilder({ initialWorkflow, isNew }: WorkflowBuil
       };
 
       if (isNew) {
-        return createWorkflow(payload);
+        return AutomationService.createWorkflow(payload);
       } else {
-        return updateWorkflow(initialWorkflow!.id, payload);
+        return AutomationService.updateWorkflow(initialWorkflow!.id, payload);
       }
     },
     onSuccess: () => {

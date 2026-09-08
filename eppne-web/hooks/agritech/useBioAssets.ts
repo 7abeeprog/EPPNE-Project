@@ -1,6 +1,7 @@
 // hooks/agritech/useBioAssets.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getBioCohorts, createBioCohort, registerBioYield } from '@/services/agritech';
+import { getBioCohorts, createBioCohort } from '@/services/agritech';
+import { AgritechService } from '@/services/agritech';
 
 export const useBioCohorts = (zoneId: number) => {
   return useQuery({
@@ -32,9 +33,9 @@ export const useRegisterBioYield = () => {
       idempotencyKey,
     }: {
       cohortId: number;
-      data: Parameters<typeof registerBioYield>[1];
+      data: Parameters<typeof AgritechService.registerBioYield>[1];
       idempotencyKey?: string;
-    }) => registerBioYield(cohortId, data, idempotencyKey),
+    }) => AgritechService.registerBioYield(cohortId, data, idempotencyKey),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['agritech-bio-yields', variables.cohortId] });
       queryClient.invalidateQueries({ queryKey: ['agritech-stats'] });

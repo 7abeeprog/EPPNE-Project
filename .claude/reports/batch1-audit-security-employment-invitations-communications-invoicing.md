@@ -369,4 +369,130 @@ M .claude/reports/batch1-audit-security-employment-invitations-communications-in
 ```
 باقي ملفات `git status` الأصلية (متعدّلة/untracked من جلسات سابقة، غير متعلقة بهذه الجلسة) — لم تُلمس، لن تُضاف لأي commit من هنا.
 
-**الحالة النهائية:** ✅ **إصلاح `invitations` (28/28 endpoint مطلوب) مُطبَّق بالكامل، مؤكَّد حيًا لكل نوع مورد (دعوات/leads/campaigns/tickets) بمنهجية هجوم-مرفوض + مسار-شرعي + SELECT-مستقل**. بيانات throwaway منظَّفة، السيرفر متوقف. ⏳ **لم يُنفَّذ commit بعد** — بانتظار موافقتك الصريحة على الـ`diff`، ثم الانتقال لـ`invoicing.create_invoice` (§8 بند 2) كالخطوة التالية.
+**الحالة النهائية:** ✅ **إصلاح `invitations` (28/28 endpoint مطلوب) مُطبَّق بالكامل، مؤكَّد حيًا لكل نوع مورد (دعوات/leads/campaigns/tickets) بمنهجية هجوم-مرفوض + مسار-شرعي + SELECT-مستقل**. بيانات throwaway منظَّفة، السيرفر متوقف. **✅ تم الـcommit** (`0630fd3`، راجع §12) بعد موافقة المستخدم على الـ`diff`.
+
+---
+
+## 11) بند #23 (`bleach-clean-none-crash`) — إعادة تصنيف كبند منتشر مستقل [2026-08-25]
+
+بتوجيه صريح من المستخدم، فُصل #23 عن البنود المحلية #24-#26 في `constructor-mismatch-backlog-classification.md` — أُعطي قسمًا مستقلاً كاملاً (بعد الجدول الموحّد مباشرة، قبل تفصيل المجموعتين أ/ب) يحتوي جدول الـ13 دومين + عدد المواضع لكل واحد. **تصحيح مهم:** العدد الأصلي (89 موضع) كان خطأ حسابي في الـ`grep` الأول (تجميع خاطئ عبر ملفات متعددة) — **العدد الصحيح المُعاد حسابه لكل ملف على حدة: 52 موضع** عبر نفس الـ13 دومين. التفاصيل الكاملة (الجدول، منهجية العدّ، الدومينات المستبعدة) في الملف نفسه مباشرة بعد الجدول الموحّد.
+
+---
+
+## 12) تنفيذ `invoicing.create_invoice` + إصلاح باج `metadata` المقنِّع — مكتمل، مؤكَّد حيًا
+
+### 12.1 نطاق التعديل
+
+**قرار المستخدم (س3، الجلسة السابقة):** قفل كامل — `tenant_id`/`user_id` من `current_user` فقط، **بلا استثناء إداري** (الاستخدام الداخلي الحقيقي عبر 13 دومين أصلًا يمرر `tenant_id` موثوق من `self.tenant_id` الخاص بكل دومين، مش عبر هذا الـendpoint العام).
+
+**`eppne-backend/app/domains/invoicing/schemas.py`:**
+- `InvoiceCreate`: حُذف حقلا `tenant_id: int`/`user_id: Optional[int]` بالكامل من الـschema — العميل ما عادش يقدر يحددهم إطلاقًا (مش مجرد تجاهل، الحقل نفسه غير موجود في العقد).
+- `InvoiceBase.metadata` → **`invoice_metadata`** (نفس اسم عمود الموديل بالضبط) — يحل تصادم `SQLAlchemy.Base.metadata` جذريًا، بما إن `model_validate(from_attributes=True)` بقى بيقرأ خاصية حقيقية `invoice.invoice_metadata` بدل ما يصطدم بخاصية `Base.metadata` المحجوزة.
+
+**`eppne-backend/app/domains/invoicing/router.py` (`create_invoice`):**
+```python
+tenant_id = cast(int, current_user.tenant_id)
+service = InvoicingService(db, tenant_id)
+invoice = await service.create_invoice(
+    entity_id=tenant_id,
+    user_id=cast(int, current_user.id),
+    ...  # باقي الحقول من data كما هي (amount, description, due_date, ...)
+)
+```
+`data.tenant_id`/`data.user_id` لم تعد موجودة أصلًا (حُذفت من الـschema)، فمفيش حتى إمكانية قراءتها بالخطأ.
+
+`python -m py_compile` على الملفين → `exit code 0`.
+
+### 12.2 التحقق الحي — قبل/بعد
+
+سيرفر uvicorn محلي، نفس مستخدمي §10.2. **ملاحظة مهمة:** تينانت1 (A) عنده حاليًا **باج ترقيم فواتير مُسبَق موجود من قبل** (`_generate_invoice_number` بيحسب التسلسل بـ`count(*)` بدل `MAX(seq)`، وفيه فجوة برقم `INV-1-000010` مفقود من صفوف اتحذفت في جلسات سابقة) — أي محاولة إنشاء فاتورة جديدة لتينانت1 حاليًا بتصطدم بـ`UniqueViolationError` **بمعزل تام عن هذا الإصلاح**. اتحول الاختبار لتينانت16 (B) الفاضي تمامًا من فواتير سابقة، لتفادي هذا الباج غير المتعلق.
+
+| السيناريو | الطلب | النتيجة |
+|---|---|---|
+| **هجوم mass-assignment** | B (تينانت16 حقيقي، `user_id=774`) → `POST /invoices` بجسم `{"tenant_id":1,"user_id":772,"amount":"777.00",...}` (محاولة انتحال هوية A) | **`201`** — لكن `tenant_id=16`، `user_id=774` في الرد (القيم المزوَّرة اتجاهلت بالكامل، اتعوَّضت بـ`current_user` الحقيقي) |
+| **SELECT مستقل** | `SELECT tenant_id,user_id FROM invoices WHERE id=55` | `tenant_id=16, user_id=774` — **مطابق تمامًا لهوية B الحقيقية، صفر أثر لقيم الهجوم** |
+| **باج `metadata` المقنِّع** | نفس الطلب أعلاه | الرد `201` نظيف يحوي `"invoice_metadata":null` — **مش `400` مضلِّل زي قبل الإصلاح** |
+| **المسار الشرعي** | B → `POST /invoices` بجسم نظيف (بلا أي حقل تينانت/مستخدم) | `201`، `tenant_id=16, user_id=774, invoice_number="INV-16-000002"` — يعمل بشكل طبيعي بلا أي تدهور وظيفي |
+
+**الحكم الحاسم:** الهجوم اتجاهل بالكامل (القيم المزوَّرة صفر أثر، مؤكَّد بردّ الـAPI **و**SELECT مستقل معًا)، والباج المقنِّع اتصلح (رد حقيقي `201` بدل `400` كاذب)، والمسار الشرعي سليم 100%.
+
+### 12.3 اكتشافات جانبية إضافية أثناء التحقق — **بلا علاقة بهذا الإصلاح، لم تُلمَس**
+
+أثناء محاولة اختبار `GET /invoices`/`GET /invoices/{id}` (خارج نطاق التعديل، لاستكمال الصورة)، صودفت 3 أعطال منفصلة تمامًا (كود لم يُعدَّل هذه الجلسة إطلاقًا):
+
+1. **`_generate_invoice_number` (`service.py`) — توليد رقم فاتورة بـ`count(*)` بدل `MAX(seq)+1`** — أي فجوة في التسلسل (صف محذوف من جلسة سابقة) بتخلي أي فاتورة جديدة لنفس التينانت تصطدم بـ`UniqueViolationError` قاطع. **يمنع إنشاء أي فاتورة جديدة لتينانت1 حاليًا بالكامل.**
+2. **`list_invoices` (`router.py:140`) — فرع تجاوز السوبريوزر (`tenant_id is None`) يستخدم `select(Invoice)` لكن `Invoice` غير مستوردة في الملف إطلاقًا** (فقط `InvoiceStatus`/`InvoiceType` مستوردتان) — `NameError` فوري لأي سوبريوزر يطلب `GET /invoices` بلا `tenant_id` صريح.
+3. **`list_invoices` (`repository.py:110`) — `PaginatedResponse[InvoiceResponse](items=..., ...)` لكن الموديل الفعلي (`app/core/pagination.py`) بيطلب حقل اسمه `data` مش `items`** — `ValidationError` فوري حتى لو اتفادى المستخدم عطل #2 (بتمرير `tenant_id` صريح).
+4. **`get_invoice` (`router.py:91`) — فرع تجاوز السوبريوزر بيمرر `tenant_id=None` لغاية طبقة الـSQL** (`WHERE tenant_id == None`) — مقارنة `NULL` في SQL **مستحيل تتحقق أبدًا** (`NULL = NULL` بترجع `NULL`, مش `TRUE`)، فالسوبريوزر بيرجع `404` **لأي** فاتورة، حتى فواتيره هو نفسه. (اكتُشف لأن `TEST_instr_b` المُستخدَم في الاختبار `SUPER_ADMIN` بالصدفة — نفس المستخدم اللي أثبت الهجوم بنجاح، مش تعارض).
+
+**لا شيء من الأربعة دول تم لمسه.** موثَّقة هنا فقط — **بانتظار توجيهك** بخصوص إضافتها لـ`constructor-mismatch-backlog-classification.md` (تبدو محلية لدومين `invoicing` بالكامل، عدا #2 اللي ممكن يكون نفس نمط "استيراد ناقص" منتشر يستاهل `grep` — لم يُفحَص).
+
+### 12.4 تنظيف بيانات throwaway — مكتمل ومؤكَّد مستقل
+
+- `invoices`: حُذف `id=55` (`TEST_INVOICE_ATTACK_FIX2_B`) و`id=56` (`TEST_INVOICE_LEGIT_FIX2_B`) — `SELECT count(*) WHERE description LIKE '%FIX2%'` = **0**.
+- **لم يُلمَس أي شيء من بيانات الجلسات السابقة** (فواتير تينانت1 الـ14 الموجودة، id=1-54 المتفرقة).
+- السيرفر التجريبي **أُوقف** (`taskkill`، `netstat` صفر `LISTENING`).
+- **صفر migration** طوال الجلسة.
+
+### 12.5 `git status` / `git diff --stat` — للمراجعة قبل أي commit
+
+```
+ M eppne-backend/app/domains/invoicing/router.py  | 10 ++++++----
+ M eppne-backend/app/domains/invoicing/schemas.py |  4 +---
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+```
+
+**الحالة النهائية:** ✅ **إصلاح `invoicing.create_invoice` (قفل كامل) + باج `metadata` المقنِّع مُطبَّقان معًا، مؤكَّدان حيًا (هجوم مُتجاهَل بالكامل + رد حقيقي بدل مضلِّل + مسار شرعي سليم + SELECT مستقل)**. بيانات throwaway منظَّفة، السيرفر متوقف. **✅ تم الـcommit** (`93e68ac`) بعد موافقة المستخدم.
+
+---
+
+## 13) تنفيذ `employment` (§6#3+4) و`communications` (§6#5) — آخر جزء من الدفعة 1، مكتمل ومؤكَّد حيًا
+
+### 13.1 نطاق التعديل
+
+**`employment/router.py` — 3 endpoints فقط من أصل 6 مُصنَّفة سابقًا (بتوجيه صريح من المستخدم، نطاق محدود عمدًا):**
+- `GET /jobs/open` (`get_open_jobs`) — حذف `tenant: AcademyTenant = Depends(get_current_tenant)`، استبدال `cast(int, tenant.id)` بـ`cast(int, current_user.tenant_id)`.
+- `POST /jobs` (`create_job`) — نفس الاستبدال.
+- `POST /contracts` (`create_contract`) — نفس الاستبدال. **ملاحظة تقنية مهمة:** كلا الدالتين (`service.create_job`/`service.create_contract`) كانتا أصلًا تستخدمان **نفس قيمة `tenant_id` الواحدة** لكل من الكتابة و`_check_saas_limits(tenant_id, "hr_management")` — المشكلة كانت **حصرًا** في مصدر هذه القيمة الواحدة بالراوتر (هيدر بدل `current_user`)، مش في وجود مصدرين مختلفين. الإصلاح بالراوتر وحده كافٍ، **صفر تعديل على `service.py`**.
+- **خارج النطاق عمدًا (بتوجيه صريح):** `POST /applications` (`apply_to_job`)، `POST /payroll/generate`، `POST /payroll/{id}/pay` — لسه بتستخدم الهيدر، موثَّقة كفجوات مفتوحة (🟠/🔴 حسب §6#4) لجلسة لاحقة.
+
+**`communications/router.py` — 2 endpoints (`create_template`/`list_templates`):**
+- نفس الاستبدال الميكانيكي. **تنظيف إضافي:** `get_current_tenant`/`AcademyTenant` كانا مستوردين فقط لهذين الاثنين في كامل الملف — بعد الإصلاح أصبحا غير مُستخدَمين إطلاقًا، فحُذف الاستيرادان (صفر استخدام متبقٍ، تأكيد `grep`).
+
+`python -m py_compile` على الملفين → `exit code 0`.
+
+### 13.2 التحقق الحي — قبل/بعد، مكتمل لكل endpoint
+
+سيرفر uvicorn محلي، نفس مستخدمي الجلسة (`TEST_super_a`/تينانت1، `TEST_instr_b`/تينانت16). ميزة `hr_management` رُفعت مؤقتًا لخطط تينانت1 **و**تينانت16 معًا (الاثنان، لأن الفحص بعد الإصلاح بيتحقق من اشتراك **تينانت المستخدم الحقيقي**، مش أي هيدر) لإتاحة اختبار الكتابة، ثم أُعيدت للقيم الأصلية.
+
+| Endpoint | الهجوم (بعد الإصلاح) | المسار الشرعي | SELECT مستقل |
+|---|---|---|---|
+| **`GET /jobs/open`** | A حقيقي(تينانت1) + هيدر مزوَّر(16) → نفس نتيجة A بلا هيدر بالضبط (كلاهما `500`، باج بيانات قديمة غير متعلق §بند سابق)؛ **الأهم:** B حقيقي(تينانت16) + هيدر مزوَّر(1) → **نتيجة مطابقة 100%** لـB بلا هيدر (`200`، نفس الوظيفتين `id=4,5`) — الهجوم عديم الأثر تمامًا من الاتجاهين | B بلا هيدر → `200`، وظائفه فقط | — (قراءة فقط) |
+| **`POST /jobs`** | A(تينانت1) + هيدر مزوَّر(16) → `201` | — | `job_listings.id=6`: **`tenant_id=1`** (الحقيقي)، مش `16` (المزوَّر) |
+| **`POST /contracts`** | A(تينانت1، صاحب عمل حقيقي لعقد شرعي) + هيدر مزوَّر(16) → `201` | سلسلة كاملة شرعية سبقت الهجوم (B يقدّم طلب → A يوافق → A ينشئ عقد) نجحت 100% | `employment_contracts.id=3`: **`tenant_id=1`** (الحقيقي)، مش `16` (المزوَّر) |
+| **`POST /templates`** | A(تينانت1) + هيدر مزوَّر(16) → `201` | B(تينانت16، بلا هيدر) → `201`، `tenant_id=16` تلقائيًا | `communication_templates.id=4`: **`tenant_id=1`** (الحقيقي) — القالب المزروع بواسطة B (`id=3`) بقي `tenant_id=16` بلا أي تلوث |
+| **`GET /templates`** | A(تينانت1) بلا هيدر → `[]`؛ A + هيدر مزوَّر(16) → **نفس النتيجة بالحرف `[]`** (لم يُسرَّب قالب B) | — | — (قراءة فقط) |
+
+**الحكم الحاسم:** في كل الحالات الخمس، **الهجوم عديم الأثر بالكامل** — القراءة ترجّع نفس نتيجة صاحب التينانت الحقيقي (سواء فاشلة أو ناجحة، بلا تسريب)، والكتابة تُنسَب دائمًا لتينانت `current_user` الحقيقي بغض النظر عن أي قيمة هيدر، مؤكَّد بـ`SELECT` مستقل في كل حالة كتابة.
+
+### 13.3 تنظيف بيانات throwaway — مكتمل ومؤكَّد مستقل
+
+- `employment_contracts`: حُذف `id=3` (`TEST_CONTRACT_ATTACK_EMP1`).
+- `job_applications`: حُذف `id=3` (طلب B لوظيفة A، throwaway).
+- `job_listings`: حُذف `id=6` (`TEST_JOB_ATTACK_EMP1`).
+- `communication_templates`: حُذف `id=3` (`TEST_TPL_B_EMPFIX3`) و`id=4` (`TEST_TPL_ATTACK_A`).
+- `saas_service_plans` (id=2,47,48): أُعيدت `features` للقيم الأصلية (`["real_estate","insurance"]` لـ2، `[]` لـ47/48) — مؤكَّد بـ`SELECT` مستقل.
+- تحقق مستقل نهائي: `SELECT count(*)` على الأربعة جداول بشرط `TEST%` = **0** لكل واحد.
+- **لم يُلمَس أي شيء من بيانات الجلسات السابقة** (job_listings id=2-5 الموجودة مسبقًا من جلسات أخرى، مستخدمو 772-777).
+- السيرفر التجريبي **أُوقف** (`taskkill`، `netstat` صفر `LISTENING`).
+- **صفر migration، صفر تعديل على `service.py`/`repository.py`** طوال الجلسة — التعديل بالكامل في `router.py` لكلا الدومينين + استيرادات `communications/router.py`.
+
+### 13.4 `git status` / `git diff --stat` — للمراجعة قبل أي commit
+
+```
+ M eppne-backend/app/domains/communications/router.py |  9 +++------
+ M eppne-backend/app/domains/employment/router.py     | 15 +++------------
+ 2 files changed, 6 insertions(+), 18 deletions(-)
+```
+
+**الحالة النهائية:** ✅ **آخر جزء من الدفعة 1 مكتمل** — الأربعة دومينات كلها (`employment`, `invitations`, `communications`, `invoicing`) لها الآن إصلاحات IDOR مؤكَّدة حيًا للفجوات المتفق عليها في §6. ⏳ **لم يُنفَّذ commit بعد** — بانتظار موافقتك الصريحة على الـ`diff` أعلاه.

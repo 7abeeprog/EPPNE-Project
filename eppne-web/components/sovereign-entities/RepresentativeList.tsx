@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getRepresentatives, addRepresentative, removeRepresentative } from '@/services/sovereign-entities';
+import { SovereignEntitiesService } from '@/services/sovereign-entities';
 import { User, Shield, Trash2, Plus, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { EntityRepresentative, EntityRole } from '@/types/sovereign-entities';
@@ -29,13 +29,13 @@ export default function RepresentativeList({ entityId, canManage = false }: Repr
 
   const { data, isLoading } = useQuery({
     queryKey: ['representatives', entityId],
-    queryFn: () => getRepresentatives(entityId).then(res => res.data),
+    queryFn: () => SovereignEntitiesService.getRepresentatives(entityId).then(res => res.data),
     staleTime: 2 * 60 * 1000,
   });
 
   const addMutation = useMutation({
     mutationFn: (payload: { user_id: number; role: EntityRole; can_sign_contracts: boolean }) =>
-      addRepresentative(entityId, payload),
+      SovereignEntitiesService.addRepresentative(entityId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['representatives', entityId] });
       setShowAddForm(false);
@@ -44,7 +44,7 @@ export default function RepresentativeList({ entityId, canManage = false }: Repr
   });
 
   const removeMutation = useMutation({
-    mutationFn: (userId: number) => removeRepresentative(entityId, userId),
+    mutationFn: (userId: number) => SovereignEntitiesService.removeRepresentative(entityId, userId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['representatives', entityId] });
     },

@@ -3,7 +3,8 @@
 
 import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { checkIn, checkOut, getMyContract } from '@/services/employment';
+import { getMyContract } from '@/services/employment';
+import { EmploymentService } from '@/services/employment';
 import { useEmploymentStore } from '@/store/employmentStore';
 import { Loader2, CheckCircle, Clock, MapPin, Smartphone } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -58,7 +59,7 @@ export default function AttendanceWidget() {
     mutationFn: () => {
       if (!contract) throw new Error('لا يوجد عقد نشط');
       if (!location) throw new Error('لم يتم تحديد الموقع');
-      return checkIn(contract.id, {
+      return EmploymentService.checkIn(contract.id, {
         latitude: location.lat,
         longitude: location.lng,
         device_fingerprint: deviceFingerprint,
@@ -73,7 +74,7 @@ export default function AttendanceWidget() {
   const checkOutMutation = useMutation({
     mutationFn: () => {
       if (!contract) throw new Error('لا يوجد عقد نشط');
-      return checkOut(contract.id);
+      return EmploymentService.checkOut(contract.id);
     },
     onSuccess: (data) => {
       setTodayRecord({

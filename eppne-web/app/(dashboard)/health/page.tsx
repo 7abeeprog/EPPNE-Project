@@ -2,7 +2,8 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { getMyProfile, getMyAppointments, getAIPrognosis } from '@/services/health';
+import { getMyProfile } from '@/services/health.service';
+import { HealthService } from '@/services/health.service';
 import { useHealthStore } from '@/store/healthStore';
 import BioProfileManager from '@/components/health/BioProfileManager';
 import AIPrognosisRadar from '@/components/health/AIPrognosisRadar';
@@ -23,7 +24,7 @@ export default function HealthDashboard() {
 
   const { data: appointments } = useQuery({
     queryKey: ['health-appointments'],
-    queryFn: () => getMyAppointments({ status: 'CONFIRMED' }).then(res => res.data),
+    queryFn: () => HealthService.getMyAppointments({ status: 'CONFIRMED' }).then(res => res.data),
     staleTime: 2 * 60 * 1000,
   });
 

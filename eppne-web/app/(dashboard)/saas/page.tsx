@@ -4,7 +4,8 @@
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useServices, useSubscriptions } from "@/hooks/saas";
+import { useServices } from "@/hooks/saas/useServices";
+import { useSubscriptions } from "@/hooks/saas/useSubscriptions";
 import { useInvoices } from "@/hooks/saas/useInvoices";
 import { useDashboardStats } from "@/hooks/saas/useDashboard";
 import {

@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { ChevronDown, ChevronLeft, Building2, Layers, Users, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getEntityTree } from '@/services/sovereign-entities';
+import { SovereignEntitiesService } from '@/services/sovereign-entities';
 import type { EntityTreeItem } from '@/types/sovereign-entities';
 
 interface TreeProps {
@@ -79,7 +79,7 @@ function TreeNode({ node, level = 0 }: { node: EntityTreeItem; level?: number })
 export default function EntityTreeView({ entityId, className }: TreeProps) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['entity-tree', entityId],
-    queryFn: () => getEntityTree(entityId).then(res => res.data),
+    queryFn: () => SovereignEntitiesService.getEntityTree(entityId).then(res => res.data),
     staleTime: 5 * 60 * 1000,
   });
 

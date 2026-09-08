@@ -1,6 +1,7 @@
 // hooks/agritech/useCropCycles.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getCropCycles, startCropCycle } from '@/services/agritech';
+import { getCropCycles } from '@/services/agritech';
+import { AgritechService } from '@/services/agritech';
 
 export const useCropCycles = (zoneId: number) => {
   return useQuery({
@@ -14,8 +15,8 @@ export const useCropCycles = (zoneId: number) => {
 export const useStartCropCycle = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ zoneId, data }: { zoneId: number; data: Parameters<typeof startCropCycle>[1] }) =>
-      startCropCycle(zoneId, data),
+    mutationFn: ({ zoneId, data }: { zoneId: number; data: Parameters<typeof AgritechService.startCropCycle>[1] }) =>
+      AgritechService.startCropCycle(zoneId, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['agritech-crop-cycles', variables.zoneId] });
       queryClient.invalidateQueries({ queryKey: ['agritech-stats'] });

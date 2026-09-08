@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createSecret } from '@/services/automation.service';
+import { AutomationService } from '@/services/automation.service';
 import { X, Loader2, Eye, EyeOff, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -19,7 +19,7 @@ export default function SecretForm({ isOpen, onClose }: SecretFormProps) {
   const [showValue, setShowValue] = useState(false);
 
   const createMutation = useMutation({
-    mutationFn: createSecret,
+    mutationFn: AutomationService.createSecret,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['secrets'] });
       setName('');

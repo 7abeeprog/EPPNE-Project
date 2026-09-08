@@ -250,7 +250,7 @@ export default function InstructorDashboard() {
                           تحرير
                         </Button>
                       </Link>
-                      <Link href={`/academy/classroom/${course.id}`}>
+                      <Link href={`/academy/${course.id}/learn`}>
                         <Button
                           size="sm"
                           className="rounded-xl bg-blue-600 hover:bg-blue-500 font-bold"

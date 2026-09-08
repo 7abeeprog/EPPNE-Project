@@ -245,7 +245,8 @@ async def get_store_courses(
 ):
     tenant_id = cast(int, current_user.tenant_id)
     service = AcademyService(db, tenant_id)
-    return await service.get_store_courses(cast(int, current_user.id), skip=skip, limit=limit)
+    result = await service.get_store_courses(cast(int, current_user.id), skip=skip, limit=limit)
+    return result.data
 
 @router.get("/student/my-enrollments", response_model=list[EnrollmentResponse])
 async def get_my_enrollments(

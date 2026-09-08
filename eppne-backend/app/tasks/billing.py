@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.ai_agents.service import AIAgentsService
 from app.domains.ai_agents.repository import AIAgentsRepository
+from app.domains.finance.service import FinanceService
 from app.domains.digital_twin.service import DigitalTwinService
 from app.domains.digital_twin.repository import DigitalTwinRepository
 from app.domains.academy.models import AcademyTenant
@@ -216,7 +217,7 @@ async def _generate_invoices_with_checkpoints():
 
 async def _generate_invoices_for_tenant(db: AsyncSession, tenant_id: int) -> Optional[dict]:
     """توليد فاتورة لمستأجر واحد."""
-    service = AIAgentsService(db)
+    service = AIAgentsService(db, tenant_id)
     repo = AIAgentsRepository(db)
 
     # 1. التحقق من آخر تاريخ فوترة (Checkpoint)
@@ -325,6 +326,7 @@ async def _process_twin_subscriptions_with_checkpoints():
 async def _process_twin_subscription_for_tenant(db: AsyncSession, tenant_id: int) -> dict:
     """معالجة اشتراكات التوأم الرقمي لمستأجر واحد."""
     service = DigitalTwinService(db)
+    finance = FinanceService(db, tenant_id)
 
     # ✅ استخدام الدالة الجديدة list_active_twins
     twin_repo = DigitalTwinRepository(db)
@@ -346,7 +348,7 @@ async def _process_twin_subscription_for_tenant(db: AsyncSession, tenant_id: int
             try:
                 idempotency_key = f"twin_subscription_{twin.id}_{uuid.uuid4().hex[:8]}"
                 # 🔥 استخدام cast لتحويل user_id و amount
-                await service.finance.transfer(
+                await finance.transfer(
                     sender_id=cast(int, twin.user_id),
                     receiver_email="system@eppne.com",
                     currency="MR_USDT",

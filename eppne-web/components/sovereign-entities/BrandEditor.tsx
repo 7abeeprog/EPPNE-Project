@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getEntityPage, updateEntityPage, publishEntityPage } from '@/services/sovereign-entities';
+import { SovereignEntitiesService } from '@/services/sovereign-entities';
 import { Loader2, Save, Globe, CheckCircle, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import DOMPurify from 'dompurify'; // تأكد من تثبيت المكتبة
@@ -25,7 +25,7 @@ export default function BrandEditor({ entityId, entityName, primaryColor }: Bran
   // جلب بيانات الصفحة
   const { data, isLoading } = useQuery({
     queryKey: ['entity-page', entityId],
-    queryFn: () => getEntityPage(entityId).then(res => res.data),
+    queryFn: () => SovereignEntitiesService.getEntityPage(entityId).then(res => res.data),
     staleTime: 2 * 60 * 1000,
   });
 
@@ -64,7 +64,7 @@ export default function BrandEditor({ entityId, entityName, primaryColor }: Bran
 
   // تحديث الصفحة
   const updateMutation = useMutation({
-    mutationFn: (payload: any) => updateEntityPage(entityId, payload),
+    mutationFn: (payload: any) => SovereignEntitiesService.updateEntityPage(entityId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['entity-page', entityId] });
     },
@@ -72,7 +72,7 @@ export default function BrandEditor({ entityId, entityName, primaryColor }: Bran
 
   // نشر الصفحة
   const publishMutation = useMutation({
-    mutationFn: () => publishEntityPage(entityId),
+    mutationFn: () => SovereignEntitiesService.publishEntityPage(entityId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['entity-page', entityId] });
       setIsPublishing(false);

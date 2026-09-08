@@ -1,6 +1,7 @@
 // hooks/logistics/useForecast.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { generateForecast, getForecasts } from '@/services/logistics';
+import { getForecasts } from '@/services/logistics';
+import { LogisticsService } from '@/services/logistics';
 
 export const useForecasts = (params?: { product_id?: number; period?: string; skip?: number; limit?: number }) => {
   return useQuery({
@@ -14,7 +15,7 @@ export const useGenerateForecast = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ productId, period, idempotencyKey }: { productId: number; period?: string; idempotencyKey?: string }) =>
-      generateForecast(productId, period, idempotencyKey),
+      LogisticsService.generateForecast(productId, period, idempotencyKey),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['logistics-forecasts'] });
     },

@@ -156,7 +156,7 @@ export default function CourseDetailPage() {
         onSuccess: () => {
           toast.success("تم إدراجك في السجل السيادي للمسار بنجاح! 🛡️");
           queryClient.invalidateQueries({ queryKey: ["academy", "my-enrollments"] });
-          router.push(`/academy/classroom/${course.id}`);
+          router.push(`/academy/${course.id}/learn`);
         },
         onError: (error) => {
           const err = handleError(error, "عملية التسجيل");
@@ -278,7 +278,7 @@ export default function CourseDetailPage() {
                 <div className="pt-8 border-t border-border/50">
                   {isEnrolled ? (
                     <Button 
-                      onClick={() => router.push(`/academy/classroom/${course.id}`)}
+                      onClick={() => router.push(`/academy/${course.id}/learn`)}
                       className="w-full h-16 text-lg font-black rounded-xl bg-primary hover:bg-primary/90 shadow-[0_0_25px_rgba(var(--primary-rgb),0.4)] hover:scale-105 transition-all"
                     >
                       <PlayCircle className="mr-2 h-7 w-7" /> دخول غرفة التعلم

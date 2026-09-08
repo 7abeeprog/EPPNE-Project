@@ -42,6 +42,11 @@ beat_schedule = {
         "schedule": crontab(hour=2, minute=0),  # 2:00 AM يومياً
         "options": {"queue": "saas"},
     },
+    "check-past-due-subscriptions": {
+        "task": "saas.check_past_due_subscriptions",
+        "schedule": crontab(hour=3, minute=0),  # 3:00 AM يومياً (بعد process-auto-renewals بساعة)
+        "options": {"queue": "saas"},
+    },
     "generate-monthly-invoices": {
         "task": "saas.generate_monthly_invoices",
         "schedule": crontab(day_of_month=1, hour=3, minute=0),  # أول كل شهر

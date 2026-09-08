@@ -4,6 +4,7 @@ import json
 import base64
 import secrets
 import logging
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 from pydantic import Field, field_validator, SecretStr  # type: ignore[import]
 from pydantic_settings import BaseSettings, SettingsConfigDict  # type: ignore[import]
@@ -11,7 +12,12 @@ from botocore.exceptions import ClientError  # type: ignore[import]
 import boto3  # type: ignore[import]
 from dotenv import load_dotenv  # type: ignore[import]
 
-load_dotenv()
+# مسار .env مطلق (مبني على مكان هذا الملف: app/core/config.py -> eppne-backend/.env)
+# بدل الاعتماد على cwd وقت التشغيل، عشان تشغيل أي عملية من مسار مختلف
+# (مثلاً جذر الريبو) ميلقطش .env غلط.
+ENV_FILE_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
+
+load_dotenv(dotenv_path=ENV_FILE_PATH)
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +221,7 @@ class Settings(BaseSettings):
     # 11. تكوين Pydantic
     # ============================================================
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_FILE_PATH,
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,

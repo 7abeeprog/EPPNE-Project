@@ -3,8 +3,8 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { useFeatureFlags, useToggleFeatureFlag } from "@/hooks/saas";
-import { useServices } from "@/hooks/saas";
+import { useFeatureFlags, useToggleFeatureFlag } from "@/hooks/saas/useFeatureFlags";
+import { useServices } from "@/hooks/saas/useServices";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Settings, Search, AlertCircle, Sparkles, Flame, Zap, Shield } from "lucide-react";

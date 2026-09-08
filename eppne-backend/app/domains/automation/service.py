@@ -1042,7 +1042,7 @@ class AutomationService:
                 "can_execute_payments": agent.can_execute_payments,
                 "can_sign_contracts": agent.can_sign_contracts,
             }
-            for agent in agents
+            for agent in agents.data
         ]
 
 

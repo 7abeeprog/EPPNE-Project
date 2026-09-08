@@ -265,10 +265,10 @@ async def test_tenders_auctions_register_affiliate_commission_get_by_id_fixed(db
 
 @pytest.mark.asyncio
 async def test_social_get_user_email_correct_and_wrong_tenant(db):
-    """الموضع #6 — social/service.py:678 (_get_user_email، داخل begin_nested()
+    """الموضع #6 — social/service.py:718-724 (_get_user_email، داخل begin_nested()
     في send_digital_gift:492 — صفر try/except، بالتصميم المعتمَد). tenant_id
-    صحيح → إيميل حقيقي. tenant_id خاطئ → fallback نصي (سلوك الدالة الأصلي
-    محفوظ، لا استثناء)."""
+    صحيح → إيميل حقيقي. tenant_id خاطئ → NotFoundError صريحة (سلوك الدالة
+    الأصلي محفوظ، لا fallback نصي)."""
     from app.domains.social.service import SocialService
 
     user = await _create_user(db, "p1audit_social")
@@ -278,8 +278,8 @@ async def test_social_get_user_email_correct_and_wrong_tenant(db):
         email = await svc._get_user_email(user.id, TENANT_ID)
         assert email == user.email
 
-        fallback = await svc._get_user_email(user.id, WRONG_TENANT_ID)
-        assert fallback == f"user_{user.id}@eppne.com"
+        with pytest.raises(NotFoundError):
+            await svc._get_user_email(user.id, WRONG_TENANT_ID)
     finally:
         await _cleanup(db, user_ids)
 

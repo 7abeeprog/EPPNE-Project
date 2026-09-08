@@ -34,7 +34,7 @@ class ServicePlan(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    service_id = Column(Integer, ForeignKey("saas_service_catalog.id"), nullable=False, index=True)
+    service_id = Column(Integer, ForeignKey("saas_service_catalog.id"), nullable=True, index=True)
     name = Column(String(100), nullable=False)
     code = Column(String(50), nullable=False)
 
@@ -50,6 +50,22 @@ class ServicePlan(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class PlanServiceAccess(Base):
+    """جدول ربط many-to-many بين ServicePlan وServiceCatalog — بديل
+    تدريجي (Expand-Contract) عن الاعتماد على ServicePlan.features (نص حر
+    بلا schema enforcement) لتحديد الخدمات المتاحة لخطة معيّنة. راجع قرار
+    PROGRESS_LOG.md ([2026-09-07] — قرار تصميم: توحيد
+    check_feature_access/can_access_service عبر جدول many-to-many جديد)
+    وmigrations 046/047 (إنشاء الجدول + ondelete='RESTRICT' على الطرفين)."""
+    __tablename__ = "saas_plan_service_access"
+    __table_args__ = (
+        Index("ix_saas_plan_service_access_service_id", "service_id"),
+    )
+
+    plan_id = Column(Integer, ForeignKey("saas_service_plans.id", ondelete="RESTRICT"), primary_key=True)
+    service_id = Column(Integer, ForeignKey("saas_service_catalog.id", ondelete="RESTRICT"), primary_key=True)
 
 
 class TenantSubscription(Base):

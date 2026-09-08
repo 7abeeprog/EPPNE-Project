@@ -156,7 +156,7 @@ async def list_invoices(
             limit=limit,
         )
 
-    items = [InvoiceResponse.model_validate(inv) for inv in invoices]
+    items = [InvoiceResponse.model_validate(inv) for inv in (invoices.data if hasattr(invoices, "data") else invoices)]
     total = len(items)
 
     return InvoiceListResponse(items=items, total=total, skip=skip, limit=limit)

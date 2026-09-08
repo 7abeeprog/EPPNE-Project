@@ -100,7 +100,7 @@ export default function CertificateView() {
             للحصول على التوثيق السيادي.
           </p>
           <Button
-            onClick={() => router.push(`/academy/classroom/${courseId}`)}
+            onClick={() => router.push(`/academy/${courseId}/learn`)}
             size="lg"
             className="rounded-xl h-14 px-8 text-lg font-bold shadow-lg"
           >

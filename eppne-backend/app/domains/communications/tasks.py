@@ -6,6 +6,9 @@ from app.services.sms import send_twilio_sms
 
 celery_app = Celery("communications", broker=settings.REDIS_URL)
 
+# ⚠️ القنوات EMAIL/SMS/PUSH غير مُفعَّلة حاليًا (لا تكامل حقيقي مع أي
+# مزوّد خارجي) — IN_APP هي القناة الوحيدة المدعومة فعليًا. راجع
+# backlog-notification-delivery-stub-empty-non-inapp-channels.
 @celery_app.task
 def send_notification_task(notification_id: int, user_id: int, title: str, body: str, data: dict, channel: str):
     # هنا يتم جلب تفاصيل المستخدم من قاعدة البيانات (رقم الهاتف، البريد)

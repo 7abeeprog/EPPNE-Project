@@ -3,7 +3,7 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { useSubscriptions, useCancelSubscription, useRenewSubscription } from "@/hooks/saas";
+import { useSubscriptions, useCancelSubscription, useRenewSubscription } from "@/hooks/saas/useSubscriptions";
 import { SubscriptionCard } from "@/components/saas/SubscriptionCard";
 import { SubscribeModal } from "@/components/saas/SubscribeModal";
 import { Skeleton } from "@/components/ui/skeleton";

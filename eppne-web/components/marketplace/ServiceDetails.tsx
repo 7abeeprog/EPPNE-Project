@@ -3,7 +3,8 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getService, getAddons } from '@/services/marketplace';
+import { getAddons } from '@/services/marketplace';
+import { MarketplaceService as MarketplaceServiceApi } from '@/services/marketplace';
 import { Loader2, DollarSign, Package, List, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import PurchaseModal from './PurchaseModal';
@@ -24,7 +25,7 @@ export default function ServiceDetails({ serviceId }: ServiceDetailsProps) {
 
   const { data: service, isLoading: isLoadingService } = useQuery({
     queryKey: ['marketplace-service', serviceId],
-    queryFn: () => getService(serviceId).then(res => res.data),
+    queryFn: () => MarketplaceServiceApi.getService(serviceId).then(res => res.data),
     staleTime: 2 * 60 * 1000,
   });
 

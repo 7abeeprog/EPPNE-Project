@@ -62,9 +62,16 @@ def process_auto_renewals_task(self):
     try:
         async def _run():
             async with SessionLocal() as db:  # ✅ استخدام SessionLocal
-                service = SaaSControlService(db)
+                # [2026-09-08] كان SaaSControlService(db) بلا tenant_id — TypeError مؤكَّد
+                # حيًا في كل تنفيذ (راجع backlog-process-auto-renewals-task-constructor-
+                # typeerror في PROGRESS_LOG.md). tenant_id=0 نفس نمط
+                # check_past_due_subscriptions_task/router.py:273 الإداري.
+                service = SaaSControlService(db, 0)
                 # 🔥 استدعاء خدمة التجديد مع إعادة النتائج المفصلة
-                results = await service.process_auto_renewals()
+                # [2026-09-08] tenant_id=None صراحةً = كل التينانتات (process_auto_renewals
+                # بقت بتمررها مباشرة لـget_subscriptions_for_renewal بلا fallback لـ
+                # self.tenant_id=0 — راجع backlog-process-auto-renewals-task-tenant-zero-noop).
+                results = await service.process_auto_renewals(tenant_id=None)
                 await db.commit()
                 
                 # تحليل النتائج لتوليد تقرير مفصل
@@ -110,20 +117,29 @@ def process_auto_renewals_task(self):
 )
 def generate_monthly_invoices_task(self):
     """
-    إنشاء فواتير الشهر الجديد (تُنفذ في أول كل شهر).
-    - تولد فواتير لجميع المستأجرين النشطين.
-    - تُرسل إشعارات للمستخدمين بالفواتير الجديدة.
+    إصدار فواتير الفوترة الشهرية اليدوية (تُنفذ في أول كل شهر).
+    - تخص فقط الاشتراكات ACTIVE بـauto_renew=False (عملاء الدفع اليدوي)
+      — بعكس process_auto_renewals_task اللي تخص auto_renew=True.
+    - تُصدر فاتورة PENDING بلا أي خصم فوري؛ الدفع يحصل لاحقًا عبر
+      pay_invoice.
     """
     try:
         async def _run():
             async with SessionLocal() as db:  # ✅ استخدام SessionLocal
-                service = SaaSControlService(db)
-                # 🔥 ملاحظة: تأكد من وجود دالة generate_monthly_invoices في SaaSControlService
-                result = await service.generate_monthly_invoices()  # type: ignore[attr-defined]
+                # [2026-09-09] نفس نمط process_auto_renewals_task/
+                # check_expired_trials_task — tenant_id=0 كـsentinel إداري،
+                # generate_monthly_invoices بتفحص كل tenant عبر sub.tenant_id
+                # مش self.tenant_id، فمش متأثرة بالقيمة دي.
+                service = SaaSControlService(db, 0)
+                issued_count = await service.generate_monthly_invoices()
                 await db.commit()
-                
-                logger.info(f"✅ Monthly invoices generated: {result}")
-                return result
+
+                logger.info(f"✅ Monthly invoices generated: {issued_count} invoices issued.")
+                return {
+                    "status": "success",
+                    "issued_count": issued_count,
+                    "generated_at": datetime.utcnow().isoformat()
+                }
 
         result = _run_async(_run())
         logger.info("✅ Monthly invoices generation task finished successfully.")
@@ -155,9 +171,12 @@ def check_expired_trials_task(self):
     try:
         async def _run():
             async with SessionLocal() as db:  # ✅ استخدام SessionLocal
-                service = SaaSControlService(db)
-                # 🔥 ملاحظة: تأكد من وجود دالة check_and_expire_trials في SaaSControlService
-                expired_count = await service.check_and_expire_trials()  # type: ignore[attr-defined]
+                # [2026-09-08] نفس نمط process_auto_renewals_task/
+                # check_past_due_subscriptions_task — tenant_id=0 كـsentinel
+                # إداري، check_and_expire_trials بتفحص كل tenant عبر
+                # sub.tenant_id مش self.tenant_id، فمش متأثرة بالقيمة دي.
+                service = SaaSControlService(db, 0)
+                expired_count = await service.check_and_expire_trials()
                 await db.commit()
                 
                 logger.info(f"✅ Expired trials checked: {expired_count} subscriptions expired.")
@@ -192,14 +211,19 @@ def send_trial_expiry_reminders_task(self):
     """
     إرسال تذكيرات للمستخدمين قبل انتهاء الفترة التجريبية بيومين.
     - تُنفذ يومياً.
-    - تُرسل إشعارات In-App وبريد إلكتروني.
+    - تُرسل إشعارات In-App بس — قناة EMAIL في CommunicationsService لسه
+      stub فاضي (backlog منفصل)، ممنوع استخدامها هنا.
     """
     try:
         async def _run():
             async with SessionLocal() as db:  # ✅ استخدام SessionLocal
-                service = SaaSControlService(db)
-                # 🔥 ملاحظة: تأكد من وجود دالة send_trial_expiry_reminders في SaaSControlService
-                reminders_sent = await service.send_trial_expiry_reminders()  # type: ignore[attr-defined]
+                # [2026-09-09] نفس نمط check_past_due_subscriptions_task —
+                # tenant_id=0 كـsentinel إداري، send_trial_expiry_reminders
+                # بتفحص كل tenant عبر sub.tenant_id مش self.tenant_id، فمش
+                # متأثرة بالقيمة دي (راجع send-trial-expiry-reminders-task-
+                # fix-session-log.md).
+                service = SaaSControlService(db, 0)
+                reminders_sent = await service.send_trial_expiry_reminders()
                 await db.commit()
                 
                 logger.info(f"✅ Trial expiry reminders sent: {reminders_sent} notifications.")
@@ -257,4 +281,61 @@ def cleanup_cancelled_subscriptions_task(self):
 
     except Exception as e:
         logger.error(f"❌ Cleanup cancelled subscriptions task failed: {str(e)}")
+        raise self.retry(exc=e, countdown=3600)
+
+
+# ============================================================
+# 7. مهمة فحص الاشتراكات المتأخرة (PAST_DUE) وتنبيهات فترة السماح
+# ============================================================
+@celery_app.task(
+    name="saas.check_past_due_subscriptions",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=3600,        # ساعة واحدة بين المحاولات (لأنها مهمة يومية)
+    acks_late=True,                   # 🔥 تأكيد بعد التنفيذ
+    time_limit=1800,                  # 30 دقيقة كحد أقصى
+    soft_time_limit=1500,             # 25 دقيقة إنذار
+)
+def check_past_due_subscriptions_task(self):
+    """
+    فحص كل اشتراكات PAST_DUE وإرسال تنبيهات فترة السماح المرحلية
+    (تُنفذ يومياً في الساعة 3 صباحاً، بعد process_auto_renewals بساعة).
+    - يوم الدخول لـPAST_DUE: تنبيه ببداية فترة السماح (3 أيام).
+    - قبل يوم واحد من انتهاء الفترة: تذكير أخير.
+    - عند انتهاء الفترة: تنبيه بالإيقاف + تحويل الاشتراك إلى EXPIRED.
+    - عبر كل المستأجرين (tenant_id=0 مؤقتاً عند إنشاء الـservice، بنفس
+      نمط SaaSControlService(db, 0) الإداري في saas/router.py:273 —
+      check_past_due_subscriptions نفسها بتفحص كل tenant عبر
+      sub.tenant_id مش self.tenant_id، فمش متأثرة بالقيمة دي).
+    """
+    try:
+        async def _run():
+            async with SessionLocal() as db:  # ✅ استخدام SessionLocal
+                service = SaaSControlService(db, 0)
+                results = await service.check_past_due_subscriptions()
+                await db.commit()
+
+                total = len(results)
+                notified = sum(1 for r in results if r.get("status") == "NOTIFIED")
+                failed = sum(1 for r in results if r.get("status") == "FAILED")
+
+                logger.info(
+                    f"✅ Past-due subscriptions checked: "
+                    f"Total: {total}, Notified: {notified}, Failed: {failed}"
+                )
+
+                return {
+                    "status": "success",
+                    "total": total,
+                    "notified": notified,
+                    "failed": failed,
+                    "details": results[:10]  # أول 10 نتائج فقط (لتجنب الحجم الكبير)
+                }
+
+        result = _run_async(_run())
+        logger.info("✅ Past-due subscriptions check task finished successfully.")
+        return {"status": "success", "result": result}
+
+    except Exception as e:
+        logger.error(f"❌ Past-due subscriptions check task failed: {str(e)}")
         raise self.retry(exc=e, countdown=3600)

@@ -11,6 +11,7 @@ from app.domains.saas.models import (
     TenantServiceAccess,
     Invoice,
     TenantFeatureFlag,
+    PlanServiceAccess,
 )
 from app.core.errors import NotFoundError
 from app.core.pagination import PaginatedResponse
@@ -119,14 +120,27 @@ class SaaSRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_trial_subscriptions(self, tenant_id: int) -> List[TenantSubscription]:
+    async def get_trial_subscriptions(
+        self,
+        tenant_id: Optional[int] = None,
+        expired_only: bool = False,
+    ) -> List[TenantSubscription]:
+        """كل اشتراكات TRIAL — بلا فلتر tenant_id افتراضيًا (عبر كل
+        المستأجرين)، بنفس نمط get_past_due_subscriptions [2026-09-08].
+        expired_only=True يضيف فلتر trial_end_date <= الآن (تُستخدَم من
+        check_and_expire_trials). expired_only=False (الافتراضي) يحافظ
+        على السلوك القديم بالضبط — لازم يفضل كده عشان
+        _cancel_related_free_trials (academy/service.py) لسه محتاجة كل
+        TRIAL بغض النظر عن تاريخ الانتهاء، مش بس المنتهية."""
+        conditions = [TenantSubscription.status == "TRIAL"]
+        if tenant_id is not None:
+            conditions.append(TenantSubscription.tenant_id == tenant_id)
+        if expired_only:
+            conditions.append(TenantSubscription.trial_end_date.isnot(None))
+            conditions.append(TenantSubscription.trial_end_date <= datetime.now(timezone.utc))
+
         result = await self.db.execute(
-            select(TenantSubscription).where(
-                and_(
-                    TenantSubscription.tenant_id == tenant_id,
-                    TenantSubscription.status == "TRIAL",
-                )
-            )
+            select(TenantSubscription).where(and_(*conditions))
         )
         return list(result.scalars().all())
 
@@ -143,6 +157,38 @@ class SaaSRepository:
                     TenantSubscription.tenant_id == tenant_id,
                     ServicePlan.service_id == service_id,
                     TenantSubscription.status.in_(["ACTIVE", "TRIAL"])
+                )
+            )
+            .order_by(TenantSubscription.created_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_active_subscription_via_plan_access(
+        self,
+        tenant_id: int,
+        service_id: int,
+    ) -> Optional[TenantSubscription]:
+        """نفس شكل get_active_subscription بالضبط، لكن الربط بين
+        الاشتراك والخدمة عبر saas_plan_service_access (many-to-many)
+        بدل ServicePlan.service_id (FK وحيد). جزء من pilot دومين
+        insurance فقط — راجع PROGRESS_LOG.md [2026-09-07].
+
+        PAST_DUE مُضاف عمدًا لقائمة الحالات [2026-09-08] — عشان فرع
+        فترة السماح في can_access_service (service.py) يبقى قابل
+        للوصول فعليًا (كان ميتًا: الاستعلام هنا كان بيستبعد PAST_DUE
+        فيرجع None قبل ما يوصل لفحص الفرع أصلًا). راجع
+        .claude/reports/past-due-grace-period-notifications-investigation-session-log.md
+        §1. get_active_subscription الشقيقة (تحت) عندها نفس القصور
+        عمدًا لم تُلمَس هنا — خارج نطاق هذا التغيير."""
+        result = await self.db.execute(
+            select(TenantSubscription)
+            .join(PlanServiceAccess, PlanServiceAccess.plan_id == TenantSubscription.plan_id)
+            .where(
+                and_(
+                    TenantSubscription.tenant_id == tenant_id,
+                    PlanServiceAccess.service_id == service_id,
+                    TenantSubscription.status.in_(["ACTIVE", "TRIAL", "PAST_DUE"])
                 )
             )
             .order_by(TenantSubscription.created_at.desc())
@@ -188,6 +234,35 @@ class SaaSRepository:
                 TenantSubscription.next_billing_date <= now
             )
         )
+        if tenant_id is not None:
+            query = query.where(TenantSubscription.tenant_id == tenant_id)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
+    async def get_subscriptions_for_manual_billing(self, tenant_id: Optional[int] = None) -> List[TenantSubscription]:
+        """اشتراكات ACTIVE بـauto_renew=False مستحقة الفاتورة الشهرية
+        (next_billing_date <= الآن) — نفس معيار الاستحقاق في
+        get_subscriptions_for_renewal، لكن لعملاء الدفع اليدوي (بعكسها
+        اللي تخص auto_renew=True). تُستخدَم من generate_monthly_invoices
+        [2026-09-09]. بلا فلتر tenant_id افتراضيًا (عبر كل المستأجرين)."""
+        now = datetime.now(timezone.utc)
+        query = select(TenantSubscription).where(
+            and_(
+                TenantSubscription.status == "ACTIVE",
+                TenantSubscription.auto_renew == False,
+                TenantSubscription.next_billing_date <= now
+            )
+        )
+        if tenant_id is not None:
+            query = query.where(TenantSubscription.tenant_id == tenant_id)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
+    async def get_past_due_subscriptions(self, tenant_id: Optional[int] = None) -> List[TenantSubscription]:
+        """كل اشتراكات PAST_DUE — بلا فلتر tenant_id افتراضيًا (عبر كل
+        المستأجرين)، تُستخدَم من check_past_due_subscriptions
+        (فحص/تنبيهات فترة السماح اليومي) [2026-09-08]."""
+        query = select(TenantSubscription).where(TenantSubscription.status == "PAST_DUE")
         if tenant_id is not None:
             query = query.where(TenantSubscription.tenant_id == tenant_id)
         result = await self.db.execute(query)

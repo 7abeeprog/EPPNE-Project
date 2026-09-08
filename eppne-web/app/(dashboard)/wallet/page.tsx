@@ -1,6 +1,6 @@
 "use client";
 
-import { BalanceCard } from "@/components/finance/balance-card";
+import { BalanceCard } from "@/components/finance/BalanceCard";
 import { Web3DepositWithdraw } from "@/components/finance/web3-deposit-withdraw";
 import { AdminMintCard } from "@/components/finance/admin-mint-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

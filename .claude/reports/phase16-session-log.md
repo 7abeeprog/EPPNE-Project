@@ -682,4 +682,31 @@ Phase 16 جزئي (command فقط).
 
 **الحالة:** ✅ الخطوتين 1 و2 مكتملتين. جاري تنفيذ الخطوة 3 (git commit).
 
+### 3. Git commit (تم)
+`git status` أكَّد وجود ملفات Phase 13 قديمة غير متعلقة، معلَّقة من قبل
+بداية الجلسة دي (`agritech/router.py` محذوف، `main.py` معدَّل) — **لم
+تُلمس ولم تُضاف للـcommit**، طبقًا لتوجيه "الملفات المتعلقة بس". تحقَّقت
+من كل diff قبل الإضافة (`git diff` لكل ملف) للتأكد إنه يطابق بالحرف
+التعديلات الموثَّقة في الجلسة دي، مش أكتر.
+
+**الملفات المُضافة للـcommit (5 بالحرف):**
+- `PROGRESS_LOG.md` (تأكَّد الـdiff بيبدأ فورًا بعد نهاية Phase 15،
+  كل المضاف = عناوين Phase 16 بس).
+- `eppne-backend/app/domains/ai_governance/repository.py`
+  (سطر واحد: `commit()` → `flush()`).
+- `eppne-backend/app/domains/command/router.py` (الديف الكامل، 18
+  endpoint).
+- `eppne-backend/app/domains/command/service.py` (3 إصلاحات
+  constructor/kwarg).
+- `.claude/reports/phase16-session-log.md` (ملف تقرير هذه الجلسة).
+
+**Commit:** `2d4ef59` — `fix(command): eliminate X-Tenant-ID header
+trust across 18 endpoints (Phase 16, partial)`. `git status` بعد
+الـcommit أكَّد: working tree نظيف من ناحية الملفات الخمسة (صفر تغيير
+متبقٍّ)، وملفات Phase 13 القديمة لسه في حالتها الأصلية (uncommitted،
+متلمستش).
+
+**الحالة النهائية:** ✅ **الخطوات الثلاثة مكتملة بالكامل. Phase 16
+متوقَّف رسميًا عند نقطة نظيفة.**
+
 ---

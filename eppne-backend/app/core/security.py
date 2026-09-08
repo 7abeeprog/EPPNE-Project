@@ -205,6 +205,9 @@ async def get_privacy_officer(
 # ============================================================
 # 7. 🔥 صلاحيات القطاعات (المصححة باستخدام ContextVar)
 # ============================================================
+# DEPRECATED — no longer wired into any router (main.py); no sector claim
+# exists on tokens. Kept for reference/tests only — see
+# .claude/reports/require-sector-removal-subscription-fix-session-log.md
 def require_sector(sector: str):
     """
     مصنع اعتمادية للتحقق من أن المستخدم ينتمي إلى قطاع معين.
@@ -310,12 +313,20 @@ async def get_current_instructor_or_admin(
 # ============================================================
 # 12. صلاحية الاشتراك (Subscription) - منقولة من api/deps.py
 # ============================================================
+# ⚠️ قرار مبدئي قابل للتغيير لاحقًا — دومينات معفاة بالكامل من فحص الاشتراك
+# (تصل لأي تينانت تلقائيًا بلا اشتراك صريح). راجع
+# .claude/reports/require-sector-removal-subscription-fix-session-log.md
+SUBSCRIPTION_CHECK_EXEMPT_SERVICES: set[str] = {"identity", "saas"}
+
+
 def require_subscription(service_code: str):
     async def subscription_checker(
         current_user: User = Depends(get_current_active_user),
         db: AsyncSession = Depends(get_db),
     ):
+        if service_code in SUBSCRIPTION_CHECK_EXEMPT_SERVICES:
+            return current_user
         service = SaaSControlService(db, current_user.tenant_id)
-        await service.check_and_enforce_access(current_user.tenant_id, service_code)
+        await service.check_and_enforce_access(service_code)
         return current_user
     return subscription_checker

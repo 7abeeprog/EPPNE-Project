@@ -64,6 +64,9 @@ celery_app.conf.update(
 # ============================================================
 # 5. مهام وهمية (Fallback) لتجنب أخطاء الاستيراد في الكود القديم
 # ============================================================
+# ⚠️ القنوات EMAIL/SMS/PUSH غير مُفعَّلة حاليًا (لا تكامل حقيقي مع أي
+# مزوّد خارجي) — IN_APP هي القناة الوحيدة المدعومة فعليًا. راجع
+# backlog-notification-delivery-stub-empty-non-inapp-channels.
 @shared_task(name="send_notification_task")
 def send_notification_task(*args, **kwargs):
     """مهمة إرسال إشعار (مؤقتة - سيتم استبدالها بمهمة حقيقية لاحقاً)"""

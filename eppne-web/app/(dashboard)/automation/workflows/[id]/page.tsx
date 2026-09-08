@@ -4,14 +4,14 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getWorkflow, updateWorkflow, toggleWorkflowActive } from '@/services/automation.service';
+import { toggleWorkflowActive } from '@/services/automation.service';
+import { AutomationService } from '@/services/automation.service';
 import WorkflowBuilder from '@/components/automation/WorkflowBuilder';
 import TriggerSettings from '@/components/automation/TriggerSettings';
-import ExecutionsPage from '@/components/automation/ExecutionsPage'; // المود الجديد
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Loader2, Save, Power, PowerOff, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import ExecutionsPage from './executions/page';
+import ExecutionsPage from './executions/page'; // المود الجديد
 
 export default function WorkflowEditorPage() {
   const params = useParams();
@@ -23,7 +23,7 @@ export default function WorkflowEditorPage() {
   // ===== جلب البيانات =====
   const { data, isLoading } = useQuery({
     queryKey: ['workflow', workflowId],
-    queryFn: () => (workflowId ? getWorkflow(workflowId).then(res => res.data) : null),
+    queryFn: () => (workflowId ? AutomationService.getWorkflow(workflowId).then(res => res.data) : null),
     enabled: !!workflowId,
     staleTime: 2 * 60 * 1000,
   });
@@ -54,7 +54,7 @@ export default function WorkflowEditorPage() {
       if (isNew) {
         return Promise.reject('Use WorkflowBuilder save');
       }
-      return updateWorkflow(workflowId!, payload);
+      return AutomationService.updateWorkflow(workflowId!, payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflows'] });

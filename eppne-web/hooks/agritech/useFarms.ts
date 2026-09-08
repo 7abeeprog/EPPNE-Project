@@ -1,6 +1,7 @@
 // hooks/agritech/useFarms.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getFarms, getFarm, createFarm, updateFarm, deleteFarm } from '@/services/agritech';
+import { getFarms, getFarm, updateFarm, deleteFarm } from '@/services/agritech';
+import { AgritechService } from '@/services/agritech';
 import type { FarmType, SmartFarm } from '@/types/agritech';
 
 export const useFarms = (params?: { farm_type?: FarmType; skip?: number; limit?: number }) => {
@@ -23,7 +24,7 @@ export const useFarm = (id: number) => {
 export const useCreateFarm = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Parameters<typeof createFarm>[0]) => createFarm(data),
+    mutationFn: (data: Parameters<typeof AgritechService.createFarm>[0]) => AgritechService.createFarm(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agritech-farms'] });
       queryClient.invalidateQueries({ queryKey: ['agritech-stats'] });

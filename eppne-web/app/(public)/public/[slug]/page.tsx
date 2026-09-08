@@ -1,7 +1,7 @@
 // app/(public)/public/[slug]/page.tsx
-import { getPublicEntityPage } from '@/services/sovereign-entities';
-import { getEntityCourses } from '@/services/academy';
-import { getEntityProducts } from '@/services/commerce';
+import { SovereignEntitiesService } from '@/services/sovereign-entities';
+import { getEntityCourses } from '@/services/academy.service';
+import { getEntityProducts } from '@/services/commerce.service';
 import { getEntityProjects } from '@/services/projects';
 import { Metadata } from 'next';
 import Image from 'next/image';
@@ -13,7 +13,7 @@ export const revalidate = 300;
 
 // ========== جلب البيانات ==========
 async function getPageData(slug: string) {
-  const entityData = await getPublicEntityPage(slug);
+  const entityData = await SovereignEntitiesService.getPublicEntityPage(slug);
   
   // جلب البيانات من القطاعات الأخرى بالتوازي
   const [courses, products, projects] = await Promise.all([
@@ -27,7 +27,7 @@ async function getPageData(slug: string) {
 
 // ========== Metadata ==========
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const data = await getPublicEntityPage(params.slug);
+  const data = await SovereignEntitiesService.getPublicEntityPage(params.slug);
   return {
     title: data.page?.meta_title || data.entity.name,
     description: data.page?.meta_description || `الصفحة الرسمية لـ ${data.entity.name} على منصة EPPNE`,

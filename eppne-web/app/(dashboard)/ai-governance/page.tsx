@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getMyAgents } from '@/services/ai-agents';
+import { getMyAgents } from '@/services/ai-agents.service';
 import UsageDashboard from '@/components/ai-governance/UsageDashboard';
 import QuotaManager from '@/components/ai-governance/QuotaManager';
 import AuditLogViewer from '@/components/ai-governance/AuditLogViewer';

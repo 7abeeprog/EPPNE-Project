@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { updateTwinConfig } from '@/services/digital-twin';
+import { DigitalTwinService } from '@/services/digital-twin.service';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TwinAccessLevel, TwinCapability } from '@/types/digital-twin';
@@ -40,7 +40,7 @@ export default function TwinConfigForm({ initialConfig }: TwinConfigFormProps) {
   const [config, setConfig] = useState(initialConfig);
 
   const mutation = useMutation({
-    mutationFn: (data: typeof config) => updateTwinConfig(data),
+    mutationFn: (data: typeof config) => DigitalTwinService.updateTwinConfig(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['twin-config'] });
     },

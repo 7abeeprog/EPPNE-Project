@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getOpenJobs } from '@/services/employment';
+import { EmploymentService } from '@/services/employment';
 import Link from 'next/link';
 import { Search, MapPin, DollarSign, Users, Loader2, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -15,7 +15,7 @@ export default function JobsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['open-jobs', filterType],
-    queryFn: () => getOpenJobs({ 
+    queryFn: () => EmploymentService.getOpenJobs({
       ...(filterType && { employment_type: filterType }),
       limit: 50 
     }).then(res => res.data),

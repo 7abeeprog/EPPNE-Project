@@ -1,11 +1,12 @@
 // hooks/logistics/useEquipment.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getEquipment, getEquipmentItem, createEquipment, updateEquipment, createMaintenance } from '@/services/logistics';
+import { getEquipmentItem } from '@/services/logistics';
+import { LogisticsService } from '@/services/logistics';
 
 export const useEquipment = (params?: { equipment_type?: string; status?: string; warehouse_id?: number; skip?: number; limit?: number }) => {
   return useQuery({
     queryKey: ['logistics-equipment', params],
-    queryFn: () => getEquipment(params).then((res) => res.data),
+    queryFn: () => LogisticsService.getEquipment(params).then((res) => res.data),
     staleTime: 2 * 60 * 1000,
   });
 };
@@ -22,7 +23,7 @@ export const useEquipmentItem = (id: number) => {
 export const useCreateEquipment = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Parameters<typeof createEquipment>[0]) => createEquipment(data),
+    mutationFn: (data: Parameters<typeof LogisticsService.createEquipment>[0]) => LogisticsService.createEquipment(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['logistics-equipment'] });
       queryClient.invalidateQueries({ queryKey: ['logistics-stats'] });
@@ -33,8 +34,8 @@ export const useCreateEquipment = () => {
 export const useUpdateEquipment = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updateEquipment>[1] }) =>
-      updateEquipment(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof LogisticsService.updateEquipment>[1] }) =>
+      LogisticsService.updateEquipment(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['logistics-equipment-item', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['logistics-equipment'] });
@@ -45,8 +46,8 @@ export const useUpdateEquipment = () => {
 export const useCreateMaintenance = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ equipmentId, data }: { equipmentId: number; data: Parameters<typeof createMaintenance>[1] }) =>
-      createMaintenance(equipmentId, data),
+    mutationFn: ({ equipmentId, data }: { equipmentId: number; data: Parameters<typeof LogisticsService.createMaintenance>[1] }) =>
+      LogisticsService.createMaintenance(equipmentId, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['logistics-equipment-item', variables.equipmentId] });
       queryClient.invalidateQueries({ queryKey: ['logistics-equipment'] });

@@ -2,7 +2,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { getEntityBalance } from '@/services/sovereign-entities';
+import { SovereignEntitiesService } from '@/services/sovereign-entities';
 import { Wallet, TrendingUp, TrendingDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -14,7 +14,7 @@ interface WalletBalanceProps {
 export default function WalletBalance({ entityId, className }: WalletBalanceProps) {
   const { data, isLoading } = useQuery({
     queryKey: ['entity-balance', entityId],
-    queryFn: () => getEntityBalance(entityId).then(res => res.data),
+    queryFn: () => SovereignEntitiesService.getEntityBalance(entityId).then(res => res.data),
     refetchInterval: 30000, // تحديث كل 30 ثانية
     staleTime: 10000,
   });

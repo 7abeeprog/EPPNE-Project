@@ -3,7 +3,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
-import { depositToEntity, transferFromEntity, generateIdempotencyKey } from '@/services/sovereign-entities';
+import { generateIdempotencyKey } from '@/services/sovereign-entities';
+import { SovereignEntitiesService } from '@/services/sovereign-entities';
 import ConfirmationModal from '@/components/ui/ConfirmationModal';
 import { Loader2, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -37,7 +38,7 @@ export default function WalletActions({ entityId, entityName, primaryColor, curr
   // Mutations
   const depositMutation = useMutation({
     mutationFn: (data: { amount: number; currency: string; notes?: string }) =>
-      depositToEntity(entityId, data, depositKeyRef.current),
+      SovereignEntitiesService.depositToEntity(entityId, data, depositKeyRef.current),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['entity-balance', entityId] });
       setIsDepositModalOpen(false);
@@ -50,7 +51,7 @@ export default function WalletActions({ entityId, entityName, primaryColor, curr
 
   const transferMutation = useMutation({
     mutationFn: (data: { to_address: string; amount: number; currency: string; notes?: string }) =>
-      transferFromEntity(entityId, data, transferKeyRef.current),
+      SovereignEntitiesService.transferFromEntity(entityId, data, transferKeyRef.current),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['entity-balance', entityId] });
       setIsTransferModalOpen(false);

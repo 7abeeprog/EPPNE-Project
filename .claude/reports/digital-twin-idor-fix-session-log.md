@@ -1,7 +1,7 @@
 # جلسة فحص IDOR/أمان عميق في `digital_twin`
 
 **بدأ التسجيل:** 2026-08-24
-**الحالة:** ✅ **الجرد + التحقق الحي "قبل" (§5) + الإصلاح (14 endpoint + فحص عضوية إضافي) + التحقق الحي "بعد" (§8) — كل ده مكتمل ومؤكَّد حيًا.** ⏳ **بانتظار موافقتك على `commit` (§9) وقرار تنظيف بيانات throwaway (§10).**
+**الحالة:** ✅ **مكتملة بالكامل.** الجرد + التحقق الحي "قبل" (§5) + الإصلاح (14 endpoint + فحص عضوية إضافي) + التحقق الحي "بعد" (§8) + تنظيف بيانات throwaway (`SELECT COUNT` مستقل = 0 على كل الجداول السبعة) + إيقاف السيرفر التجريبي (تأكيد المنفذ 8000 فاضي) + تحديث `critical-finding-xtenant-systemic.md` (تأكيد حي لتوقع "الأخطر تأثيرًا") + `commit e01dcee` (6 ملفات: `router.py`, `service.py`, `PROGRESS_LOG.md`, `critical-finding-xtenant-systemic.md`, تقرير هذه الجلسة، `throwaway-test-users.md`).
 
 **نطاق الجلسة:** `eppne-backend/app/domains/digital_twin/{router,service,repository,schemas}.py` بالكامل (14 endpoint).
 

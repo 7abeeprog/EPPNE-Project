@@ -1,6 +1,7 @@
 // hooks/arbitration-syndicates/useSyndicates.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getSyndicates, getSyndicate, createSyndicate, joinSyndicate } from '@/services/arbitration-syndicates';
+import { getSyndicates, getSyndicate } from '@/services/arbitration-syndicates';
+import { ArbitrationSyndicatesService } from '@/services/arbitration-syndicates';
 
 export const useSyndicates = () => {
   return useQuery({
@@ -22,7 +23,7 @@ export const useSyndicate = (id: number) => {
 export const useCreateSyndicate = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Parameters<typeof createSyndicate>[0]) => createSyndicate(data),
+    mutationFn: (data: Parameters<typeof ArbitrationSyndicatesService.createSyndicate>[0]) => ArbitrationSyndicatesService.createSyndicate(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['syndicates'] });
     },
@@ -33,7 +34,7 @@ export const useJoinSyndicate = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ syndicateId, idempotencyKey }: { syndicateId: number; idempotencyKey?: string }) =>
-      joinSyndicate(syndicateId, idempotencyKey),
+      ArbitrationSyndicatesService.joinSyndicate(syndicateId, idempotencyKey),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['syndicate', variables.syndicateId] });
       queryClient.invalidateQueries({ queryKey: ['syndicates'] });

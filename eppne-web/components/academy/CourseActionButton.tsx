@@ -36,7 +36,7 @@ export function CourseActionButton({ course }: CourseActionButtonProps) {
       },
       {
         onSuccess: () => {
-          router.push(`/academy/classroom/${course.id}`);
+          router.push(`/academy/${course.id}/learn`);
         },
         onError: (error: any) => {
           console.error("Enrollment error:", error);
@@ -60,7 +60,7 @@ export function CourseActionButton({ course }: CourseActionButtonProps) {
     if (progress === 0) {
       return (
         <Button
-          onClick={() => router.push(`/academy/classroom/${course.id}`)}
+          onClick={() => router.push(`/academy/${course.id}/learn`)}
           className="w-full bg-emerald-600 hover:bg-emerald-500 font-black text-lg h-14 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] border border-emerald-500/50 transition-all hover:-translate-y-1"
         >
           <Play className="mr-2 h-5 w-5" /> ابدأ التعلم الآن
@@ -71,7 +71,7 @@ export function CourseActionButton({ course }: CourseActionButtonProps) {
     if (progress === 100 || enrollment.is_completed) {
       return (
         <Button
-          onClick={() => router.push(`/academy/classroom/${course.id}`)}
+          onClick={() => router.push(`/academy/${course.id}/learn`)}
           variant="outline"
           className="w-full bg-background/40 backdrop-blur-md border border-emerald-500/40 text-emerald-500 hover:bg-emerald-500 hover:text-white font-black text-lg h-14 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.15)] transition-all hover:-translate-y-1"
         >
@@ -82,7 +82,7 @@ export function CourseActionButton({ course }: CourseActionButtonProps) {
 
     return (
       <Button
-        onClick={() => router.push(`/academy/classroom/${course.id}`)}
+        onClick={() => router.push(`/academy/${course.id}/learn`)}
         className="w-full bg-blue-600 hover:bg-blue-500 font-black text-lg h-14 rounded-xl relative overflow-hidden group shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:shadow-[0_0_30px_rgba(37,99,235,0.5)] border border-blue-500/50 transition-all hover:-translate-y-1"
       >
         <div

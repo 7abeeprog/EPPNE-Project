@@ -2,7 +2,8 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { getOpenJobs, getMyApplications, getMyContract, getMyPayrolls } from '@/services/employment';
+import { getMyContract } from '@/services/employment';
+import { EmploymentService } from '@/services/employment';
 import { Loader2, Briefcase, FileCheck, Users, DollarSign } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -10,13 +11,13 @@ import { cn } from '@/lib/utils';
 export default function EmploymentDashboard() {
   const { data: jobs, isLoading: jobsLoading } = useQuery({
     queryKey: ['open-jobs'],
-    queryFn: () => getOpenJobs({ limit: 10 }).then(res => res.data),
+    queryFn: () => EmploymentService.getOpenJobs({ limit: 10 }).then(res => res.data),
     staleTime: 2 * 60 * 1000,
   });
 
   const { data: applications } = useQuery({
     queryKey: ['my-applications'],
-    queryFn: () => getMyApplications({ limit: 10 }).then(res => res.data),
+    queryFn: () => EmploymentService.getMyApplications({ limit: 10 }).then(res => res.data),
     staleTime: 2 * 60 * 1000,
   });
 
@@ -28,7 +29,7 @@ export default function EmploymentDashboard() {
 
   const { data: payrolls } = useQuery({
     queryKey: ['my-payrolls'],
-    queryFn: () => getMyPayrolls({ limit: 6 }).then(res => res.data),
+    queryFn: () => EmploymentService.getMyPayrolls({ limit: 6 }).then(res => res.data),
     staleTime: 2 * 60 * 1000,
   });
 

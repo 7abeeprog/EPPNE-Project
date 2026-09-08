@@ -1,11 +1,11 @@
 // hooks/ai-agents/useApprovalWebSocket.ts
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useAIAgentStore } from '@/store/aiAgentStore';
+import { useAgentStore } from '@/store/agentStore';
 import type { ApprovalRequest } from '@/types/ai-agents';
 
 export function useApprovalWebSocket() {
   const [isConnected, setIsConnected] = useState(false);
-  const { addPendingApproval, removePendingApproval } = useAIAgentStore();
+  const { addPendingApproval, removePendingApproval } = useAgentStore();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttempt = useRef(0);
 

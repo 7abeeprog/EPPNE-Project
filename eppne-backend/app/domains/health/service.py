@@ -40,7 +40,6 @@ class HealthService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = HealthRepository(db)
-        self.finance = FinanceService(db)
         self.iot = IoTService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
 
@@ -222,8 +221,9 @@ class HealthService:
         # 2. خصم الرسوم (مع Idempotency للدفع)
         fee = Decimal("10.00")
         payment_idempotency = f"appointment_fee_{idempotency_key or uuid.uuid4().hex[:12]}"
+        finance = FinanceService(self.db, tenant_id)
         try:
-            await self.finance.transfer(
+            await finance.transfer(
                 sender_id=patient_id,
                 receiver_email="health@eppne.com",
                 currency="MR_USDT",

@@ -1,6 +1,7 @@
 // hooks/arbitration-syndicates/useElections.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getElections, getElection, createElection, nominateCandidate, castVote } from '@/services/arbitration-syndicates';
+import { getElections, getElection, castVote } from '@/services/arbitration-syndicates';
+import { ArbitrationSyndicatesService } from '@/services/arbitration-syndicates';
 
 export const useElections = (params?: { syndicate_id?: number; status?: string }) => {
   return useQuery({
@@ -22,7 +23,7 @@ export const useElection = (id: number) => {
 export const useCreateElection = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Parameters<typeof createElection>[0]) => createElection(data),
+    mutationFn: (data: Parameters<typeof ArbitrationSyndicatesService.createElection>[0]) => ArbitrationSyndicatesService.createElection(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['arbitration-elections'] });
     },
@@ -33,7 +34,7 @@ export const useNominateCandidate = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ electionId, data, idempotencyKey }: { electionId: number; data: { manifesto: string }; idempotencyKey?: string }) =>
-      nominateCandidate(electionId, data, idempotencyKey),
+      ArbitrationSyndicatesService.nominateCandidate(electionId, data, idempotencyKey),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['arbitration-election', variables.electionId] });
     },

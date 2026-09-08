@@ -8,7 +8,7 @@ from typing import Optional, List, Dict, Any, cast
 
 from app.domains.digital_twin.repository import DigitalTwinRepository
 from app.domains.finance.service import FinanceService
-from app.domains.saas.service import SaaSControlService, FeatureAccessStatus
+from app.domains.saas.service import SaaSControlService
 from app.domains.affiliate.service import AffiliateService
 from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
 from app.core.idempotency import get_idempotency_result, store_idempotency_result
@@ -35,11 +35,14 @@ class DigitalTwinService:
 
     async def _check_saas_limits(self, tenant_id: int):
         """التحقق من صلاحية التوأم الرقمي في خطة الاشتراك."""
+        # [2026-09-07] موحَّد على can_access_service (زي insurance/employment/
+        # zamakana/transport/tourism_sports/tenders_auctions/social/
+        # service_marketplace بالظبط) — بعد ما can_access_service نفسها بقت
+        # بتفحص saas_plan_service_access (many-to-many) بدل
+        # ServicePlan.service_id القديم. راجع PROGRESS_LOG.md.
         saas_service = SaaSControlService(self.db, tenant_id)
-        check = await saas_service.check_feature_access(tenant_id, "digital_twin")
-        if check.status == FeatureAccessStatus.NO_ACTIVE_SUBSCRIPTION:
-            raise PermissionDeniedError("No active subscription found for this entity.")
-        if check.status == FeatureAccessStatus.FEATURE_NOT_INCLUDED:
+        has_access = await saas_service.can_access_service("digital_twin")
+        if not has_access:
             raise PermissionDeniedError("Digital Twin feature is not included in your current plan.")
 
     async def _get_user(self, user_id: int, tenant_id: int):

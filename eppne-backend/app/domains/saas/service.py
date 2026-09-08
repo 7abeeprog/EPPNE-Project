@@ -60,7 +60,6 @@ class SaaSControlService:
         self.db = db
         self.tenant_id = tenant_id
         self.repo = SaaSRepository(db)
-        self.finance = FinanceService(db, tenant_id)
 
     async def _get_tenant_admin_id(self, tenant_id: int) -> int:
         # الدافع الرسمي لفواتير/تجديدات التينانت هو AcademyTenant.admin_id
@@ -264,39 +263,50 @@ class SaaSControlService:
         return result
 
     async def process_auto_renewals(self, tenant_id: Optional[int] = None) -> List[dict]:
-        """معالجة التجديد التلقائي للاشتراكات المنتهية (تُنفذ يومياً)."""
-        target_tenant = tenant_id if tenant_id is not None else self.tenant_id
-        subscriptions = await self.repo.get_subscriptions_for_renewal(target_tenant)
+        """معالجة التجديد التلقائي للاشتراكات المنتهية (تُنفذ يومياً).
+
+        [2026-09-08] tenant_id=None بيتمرر مباشرة لـget_subscriptions_for_renewal
+        بلا fallback لـself.tenant_id — عبر كل المستأجرين، بنفس نمط
+        check_past_due_subscriptions بالضبط: كل اشتراك بيتعامل بـ
+        sub.tenant_id الحقيقي بتاعه، مش بقيمة self.tenant_id اللي اتبنى
+        بيها الـservice instance. قبل التعديل، استدعاء بلا tenant_id
+        (زي process_auto_renewals_task) كان بيقع على self.tenant_id
+        (غالبًا 0 كـsentinel إداري) فيعالج تينانت واحد وهمي بس بدل كل
+        التينانتات فعليًا — راجع backlog-process-auto-renewals-task-
+        tenant-zero-noop (PROGRESS_LOG.md) لتفاصيل الاكتشاف والتحقق الحي."""
+        subscriptions = await self.repo.get_subscriptions_for_renewal(tenant_id)
         results = []
 
         for sub in subscriptions:
+            sub_tenant_id = cast(int, sub.tenant_id)
             try:
                 plan = await self.repo.get_plan_by_id_admin(cast(int, sub.plan_id))
                 if not plan:
                     continue
 
-                payer_id = await self._get_tenant_admin_id(target_tenant)
-                system_account = await get_or_create_system_account(self.db, target_tenant)
+                payer_id = await self._get_tenant_admin_id(sub_tenant_id)
+                system_account = await get_or_create_system_account(self.db, sub_tenant_id)
+                finance = FinanceService(self.db, sub_tenant_id)
                 async with self.db.begin_nested():
-                    tx = await self.finance.transfer(
+                    tx = await finance.transfer(
                         sender_id=payer_id,
                         receiver_email=cast(str, system_account.email),
                         currency=plan.currency,
                         amount=plan.price_monthly,
                         idempotency_key=f"AUTO-RENEW-{sub.id}-{datetime.now(timezone.utc).strftime('%Y-%m')}",
-                        notes=f"تجديد اشتراك {plan.name} - {target_tenant}",
+                        notes=f"تجديد اشتراك {plan.name} - {sub_tenant_id}",
                     )
 
                     await self.repo.update_subscription(
                         cast(int, sub.id),
-                        target_tenant,
+                        sub_tenant_id,
                         status="ACTIVE",
                         next_billing_date=datetime.now(timezone.utc) + timedelta(days=30),
                         grace_period_end_date=None,
                     )
 
                     await self._generate_invoice(
-                        tenant_id=target_tenant,
+                        tenant_id=sub_tenant_id,
                         subscription_id=cast(int, sub.id),
                         plan=plan,
                     )
@@ -309,7 +319,7 @@ class SaaSControlService:
             except InsufficientBalanceError:
                 await self.repo.update_subscription(
                     cast(int, sub.id),
-                    target_tenant,
+                    sub_tenant_id,
                     status="PAST_DUE",
                     grace_period_end_date=datetime.now(timezone.utc) + timedelta(days=3),
                 )
@@ -321,6 +331,223 @@ class SaaSControlService:
                 results.append({"subscription_id": cast(int, sub.id), "status": "FAILED", "error": str(e)})
 
         return results
+
+    async def generate_monthly_invoices(self, tenant_id: Optional[int] = None) -> int:
+        """توليد فواتير الفوترة الشهرية اليدوية للاشتراكات ACTIVE بـ
+        auto_renew=False (العميل اختار الدفع اليدوي — بعكس
+        process_auto_renewals اللي تخص auto_renew=True) [2026-09-09].
+
+        لكل اشتراك مستحق: تُصدر فاتورة PENDING عبر _generate_invoice
+        الموجودة أصلًا (idempotent عبر idempotency_key، نفس الدالة
+        المُستخدَمة جوّه process_auto_renewals) — **بلا** أي استدعاء
+        لـFinanceService/transfer وبلا أي خصم فوري من المحفظة (ده الفرق
+        الجوهري عن process_auto_renewals): الدفع الفعلي بيحصل لاحقًا عبر
+        pay_invoice الموجودة. بعد الإصدار، next_billing_date بيتحدّث +30
+        يوم (نفس منطق process_auto_renewals بالضبط) عشان الفاتورة الجاية
+        متتصدرش تاني الشهر ده بالغلط.
+
+        try/except لكل اشتراك على حدة — فشل واحد ما يوقفش معالجة الباقي.
+        بلا فلتر tenant_id افتراضيًا (عبر كل المستأجرين)، بنفس نمط
+        process_auto_renewals/check_past_due_subscriptions. ترجع عدد
+        الفواتير المُصدرة فعليًا (مش عدد المرشَّحين للفحص)."""
+        subscriptions = await self.repo.get_subscriptions_for_manual_billing(tenant_id)
+        issued_count = 0
+
+        for sub in subscriptions:
+            sub_id = cast(int, sub.id)
+            sub_tenant_id = cast(int, sub.tenant_id)
+            try:
+                plan = await self.repo.get_plan_by_id_admin(cast(int, sub.plan_id))
+                if not plan:
+                    continue
+
+                async with self.db.begin_nested():
+                    await self._generate_invoice(
+                        tenant_id=sub_tenant_id,
+                        subscription_id=sub_id,
+                        plan=plan,
+                    )
+
+                    await self.repo.update_subscription(
+                        sub_id,
+                        sub_tenant_id,
+                        next_billing_date=datetime.now(timezone.utc) + timedelta(days=30),
+                    )
+
+                await self.db.commit()
+                issued_count += 1
+                logger.info(f"Monthly invoice generated: subscription {sub_id}")
+
+            except Exception as e:
+                logger.error(f"Monthly invoice generation failed: subscription {sub_id} - {str(e)}")
+
+        return issued_count
+
+    async def check_past_due_subscriptions(self, tenant_id: Optional[int] = None) -> List[dict]:
+        """فحص كل اشتراكات PAST_DUE وإرسال تنبيهات فترة السماح المرحلية
+        (تُنفذ يومياً 3 صباحاً، بعد process_auto_renewals بساعة).
+        [2026-09-08] — راجع خطة تصميم فترة السماح +
+        .claude/reports/past-due-grace-period-notifications-implementation-session-log.md.
+
+        بعكس process_auto_renewals (اللي بتقع على self.tenant_id لو
+        tenant_id=None)، الدالة دي بتفحص عبر كل المستأجرين افتراضيًا
+        (get_past_due_subscriptions(None) بلا فلتر) — كل اشتراك بيتعامل
+        بـtenant_id بتاعه هو (sub.tenant_id)، مش self.tenant_id، عشان
+        تشتغل صح بغض النظر عن الـtenant_id اللي اتبنى بيه الـservice
+        instance (زي نمط SaaSControlService(db, 0) الإداري الموجود في
+        router.py:273).
+
+        فترة السماح 3 أيام (مضروبة فعليًا وقت التحويل لـPAST_DUE في
+        process_auto_renewals، بلا تغيير هنا). المراحل:
+        - يوم 0 (أكتر من يوم متبقي): تنبيه ببداية فترة السماح.
+        - يوم 2 (يوم واحد أو أقل متبقي، لسه ساري): تذكير أخير.
+        - يوم 3 (انتهت الفترة): تنبيه بالإيقاف + تحويل EXPIRED استباقيًا
+          (بدل الاعتماد فقط على lazy check جوّه can_access_service).
+
+        idempotency_key = f"SUB-PASTDUE-{sub.id}-{day_number}" لكل مرحلة
+        يمنع تكرار الإرسال لو الـtask اتنفذت أكتر من مرة لنفس الاشتراك
+        وهو لسه في نفس المرحلة."""
+        from app.domains.communications.service import CommunicationsService
+
+        subscriptions = await self.repo.get_past_due_subscriptions(tenant_id)
+        comm_service = CommunicationsService(self.db)
+        now = datetime.now(timezone.utc)
+        results = []
+
+        for sub in subscriptions:
+            grace_end = sub.grace_period_end_date
+            if grace_end is None:
+                logger.warning(f"Past-due subscription {sub.id} has no grace_period_end_date - skipped")
+                continue
+
+            remaining = grace_end - now
+            if remaining <= timedelta(0):
+                day_number = 3
+            elif remaining <= timedelta(days=1):
+                day_number = 2
+            else:
+                day_number = 0
+
+            sub_id = cast(int, sub.id)
+            sub_tenant_id = cast(int, sub.tenant_id)
+
+            try:
+                admin_id = await self._get_tenant_admin_id(sub_tenant_id)
+
+                if day_number == 0:
+                    title = "تأخر الدفع"
+                    body = "دفعتك اتأخرت، عندك 3 أيام سماح."
+                elif day_number == 2:
+                    title = "تنبيه: فترة السماح توشك على الانتهاء"
+                    body = "باقي يوم واحد بس على انتهاء فترة السماح."
+                else:
+                    title = "تم إيقاف الخدمة"
+                    body = "الخدمة اتوقفت بسبب انتهاء فترة السماح."
+
+                await comm_service.send_notification(
+                    user_id=admin_id,
+                    title=title,
+                    body=body,
+                    data={"subscription_id": sub_id, "day": day_number},
+                    channel="IN_APP",
+                    idempotency_key=f"SUB-PASTDUE-{sub_id}-{day_number}",
+                )
+
+                if day_number == 3:
+                    await self.repo.update_subscription_status(sub_id, sub_tenant_id, "EXPIRED")
+                    await self.db.commit()
+
+                results.append({"subscription_id": sub_id, "day": day_number, "status": "NOTIFIED"})
+
+            except Exception as e:
+                logger.error(f"Past-due check failed: subscription {sub_id} - {str(e)}")
+                results.append({"subscription_id": sub_id, "status": "FAILED", "error": str(e)})
+
+        return results
+
+    async def check_and_expire_trials(self, tenant_id: Optional[int] = None) -> int:
+        """فحص كل اشتراكات TRIAL المنتهية (trial_end_date <= الآن) وتحويلها
+        لـEXPIRED (تُنفذ يوميًا 4 صباحًا، بنفس نمط check_past_due_subscriptions
+        المبنية اليوم [2026-09-08]).
+
+        بلا فلتر tenant_id افتراضيًا (get_trial_subscriptions(None,
+        expired_only=True) — عبر كل المستأجرين) — كل اشتراك بيتعامل
+        بـsub.tenant_id بتاعه هو، مش self.tenant_id، فمش متأثرة بقيمة
+        tenant_id اللي اتبنى بيها الـservice instance (نمط
+        SaaSControlService(db, 0) الإداري في saas_tasks.py).
+
+        try/except حول كل اشتراك على حدة — فشل واحد ما يوقفش فحص الباقي.
+        ترجع عدد الاشتراكات اللي اتحوّلت فعليًا لـEXPIRED (مش عدد
+        المرشَّحين للفحص)."""
+        subscriptions = await self.repo.get_trial_subscriptions(tenant_id, expired_only=True)
+        expired_count = 0
+
+        for sub in subscriptions:
+            sub_id = cast(int, sub.id)
+            sub_tenant_id = cast(int, sub.tenant_id)
+            try:
+                await self.repo.update_subscription_status(sub_id, sub_tenant_id, "EXPIRED")
+                await self.db.commit()
+                expired_count += 1
+                logger.info(f"Trial expired: subscription {sub_id}")
+            except Exception as e:
+                logger.error(f"Trial expiry check failed: subscription {sub_id} - {str(e)}")
+
+        return expired_count
+
+    async def send_trial_expiry_reminders(self, tenant_id: Optional[int] = None) -> int:
+        """إرسال تذكير "باقي يومين" لاشتراكات TRIAL اللي trial_end_date بتاعها
+        بين الآن والآن+يومين (تُنفذ يوميًا، بنفس بنية check_past_due_subscriptions
+        [2026-09-08] — راجع send-trial-expiry-reminders-task-fix-session-log.md).
+
+        بتستخدم get_trial_subscriptions(tenant_id, expired_only=False) الموجودة
+        بالفعل — مش expired_only=True زي check_and_expire_trials، لأن المطلوب
+        هنا اشتراكات لسه سارية وقربت تنتهي مش اللي انتهت بالفعل — وتضيف فلتر
+        محلي إضافي: now <= trial_end_date <= now + يومين.
+
+        IN_APP بس — قناة EMAIL في CommunicationsService لسه stub فاضي (backlog
+        منفصل)، ممنوع استخدامها هنا.
+
+        idempotency_key = f"SUB-TRIAL-REMIND-{sub.id}" يمنع تكرار الإرسال لو
+        الـtask اتنفذت أكتر من مرة والاشتراك لسه في نفس نافذة التذكير.
+
+        try/except حول كل اشتراك على حدة — فشل واحد ما يوقفش فحص الباقي.
+        ترجع عدد التذكيرات اللي اتبعتت فعلاً (مش عدد المرشَّحين للفحص)."""
+        from app.domains.communications.service import CommunicationsService
+
+        subscriptions = await self.repo.get_trial_subscriptions(tenant_id, expired_only=False)
+        comm_service = CommunicationsService(self.db)
+        now = datetime.now(timezone.utc)
+        window_end = now + timedelta(days=2)
+        reminders_sent = 0
+
+        for sub in subscriptions:
+            trial_end = sub.trial_end_date
+            if trial_end is None or not (now <= trial_end <= window_end):
+                continue
+
+            sub_id = cast(int, sub.id)
+            sub_tenant_id = cast(int, sub.tenant_id)
+
+            try:
+                admin_id = await self._get_tenant_admin_id(sub_tenant_id)
+
+                await comm_service.send_notification(
+                    user_id=admin_id,
+                    title="تنبيه: الفترة التجريبية توشك على الانتهاء",
+                    body="باقي يومين بس على انتهاء الفترة التجريبية.",
+                    data={"subscription_id": sub_id},
+                    channel="IN_APP",
+                    idempotency_key=f"SUB-TRIAL-REMIND-{sub_id}",
+                )
+
+                reminders_sent += 1
+                logger.info(f"Trial expiry reminder sent: subscription {sub_id}")
+
+            except Exception as e:
+                logger.error(f"Trial expiry reminder failed: subscription {sub_id} - {str(e)}")
+
+        return reminders_sent
 
     # ==========================================
     # 4. صلاحيات الوصول (Access Control)
@@ -335,7 +562,7 @@ class SaaSControlService:
         if access is None or not cast(bool, access.is_active):
             return False
 
-        subscription = await self.repo.get_active_subscription(self.tenant_id, service_id)
+        subscription = await self.repo.get_active_subscription_via_plan_access(self.tenant_id, service_id)
         if subscription is None:
             return False
 
@@ -418,9 +645,10 @@ class SaaSControlService:
 
         payer_id = await self._get_tenant_admin_id(self.tenant_id)
         system_account = await get_or_create_system_account(self.db, self.tenant_id)
+        finance = FinanceService(self.db, self.tenant_id)
         async with self.db.begin_nested():
             try:
-                tx = await self.finance.transfer(
+                tx = await finance.transfer(
                     sender_id=payer_id,
                     receiver_email=cast(str, system_account.email),
                     currency=invoice.currency,
@@ -525,4 +753,6 @@ class SaaSControlService:
     async def trigger_renewals(self, tenant_id: Optional[int] = None):
         """تشغيل مهمة تجديد الاشتراكات يدوياً (للمشرفين)."""
         target = tenant_id if tenant_id is not None else self.tenant_id
-        return await self.process_auto_renewals(target)
+        results = await self.process_auto_renewals(target)
+        await self.db.commit()
+        return results

@@ -4,7 +4,7 @@
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createEntity } from '@/services/sovereign-entities';
+import { SovereignEntitiesService } from '@/services/sovereign-entities';
 import { Upload, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { EntityFormData, SovereignEntityType } from '@/types/sovereign-entities';
@@ -37,7 +37,7 @@ export default function EntityForm() {
 
   const { mutate, isPending } = useMutation({
     mutationFn: async (data: FormData) => {
-      const response = await createEntity(data);
+      const response = await SovereignEntitiesService.createEntity(data);
       return response.data;
     },
     onSuccess: () => {
