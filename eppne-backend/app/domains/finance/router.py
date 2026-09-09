@@ -115,9 +115,14 @@ async def get_history(
 
 @router.get("/admin/crypto-mode")
 async def get_crypto_mode(
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    # هذا endpoint عام (قراءة فقط) - لا يحتاج tenant_id
+    # الـ 1 هنا مُهملة وظيفيًا: SystemStateRepository تينانت-أجنوستيك بالكامل
+    # (get_state() بيرجع أحدث صف من غير أي فلترة بـ tenant_id) - أي رقم هنا
+    # هيدّي نفس النتيجة. لو حد وسّع الـresponse مستقبلًا يضيف total_supply
+    # أو exchange_rates (بيانات تشغيلية أحساس)، لازم يراجع الـauth level
+    # تاني وقتها - ما ينفعش يفترض إن "GET بدون قيود إضافية" يفضل آمن دايمًا.
     service = FinanceService(db, 1)
     state = await service.state_repo.get_state()
     return {

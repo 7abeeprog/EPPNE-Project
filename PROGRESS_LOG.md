@@ -2709,7 +2709,7 @@ API عبر كل استخدامتها في المشروع؟) **لسه قرار م
 `.claude/reports/financeservice-tenant-binding-fix-session-log.md`،
 `tests/test_financeservice_tenant_binding_fix.py`.
 
-## [2026-09-08] backlog-finance-router-hardcoded-tenant-id-1 — 🟡 توثيق فقط، صفر تحقق حي
+## [2026-09-08] backlog-finance-router-hardcoded-tenant-id-1 — ✅ مُغلَق [2026-09-09]، مُتحقَّق منه حيًا
 
 اكتُشف أثناء فحص read-only شامل (جرد كل نقاط إنشاء `FinanceService(...)`
 عبر المشروع) لتوثيق حجم تأثير
@@ -2737,6 +2737,47 @@ service = FinanceService(db, 1)   # سطر 121 — مقارنة بباقي ال�
 **المرجع:**
 `.claude/reports/financeservice-tenant-binding-investigation-session-log.md`
 §2 ("`finance/router.py` نفسه").
+
+### تحديث الإغلاق [2026-09-09] — السبب الحقيقي كان غياب auth، مش الـtenant_id
+
+سلسلة تحقيق read-only على 3 جلسات كشفت إن التشخيص الأصلي أعلاه ("عزل
+تينانت مكسور") **غير دقيق**. الـendpoint المحدَّد فعليًا: `GET
+/finance/admin/crypto-mode` (دالة `get_crypto_mode`، `finance/router.py:116-126`).
+
+**الاكتشاف الحاسم:** `SystemStateRepository.get_state()`
+(`repository.py:217-229`) **تينانت-أجنوستيك بالكامل** — بيرجع أحدث صف
+من جدول `system_state` من غير أي فلترة بـ`tenant_id` على الإطلاق. الجدول
+نفسه singleton عالمي (صف واحد فقط، `id=1`، مؤكَّد بـSELECT حي ضد الـDB
+الفعلية). يعني الـ`1` المكتوب في `FinanceService(db, 1)` **مُهملة
+وظيفيًا تمامًا** — أي رقم هيدّي نفس النتيجة بالظبط، فمفيش "عزل تينانت
+مكسور" لأن مفيش عزل تينانت من الأساس على هذا المسار.
+
+المشكلة الحقيقية اللي طلعت بدل كده: الدالة **كانت من غير أي auth
+dependency خالص** — لا `current_user`، لا `get_current_active_user`
+ولا `get_current_superuser` — يعني أي حد بيعرف الـURL يقدر يقرا
+`crypto_mode` و`max_supply` بدون تسجيل دخول أصلًا. ده كمان تناقض مع
+الـ`POST` المقابل لنفس الـresource (`set_crypto_mode`، سطر 129) اللي
+بيتطلب `get_current_superuser` فعليًا.
+
+**الإصلاح المُنفَّذ (ضيق جدًا، صفر لمس لـ`FinanceService(db, 1)`):**
+إضافة `current_user: User = Depends(get_current_active_user)` (تسجيل
+دخول عادي — البيانات المُرجَعة رقم تصميمي عام مش حساس كفاية لتبرير
+`get_current_superuser`)، وتحديث التعليق فوق السطر ليوضّح صراحة إن الـ`1`
+مُهملة وظيفيًا ولازم مراجعة الـauth level تاني لو حد وسّع الـresponse
+مستقبلًا بحقول أحساس زي `total_supply`/`exchange_rates` (موجودين في
+نفس جدول `SystemState` بس مش مُرجَعين حاليًا).
+
+**تحقق حي (TestClient in-process + DB حقيقية، صفر mock):**
+- بدون توكن → `401 {"detail":"Not authenticated"}` ✅
+- مستخدم عادي مسجّل (`system_role=USER`, لا `SUPER_ADMIN`) → `200
+  {"crypto_mode":"FULL_CRYPTO","max_supply":{...}}` ✅
+- Regression: `tests/test_financeservice_tenant_binding_fix.py` — `2
+  passed`، صفر كسر.
+
+**المرجع:**
+`.claude/reports/finance-router-hardcoded-tenant-investigation-session-log.md`،
+`.claude/reports/finance-router-system-state-model-and-live-data-session-log.md`،
+`.claude/reports/finance-router-crypto-mode-auth-fix-session-log.md`.
 
 ## [2026-09-08] ربط بباجات constructor-mismatch القديمة: commerce/tasks.py + تأكيد invoicing/router.py:330
 
