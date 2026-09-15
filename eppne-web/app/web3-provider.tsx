@@ -1,7 +1,6 @@
 "use client";
 import { mainnet, polygon, bsc } from 'wagmi/chains';
 import { RainbowKitProvider, getDefaultConfig } from "@rainbow-me/rainbowkit";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 // إعداد Wagmi + RainbowKit
 const config = getDefaultConfig({
@@ -11,14 +10,10 @@ const config = getDefaultConfig({
   ssr: true,
 });
 
-const queryClient = new QueryClient();
-
 export function Web3Provider({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider locale="ar">{children}</RainbowKitProvider>
-      </QueryClientProvider>
+      <RainbowKitProvider locale="ar">{children}</RainbowKitProvider>
     </WagmiProvider>
   );
 }
