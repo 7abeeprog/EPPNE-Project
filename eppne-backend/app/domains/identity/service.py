@@ -58,6 +58,9 @@ class UserService:
         self.wallet_repo = WalletRepository(db)
         self.token_repo = RefreshTokenRepository(db)
 
+    async def search_users(self, q: str, limit: int = 10) -> List[User]:
+        return await self.user_repo.search_by_username_or_email(q, self.tenant_id, limit)
+
     async def register(self, data: UserCreate, idempotency_key: Optional[str] = None) -> User:
         if idempotency_key:
             existing_user = await self.user_repo.get_by_idempotency_key(idempotency_key, self.tenant_id)

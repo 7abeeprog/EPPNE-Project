@@ -103,3 +103,9 @@ class TenantInvitationCreateResponse(TenantInvitationResponse):
 
 class InvitationRegisterRequest(UserCreate):
     token: str = Field(description="توكن الدعوة الخام (من الرابط اللي وصل للمستخدم)")
+
+
+class UserSearchResult(BaseModel):
+    user_id: int
+    name: str = Field(description="اسم المستخدم (username)")
+    email: str

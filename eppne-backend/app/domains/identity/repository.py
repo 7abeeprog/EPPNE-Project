@@ -73,6 +73,22 @@ class UserRepository:
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
+    async def search_by_username_or_email(self, q: str, tenant_id: int, limit: int = 10) -> List[User]:
+        pattern = f"%{q}%"
+        query = (
+            select(User)
+            .where(
+                and_(
+                    User.tenant_id == tenant_id,
+                    or_(User.username.ilike(pattern), User.email.ilike(pattern)),
+                )
+            )
+            .order_by(User.id)
+            .limit(limit)
+        )
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
     async def get_tenant_id_by_user_id(self, user_id: int) -> Optional[int]:
         """يبحث بـuser_id وحده عبر كل الـtenants ويرجع tenant_id فقط
         (بلا أي بيانات أخرى عن المستخدم) — للحالات التي يكون فيها

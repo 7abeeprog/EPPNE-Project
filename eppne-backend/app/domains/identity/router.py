@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.domains.identity.schemas import (
     UserCreate, UserResponse, UserLogin, UserUpdate, SessionInfoResponse,
     TenantInvitationCreate, TenantInvitationResponse, TenantInvitationCreateResponse,
-    InvitationRegisterRequest,
+    InvitationRegisterRequest, UserSearchResult,
 )
 from app.domains.identity.service import UserService
 from app.domains.identity.invitation_service import InvitationService
@@ -209,6 +209,24 @@ async def list_invitations(
     else:
         invitations = await service.list_mine(cast(int, current_user.id), cast(int, current_user.tenant_id), skip, limit)
     return [_invitation_to_dict(inv) for inv in invitations]
+
+
+@protected_router.get("/users/search", response_model=List[UserSearchResult])
+@rate_limit(max_requests=30, window_seconds=60)
+async def search_users(
+    q: str = Query(..., min_length=2),
+    limit: int = Query(10, ge=1, le=50),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not is_admin_or_above(current_user):
+        raise PermissionDeniedError("صلاحية إدارية مطلوبة للبحث عن مستخدمين")
+    service = UserService(db, cast(int, current_user.tenant_id))
+    users = await service.search_users(q, limit)
+    return [
+        UserSearchResult(user_id=cast(int, u.id), name=cast(str, u.username), email=cast(str, u.email))
+        for u in users
+    ]
 
 
 @protected_router.get("/invitations/{invitation_id}", response_model=TenantInvitationResponse)
