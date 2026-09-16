@@ -17,7 +17,6 @@ from app.domains.communications.schemas import *
 from app.core.security import decode_token
 from app.core.rate_limiter import rate_limit
 from app.core.audit import audit_log
-from app.core.idempotency import check_idempotency, store_idempotency_result
 
 router = APIRouter(prefix="/communications", tags=["Sovereign Communications"])
 
@@ -95,11 +94,12 @@ async def send_notification(
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
+    # ملحوظة: صفر تحقق Idempotency إضافي هنا عمدًا — CommunicationsService.
+    # send_notification بيتحقق من idempotency_key الحقيقي عبر عمود DB
+    # فريد (unique) قبل الإنشاء ويرجّع السجل الموجود لو مُكرَّر (راجع
+    # repo.get_notification_by_idempotency)، وده كافٍ وحده وأدق من أي
+    # طبقة Redis إضافية فوقه.
     idempotency_key = data.idempotency_key or request.headers.get("Idempotency-Key")
-    if idempotency_key:
-        cached_result = await check_idempotency(idempotency_key)
-        if cached_result:
-            return cached_result
 
     service = CommunicationsService(db)
     notification = await service.send_notification(
@@ -118,9 +118,6 @@ async def send_notification(
         resource_id=notification.id,  # type: ignore
         details={"recipient": data.user_id, "title": data.title}
     )
-
-    if idempotency_key:
-        await store_idempotency_result(idempotency_key, notification)
 
     await broadcast_to_user_redis(data.user_id, {
         "type": "notification",
@@ -207,11 +204,11 @@ async def send_mail(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    # ملحوظة: صفر تحقق Idempotency إضافي هنا عمدًا — نفس السبب الموثَّق
+    # في send_notification أعلاه (CommunicationsService.send_mail بيتحقق
+    # من idempotency_key عبر عمود DB فريد قبل الإنشاء، راجع
+    # repo.get_message_by_idempotency).
     idempotency_key = data.idempotency_key or request.headers.get("Idempotency-Key")
-    if idempotency_key:
-        cached_result = await check_idempotency(idempotency_key)
-        if cached_result:
-            return cached_result
 
     service = CommunicationsService(db)
     message = await service.send_mail(
@@ -231,9 +228,6 @@ async def send_mail(
         resource_id=message.id,  # type: ignore
         details={"recipient": data.recipient_id, "subject": data.subject}
     )
-
-    if idempotency_key:
-        await store_idempotency_result(idempotency_key, message)
 
     return message
 

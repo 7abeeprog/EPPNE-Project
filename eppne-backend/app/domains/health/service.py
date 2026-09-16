@@ -31,9 +31,13 @@ from app.core.config import settings
 from app.domains.finance.service import FinanceService
 from app.domains.iot.service import IoTService
 from app.domains.identity.models import User
-from app.core.idempotency import check_idempotency, store_idempotency_result
+from app.core.idempotency import check_idempotency, get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
+from app.core.entity_membership_service import EntityMembershipService
+from app.core.models import EntityMembershipRole
+
+ENTITY_TYPE = "SOVEREIGN_ENTITY"  # نفس القيمة المستخدَمة في sovereign_entities/service.py
 
 
 class HealthService:
@@ -42,6 +46,7 @@ class HealthService:
         self.repo = HealthRepository(db)
         self.iot = IoTService(db)
         self.event_bus = EventBus(cast(Any, redis_client))
+        self.membership = EntityMembershipService(db)
 
     # ============================================================
     # دوال مساعدة
@@ -55,21 +60,36 @@ class HealthService:
         return user.email if user else f"user_{user_id}@eppne.com"  # type: ignore
 
     async def _validate_idempotency(self, idempotency_key: str, model_class) -> Optional[Any]:
-        """التحقق من Idempotency وإرجاع السجل المخزن إن وجد."""
+        """التحقق من Idempotency. ترجع None لو المفتاح جديد (نفّذ العملية
+        عاديًا)، أو الكائن الحقيقي المخزَّن مسبقًا لو المفتاح استُخدم من
+        قبل ونجحت العملية الأصلية، أو ترمي IdempotencyError لو المفتاح
+        محجوز لكن العملية الأصلية لسه قيد التنفيذ (صفر نتيجة مخزَّنة بعد).
+
+        ملحوظة: check_idempotency() بترجع True لما المفتاح *جديد* (SETNX
+        نجح) — مش لما فيه نتيجة سابقة. القيمة الحقيقية المخزَّنة (لو
+        فعلاً موجودة) بتتقرأ من get_idempotency_result() بشكل منفصل."""
         if not idempotency_key:
             return None
-        cached = await check_idempotency(idempotency_key)
-        if cached:
-            # نحاول جلب الكائن من قاعدة البيانات إذا كان cached يحتوي على ID
-            if isinstance(cached, dict) and "id" in cached:
-                return await self.repo.get_appointment(cached["id"]) if model_class == MedicalAppointment else None
-            return cached
-        return None
+        is_new = await check_idempotency(idempotency_key)
+        if is_new:
+            return None
+        cached = await get_idempotency_result(idempotency_key)
+        if isinstance(cached, dict) and "id" in cached:
+            fetched = None
+            if model_class == MedicalAppointment:
+                fetched = await self.repo.get_appointment(cached["id"])
+            elif model_class == EmergencyDispatch:
+                fetched = await self.repo.get_dispatch(cached["id"])
+            if fetched:
+                return fetched
+        raise IdempotencyError("طلب مكرر لا يزال قيد المعالجة، يرجى المحاولة لاحقًا.")
 
     async def _store_idempotency(self, idempotency_key: str, result: Any):
-        """تخزين نتيجة Idempotency."""
+        """تخزين نتيجة Idempotency — نخزن الـid فقط (مش الكائن الكامل،
+        غير قابل للتسلسل JSON بأمان عبر store_idempotency_result) ونعيد
+        جلب الكائن الحقيقي من DB عند التكرار (راجع _validate_idempotency)."""
         if idempotency_key:
-            await store_idempotency_result(idempotency_key, result)
+            await store_idempotency_result(idempotency_key, {"id": result.id})
 
     # ============================================================
     # 1. الملف الطبي الشخصي (Medical Profile)
@@ -218,25 +238,9 @@ class HealthService:
         facility_id = data.get("facility_id")
         appointment_time = data.get("appointment_time")
 
-        # 2. خصم الرسوم (مع Idempotency للدفع)
-        fee = Decimal("10.00")
-        payment_idempotency = f"appointment_fee_{idempotency_key or uuid.uuid4().hex[:12]}"
-        finance = FinanceService(self.db, tenant_id)
-        try:
-            await finance.transfer(
-                sender_id=patient_id,
-                receiver_email="health@eppne.com",
-                currency="MR_USDT",
-                amount=fee,
-                idempotency_key=payment_idempotency,
-                notes=f"رسوم حجز موعد طبي (دكتور ID: {doctor_id})"
-            )
-        except InsufficientBalanceError:
-            raise ValidationError("الرصيد غير كافٍ لدفع رسوم الحجز")
-        except Exception as e:
-            raise SovereignError(f"فشل الخصم المالي: {str(e)}")
-
-        # 3. إنشاء الموعد في معاملة ذرية
+        # 2. إنشاء الموعد ثم خصم الرسوم في نفس المعاملة الذرية
+        #    (الترتيب هنا مقصود: لا نخصم رسومًا إلا بعد نجاح إنشاء الموعد،
+        #    وإذا فشل الخصم بعد الإنشاء يتراجع الـ savepoint عن الاثنين معًا)
         async with self.db.begin_nested():
             appointment_data = {
                 "tenant_id": tenant_id,
@@ -251,14 +255,31 @@ class HealthService:
             }
             appointment = await self.repo.create_appointment(**appointment_data)
 
+            fee = Decimal("10.00")
+            payment_idempotency = f"appointment_fee_{idempotency_key or uuid.uuid4().hex[:12]}"
+            finance = FinanceService(self.db, tenant_id)
+            try:
+                await finance.transfer(
+                    sender_id=patient_id,
+                    receiver_email="health@eppne.com",
+                    currency="MR_USDT",
+                    amount=fee,
+                    idempotency_key=payment_idempotency,
+                    notes=f"رسوم حجز موعد طبي (دكتور ID: {doctor_id})"
+                )
+            except InsufficientBalanceError:
+                raise ValidationError("الرصيد غير كافٍ لدفع رسوم الحجز")
+            except Exception as e:
+                raise SovereignError(f"فشل الخصم المالي: {str(e)}")
+
             # تسجيل التدقيق
             await audit_log(
-            user_id=patient_id,
-            tenant_id=tenant_id,  # type: ignore
-            action="JOB_CREATED",
-            resource_id=job.id,  # type: ignore
-            details={"title": job.title}  # type: ignore
-        )
+                user_id=patient_id,
+                tenant_id=tenant_id,
+                action="APPOINTMENT_BOOKED",
+                resource_id=appointment.id,
+                details={"doctor_id": doctor_id, "facility_id": facility_id}
+            )
 
         await self.db.commit()
 
@@ -329,14 +350,9 @@ class HealthService:
     ) -> EmergencyDispatch:
         """استدعاء الطوارئ مع دعم Idempotency."""
         if idempotency_key:
-            cached = await check_idempotency(idempotency_key)
+            cached = await self._validate_idempotency(idempotency_key, EmergencyDispatch)
             if cached:
-                # نحاول جلب الكائن من قاعدة البيانات
-                if isinstance(cached, dict) and "id" in cached:
-                    dispatch = await self.repo.get_dispatch(cached["id"])
-                    if dispatch:
-                        return dispatch
-                return cast(EmergencyDispatch, cached)
+                return cached
 
         async with self.db.begin_nested():
             dispatch_data = {
@@ -352,12 +368,12 @@ class HealthService:
             dispatch = await self.repo.create_dispatch(**dispatch_data)
 
             await audit_log(
-            user_id=caller_id,
-            tenant_id=tenant_id,  # type: ignore
-            action="JOB_CREATED",
-            resource_id=job.id,  # type: ignore
-            details={"title": job.title}  # type: ignore
-        )
+                user_id=caller_id,
+                tenant_id=tenant_id,
+                action="EMERGENCY_DISPATCHED",
+                resource_id=dispatch.id,
+                details={"emergency_type": data.get("emergency_type")}
+            )
 
         await self.db.commit()
 
@@ -379,17 +395,25 @@ class HealthService:
     # 6. المنشآت الصحية (Facilities)
     # ============================================================
 
-    async def create_facility(self, user_id: int, data: Dict[str, Any]) -> HealthFacility:
-        """إنشاء منشأة صحية جديدة (للمشرفين فقط)."""
-        async with self.db.begin_nested():
-            facility = await self.repo.create_facility(**data)
-            await audit_log(
+    async def create_facility(self, user_id: int, tenant_id: int, data: Dict[str, Any]) -> HealthFacility:
+        """إنشاء منشأة صحية جديدة (للمشرفين فقط، وأعضاء الكيان المالك فقط)."""
+        member = await self.membership.get_member(
+            entity_type=ENTITY_TYPE, entity_id=data["entity_id"],
             user_id=user_id,
-            tenant_id=tenant_id,  # type: ignore
-            action="JOB_CREATED",
-            resource_id=job.id,  # type: ignore
-            details={"title": job.title}  # type: ignore
         )
+        if member is None or member.role not in [EntityMembershipRole.OWNER, EntityMembershipRole.EXECUTIVE_DIRECTOR]:
+            raise PermissionDeniedError("Not authorized to create facility for this entity")
+
+        async with self.db.begin_nested():
+            facility_data = {**data, "tenant_id": tenant_id}
+            facility = await self.repo.create_facility(**facility_data)
+            await audit_log(
+                user_id=user_id,
+                tenant_id=tenant_id,
+                action="FACILITY_CREATED",
+                resource_id=facility.id,
+                details={"name": facility.name}
+            )
         await self.db.commit()
         return facility
 

@@ -218,11 +218,10 @@ async def create_facility(
     db: AsyncSession = Depends(get_db)
 ):
     service = HealthService(db)
-    facility_data = data.model_dump()
-    facility_data["tenant_id"] = tenant.id
     facility = await service.create_facility(
         user_id=cast(int, current_user.id),
-        data=facility_data
+        tenant_id=cast(int, tenant.id),
+        data=data.model_dump()
     )
     return facility
 

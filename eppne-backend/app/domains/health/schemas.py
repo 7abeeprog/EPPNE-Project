@@ -14,6 +14,7 @@ from app.domains.health.models import (
 # ============================================================
 
 class HealthFacilityCreate(BaseModel):
+    entity_id: int = Field(description="الكيان السيادي المالك للمنشأة")
     name: str = Field(description="اسم المنشأة")
     facility_category: FacilityCategory = Field(description="تصنيف المنشأة")
     specialties: List[str] = Field(default_factory=list, description="التخصصات")
