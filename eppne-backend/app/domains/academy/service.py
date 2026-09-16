@@ -20,6 +20,8 @@ from app.core.storage import minio_client, ensure_bucket_exists
 from app.core.ai_engine import analyze_and_recommend_courses
 from app.domains.academy.models import Course, Enrollment, Quiz, QuizSubmission
 from app.domains.identity.models import User
+from app.core.event_bus import EventBus
+from app.core.redis_client import redis_client
 
 
 class AcademyService:
@@ -28,6 +30,7 @@ class AcademyService:
         self.tenant_id = tenant_id
         self.repo = AcademyRepository(db)
         self.finance = FinanceService(db, tenant_id)
+        self.event_bus = EventBus(cast(Any, redis_client))
 
     async def _upload_file_to_minio(self, bucket: str, object_name: str, file_content: bytes, content_type: str):
         try:
@@ -420,6 +423,14 @@ class AcademyService:
         await self.repo._invalidate_cache(f"user_enrollments_{user_id}")
         await self.repo._invalidate_cache("published_courses")
 
+        if course.bootcamp_id is not None:  # type: ignore
+            await self.event_bus.publish("academy.bootcamp_enrollment.created", {
+                "user_id": user_id,
+                "tenant_id": self.tenant_id,
+                "course_id": course_id,
+                "bootcamp_id": course.bootcamp_id,
+            })
+
         return enrollment
 
     async def get_user_enrollments(self, user_id: int, skip: int = 0, limit: int = 100):
@@ -437,6 +448,14 @@ class AcademyService:
             raise NotFoundError("غير مسجل في هذا الكورس")
         updated = await self.repo.update_progress(user_id, course_id, self.tenant_id, progress)
         await self.repo._invalidate_cache(f"enrollment_{user_id}_{course_id}")
+
+        if updated and cast(bool, updated.is_completed):
+            await self.event_bus.publish("academy.course.completed", {
+                "user_id": user_id,
+                "tenant_id": self.tenant_id,
+                "course_id": course_id,
+            })
+
         return updated
 
     async def cancel_enrollment(self, user_id: int, enrollment_id: int, reason: str, note: Optional[str]):
