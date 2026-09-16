@@ -3275,6 +3275,60 @@ WHERE idempotency_key LIKE 'SUB-TRIAL-REMIND-%'` +
 
 **المرجع:** `.claude/reports/send-trial-expiry-reminders-task-fix-session-log.md`.
 
+## [2026-09-16] entertainment-venue-endpoint-implementation — ✅ endpoint إنشاء EntertainmentVenue الجديد مبني بالكامل ومُتحقَّق منه حيًا (3/3 اختبارات)، بما فيها migration 055 جديد
+
+بناءً على فحص read-only سابق
+(`.claude/reports/entertainment-venue-endpoint-planning-session-log.md`)
+اللي أكَّد إن `EntertainmentVenue` عندها repository method (`create_venue`)
+و`schemas` (`VenueCreate`/`VenueResponse`) جاهزين من قبل ويتيمين تمامًا —
+بلا `service` method ولا `router` endpoint يستخدمهم. اتبنى الجزء المفقود
+كامل، بنفس نمط `create_sports_org` بالحرف
+([[project_tourism_sports_entity_membership_implementation_closed]]):
+
+- **migration 055** (`055_entertainment_venues_entity_id_fk_set_null.py`):
+  إضافة `ForeignKey("sovereign_entities_v2.id", ondelete="SET NULL")` على
+  `entertainment_venues.entity_id` (كان عمود `Integer` شكلي بلا أي FK
+  إطلاقًا). اتأكَّد مباشرة عبر `asyncpg` قبل الكتابة: 4 صفوف حاليًا،
+  صفر منها `entity_id` غير NULL — صفر خطر backfill. اتطبَّقت على DB
+  الديف واتأكَّد `confdeltype='n'` (SET NULL) عبر `pg_constraint` بعدها.
+- **`models.py`**: تحديث `EntertainmentVenue.entity_id` ليطابق الـFK
+  الجديد.
+- **`schemas.py`**: إضافة `entity_id: int` لـ`VenueCreate` (كانت مفقودة
+  تمامًا، بخلاف `SportsOrgCreate` اللي عندها الحقل ده بالفعل).
+- **`service.py`**: `create_venue` جديدة تحت قسم "3. الترفيه" — فحص
+  عضوية عبر `self.membership.get_member(entity_type=ENTITY_TYPE,
+  entity_id=data["entity_id"], user_id=user_id)`، رفض لو مش
+  `OWNER`/`EXECUTIVE_DIRECTOR` بـ`PermissionDeniedError` (→403)،
+  `_check_saas_limits(tenant_id, "entertainment")` (نفس مفتاح
+  `create_event`)، ثم `repo.create_venue(...)` الموجودة من قبل.
+- **`router.py`**: `POST /tourism-sports/venues` (مسطّح، بدون
+  `/entertainment/` sub-prefix — مطابق لباقي مسارات قسم الترفيه)،
+  `response_model=VenueResponse`, `status_code=201`,
+  `Depends(get_current_active_user)` (مش superuser — التفويض عبر عضوية
+  الكيان، تمامًا زي `create_sports_org`).
+
+**الاختبار الحي** (`tests/test_entertainment_venue_entity_membership_full_implementation.py`,
+3 سيناريوهات، نفس شكل ملف tourism_sports/sports_org بالضبط): (1) عضو
+OWNER ينجح + غير عضو يترفض بـ`PermissionDeniedError` — **PASSED**؛ (2)
+`EXECUTIVE_DIRECTOR` أيضًا مسموح — **PASSED**؛ (3) حذف الكيان المُصدِر
+→ `entity_id` بيرجع NULL والمكان يفضل موجود (SET NULL مش CASCADE) —
+**PASSED**. **3/3 نجحوا.**
+
+**Regression check:** كل tourism_sports/entertainment_venue tests
+(19 اختبار عبر 4 ملفات) — 18 نجحوا، فشل واحد **مسبق وغير مرتبط**
+(`test_tourism_sports_register_affiliate_commission_get_by_id_fixed` في
+`tests/test_user_repository_get_by_id_audit.py` — عن `_register_affiliate_commission`
+وموضوع `referred_by` في audit log، صفر علاقة بـ`EntertainmentVenue` أو
+أي ملف اتلمس في هذه الجلسة؛ لم يُعدَّل أي ملف من الملفين). لم يُصلَح —
+خارج نطاق هذه الجلسة.
+
+**الحالة النهائية:** endpoint إنشاء `EntertainmentVenue` مبني بالكامل
+ومتحقَّق منه حيًا، صفر تعديل على الملف الفاشل مسبقًا. لم يُعمَل commit
+بعد — بانتظار طلب المستخدم.
+
+**المرجع الكامل:**
+`.claude/reports/entertainment-venue-endpoint-implementation-session-log.md`.
+
 ## [2026-09-16] guardian-relationship-foundation-implementation — ✅ الأساس فقط (migration 056 + دومين app/domains/guardian/ جديد بالكامل)، صفر endpoint/service/منطق تدفق بعد
 
 بناءً على جلستي التخطيط read-only السابقتين
@@ -3829,3 +3883,310 @@ nullable=False, index=True)` صراحةً. **أي كود يحاول `INSERT` أ�
 يستاهل إصلاح مستقل لأي استخدام مستقبلي لـ`AcademyRepository.get_instructor`/
 `create_instructor` نفسهما. راجع
 `.claude/reports/guardian-message-instructor-implementation-session-log.md`.
+
+## [2026-09-16] تحديث توثيقي — 7 جلسات مُكتشَفة عبر جلسة `uncommitted-pre-existing-changes-audit`، صفر إشارة ليها في هذا الملف قبل الآن
+
+**السياق:** جلسة `uncommitted-pre-existing-changes-audit` (فحص
+read-only) كشفت إن 5 ملفات فضلت جزئيًا unstaged بعد commit `2f70711`
+(guardian) بترجع لـ~15 تقرير جلسة حقيقي في `.claude/reports/`،
+**صفر واحد فيهم موثَّق في `PROGRESS_LOG.md`** — رغم إن كل واحد منهم
+مكتمل ومُختبَر حيًا بregression موثَّق في تقريره. الإدخالات السبعة
+التالية (بالترتيب الزمني الصحيح حسب تواريخ/توقيتات التقارير الفعلية،
+مش ترتيب الاكتشاف) بتسد هذه الفجوة التوثيقية. **صفر تعديل كود أو
+commit في هذه الجلسة التوثيقية — توثيق فقط.**
+
+**المرجع الكامل:** `.claude/reports/uncommitted-pre-existing-changes-audit-session-log.md`.
+
+---
+
+## [2026-09-10] health-nameerror-and-fee-ordering-fix — ✅ إصلاح 3 NameError حقيقية (فشل مضمون 100% في كل استدعاء بدون استثناء) + ترتيب الخصم المالي في book_appointment
+
+اكتُشف الباج أولًا في فحص read-only منفصل سابق بنفس اليوم
+(`.claude/reports/health-nameerror-investigation-session-log.md`،
+2026-09-10): كتلة `audit_log(...)` كاملة (5 أسطر) اتنسخت حرفيًا من
+`employment/service.py::create_job` في 3 دوال مختلفة تمامًا في
+`health/service.py` (`book_appointment`, `trigger_emergency`,
+`create_facility`)، بلا استبدال المتغير `job` بالكائن الفعلي
+(`appointment`/`dispatch`/`facility`) ولا `action="JOB_CREATED"` باسم
+مناسب للسياق — **`NameError` مضمون الحدوث في كل استدعاء بدون استثناء،
+الكود مستحيل ينفّذ جزء `audit_log` بنجاح أبدًا قبل الإصلاح.**
+
+**الإصلاح (٣ دوال):**
+
+| الدالة | `job.id` → | `JOB_CREATED` → | `details` |
+|---|---|---|---|
+| `book_appointment` | `appointment.id` | `APPOINTMENT_BOOKED` | `{doctor_id, facility_id}` |
+| `trigger_emergency` | `dispatch.id` | `EMERGENCY_DISPATCHED` | `{emergency_type}` |
+| `create_facility` | `facility.id` | `FACILITY_CREATED` | `{name}` |
+
++ ترتيب الخصم المالي في `book_appointment`: الرسوم بقت تُخصَم **بعد**
+نجاح إنشاء الموعد (جوّه نفس `begin_nested()`)، مش قبله — فشل أي من
+الخطوتين يتراجع عن الاثنين معًا عبر نفس الـsavepoint.
+
+**Regression:** تذبذب بيئي عابر (flaky) مرة واحدة أثناء التشغيلة
+الكاملة الأولى (فشل اختبارين حيين جدد بـ`PermissionDeniedError:
+Insufficient balance`)، اتأكَّد إنه مش regression حقيقي بإعادة تشغيل
+معزولة (4/4 نجحت) ثم كاملة نظيفة من الصفر: **`15 failed, 152 passed, 2
+xfailed`** — مطابق تمامًا للأساس الموثَّق (جلسة
+`invoicing-process-overdue-invoices`، 2026-09-09:
+`15 failed, 148 passed, 2 xfailed`) + 4 اختبارات حية جديدة. نفس الـ15
+فشل بالحرف، كلهم pre-existing غير مرتبطين بـ`health`/`finance`/
+`employment`.
+
+**الملفات:** `health/service.py`, `health/router.py` + اختبار جديد
+`tests/test_health_nameerror_and_fee_ordering_fix.py`.
+
+**اكتشاف جانبي وُثِّق كبند backlog منفصل في نفس التقرير (لم يُصلَح في
+هذه الجلسة):** باج idempotency (`check_idempotency()` truthy
+misinterpretation) — راجع الجلسة التالية.
+
+**المرجع الكامل:** `.claude/reports/health-nameerror-and-fee-ordering-fix-session-log.md`
+(خلفية التشخيص: `.claude/reports/health-nameerror-investigation-session-log.md`).
+
+---
+
+## [2026-09-10] idempotency-truthy-bug-fix — ✅ إصلاح باج تفسير القيمة الراجعة من check_idempotency() في 4 مواضع (health×2, communications/router.py×2)
+
+`check_idempotency()` (`app/core/idempotency.py:17-24`) بترجع `True`
+لما المفتاح **جديد** (SETNX نجح، يعني "كمّل تنفيذ العملية") — مش لما
+فيه نتيجة سابقة مخزَّنة فعليًا. 4 مواضع
+(`HealthService._validate_idempotency` المُستخدَمة في `book_appointment`/
+`trigger_emergency` + `send_notification`/`send_mail` في
+`communications/router.py`) كانت بتفسّر أي قيمة truthy منها على إنها
+"نتيجة مخزَّنة، رجّعها فورًا" — فأول استخدام حقيقي لأي `Idempotency-Key`
+جديد كان بيرجّع `True` (bool) بدل تنفيذ العملية بالكامل. اكتُشف حيًا
+أثناء كتابة اختبار حي بـ`idempotency_key` حقيقي في الجلسة السابقة
+ووُثِّق كبند backlog منفصل هناك.
+
+**الإصلاح:** `_validate_idempotency`/`_store_idempotency`
+(`health/service.py`) أُعيد كتابتهما لتفرقة صريحة بين "مفتاح جديد"
+(`is_new=True` من `check_idempotency`) و"نتيجة مخزَّنة فعليًا" (تُقرأ
+من `get_idempotency_result()` منفصلة). نفس المبدأ اتطبَّق على
+`send_notification`/`send_mail` في `communications/router.py`.
+
+**اختبار حي جديد (4/4 PASSED, 84.95 ثانية، DB حقيقية `eppne_v2`، صفر
+mock):** `tests/test_idempotency_truthy_bug_fix.py` — يغطي الأربعة
+مواضع، كل واحد بيتأكد صراحة من `not isinstance(result, bool)` (فحص
+مباشر لأعراض الباج القديم).
+
+**Regression:** `15 failed, 156 passed, 2 xfailed` — مطابق تمامًا
+للأساس (`invoicing-process-overdue-invoices`: `15 failed, 148 passed`)
++ 4 اختبارات `health-nameerror-and-fee-ordering-fix` (الجلسة السابقة)
++ 4 اختبارات هذه الجلسة = `156`. نفس الـ15 فشل بالحرف. صفر regression.
+
+**الملفات:** `health/service.py`, `communications/router.py` (لم
+يُلمَس `communications/service.py` — لم يكن معطوبًا) + اختبار جديد
+`tests/test_idempotency_truthy_bug_fix.py`.
+
+**المرجع الكامل:** `.claude/reports/idempotency-truthy-bug-fix-session-log.md`.
+
+---
+
+## [2026-09-14] health-entity-membership-implementation — ✅ نمط EntityMembership لـcreate_facility في health (مقصور عليها صراحة) + migration 052
+
+بناءً على فحص read-only سابق بنفس اليوم
+(`.claude/reports/health-entity-membership-planning-session-log.md`)،
+اتبنى فحص عضوية على `HealthService.create_facility` بنفس نمط باقي
+الدومينات (insurance/transport/tourism_sports/logistics): فحص
+`EntityMembershipService.get_member(entity_type="SOVEREIGN_ENTITY",
+entity_id=data["entity_id"], user_id=user_id)`، رفض لو مش
+`OWNER`/`EXECUTIVE_DIRECTOR`. **نطاق ضيق صريح بالتعليمات** —
+`get_or_create_profile` (`tenant_id or 1` fallback) و`list_facilities`
+(فلترة tenant بعد الجلب في بايثون، دالتان مختلفتان تمامًا) **ممنوع
+لمسهما صراحة، لم يُلمَسا.**
+
+**migration 052** (`052_health_facility_entity_id_fk_set_null.py`):
+`ForeignKeyConstraint` جديد على `health_facilities.entity_id` →
+`sovereign_entities_v2(id)`, `ondelete='SET NULL'`.
+
+**Regression:** `15 failed, 174 passed, 2 xfailed, 240 warnings in
+2038.00s (0:33:57)` — مطابق تمامًا للأساس الموثَّق (جلسة
+`tourism-sports-entity-membership-implementation`:
+`15 failed, 171 passed, 2 xfailed, 237 warnings`): `174 = 171 + 3`
+(3 اختبارات حية جديدة فقط — الاختبار المُحدَّث في
+`test_health_nameerror_and_fee_ordering_fix.py` كان موجودًا أصلًا).
+نفس الـ15 فشل بالحرف، صفر علاقة بـ`health`.
+
+**الملفات:** `health/schemas.py`, `health/service.py`, `health/router.py`
+(معدَّلة) + `tests/test_health_nameerror_and_fee_ordering_fix.py`
+(محدَّث). **جديدة:** `migrations/versions/052_health_facility_entity_id_fk_set_null.py`,
+`tests/test_health_entity_membership_full_implementation.py`.
+
+**نطاق متبقٍّ خارج هذه الجلسة (عمدًا وصراحةً):**
+`get_or_create_profile` (`tenant_id or 1` fallback خطير)،
+`list_facilities` (فلترة tenant بعد الجلب في بايثون)، `logistics`
+(لسه محتاج فحص read-only قبل أي تنفيذ).
+
+**المرجع الكامل:** `.claude/reports/health-entity-membership-implementation-session-log.md`
+(تخطيط: `.claude/reports/health-entity-membership-planning-session-log.md`).
+
+---
+
+## [2026-09-15] achievements-foundation-implementation — ✅ أساس نظام الإنجازات: migration 054 (3 جداول) + 4 endpoints إدارية — ⚠️ تقرير الجلسة الأصلي تالف/شبه فارغ
+
+**⚠️ ملحوظة توثيقية مهمة قبل أي حاجة تانية:** ملف
+`.claude/reports/achievements-foundation-implementation-session-log.md`
+نفسه **شبه فارغ فعليًا** (يحتوي حرفيًا على كلمة واحدة بس عند الفحص
+المباشر — على الأرجح كتابته انقطعت أو اتكتب بالغلط وقتها). **هذا
+الإدخال مبني على استنتاج غير مباشر** (استشهاد صريح من تقرير الجلسة
+اللاحقة مباشرة + تأكيد تنفيذي مباشر لاحق)، مش على قراءة تقرير الجلسة
+نفسها.
+
+**ما اتبنى (مُستنتَج من محتوى `achievements/models.py`/`repository.py`/
+`service.py`/`router.py` + migration 054 الحاليين):** دومين
+`achievements` جديد بالكامل — 3 جداول (`achievement_definitions`,
+`user_achievements`, `user_network_stats`) + 4 endpoints إدارية
+(`POST /achievements/definitions`, `GET /achievements/definitions`,
+`POST /achievements/grant`, `GET /achievements/users/{user_id}`) — منح
+يدوي بس في هذه المرحلة (`trigger_type=MANUAL`)، صفر منطق `AUTO_EVENT`
+فعلي بعد (مُخزَّن كقيمة enum فقط، مفيش أي كود بيقرأه وقتها).
+
+**الأساس (baseline) الموثَّق من الجلسة اللاحقة مباشرة** (بما إن تقرير
+هذه الجلسة نفسه تالف): **`15 failed, 186 passed, 2 xfailed, 250
+warnings`** (مذكور صراحة في
+`.claude/reports/achievement-network-tracking-implementation-session-log.md`
+كـ"الأساس... آخر جلسة قبل هذه").
+
+**تأكيد تنفيذي مباشر (منفصل تمامًا عن أي تقرير، جلسة
+`guardian-relationship-flow-implementation` اللاحقة بيوم واحد):**
+شُغِّل `tests/test_achievements_foundation_implementation.py` مباشرة
+ضد DB حقيقية — **3/3 PASSED** (إنشاء تعريف، منح يدوي + عرض إنجازات
+مستخدم، رفض التكرار عبر القيد الفريد).
+
+**الملفات (مُستنتَجة من محتوى الكود الحالي، غير مؤكَّدة من تقرير
+الجلسة نفسه):** `app/domains/achievements/` (جديد بالكامل: `models.py`,
+`schemas.py`, `repository.py`, `service.py`, `router.py`)،
+`migrations/versions/054_create_achievement_tables.py`، اختبار جديد
+`tests/test_achievements_foundation_implementation.py`.
+
+**المرجع:** `.claude/reports/achievements-foundation-implementation-session-log.md`
+(تالف — راجع الملحوظة أعلاه).
+
+---
+
+## [2026-09-15] achievement-network-tracking-implementation — ✅ حدث academy.bootcamp_enrollment.created + منطق walk-up (8 مستويات) لعداد الشبكة التراكمي
+
+نشر حدث `academy.bootcamp_enrollment.created` من `enroll_in_course`
+(`academy/service.py`) — أول قيمة حقيقية في
+`app/core/critical_events.py` (`CRITICAL_EVENT_HANDLERS`)، معالجة عبر
+`achievements.update_bootcamp_network_stats`.
+`update_bootcamp_network_stats` (`achievements/service.py`) بتمشي فوق
+سلسلة `users.referred_by_user_id` بدءًا من المستخدم لحد `max_depth=8`
+مستويات، وتزوّد `user_network_stats.bootcamp_network_size` لكل سلف بـ1
+(INSERT...ON CONFLICT DO UPDATE ذرّي — مش SELECT ثم UPDATE). بعد كل
+تحديث ناجح، فحص فوري لعتبات `AchievementDefinition` من فئة
+`TEAM_BUILDING` — لو القيمة الجديدة تجاوزت `trigger_threshold`، منح
+تلقائي (`granted_by=None`) عبر INSERT...ON CONFLICT DO NOTHING.
+
+**Regression:** `190 = 186 + 4` (4 اختبارات حية جديدة،
+`test_achievement_network_tracking_implementation.py`) — نفس الـ15
+فشل pre-existing بالحرف، صفر regression جديد.
+
+**الملفات:** `academy/service.py` (import `EventBus`/`redis_client` +
+`self.event_bus` في `__init__` + نشر الحدث في `enroll_in_course`)،
+`app/core/critical_events.py` (جديد)، `app/tasks/events.py` (جديد —
+`CRITICAL_EVENT_DISPATCH_HANDLERS` + معالج
+`bootcamp_enrollment_created`)، `achievements/service.py`
+(`update_bootcamp_network_stats`)، `achievements/repository.py`
+(`get_referred_by_user_id`, `increment_bootcamp_network_size`,
+`get_network_stats` — + إصلاح `populate_existing`).
+
+**⚠️ ملحوظة نطاق (اكتشاف جانبي أثناء التوثيق، خارج نطاق هذه الجلسة
+التوثيقية المحدَّد صراحة):** بين هذه الجلسة والجلسة التالية أدناه
+(`achievement-auto-grant-training`) وقعت جلستان إضافيتان بنفس النمط
+غير موثَّقتين هنا (`achievement-auto-grant-team-building`,
+`achievement-auto-grant-project-funding` — أسماء الفئتين التانيتين من
+تلات فئات الإنجازات). **نفس فجوة عدم التوثيق في `PROGRESS_LOG.md`،
+تستاهل بند مماثل لاحقًا لو طُلب.** راجع
+`.claude/reports/achievement-auto-grant-team-building-session-log.md`
+و`.claude/reports/achievement-auto-grant-project-funding-session-log.md`.
+
+**المرجع الكامل:** `.claude/reports/achievement-network-tracking-implementation-session-log.md`.
+
+---
+
+## [2026-09-15] achievement-auto-grant-training-session — ✅ حدث academy.course.completed + منح تلقائي مباشر لفئة TRAINING (بلا عتبة، بلا walk-up)
+
+نشر حدث `academy.course.completed` من `update_progress`
+(`academy/service.py`) عند اكتمال الكورس (`is_completed=True`) — ثاني
+قيمة حقيقية في `CRITICAL_EVENT_HANDLERS`، معالجة عبر
+`achievements.grant_training_achievements_for_course_completion`.
+بعكس `TEAM_BUILDING` (فيها عتبة `trigger_threshold` + walk-up)، فئة
+`TRAINING` بتُمنح **مباشرة بلا عتبة** لأول مرة يوصل فيها الحدث للمستخدم
+— نفس آلية INSERT...ON CONFLICT DO NOTHING (القيد الفريد يمنع أي
+تكرار، بلا SELECT أول).
+
+**Regression:** `195 = 191 + 4` (4 اختبارات حية جديدة،
+`test_achievement_auto_grant_training_implementation.py`؛ الأساس `191
+passed` من جلسة `achievement-auto-grant-team-building` غير الموثَّقة
+هنا — راجع ملحوظة النطاق في الإدخال السابق). تشغيلة أبطأ من المعتاد
+بشكل ملحوظ (~42.5 دقيقة بدل ~10-11 دقيقة المعتادة) اتفحصت صراحة أثناء
+الجلسة نفسها (مراقبة `Get-Process` حية: استهلاك CPU فعلي ~215 ثانية
+بس من أصل ~2555 ثانية wall-time، ~8%) وتأكَّد إنه ازدحام I/O بيئي عابر
+(تراكم حمل DB محلي من كثرة تشغيلات متكررة نفس اليوم)، **مش تغيير في
+الكود** — النتيجة النهائية مطابقة تمامًا بلا أي شذوذ. **تأكيد إضافي:**
+13 اختبار من 3 جلسات سابقة (`achievements-foundation`,
+`achievement-network-tracking`, `achievement-auto-grant-team-building`)
++ `test_critical_event_dispatch_infrastructure.py` — **13/13 لسه
+PASSED**، بما فيهم تأكيد إن حدث `academy.bootcamp_enrollment.created`
+لسه شغّال بلا أي تداخل مع الحدث الجديد.
+
+**الملفات:** `academy/service.py` (نشر الحدث في `update_progress`)،
+`achievements/service.py`
+(`grant_training_achievements_for_course_completion`).
+
+**المرجع الكامل:** `.claude/reports/achievement-auto-grant-training-session-log.md`.
+
+---
+
+## [2026-09-15] achievements-stats-endpoints-implementation — ✅ endpoints إحصائية (by-category, top-users, by-definition) + إضافة جانبية: GET /identity/users/search
+
+**endpoints جديدة:** `GET /achievements/stats/by-category`,
+`GET /achievements/stats/top-users`, `GET /achievements/stats/by-definition`
+(`achievements/service.py`: `get_stats_by_category`, `get_top_users`؛
+`achievements/router.py` + `Query` import) — إحصائيات حقيقية من
+`UserAchievement` (INNER JOIN عمدًا مع `AchievementDefinition` — فئة/
+تعريف بلا أي منح فعلي مش هيظهر إطلاقًا، مش بـ`count=0`).
+
+**إضافة جانبية (نفس اليوم، دومين `identity` مش `achievements`):**
+فورم المنح اليدوي في لوحة أدمن الإنجازات احتاج "بحث بالاسم/الإيميل عن
+مستخدم". اكتُشف: **صفر endpoint بحث/قائمة مستخدمين شغّال في الباك
+إند إطلاقًا** — الفرونت إند القديم (`entity-representatives.tsx`)
+بينادي `/users/search` (بلا `/identity` prefix)، endpoint غير موجود
+إطلاقًا، بج قديم منفصل تمامًا خارج النطاق (موثَّق كملاحظة بس، لم
+يُصلَح). **الحل:** `GET /identity/users/search?q=&limit=` على
+`protected_router` الموجود بالفعل — `UserRepository.search_by_username_or_email`
+(ILIKE على `username`/`email`، مقيَّد بـtenant)،
+`UserService.search_users`, `UserSearchResult` schema (`user_id, name,
+email`)، حماية **`is_admin_or_above`** (نفس نمط
+`GET /identity/invitations?scope=tenant` الموجود بالفعل بنفس الدومين
+بالحرف).
+
+**Regression:** إحصائيات بس: `15 failed, 201 passed, 2 xfailed, 262
+warnings in 529.85s` — مطابق تمامًا للأساس (جلسة
+`achievement-auto-grant-project-funding` غير الموثَّقة هنا أيضًا —
+`199 passed`؛ `201 = 199 + 2` اختبار حي جديد). بعد إضافة identity
+search: **`15 failed, 203 passed, 2 xfailed, 264 warnings in
+1509.30s` — `203 = 199 + 4`** (2 إحصائيات + 2 بحث). نفس الـ15 فشل
+pre-existing بالحرف، صفر علاقة بأي منهما. **تأكيد إضافي:** كل الـ16
+اختبار حي القائم بالفعل لدومين `achievements` (5 ملفات) — **16/16 لسه
+PASSED** + تحقق مباشر ضد DB إن الحالة رجعت بالظبط لما كانت عليه قبل
+الجلسة.
+
+**الملفات:** `achievements/service.py`, `achievements/router.py` (+
+`Query` import)، `identity/repository.py`
+(`search_by_username_or_email`)، `identity/service.py`
+(`UserService.search_users`)، `identity/schemas.py`
+(`UserSearchResult`)، `identity/router.py` (`GET /users/search`) —
+**صفر تعديل على `app/main.py`** (الراوتر مسجَّل بالفعل من جلسة
+`achievements-foundation-implementation`). اختبارات جديدة:
+`tests/test_achievements_stats_endpoints_implementation.py`,
+`tests/test_identity_users_search_implementation.py`.
+
+**⚠️ ملحوظة نطاق:** الأساس المذكور فوق (`achievement-auto-grant-project-funding`،
+`199 passed`) جلسة غير موثَّقة هنا كمان — تالت فئة إنجازات (`PROJECT_FUNDING`)
+بنفس نمط `TRAINING` بالحرف. راجع
+`.claude/reports/achievement-auto-grant-project-funding-session-log.md`.
+
+**المرجع الكامل:** `.claude/reports/achievements-stats-endpoints-implementation-session-log.md`
+(تخطيط: `.claude/reports/achievements-admin-dashboard-planning-session-log.md`).
