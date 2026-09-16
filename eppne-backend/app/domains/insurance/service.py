@@ -244,6 +244,7 @@ class InsuranceService:
                     due_date=datetime.utcnow() + timedelta(days=30)
                 )
             except Exception as e:
+                await self.db.rollback()
                 logger.error(f"Invoice creation failed for insurance subscription {subscription.id}: {e}")
 
         await self.event_bus.publish("insurance.subscription.created", {
@@ -534,6 +535,7 @@ class InsuranceService:
                     due_date=datetime.utcnow()
                 )
             except Exception as e:
+                await self.db.rollback()
                 logger.error(f"Invoice creation failed for insurance claim payout {claim_id}: {e}")
 
         await self.event_bus.publish("insurance.claim.resolved", {

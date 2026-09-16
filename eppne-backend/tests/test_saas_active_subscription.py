@@ -98,6 +98,7 @@ from app.domains.identity.models import User
 from app.domains.identity.repository import WalletRepository
 from app.domains.finance.models import Wallet, Transaction, AuditLog
 from app.domains.invoicing.service import InvoicingService
+from app.domains.communications.models import Notification
 
 from app.domains.realestate.service import RealEstateService
 from app.domains.realestate.repository import RealEstateRepository
@@ -148,6 +149,7 @@ async def _cleanup_users_and_finance(db, user_ids):
         return
     await db.execute(delete(Transaction).where(Transaction.sender_id.in_(user_ids)))
     await db.execute(delete(AuditLog).where(AuditLog.user_id.in_(user_ids)))
+    await db.execute(delete(Notification).where(Notification.user_id.in_(user_ids)))
     await db.execute(delete(Wallet).where(Wallet.user_id.in_(user_ids)))
     await db.execute(delete(User).where(User.id.in_(user_ids)))
     await db.commit()
@@ -184,14 +186,18 @@ async def test_realestate_rent_unit_saas_check_passes(db, monkeypatch):
     )
     unit_id = unit.id
     development_id = development.id
-    landlord = await _create_funded_user(db, "p_regtest_saas9_re_landlord")
-    tenant_user = await _create_funded_user(db, "p_regtest_saas9_re_tenant")
-    user_ids = [landlord.id, tenant_user.id]
+    # landlord_id لازم يطابق EXISTING_LAND_ASSET_ID.owner_id الفعلي (47،
+    # p_ctor_re_owner@example.com) — rent_unit بترفض أي landlord_id غير
+    # مالك الأرض المرتبطة (_get_land_owner_for_unit). مستخدم مشترك موجود
+    # مسبقًا، قراءة فقط، صفر إنشاء/تنظيف له هنا (نفس نمط _cleanup_users_and_finance).
+    landlord_id = 47
+    tenant_user = await _create_funded_user(db, "p_regtest_saas9_re_tenant", mr_usdt=Decimal("100"))
+    user_ids = [tenant_user.id]
     service = RealEstateService(db)
 
     try:
         contract = await service.rent_unit(
-            landlord_id=landlord.id, tenant_id=TENANT_ID, unit_id=unit_id,
+            landlord_id=landlord_id, tenant_id=TENANT_ID, unit_id=unit_id,
             tenant_user_id=tenant_user.id, monthly_rent=Decimal("50"),
             start_date=datetime.utcnow(), end_date=datetime.utcnow() + timedelta(days=365),
             idempotency_key=f"REGTEST-SAAS9-RENT-{_suffix()}",
@@ -270,12 +276,26 @@ async def test_insurance_subscribe_saas_check_passes(db, monkeypatch):
 # ============================================================
 
 @pytest.mark.asyncio
-async def test_realestate_buy_fractional_ownership_saas_check_passes_then_hits_known_bug(db):
+async def test_realestate_buy_fractional_ownership_saas_check_passes_then_hits_known_bug(db, monkeypatch):
     """`_check_saas_limits` الحقيقية لازم تعدي بنجاح (تصل الدالة لمنطقها
-    الداخلي)، ثم تكراش بالبج المسبق المُوثَّق تحديدًا (Backlog #16، معامل
-    `tenant_id=` زايد على `execute_agent_action`) — نفس مستوى التقرير
-    الأصلي (قسم 13.1/14.1، الصف 3). لو الاستثناء كان عن subscription/
-    features/AttributeError بدل ده، ده رجوع لباج #9 نفسه."""
+    الداخلي).
+
+    **[تحديث 2026-09-17]** التوقع القديم (كراش بـ`TypeError` عند
+    `execute_agent_action` بسبب `tenant_id=` زايد، Backlog #16) بقى
+    stale — الكوارج اتصلحت فعليًا في جلسة `ai-agents-execute-action-fix`
+    منفصلة (تأكيد بالقراءة المباشرة: `execute_agent_action()`
+    (`ai_agents/service.py:147-154`) توقيعها الحالي بلا `tenant_id`
+    إطلاقًا، والاستدعاء في `buy_fractional_ownership` بيمرر بالظبط
+    الكوارج الصحيحة). الاختبار دلوقتي بيتوقع **نجاح كامل** للعملية،
+    ويتحقق حيًا من خصم الرصيد بالظبط بقد التكلفة وتسجيل الملكية الجزئية
+    صح. `create_invoice()` اتعملها `monkeypatch` (نفس نمط
+    `test_realestate_rent_unit_saas_check_passes`) عمدًا لتفادي الاصطدام
+    ببند `invoicing-generate-invoice-number-count-based-collision`
+    المفتوح أصلًا (تينانت 1 له تاريخ حذف فواتير throwaway) — هذا
+    الاختبار بيركّز على منطق شراء الملكية الجزئية نفسه، مش على منطق
+    الفوترة (نفس التبرير الموثَّق في `_noop_create_invoice`)."""
+    monkeypatch.setattr(InvoicingService, "create_invoice", _noop_create_invoice)
+
     re_repo = RealEstateRepository(db)
     development = await re_repo.create_development(
         tenant_id=TENANT_ID, land_asset_id=EXISTING_LAND_ASSET_ID,
@@ -290,23 +310,40 @@ async def test_realestate_buy_fractional_ownership_saas_check_passes_then_hits_k
     )
     unit_id = unit.id
     development_id = development.id
-    buyer = await _create_funded_user(db, "p_regtest_saas9_re_buyer")
+    buyer = await _create_funded_user(db, "p_regtest_saas9_re_buyer", mr_usdt=Decimal("100"))
     user_ids = [buyer.id]
     service = RealEstateService(db)
+    cost = Decimal("50")  # 500 (سعر الوحدة) * 10% (percentage)
+    wallet_repo = WalletRepository(db)
+    idem_key = f"REGTEST-SAAS9-BUY-{_suffix()}"
 
     try:
-        with pytest.raises(TypeError, match="tenant_id"):
-            await service.buy_fractional_ownership(
-                buyer_id=buyer.id, tenant_id=TENANT_ID, unit_id=unit_id,
-                percentage=Decimal("10"),
-                idempotency_key=f"REGTEST-SAAS9-BUY-{_suffix()}",
-            )
+        wallet_before = await wallet_repo.get_by_user_id(buyer.id, TENANT_ID)
+        balance_before = Decimal(str(wallet_before.balances.get("MR_USDT", 0)))
 
-        # تراجع نظيف — صفر أثر جزئي (المورد لم يُنشأ، المحفظة لم تُلمس)
-        ownership_count = (await db.execute(
-            select(PropertyOwnership).where(PropertyOwnership.owner_user_id == buyer.id)
-        )).scalars().all()
-        assert len(ownership_count) == 0, "صفر ownership كان المتوقع — الكراش قبل الوصول لـfinance.transfer أصلًا"
+        ownership = await service.buy_fractional_ownership(
+            buyer_id=buyer.id, tenant_id=TENANT_ID, unit_id=unit_id,
+            percentage=Decimal("10"),
+            idempotency_key=idem_key,
+        )
+        assert ownership is not None
+
+        # 1. الرصيد اتخصم بالظبط بقد التكلفة
+        wallet_after = await wallet_repo.get_by_user_id(buyer.id, TENANT_ID)
+        balance_after = Decimal(str(wallet_after.balances.get("MR_USDT", 0)))
+        assert balance_before - balance_after == cost, (
+            f"المتوقع خصم {cost} بالظبط، الفعلي: {balance_before - balance_after}"
+        )
+
+        # 2. سجل الملكية الجزئية اتسجل صح
+        refreshed = (await db.execute(
+            select(PropertyOwnership).where(PropertyOwnership.id == ownership.id)
+        )).scalar_one_or_none()
+        assert refreshed is not None, "سجل الملكية المتوقع مش موجود على القرص"
+        assert refreshed.owner_user_id == buyer.id
+        assert refreshed.unit_id == unit_id
+        assert refreshed.ownership_percentage == Decimal("10")
+
     finally:
         await db.execute(delete(PropertyOwnership).where(PropertyOwnership.unit_id == unit_id))
         await db.execute(delete(PropertyUnit).where(PropertyUnit.id == unit_id))

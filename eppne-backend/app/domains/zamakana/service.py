@@ -328,6 +328,7 @@ class ZamakanaService:
                     due_date=datetime.utcnow() + timedelta(days=30)
                 )
             except Exception as e:
+                await self.db.rollback()
                 logger.error(f"Invoice creation failed for time pledge {pledge.id}: {e}")
 
         # تخزين معرف التعهد فقط

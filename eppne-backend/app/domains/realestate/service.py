@@ -378,6 +378,7 @@ class RealEstateService:
                 due_date=datetime.utcnow() + timedelta(days=30)
             )
         except Exception as e:
+            await self.db.rollback()
             logger.error(f"Invoice creation failed for fractional ownership purchase (unit {unit_id}): {e}")
 
         # تخزين البيانات كاملة مع استخدام cast لتوضيح الأنواع
@@ -489,6 +490,7 @@ class RealEstateService:
                 due_date=datetime.utcnow() + timedelta(days=3)
             )
         except Exception as e:
+            await self.db.rollback()
             logger.error(f"Invoice creation failed for rental contract (unit {unit_id}): {e}")
 
         await self._register_affiliate_commission(tenant_user_id, tenant_id, first_payment)

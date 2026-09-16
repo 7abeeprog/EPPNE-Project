@@ -218,6 +218,7 @@ class TourismSportsService:
                 due_date=datetime.utcnow() + timedelta(days=30)
             )
         except Exception as e:
+            await self.db.rollback()
             logger.error(f"Invoice creation failed for program booking {program_id}: {e}")
 
         # تخزين معرف المشارك فقط
@@ -352,6 +353,7 @@ class TourismSportsService:
                 due_date=datetime.utcnow() + timedelta(days=30)
             )
         except Exception as e:
+            await self.db.rollback()
             logger.error(f"Invoice creation failed for ticket purchase (event {event_id}): {e}")
 
         # تخزين معرف التذكرة فقط
@@ -523,6 +525,7 @@ class TourismSportsService:
                 due_date=datetime.utcnow() + timedelta(days=30)
             )
         except Exception as e:
+            await self.db.rollback()
             logger.error(f"Invoice creation failed for player transfer bid {transfer.id}: {e}")
 
         # تخزين معرف التحويل فقط

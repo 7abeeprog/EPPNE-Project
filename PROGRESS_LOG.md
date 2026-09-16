@@ -253,7 +253,9 @@ seed حقيقي (5 صفوف/دومين عبر `docker exec psql` مباشر) + �
 
 | — | **`saas-test-reqsector-leaked-throwaway-data-breaks-get-my-subscriptions`** [2026-08-24] — اكتُشف أثناء جلسة `saas-idor-fix` عند اختبار `GET /saas/subscriptions` (`get_my_subscriptions`) حيًا: رجعت `500` (`pydantic_core.ValidationError: 4 validation errors for TenantSubscriptionResponse`) — **ليس باج كود، ولا علاقة له بعزل التينانت.** السبب مؤكَّد من اللوج: صفان **متبقيان فعليًا في قاعدة `eppne_v2` من جلسة `require-sector-removal-subscription-fix` السابقة** (بادئة `TEST_REQSECTOR_*`، تينانت1) — `saas_tenant_subscriptions.id=50` (`payment_method=NULL`) وخطتها `saas_service_plans.id=48` (`max_users`/`max_products`/`max_courses` كلهم `NULL`). هذه الأعمدة عندها `default=` على مستوى Python/SQLAlchemy بس (مش `server_default`/`NOT NULL` على مستوى الـDB)، فالصفوف المزروعة يدويًا وقتها بلا القيم دي صراحة أصبحت غير قابلة للقراءة عبر `TenantSubscriptionResponse` (تتطلب non-optional). **الأثر الفعلي الآن:** **أي مستخدم حقيقي في تينانت1 يستدعي `GET /saas/subscriptions` اليوم يرجعله `500`** — بيانات throwaway متسربة من جلسة سابقة بتأثر فعليًا على مسار إنتاجي حي، مش مجرد "كود محتاج تحسين مستقبلي". **الحل المطلوب: تنظيف بيانات (`UPDATE`/`DELETE` الصفين، أو تعبئة القيم الناقصة)، صفر تعديل كود** — مختلف تمامًا عن فئة "silent-write"/schema drift الأخرى في هذه الجلسة. | 🟠 **مفتوح، أولوية متوسطة-عالية** — بيانات متسربة بتأثر على مستخدمين حقيقيين الآن، لا مجرد كود يحتاج تحسين | `.claude/reports/saas-idor-fix-session-log.md` §4 |
 
-| — | **`finance-transfer-hardcoded-system-account-real-fund-risk`** [2026-08-24] — اكتُشف أثناء جلسة `finance-idor-security-fix` (فحص عميق منبثق من `saas-pay-invoice-sender-id-user-id-collision` فوق): **3 دومينات — `commerce.release_commissions` (`commerce/service.py:303`)، `affiliate.withdraw_commissions` (`affiliate/service.py:477`)، `iot.settle_carbon_credits` (`iot/service.py:213`) — بتمرر `sender_id=1` هاردكودد حرفيًا** لـ`finance.transfer()` كتمثيل لـ"حساب النظام/الخزانة"، رغم إن `finance` معندهاش مفهوم حساب نظام مخصَّص أصلًا (لا `is_system` flag، لا استثناء في `get_or_create_wallet_for_update`). **تحقق حي (`SELECT` فقط، صفر استدعاء دالة) أكَّد الخطر حقيقي مش نظري:** `user_id=1` (تينانت1) موجود فعليًا، إيميله `p_system_treasury@example.com`، `created_at=2026-08-14` — بقايا بيانات throwaway من جلسة `silent-write-regression` **موثَّقة هناك صراحة كـ"هتتنضف آخر الجلسة" ولم تُنضَّف**، وله محفظة حقيقية برصيد فعلي **875.0 MR_USDT حاليًا** (`wallets.id=39`). **الأثر: أي استدعاء حقيقي/إنتاجي للثلاثة دول (تحرير عمولة تاجر، سحب عمولة داعي، تسييل كربون IoT) هيخصم فعليًا من هذا الرصيد الحقيقي — بلا أي نية هجومية، مجرد استخدام عادي للميزة الشرعية كافٍ.** (بند رابع أقل خطورة: `social.subscribe_group_to_plan`, `social/service.py:633`, بيمرر `sender_id=0` — `user_id=0` غير موجود أصلًا، على الأرجح `IntegrityError` قاطع/فشل وظيفي مش تسريب مالي). **لم يُنفَّذ أي استدعاء حي للثلاثة الخطيرة** — فحص مسبق (بطلب صريح) أثبت إن الثلاثة عندهم `db.commit()` داخلي غير مشروط جوه جسم الدالة نفسها (`commerce/repository.py:264` جوه `release_commission()`، `affiliate/service.py:509`، `iot/service.py:244`) — **مستحيل تحقق آمن بـ`begin`/`ROLLBACK` من برّه بلا لمس الكود**، فالإثبات مقصور على القراءة الثابتة + دليل `SELECT`. **صفر إصلاح كود حتى الآن — القرار المعماري (`is_system` flag؟ حساب خزانة مُدار رسميًا؟ مصدر آخر؟) محتاج نقاش تصميمي منفصل.** ⚠️ **لو التطبيق قريب من أي استخدام حقيقي/إنتاجي: الدومينات التلاتة دي لازم تتعطّل مؤقتًا أو يتحط عليها guard clause صريح (رفض `sender_id in (0, 1)` قبل نداء `finance.transfer()`) لحد ما يتصمم الحل الرسمي — القرار ده لسه مؤجَّل لتوجيه صريح.** التطبيق لسه مش شغال بمستخدمين حقيقيين حاليًا (2026-08-24) — الخطر نظري مش فوري. **لكن هذا البند launch blocker صريح: `commerce.release_commissions` و`iot.settle_carbon_credits` ممنوع تفعيلهم لمستخدمين حقيقيين قبل حل القرار المعماري (`is_system` flag أو حساب خزانة مُدار رسميًا).** | 🔴🔴🔴 **مفتوح، أعلى أولوية موثَّقة حتى الآن — أخطر من `ai_agents-idor` نفسها لأنها بتتفعّل بالاستخدام العادي بلا أي مهاجم** | `.claude/reports/finance-idor-security-fix-session-log.md`، `.claude/plans/critical-finding-xtenant-systemic.md` (تحديث [2026-08-24] الأحدث) |
+| — | **`finance-transfer-hardcoded-system-account-real-fund-risk`** [2026-08-24] — اكتُشف أثناء جلسة `finance-idor-security-fix` (فحص عميق منبثق من `saas-pay-invoice-sender-id-user-id-collision` فوق): **3 دومينات — `commerce.release_commissions` (`commerce/service.py:303`)، `affiliate.withdraw_commissions` (`affiliate/service.py:477`)، `iot.settle_carbon_credits` (`iot/service.py:213`) — بتمرر `sender_id=1` هاردكودد حرفيًا** لـ`finance.transfer()` كتمثيل لـ"حساب النظام/الخزانة"، رغم إن `finance` معندهاش مفهوم حساب نظام مخصَّص أصلًا (لا `is_system` flag، لا استثناء في `get_or_create_wallet_for_update`). **تحقق حي (`SELECT` فقط، صفر استدعاء دالة) أكَّد الخطر حقيقي مش نظري:** `user_id=1` (تينانت1) موجود فعليًا، إيميله `p_system_treasury@example.com`، `created_at=2026-08-14` — بقايا بيانات throwaway من جلسة `silent-write-regression` **موثَّقة هناك صراحة كـ"هتتنضف آخر الجلسة" ولم تُنضَّف**، وله محفظة حقيقية برصيد فعلي **875.0 MR_USDT حاليًا** (`wallets.id=39`). **الأثر: أي استدعاء حقيقي/إنتاجي للثلاثة دول (تحرير عمولة تاجر، سحب عمولة داعي، تسييل كربون IoT) هيخصم فعليًا من هذا الرصيد الحقيقي — بلا أي نية هجومية، مجرد استخدام عادي للميزة الشرعية كافٍ.** (بند رابع أقل خطورة: `social.subscribe_group_to_plan`, `social/service.py:633`, بيمرر `sender_id=0` — `user_id=0` غير موجود أصلًا، على الأرجح `IntegrityError` قاطع/فشل وظيفي مش تسريب مالي). **لم يُنفَّذ أي استدعاء حي للثلاثة الخطيرة** — فحص مسبق (بطلب صريح) أثبت إن الثلاثة عندهم `db.commit()` داخلي غير مشروط جوه جسم الدالة نفسها (`commerce/repository.py:264` جوه `release_commission()`، `affiliate/service.py:509`، `iot/service.py:244`) — **مستحيل تحقق آمن بـ`begin`/`ROLLBACK` من برّه بلا لمس الكود**، فالإثبات مقصور على القراءة الثابتة + دليل `SELECT`. **صفر إصلاح كود حتى الآن — القرار المعماري (`is_system` flag؟ حساب خزانة مُدار رسميًا؟ مصدر آخر؟) محتاج نقاش تصميمي منفصل.** ⚠️ **لو التطبيق قريب من أي استخدام حقيقي/إنتاجي: الدومينات التلاتة دي لازم تتعطّل مؤقتًا أو يتحط عليها guard clause صريح (رفض `sender_id in (0, 1)` قبل نداء `finance.transfer()`) لحد ما يتصمم الحل الرسمي — القرار ده لسه مؤجَّل لتوجيه صريح.** التطبيق لسه مش شغال بمستخدمين حقيقيين حاليًا (2026-08-24) — الخطر نظري مش فوري. **لكن هذا البند launch blocker صريح: `commerce.release_commissions` و`iot.settle_carbon_credits` ممنوع تفعيلهم لمستخدمين حقيقيين قبل حل القرار المعماري (`is_system` flag أو حساب خزانة مُدار رسميًا).**
+
+**✅ جزئيًا [تأكيد 2026-09-16]:** فحص حي (`grep -n "sender_id=1"` على الثلاثة ملفات) أثبت إن **الثلاثة الأصليون اتصلحوا فعليًا** في جلسة لاحقة غير موثَّقة صراحة على هذا البند وقت الإصلاح: `commerce/service.py` (`sender_id=customer_id`/`order.customer_id`، صفر hardcode)، `affiliate/service.py:577` و`iot/service.py:215` بقوا يستخدموا `get_or_create_system_account(self.db, tenant_id)` (tenant-scoped، مش حساب عالمي مشترك). **جزء مفتوح صراحة لسه:** نفس النمط الخطير (بالحرف) اكتُشف حيًا في مكان **جديد لم يكن مذكورًا هنا أصلًا** — `insurance/service.py:626` داخل `disburse_monthly_pensions()`، لسه `sender_id=1` هاردكودد بلا `get_or_create_system_account`. تحقق حي إضافي [2026-09-16]: الدالة **مش مجدولة خالص** (صفر Celery beat/APScheduler، endpoint يدوي `POST /insurance/admin/disburse-pensions` superuser-only) — الخطر كامن (latent) مش حي فعليًا حاليًا. تأكيد رصيد `wallets.id=39`: انخفض من 875.0 إلى 771.0 MR_USDT، لكن الفرق (104.0) بالكامل من معاملات اختبار (`REGTEST-*`/فواتير اختبار)، **صفر معاملة pension في تاريخ الجدول بالكامل** — الباج الجديد لم يُستغل بعد. | 🟡 **مُغلَق جزئيًا (3 من 4 مواضع)، الجزء المتبقي (`insurance/service.py:626`) موثَّق كبند منفصل تحت** | `.claude/reports/finance-idor-security-fix-session-log.md`، `.claude/plans/critical-finding-xtenant-systemic.md` (تحديث [2026-08-24] الأحدث)، `.claude/reports/backlog-review-2026-09-16-session-log.md` |
 
 | — | **`projects-add-contribution-hardcoded-receiver-email`** [2026-08-24] — اكتُشف بالقراءة الثابتة أثناء جلسة `projects-idor-fix` (`projects/service.py:180-190`، `add_contribution`، نوع `MONETARY`): `finance.transfer(receiver_email="system@eppne.com", ...)` — بريد مستلم ثابت هاردكودد، بلا أي إعداد لكل تينانت. **بعكس `finance-transfer-hardcoded-system-account-real-fund-risk` أعلاه (`sender_id=1` ثابت عالميًا، بلا فلترة تينانت)، هذا الاستدعاء أضعف/مشروط:** `FinanceService.transfer` بتعمل `user_repo.get_by_email(receiver_email, self.tenant_id)` **مفلتر بالتينانت نفسه** — لازم يوجد مستخدم حقيقي بريده بالحرف `system@eppne.com` **داخل كل تينانت على حدة**؛ لو غير موجود، فشل آمن (`NotFoundError`)، مش تسريب لحساب عالمي مشترك. **الخطر الوحيد المتبقي:** بما إن `tenant_id` نفسه في `add_contribution` كان (قبل إصلاح جلسة `projects-idor-fix`) مصدره هيدر مزوَّر، لو `system@eppne.com` موجود فعلاً في تينانت الضحية، مهاجم كان يقدر (بهيدر مزوَّر) يوجّه مساهمة "له" تُخصَم من محفظته الحقيقية وتُقيَّد تحت مشروع تينانت آخر — **هذا الجزء أُغلق فعليًا بإصلاح الجذر (`tenant_id = cast(int, current_user.tenant_id)`) في نفس الجلسة**، فالمخاطرة الحالية مشروطة بوجود مستخدم `system@eppne.com` فعلي لكل تينانت، لا أكثر. **لم يُستدعَ حيًا إطلاقًا** (بقرار متعمَّد، نفس معاملة `commerce.release_commissions`). **صفر إصلاح كود — مرجع/توثيق فقط بقرار مستخدم صريح، ليس تصعيدًا عاجلاً بعكس البند أعلاه.** | 🟡 **مرجع فقط — أضعف من البند أعلاه، مشروط بوجود مستخدم `system@eppne.com` لكل تينانت، والجزء الأخطر (مصدر `tenant_id`) مُغلَق بالفعل** | `.claude/reports/projects-idor-fix-session-log.md` §4.2 |
 | — | **`insurance-review-claim-payout-from-reviewer-personal-wallet`** [2026-08-28] — اكتُشف بالقراءة الثابتة أثناء التحقق الحي لإصلاح Backlog #37 (`finance-transfer-payment-tx-hash-broken`) على `insurance.review_claim`: `insurance/service.py:462-469` — مسار الموافقة (`approve=True`) بينادي `finance.transfer(sender_id=reviewer_id, receiver_email=<claimant>, ...)` — يعني **تعويض المطالبة بيتحوّل من محفظة المراجع (`reviewer_id`) الشخصية مباشرة، مش من حساب نظام/خزانة تأمين مركزي**. **نفس فئة `finance-transfer-hardcoded-system-account-real-fund-risk`/`projects-add-contribution-hardcoded-receiver-email` أعلاه (غياب مفهوم "حساب نظام" في `finance` أصلًا)، لكن بزاوية معكوسة:** الاتنين اللي فوق بيمرروا `sender_id`/`receiver_email` **ثابت هاردكودد** يمثّل نظام؛ هنا **مفيش تمثيل لحساب نظام إطلاقًا** — المستخدم البشري اللي بيوافق على المطالبة (`reviewer_id`، مرتبط بـ`policy.issuer_entity_id` عبر فحص #41) هو نفسه اللي بيدفع من رصيده الشخصي في `MR_USDT`. **الأثر العملي المحتمل:** أي مراجع حقيقي وافق على مطالبة تعويض كبيرة هيتخصم فعليًا من محفظته الشخصية بمبلغ التعويض كامل، بدل ما يكون مجرد "موافقة إدارية" — سلوك غير متوقَّع على الأرجح من منظور المنتج (هل ده مقصود كنموذج "ضامن شخصي"، ولا خطأ تصميم يفترض ضمنيًا وجود حساب خزانة التأمين اللي مش موجود فعليًا في `finance`؟). **صفر لمس كود — توثيق فقط، خارج نطاق #37 صراحة (اللي اقتصر على تصحيح `.tx_hash`/`Transaction` فقط، بلا أي تعديل على منطق التحويل نفسه).** غير مؤكَّد حيًا كـ"مشكلة" (التحويل نفسه نجح بنجاح تام في التحقق الحي لـ#37 — راجع `.claude/reports/constructor-mismatch-backlog-37-insurance-result.md`)، لكنه سؤال تصميمي/منتجي حقيقي يستاهل نقاش منفصل قبل أي استخدام إنتاجي واسع لـ`review_claim`. | 🟡 **مرجع فقط، يستاهل نقاش تصميمي منفصل** — لا يمنع #37 ولا يُعتبر جزءًا منه | `.claude/reports/constructor-mismatch-backlog-37-insurance-result.md`؛ `.claude/reports/constructor-mismatch-backlog-37-blockers-found.md` |
@@ -1038,6 +1040,8 @@ seed حقيقي (5 صفوف/دومين عبر `docker exec psql` مباشر) + �
 
 **الحالة:** 🔴 مفتوح، موثَّق فقط، صفر إصلاح. اكتُشف أثناء التحقق الحي لجلسة `backlog-16-begin-nested-commit-conflict` (`.claude/reports/backlog-16-begin-nested-commit-session-log.md` §5.4).
 
+**✅ اتحل [تأكيد 2026-09-16]** — أُغلق رسميًا في جلسة `ai-governance-check-and-consume-begin-nested` [2026-09-01] (راجع قسم "✅ إغلاق" أسفل هذا البند في نفس الملف). تأكيد إضافي أثناء مراجعة backlog دورية: `.claude/reports/backlog-review-2026-09-16-session-log.md`.
+
 ---
 
 ## [2026-09-01] بند Backlog جديد — `invitations-chat-with-ai-reply-key-mismatch`
@@ -1262,6 +1266,8 @@ endpoint جديد `PATCH /insurance/claims/{claim_id}` (`update_claim`) كوصل
 
 **الحالة:** ✅ مغلق (قرار: البقاء كما هو). `.claude/reports/frontend-category-b-phase2-session-log.md` قسم insurance، `.claude/reports/category-b-decision-needed-triage-session-log.md`.
 
+**✅ اتحل [تأكيد 2026-09-16]** — تأكيد إضافي أثناء مراجعة backlog دورية: القرار (البقاء superuser-only) لسه ساري، صفر تعديل كود لاحق. `.claude/reports/backlog-review-2026-09-16-session-log.md`.
+
 ---
 
 ## [2026-09-02] بند Backlog جديد — `api-types-schema-name-collision-auction-tender-create`
@@ -1431,6 +1437,8 @@ tenant_id)`/`list_transfers(tenant_id, status=None)` لـ`repository.py` +
 **الحالة:** ✅ مغلق. `.claude/reports/frontend-category-b-item3-components-readiness.md`،
 `.claude/reports/category-b-decision-needed-triage-session-log.md`.
 
+**✅ اتحل [تأكيد 2026-09-16]** — تأكيد إضافي أثناء مراجعة backlog دورية: `get_transfer`/`list_transfers` لسه موجودة وموصولة، صفر تراجع. `.claude/reports/backlog-review-2026-09-16-session-log.md`.
+
 ---
 
 ## [2026-09-03] بند Backlog جديد — `frontend-types-null-vs-undefined-mismatch-pattern`
@@ -1596,6 +1604,8 @@ tenant_id==...)`، نفس نمط باقي الدالة `get_bio_cohort`) وفي 
 
 **الحالة:** ✅ مغلق. `.claude/reports/agritech-full-domain-build-session-log.md`،
 `.claude/reports/category-b-decision-needed-triage-session-log.md`.
+
+**✅ اتحل [تأكيد 2026-09-16]** — تأكيد حي إضافي: `update_bio_cohort_count(cohort_id, tenant_id, new_count)` لسه بتوقيعها الصحيح (`agritech/repository.py:146`)، صفر تراجع. `.claude/reports/backlog-review-2026-09-16-session-log.md`.
 
 ---
 
@@ -2335,7 +2345,7 @@ receiver is outside your tenant`). الاختبار القديم حُدِّث ل
 حصر شامل بالـgrep أثبت إن باقي دوال الملف بتطبّق offset/limit مرة
 واحدة بس، مفيش تراكب فيها).
 
-## [2026-09-08] backlog-realestate-test-fixture-landlord-not-registered-land-owner — 🔴 مفتوح (توثيق فقط)
+## [2026-09-08] backlog-realestate-test-fixture-landlord-not-registered-land-owner — ✅ اتحل [تنفيذ 2026-09-17]
 
 اكتُشف أثناء seed تينانت 1 لخدمتي `insurance`/`real_estate` في
 `saas_tenant_subscriptions`/`saas_tenant_service_access` (متابعة بند
@@ -2375,6 +2385,18 @@ fixture الاختبار الحالية (استخدام `landlord`/`owner` عش�
 §2.3/§5.1، `.claude/reports/plan-features-tests-fix-investigation-session-log.md`،
 `.claude/reports/realestate-design-decision-session-log.md`
 (بند `realestate-hooks-layer-design-decision` [2026-08-31]).
+
+**✅ اتحل [تنفيذ 2026-09-17]:** نُفِّذ بالظبط الحل المقترح أعلاه —
+`test_realestate_rent_unit_saas_check_passes` بقت تستخدم
+`landlord_id=47` (المالك الحقيقي المسجَّل لـ`land_assets.id=1`)
+مباشرة بدل إنشاء `landlord` عشوائي جديد، بلا أي لمس على
+`land_assets.id=1.owner_id` نفسه (أصل مشترك، قراءة فقط)، وبلا إضافته
+لقائمة تنظيف المستخدمين (`user_ids`) — نفس نمط "مستقبِلين مشتركين
+قراءة فقط" الموثَّق بالفعل في الملف. اكتُشف الباج ده حيًا من جديد (بشكل
+مستقل) أثناء جلسة مراجعة backlog دورية [2026-09-16] قبل ما نلاقي إنه
+موثَّق هنا بالفعل — تأكيد إضافي إن التحليل الأصلي [2026-09-08] كان
+دقيقًا 100%. تحقق حي: `1 passed`، صفر مشاكل تالتة. تقرير الجلسة:
+`.claude/reports/backlog-review-2026-09-16-session-log.md`.
 
 ## [2026-09-08] backlog-realestate-ai-agent-exception-silently-swallowed — ✅ اتحل — تمييز NotFoundError/PermissionDeniedError عن باقي الأخطاء
 
@@ -2444,6 +2466,17 @@ balance")` (`realestate/service.py:313`) قبل الوصول لأي منطق ت�
 مصطنع) أثبت الفصل صح، والعملية المالية غير متأثرة في الحالتين.
 تفاصيل التنفيذ والتحقق الحي:
 `.claude/reports/realestate-ai-agent-exception-differentiation-fix-session-log.md`.
+
+**✅ تأكيد إضافي [2026-09-17]:** بما إن Backlog #16 (كوارج
+`execute_agent_action`) وهذا البند اتصلحوا الاتنين فعليًا، توقّع
+الاختبار الأصلي `pytest.raises(TypeError, match="tenant_id")` في
+`test_realestate_buy_fractional_ownership_saas_check_passes_then_hits_known_bug`
+بقى **stale مزدوج** (مش بس فجوة تمويل الـbuyer). الاختبار اتحدَّث
+ليتوقع **نجاح كامل** للعملية بدل الكراش القديم — تحقق حي كامل (خصم
+رصيد دقيق + سجل ملكية صحيح) بعد `monkeypatch` لـ`create_invoice`
+(تفاديًا لبند `invoicing-generate-invoice-number-count-based-collision`
+المفتوح أصلًا، غير متأثر بهذا البند). تفاصيل:
+`.claude/reports/backlog-review-2026-09-16-session-log.md`.
 
 ## [2026-09-08] backlog-notification-delivery-stub-empty-non-inapp-channels — 🔴🔴 أولوية بارزة
 
@@ -4190,3 +4223,130 @@ PASSED** + تحقق مباشر ضد DB إن الحالة رجعت بالظبط �
 
 **المرجع الكامل:** `.claude/reports/achievements-stats-endpoints-implementation-session-log.md`
 (تخطيط: `.claude/reports/achievements-admin-dashboard-planning-session-log.md`).
+
+---
+
+## [2026-09-16] بند Backlog جديد — `insurance-disburse-pensions-hardcoded-system-account`
+
+**الوصف:** اكتُشف أثناء جلسة مراجعة backlog دورية (السؤال الأول: هل بند
+`finance-transfer-hardcoded-system-account-real-fund-risk` [2026-08-24]
+لسه حي؟). فحص حي (`grep` موسّع على `app/domains/`) أثبت إن **3 من الـ4
+مواضع الأصلية اتصلحت فعليًا** في وقت لاحق غير موثَّق صراحة على البند
+الأصلي: `commerce/service.py` (`sender_id=customer_id`)،
+`affiliate/service.py:577`، `iot/service.py:215` (الاتنان الأخيرين
+بقوا يستخدموا `get_or_create_system_account(self.db, tenant_id)`
+tenant-scoped بدل `sender_id=1` هاردكودد). **لكن نفس النمط الخطير
+بالحرف اتكشف في مكان جديد لم يكن مذكورًا في البند الأصلي إطلاقًا:**
+`InsuranceService.disburse_monthly_pensions()` (`insurance/service.py:626`)
+لسه بتنادي `finance.transfer(sender_id=1, ...)` هاردكودد، بلا
+`get_or_create_system_account`، بلا أي tenant scoping — كل معاش شهري
+لأي تينانت بيتسحب فعليًا من نفس حساب `user_id=1`
+(`p_system_treasury@example.com`, `wallets.id=39`).
+
+**تحقق حي إضافي [2026-09-16] — هل الخطر حي دلوقتي؟**
+1. **الجدولة:** `grep -rn "disburse_monthly_pensions"` على المشروع
+   بالكامل أظهر استدعاء واحد بس: `insurance/router.py:358`
+   (`POST /insurance/admin/disburse-pensions`, `get_current_superuser`
+   + rate limit). فحص `celery_config.py` (`beat_schedule` بالكامل) وصفر
+   استخدام لـ APScheduler في المشروع كله يؤكدان: **الدالة مش مجدولة
+   خالص** — مفيش Celery beat ولا cron. الخطر **كامن (latent) مش حي
+   فعليًا** حاليًا.
+2. **الرصيد:** `wallets.id=39` انخفض من 875.0 إلى 771.0 MR_USDT
+   (104.0 فرق) منذ توثيق البند الأصلي. `SELECT` على `transactions`
+   (`from_wallet_id=39`, آخر 30 يوم) أظهر 95 معاملة تجمع 104.0 بالظبط
+   — كلها `REGTEST-*`/فواتير اختبار، **صفر معاملة بأي ذكر لـ
+   "pension"/"معاش" في تاريخ الجدول بالكامل**. الفرق مش نتيجة استغلال
+   هذا الباج.
+
+**الحل المتوقَّع:** نفس نمط الإصلاح المُطبَّق فعليًا على
+`affiliate`/`iot` — استبدال `sender_id=1` بـ
+`await get_or_create_system_account(self.db, tenant_id)` داخل الحلقة
+(لكل `pension.tenant_id` على حدة، مش تينانت الـservice instance
+نفسه — الدالة بتُنادى بلا `tenant_id` بارامتر أصلًا وبتلف على كل
+pensions عبر كل التينانتس). يحتاج تصميم/موافقة منفصلة قبل التنفيذ.
+
+**الحالة:** 🟡 **مفتوح، أولوية عالية عند أي تفعيل مستقبلي للـendpoint/جدولة
+تلقائية — كامن (latent) لا حي حاليًا.** جزء صريح من عائلة
+`finance-transfer-hardcoded-system-account-real-fund-risk` (راجع تحديث
+"✅ جزئيًا" على البند الأصلي أعلاه في الملف). |
+`.claude/reports/backlog-review-2026-09-16-session-log.md`.
+
+---
+
+## [2026-09-17] بند Backlog جديد — ✅ اتحل — `test-cleanup-notification-fk-violation-in-shared-helper`
+
+**الوصف:** اكتُشف أثناء تحديث `test_realestate_buy_fractional_ownership_saas_check_passes_then_hits_known_bug`
+ليتوقع نجاح كامل بدل الكراش القديم (راجع بند `backlog-realestate-ai-agent-exception-silently-swallowed`
+أعلاه). الـhelper المشترك `_cleanup_users_and_finance` (`tests/test_saas_active_subscription.py`)
+كان بيحاول `DELETE FROM users` مباشرة بعد حذف `Transaction`/`AuditLog`/`Wallet`،
+**بدون حذف `Notification`** المرتبطة بالمستخدم أولًا — أي اختبار بيوصل
+لمنطق بيستدعي `_send_notification()` (زي `buy_fractional_ownership`)
+بيعمل صف `notifications` حقيقي، فمحاولة حذف الـuser بعدها بتفشل بـ
+`ForeignKeyViolationError` (`notifications_user_id_fkey`). الاختبار
+القديم عمره ما وصل لهذه النقطة (كان بيكراش بدري بالـTypeError القديم)،
+فالباج ده كان كامن وغير مكتشَف من قبل.
+
+**الإصلاح المُطبَّق:** إضافة `await db.execute(delete(Notification).where(Notification.user_id.in_(user_ids)))`
+في `_cleanup_users_and_finance` قبل حذف `Wallet`/`User` — تعديل ميكانيكي
+صرف على الـhelper المشترك، يفيد أي اختبار حالي/مستقبلي في نفس الملف
+يستخدم نفس الدالة. تحقق حي: تشغيل الملف كامل (`4 passed`)، صفر
+`ForeignKeyViolationError`.
+
+**الحالة:** ✅ اتحل بالكامل [2026-09-17]. `.claude/reports/backlog-review-2026-09-16-session-log.md`.
+
+## [2026-09-17] بند Backlog جديد — `test-savepoint-fragile-source-position-parsing`
+
+**الوصف:** `tests/test_realestate_insurance_savepoint.py::_assert_invoice_after_commit_and_wrapped`
+بتفحص *ترتيب النص المصدري* (source string position، عبر `inspect.getsource`
++ `str.index`) للتأكد إن `create_invoice()` جوه `try/except` بعد
+`await self.db.commit()` (تحقق بند #11b) — بتفترض **try/except واحد بس**
+بين `commit()` و`create_invoice()` (أول `try:`/أول `except` بعد الـcommit).
+
+**الأثر المؤكَّد حيًا [2026-09-16]:** فشل `test_realestate_buy_fractional_ownership_invoice_ordering`
+لأن جلسات لاحقة شرعية (`ai-agents-execute-action-fix`،
+`backlog-realestate-ai-agent-exception-silently-swallowed`) ضافت
+`try: await ai.execute_agent_action(...) except (NotFoundError,
+PermissionDeniedError)... except Exception...` **قبل** try/except
+الفاتورة (بعد نفس الـcommit()، لسبب شرعي تمامًا). دالة الفحص الساذجة
+بتاخد أول try/except بس (بتاعة الـAI)، فبتقارن موضع `create_invoice()`
+(في الزوج التاني) ضد `except` الزوج الأول → `assert` فاشلة رغم إن
+الكود سليم 100% (تأكيد بالقراءة المباشرة: `create_invoice()` لسه فعليًا
+جوه try/except خاصة بيها بعد `commit()`).
+
+**الحل المتوقَّع:** تعديل `_assert_invoice_after_commit_and_wrapped`
+لتبحث عن **زوج try/except يحتوي فعليًا** الـsnippet المطلوب (`create_invoice(`)
+بدل افتراض إنه أول زوج بعد الـcommit — مثلًا: تلقيط كل مواضع `try:`
+بعد الـcommit، واختيار أقرب واحد قبل موضع `create_invoice(` مباشرة،
+مش أول واحد مطلقًا.
+
+**الحالة:** 🟡 **مفتوح، أولوية منخفضة — الكود الإنتاجي سليم 100%، المشكلة
+في منهجية فحص الاختبار بس.** توثيق فقط، لم يُصلَح بعد. `.claude/reports/backlog-review-2026-09-16-session-log.md` (قسم 8).
+
+---
+
+## [2026-09-17] `test_saas_active_subscription.py` — ✅ اتصلح بالكامل
+
+**الملخص:** الملف كان فيه فشلان اثنان من الـ15 فشل الموروثة في baseline
+مراجعة backlog [2026-09-16] (راجع القسم 8 من التقرير). الاتنان اتصلحوا
+بالكامل اليوم:
+
+1. `test_realestate_rent_unit_saas_check_passes` — إضافة `mr_usdt=Decimal("100")`
+   لتمويل `tenant_user` + استخدام `landlord_id=47` (المالك الحقيقي
+   المسجَّل، مش `landlord` عشوائي — راجع إغلاق
+   `backlog-realestate-test-fixture-landlord-not-registered-land-owner`
+   أعلاه).
+2. `test_realestate_buy_fractional_ownership_saas_check_passes_then_hits_known_bug` —
+   تمويل `buyer` + استبدال `pytest.raises(TypeError, match="tenant_id")`
+   القديم بتوقّع نجاح كامل (راجع تأكيد `backlog-realestate-ai-agent-exception-silently-swallowed`
+   أعلاه) + `monkeypatch` لـ`create_invoice` (تفاديًا لبند
+   `invoicing-generate-invoice-number-count-based-collision` المفتوح) +
+   تحقق حي كامل لخصم الرصيد وسجل الملكية.
+
+**اكتشاف جانبي أثناء الإصلاح:** باج تنظيف كامن في `_cleanup_users_and_finance`
+(`notifications_user_id_fkey`) — راجع `test-cleanup-notification-fk-violation-in-shared-helper`
+أعلاه، ✅ اتحل بالكامل.
+
+**تحقق حي نهائي:** `pytest tests/test_saas_active_subscription.py` →
+**`4 passed`** (كان `2 failed, 2 passed`). صفر مشاكل تالتة غير متوقعة.
+
+**الحالة:** ✅ **الملف بالكامل سليم الآن.** `.claude/reports/backlog-review-2026-09-16-session-log.md`.
