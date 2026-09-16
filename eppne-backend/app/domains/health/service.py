@@ -268,9 +268,11 @@ class HealthService:
 
         return appointment
 
-    async def get_my_appointments(self, user_id: int, status_filter: Optional[str] = None) -> List[MedicalAppointment]:
-        """جلب مواعيد المستخدم."""
-        return list(await self.repo.list_appointments(user_id, status_filter))
+    async def get_my_appointments(self, user_id: int, tenant_id: int, status_filter: Optional[str] = None) -> List[MedicalAppointment]:
+        """جلب مواعيد المستخدم — `tenant_id` إجباري لمنع تسريب عبر التينانتات
+        (إصلاح أمني عاجل، راجع
+        .claude/reports/health-appointments-tenant-isolation-fix-session-log.md)."""
+        return list(await self.repo.list_appointments(user_id, tenant_id, status_filter))
 
     async def cancel_appointment(self, user_id: int, appointment_id: int) -> MedicalAppointment:
         """إلغاء موعد (مع التحقق من الملكية)."""
@@ -416,10 +418,10 @@ class HealthService:
     # 7. البصمة الكربونية
     # ============================================================
 
-    async def get_health_carbon_footprint(self, user_id: int) -> Dict:
+    async def get_health_carbon_footprint(self, user_id: int, tenant_id: int) -> Dict:
         """حساب البصمة الكربونية للخدمات الصحية المستخدمة من قبل المستخدم."""
         profile = await self.get_or_create_profile(user_id)
-        appointments = await self.repo.list_appointments(user_id)
+        appointments = await self.repo.list_appointments(user_id, tenant_id)
         total_appointments = len(appointments)
         estimated_emissions = total_appointments * 0.5
 

@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, and_
 from typing import Optional, List
 from datetime import datetime
 
@@ -93,8 +93,16 @@ class HealthRepository:
         result = await self.db.execute(select(MedicalAppointment).where(MedicalAppointment.id == appointment_id))
         return result.scalar_one_or_none()
 
-    async def list_appointments(self, user_id: int, status: Optional[str] = None):
-        query = select(MedicalAppointment).where(MedicalAppointment.patient_user_id == user_id)
+    async def list_appointments(self, user_id: int, tenant_id: int, status: Optional[str] = None):
+        # ⚠️ إصلاح أمني عاجل (2026-09-16): `tenant_id` كان غائبًا تمامًا هنا
+        # قبل كده — الفلترة كانت بـpatient_user_id بس. راجع
+        # .claude/reports/health-appointments-tenant-isolation-fix-session-log.md
+        query = select(MedicalAppointment).where(
+            and_(
+                MedicalAppointment.patient_user_id == user_id,
+                MedicalAppointment.tenant_id == tenant_id,
+            )
+        )
         if status:
             query = query.where(MedicalAppointment.status == status)
         query = query.order_by(MedicalAppointment.appointment_time)

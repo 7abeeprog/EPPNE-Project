@@ -3274,3 +3274,558 @@ WHERE idempotency_key LIKE 'SUB-TRIAL-REMIND-%'` +
   §4).
 
 **المرجع:** `.claude/reports/send-trial-expiry-reminders-task-fix-session-log.md`.
+
+## [2026-09-16] guardian-relationship-foundation-implementation — ✅ الأساس فقط (migration 056 + دومين app/domains/guardian/ جديد بالكامل)، صفر endpoint/service/منطق تدفق بعد
+
+بناءً على جلستي التخطيط read-only السابقتين
+([[project_guardian_relationship_design_planning]] و
+[[project_birth_date_null_percentage_check]])، اتبنى **الأساس البنيوي
+فقط** لعلاقة ولي أمر↔طالب — جدولان جديدان + دومين جديد كامل، بلا أي
+endpoint أو service أو منطق طلب/موافقة/تحقق إداري فعلي (المرحلة القادمة):
+
+- **migration 056** (`056_create_guardian_relationship_tables.py`):
+  جدولان جدد بالكامل، صفر لمس على أي جدول قائم.
+  - `guardian_relationships`: `guardian_user_id`/`ward_user_id` (FK
+    `users.id`, `ON DELETE CASCADE`)، `relationship_type`
+    (enum `FATHER/MOTHER/GUARDIAN`)، `status` (enum
+    `PENDING_WARD_APPROVAL/PENDING_ADMIN_REVIEW/VERIFIED/REJECTED`،
+    افتراضي `PENDING_WARD_APPROVAL`)، `initiated_by_user_id`،
+    `ward_birth_date_provided` (Date, nullable — منفصل عمدًا عن
+    `users.birth_date` القديمة الناقصة 99.16%)، `verified_by`/
+    `verified_at`/`rejection_reason` (نفس شكل `kyb_status` في
+    `sovereign_entities`)، قيد فريد `uq_guardian_ward` على
+    `(guardian_user_id, ward_user_id)`.
+  - `guardian_visibility_settings`: `guardian_relationship_id` (FK
+    `ON DELETE CASCADE`)، `sector` (enum
+    `ACADEMY/SOCIAL/TRANSPORT/HEALTH`)، `is_visible` (افتراضي `True`)،
+    قيد فريد `uq_guardian_visibility_relationship_sector` على
+    `(guardian_relationship_id, sector)`.
+  - اتطبَّقت فعليًا على DB الديف (`alembic upgrade head`، من 055 لـ056)
+    واتأكَّد الشكل الكامل (أعمدة، فهارس، FKs، قيود فريدة) مباشرة عبر
+    `psql \d`.
+- **`app/domains/guardian/`** (دومين جديد، __init__.py فارغ زي باقي
+  الدومينات): `models.py` (الموديلين + 3 enums)، `schemas.py`
+  (`GuardianRelationshipCreate/Response`,
+  `GuardianVisibilitySettingCreate/Response`)، `repository.py`
+  (`GuardianRepository`: `create_relationship`, `get_relationship`,
+  `get_relationship_by_guardian_and_ward`, `create_visibility_setting`,
+  `list_visibility_settings` — كل الدوال المطلوبة للاختبار الحي بس،
+  صفر منطق فوق CRUD). **لا `service.py` ولا `router.py`** — بالضبط زي
+  المطلوب، صفر تسجيل في `main.py`.
+
+**الاختبار الحي** (`tests/test_guardian_relationship_foundation_implementation.py`,
+3 سيناريوهات، عبر `GuardianRepository` مباشرة بلا أي service/endpoint):
+(1) إنشاء علاقة + 4 صفوف رؤية (كل قطاعات `GuardianVisibilitySector`)،
+تأكيد الحالة الافتراضية `PENDING_WARD_APPROVAL` — **PASSED**؛ (2) القيد
+الفريد `uq_guardian_ward` يرفض نفس زوج (guardian, ward) مرتين
+(`IntegrityError` فعلي من DB) — **PASSED**؛ (3) القيد الفريد
+`uq_guardian_visibility_relationship_sector` يرفض نفس القطاع مرتين لنفس
+العلاقة — **PASSED**. **3/3 نجحوا.**
+
+**اكتشاف جانبي أثناء كتابة الاختبار (deadlock حقيقي، اتصلح في الاختبار
+نفسه، صفر تعديل على الكود الأساسي):** أول محاولة تشغيل عَلَّقت بلا نهاية
+(اتأكَّد بفحص `pg_stat_activity` مباشرة). السبب: `INSERT` في
+`guardian_relationships` بياخد قفل `FOR KEY SHARE` على صفوف `users`
+المُشار إليها (guardian/ward) لحد ما الترانزاكشن تتقفل — الاختبار كان
+بيعمل `flush()` بس (بلا `commit()`) ثم الـ`finally` بيفتح `session`
+منفصلة (`AsyncSessionLocal()`) وتحاول `DELETE FROM users` لنفس الصفوف
+→ تعليق دائري: الـfinally مستني قفل مايتفكش غير لما الـtest function
+نفسها تخلص، والـtest function مستنية الـfinally يخلص. الحل: إضافة
+`await db.commit()` صريح بعد كل إنشاء ناجح (نفس نمط
+`AchievementService.grant_achievement` اللي بيعمل `commit()` داخل
+الـservice — هنا الاختبار نفسه لعب دور الـservice المؤقت). بعد الإصلاح:
+3/3 نجحوا في 57.75 ثانية، صفر بقايا بيانات (اتأكَّد مباشرة على DB).
+
+**Regression check:** `pytest --collect-only` على كامل `tests/`
+(226 اختبار عبر كل الملفات) — صفر خطأ استيراد جديد من الدومين الجديد؛
+الخطأ الوحيد الموجود (`ActionCommission` مفقودة من
+`app.domains.affiliate.models`) **مسبق وموثَّق من قبل**
+([[project_tourism_sports_entity_membership_implementation_closed]]،
+side-finding لم يُصلَح)، صفر علاقة بهذه الجلسة. + عيّنة تشغيل فعلية
+(`test_achievements_foundation_implementation.py` +
+`test_achievement_auto_grant_training_implementation.py`, 7 اختبارات) —
+**7/7 نجحوا**، صفر تأثير من الدومين الجديد على أي دومين قائم (إضافة
+بحتة، صفر تعديل على أي ملف موجود مسبقًا).
+
+**الحالة النهائية:** الأساس (migration + models + schemas + repository)
+مبني بالكامل ومتحقَّق منه حيًا. **صفر endpoint، صفر service، صفر منطق
+تدفق (طلب/موافقة/رفض/تحقق إداري/تنبيهات)** — كل ده مرحلة تانية بموافقة
+صريحة منفصلة. لم يُعمَل commit بعد — بانتظار طلب المستخدم.
+
+**المرجع الكامل:**
+`.claude/reports/guardian-relationship-foundation-implementation-session-log.md`.
+
+## [2026-09-16] guardian-relationship-flow-implementation — ✅ المرحلة الثانية (service.py/router.py كاملين): 6 endpoints، 6/6 اختبارات حية، اكتشاف وإصلاح باج identity-map حقيقي
+
+بناءً على [[project_guardian_relationship_foundation_implementation]]
+(الأساس: migration 056 + models/schemas/repository) و
+[[project_guardian_flow_implementation_planning]] (تخطيط read-only)،
+اتبنى منطق التدفق الكامل — `service.py` + `router.py` جديدين في
+`app/domains/guardian/`، + endpoint إضافي واحد صغير في `identity`:
+
+- **`identity/repository.py`**: إضافة `UserRepository.list_by_role(tenant_id,
+  roles)` — دالة جديدة بحتة (صفر تعديل على أي دالة قائمة)، لجلب كل
+  `SUPER_ADMIN`/`EXECUTIVE_DIRECTOR` نشط في tenant معيّن (كانت
+  التوصية الجاهزة من جلسة التخطيط).
+- **`guardian/schemas.py`**: 6 schemas جديدة للطلبات/الردود
+  (`GuardianRelationshipRequestCreate` بدون `guardian_user_id` عمدًا —
+  بيتحدد من `current_user` دايمًا، مش من مدخلات العميل؛
+  `GuardianRelationshipApproveRequest`, `RejectRequest`,
+  `ReviewRequest` مع `field_validator` يقصر `status` على
+  `VERIFIED`/`REJECTED` بس، `GuardianVisibilityUpdateRequest`,
+  `UserLookupResponse`).
+- **`guardian/repository.py`**: 3 دوال جديدة — `update_relationship`
+  (تحديث عام)، `upsert_visibility_setting` (INSERT...ON CONFLICT DO
+  UPDATE ذرّي، نفس نمط `AchievementRepository.increment_bootcamp_network_size`).
+- **`guardian/service.py`** (جديد بالكامل) — `GuardianService`:
+  1. `find_user(email, username)` — تطابق تام بس (`get_by_email`/
+     `get_by_username` الموجودتين فعليًا، غير المُعرَّضتين سابقًا).
+  2. `create_relationship_request` — فحص تكرار (pre-check +
+     `IntegrityError` fallback، نفس نمط achievements)، `PENDING_WARD_APPROVAL`.
+  3. `approve_relationship` — يتطلب `ward_birth_date_provided` في
+     الطلب. حساب عمر يدوي (بلا مكتبة خارجية). تاريخ في المستقبل =
+     "إدخال مرفوض" → `PENDING_ADMIN_REVIEW` (زي القاصر بالحرف، مش خطأ
+     4xx). 18+ → `VERIFIED` فورًا (`verified_by=None`, self-attested).
+     أقل من 18 أو تاريخ مرفوض → `PENDING_ADMIN_REVIEW` + تنبيه فعلي
+     لكل الأدمنز (loop على `send_notification` المفردة — صفر دعم
+     لمستلمين متعددين في الدالة نفسها، زي ما وثَّقت الجلسات السابقة).
+  4. `reject_relationship` — الطالب بس، `PENDING_WARD_APPROVAL` فقط.
+  5. `review_relationship` — الأدمن (`get_current_superuser` في
+     الراوتر)، يتطلب الحالة `PENDING_ADMIN_REVIEW`، `REJECTED` يتطلب
+     `rejection_reason`.
+  6. `update_visibility` — الطالب بس، يتطلب `VERIFIED`، upsert لكل
+     قطاع مُرسَل.
+  - `_ensure_default_visibility_settings`: تُنشئ الـ4 صفوف رؤية
+    (is_visible=True) تلقائيًا أول ما العلاقة توصل `VERIFIED` (عبر
+    أي مسار — موافقة راشد أو مراجعة أدمن).
+- **`guardian/router.py`** (جديد بالكامل) — 6 endpoints مطابقة تمامًا
+  للمطلوب: `GET /guardian/find-user`, `POST /guardian/relationships`,
+  `POST .../{id}/approve`, `POST .../{id}/reject`,
+  `PUT .../{id}/review` (`get_current_superuser`)،
+  `PUT .../{id}/visibility`. باقي كلهم `get_current_active_user`.
+- **`main.py`**: تسجيل `guardian_router` (import + سطر في
+  `routers_config`، بين `finance` و`health` أبجديًا) — صفر تعديل على
+  أي router قائم.
+
+**اكتشاف وإصلاح باج حقيقي أثناء الاختبار (نفس فئة باج
+`get_network_stats` الموثَّق في achievements، اتكرر هنا بالغلط):**
+`upsert_visibility_setting` كانت بترجع القيمة القديمة (`is_visible`
+الأصلية) بعد الـUPDATE مباشرة، رغم إن التنفيذ في DB كان صح — identity
+map الخاصة بالـsession كانت بترجّع الكائن المحمَّل قبل كده (من
+`_ensure_default_visibility_settings`) بدل القيمة الطازة. الإصلاح:
+إضافة `.execution_options(populate_existing=True)` على الـSELECT بعد
+الـupsert مباشرة — بالحرف نفس حل `AchievementRepository.get_network_stats`.
+اتأكَّد بالفشل الفعلي للاختبار قبل الإصلاح ونجاحه بعده.
+
+**الاختبار الحي** (`tests/test_guardian_relationship_flow_implementation.py`,
+6 سيناريوهات، عبر `GuardianService` مباشرة بلا HTTP client، فوق DB
+حقيقية): بحث تطابق تام + عدم وجود + تحقق مدخلات؛ راشد يوافق فورًا
+(`VERIFIED` self-attested) + يتحكم في رؤية قطاع واحد بنجاح؛ قاصر →
+`PENDING_ADMIN_REVIEW` + **تحقق فعلي من DB إن الأدمن استلم إشعار حقيقي**
+(صف `Notification` بـ`idempotency_key` مطابق) → مراجعة أدمن `VERIFIED`؛
+رفض الطالب + منع معالجة مزدوجة؛ منع تكرار نفس زوج (guardian, ward)؛
+تفويض خاطئ (مستخدم غريب يحاول يوافق/يرفض) مرفوض + حالات مبكرة (مراجعة
+أدمن قبل الأوان، تحكّم في الرؤية قبل VERIFIED) مرفوضة. **6/6 نجحوا.**
+
+**اكتشاف جانبي أثناء التطوير (بيئة، غير مرتبط بالكود، غير مُصلَح
+عمدًا):** أول تشغيلة لاختبار القاصر كشفت إن `list_by_role` بترجع
+**24 حساب** `SUPER_ADMIN` حقيقي في tenant_id=1 — كلهم throwaway محذوف
+منه التنظيف من جلسات اختبار قديمة تمامًا وغير مرتبطة (`p_ctor_*`,
+`TEST_*` — انظر أسماءهم)، مش بيانات إنتاج ولا مرتبطين بهذه الجلسة.
+هذا يعني كل تشغيلة لمنطق تنبيه الأدمن الجديد كانت هتبعت إشعارات حقيقية
+لكل الـ24 حساب دول. **الكود الجديد سليم ويعمل بالضبط زي المطلوب** (تنبيه
+كل الأدمنز فعلًا) — المشكلة في تراكم بيانات throwaway قديمة من دومينات
+تانية بالكامل. تم فقط تصحيح تنظيف الاختبار الحالي (`_cleanup` بقت تمسح
+كل إشعار مرتبط بـ`relationship_id` بغض النظر عن المستلم، مش بس
+المستخدمين اللي الاختبار نفسه أنشأهم) — **لم يُلمَس أي كود أو بيانات
+تخص الجلسات القديمة دي**، خارج نطاق هذه الجلسة تمامًا.
+
+**Regression check:**
+- `pytest --collect-only` على كامل `tests/` (232 اختبار): صفر خطأ
+  استيراد جديد؛ نفس الخطأ المسبق الوحيد (`ActionCommission`، موثَّق من
+  [[project_tourism_sports_entity_membership_implementation_closed]]).
+- `test_guardian_relationship_foundation_implementation.py` +
+  `test_guardian_relationship_flow_implementation.py` معًا: **9/9
+  نجحوا**.
+- عيّنة `test_identity_router_protection.py` +
+  `test_user_repository_get_by_id_audit.py` +
+  `test_user_repository_get_user_audit.py` (37 اختبار): **12 فشلوا،
+  25 نجحوا** — **تأكَّد بالتفصيل إن الـ12 فشل ده صفر علاقة بهذه الجلسة**:
+  كلهم عن طبقة "Backlog #8" (`_register_affiliate_commission` +
+  `referred_by` عبر zamakana/transport/tourism_sports/tenders_auctions/
+  service_marketplace/realestate/arbitration_syndicates/manufacturing/
+  invitations/insurance/employment/digital_twin) — دومينات صفر علاقة
+  بـ`guardian`. اتأكَّد إن `list_by_role` (الإضافة الوحيدة لـ
+  `identity/repository.py`) **مُستخدَمة فقط من `guardian/service.py`**
+  (grep شامل، صفر مستدعٍ تاني)، وإن `identity/router.py`/`service.py`/
+  `schemas.py` كان عندهم بالفعل تعديلات uncommitted **قبل بداية هذه
+  الجلسة** (موجودة في git status الأصلي لبداية المحادثة) — الفشل ده
+  مرتبط بيها، مش بإضافة `list_by_role` البسيطة. **لم يُصلَح — خارج نطاق
+  هذه الجلسة بالكامل**، يحتاج جلسة منفصلة مخصصة لـBacklog #8.
+
+**الحالة النهائية:** منطق التدفق الكامل مبني ومتحقَّق منه حيًا (9/9
+اختبار guardian). Endpoints الستة كلهم مسجَّلين وشغالين
+(`/api/guardian/...`). لم يُعمَل commit بعد — بانتظار طلب المستخدم.
+
+**المرجع الكامل:**
+`.claude/reports/guardian-flow-implementation-session-log.md`.
+
+## [2026-09-16] health-appointments-tenant-isolation-fix — 🔒 إصلاح أمني عاجل ومعزول تمامًا عن guardian: `HealthRepository.list_appointments`/`HealthService.get_my_appointments` كانا بلا فلتر tenant_id إطلاقًا
+
+**هذا البند منفصل تمامًا عن كل جلسات guardian السابقة — صفر لمس على
+أي كود أو دومين guardian في هذه الجلسة**، بناءً على اكتشاف جانبي من
+جلسة [[project_guardian_overview_endpoint_planning]] (فحص read-only)
+تطلَّب إصلاحًا عاجلًا معزولًا فورًا.
+
+**الثغرة المؤكَّدة قبل الإصلاح:**
+```python
+# health/repository.py (قبل)
+async def list_appointments(self, user_id: int, status: Optional[str] = None):
+    query = select(MedicalAppointment).where(MedicalAppointment.patient_user_id == user_id)
+    ...
+```
+**صفر أي فلتر `tenant_id`** — الدالة بتفلتر بـ`patient_user_id` بس.
+`HealthService.get_my_appointments(user_id, status_filter=None)` نفس
+الشيء بالضبط، وبتمررهم كده لـrepo. `HealthService(db)` نفسها بتتبنى
+بلا `tenant_id` أصلًا (بعكس كل الدومينات التانية زي
+`AcademyService(db, tenant_id)`). أي مسار مستقبلي (أو حالي غير مكتشَف)
+يستدعي هذه الدالة بـ`user_id` تابع لمستخدم في تينانت مختلف عن المتوقَّع
+كان هيرجّع بياناته الطبية بلا أي حاجز.
+
+**الإصلاح (3 ملفات، تعديل بسيط ومحدود جدًا):**
+- `health/repository.py`: `list_appointments(user_id, tenant_id, status=None)`
+  — إضافة `and_(MedicalAppointment.patient_user_id == user_id,
+  MedicalAppointment.tenant_id == tenant_id)` (استيراد `and_` جديد).
+- `health/service.py`: `get_my_appointments(user_id, tenant_id,
+  status_filter=None)` — تمرير `tenant_id` للـrepo. **دالة تانية غير
+  مرتبطة** (`get_health_carbon_footprint`) كانت بتستدعي نفس
+  `repo.list_appointments(user_id)` القديمة — اتصلحت بتمرير `tenant_id`
+  كمان (تعديل ميكانيكي إجباري لتفادي كسرها بالتوقيع الجديد؛ تم التحقق
+  إنها **dead code فعليًا** — صفر مستدعٍ لها من أي router أو مكان تاني
+  في المشروع كله، `"get_health_carbon_footprint"` الظاهرة في
+  `process_voice_command` مجرد نص وصفي في dict، مش استدعاء فعلي).
+- `health/router.py`: `GET /health/appointments` — تمرير
+  `tenant_id=cast(int, current_user.tenant_id)` (من التوكن المُوثَّق،
+  مش أي header) عند استدعاء `service.get_my_appointments`.
+
+**الاختبار الحي** (`tests/test_health_appointments_tenant_isolation_fix.py`):
+مستخدم بموعد طبي حقيقي في `tenant_id=1` (عيادة + موعد حقيقيين، بلا
+استخدام `book_appointment` كامل تفاديًا لتعقيد رسوم المحفظة غير
+المرتبط بالاختبار) → استدعاء `get_my_appointments(user_id, tenant_id=16)`
+→ **قائمة فارغة فعليًا** (صفر تسريب)؛ استدعاء بـ`tenant_id=1` الصح →
+**الموعد يظهر عادي** (صفر false negative من الإصلاح). **PASSED**.
+
+**Regression check:**
+- كل اختبارات health الحالية (`test_health_entity_membership_full_implementation.py`
+  + `test_health_nameerror_and_fee_ordering_fix.py`، 7 اختبارات بما
+  فيها `book_appointment` الكامل مع الرسوم): **7/7 نجحوا**.
+- `pytest --collect-only` على كامل `tests/` (233 اختبار، +1 من هذه
+  الجلسة): صفر خطأ استيراد جديد؛ نفس الخطأ المسبق الوحيد
+  (`ActionCommission`، غير مرتبط، موثَّق من قبل).
+
+**الحالة النهائية:** الثغرة مُصلَحة ومتحقَّق منها حيًا. **صفر لمس على
+أي كود guardian في هذه الجلسة بالكامل** (فُحص بالمطابقة قبل وبعد —
+الملفات المعدَّلة الوحيدة: `health/repository.py`, `health/service.py`,
+`health/router.py`, + ملف الاختبار الجديد). لم يُعمَل commit بعد —
+بانتظار طلب المستخدم.
+
+**المرجع الكامل:**
+`.claude/reports/health-appointments-tenant-isolation-fix-session-log.md`.
+
+## [2026-09-16] guardian-overview-endpoint-implementation — ✅ GET /guardian/wards/{ward_id}/overview مبني بالكامل: تفويض VERIFIED + احترام الرؤية + تجميع تسلسلي من 4 دومينات، 12/12 اختبار guardian
+
+بناءً على [[project_guardian_overview_endpoint_planning]] (فحص
+read-only سابق)، اتبنى endpoint موحَّد يجمّع ملخصات خفيفة من academy،
+achievements، social، transport، health لولي أمر مُوثَّق — بأقل قدر
+تعديل ممكن على الدومينات القائمة (إضافتان جديدتان بس، صفر تعديل على
+منطق موجود):
+
+- **الأمان أولًا** (`GuardianService.get_ward_overview`): فحص
+  `GuardianRelationship` بين `guardian_user_id`/`ward_user_id` — لازم
+  تكون موجودة، `tenant_id` مطابق، و**`status == VERIFIED` بالحرف** (مش
+  `PENDING_*`) — غير كده `PermissionDeniedError` (403) فورًا، قبل أي
+  استعلام لأي دومين تشغيلي.
+- **احترام الرؤية**: لكل قطاع من الأربعة، لو فيه صف
+  `GuardianVisibilitySetting` صريح بـ`is_visible=False`، **القسم
+  بيُستبعد تمامًا من الـdict المُرجَع** (مفتاح غائب بالكامل، مش
+  `null`) — الـendpoint نفسه **بلا `response_model`** عمدًا عشان
+  `jsonable_encoder` يسيب الـdict زي ما هو بالظبط، بلا أي مفتاح إضافي
+  بقيمة فاضية.
+- **استدعاء تسلسلي بحت** — 4 `await` متتاليين على نفس `self.db`
+  المُحقَنة، **صفر `asyncio.gather`** (راجع سبب الخطر الموثَّق في تقرير
+  التخطيط، ومثال `projects/service.py:455` كتحذير فعلي موجود بالكود).
+
+**إضافتان جديدتان بس (صفر تعديل على أي دالة قائمة)، بالضبط زي ما
+اتفق):**
+- `AcademyRepository.get_user_enrollments_summary` +
+  `AcademyService.get_user_enrollments_summary` — `join` جديد مع
+  `Course.title` (كان مفقودًا، `get_user_enrollments` القائمة اتسابت
+  بلا لمس).
+- `SocialRepository.get_user_activity_summary` +
+  `SocialService.get_user_activity_summary` — دالة جديدة بالكامل
+  (مفيش أي دالة "منشورات مستخدم" كانت موجودة أصلًا)، بترجع `{post_count,
+  comment_count, last_activity_at}` **بلا أي محتوى نصي خام** — `Post`
+  بلا أي عمود خصوصية (راجع تقرير التخطيط)، فالعد المجرد هو الخيار
+  الآمن الوحيد.
+- **achievements/transport/health: صفر كود جديد في الدومينات نفسها** —
+  `GuardianService` بتستهلك `AchievementService.get_user_achievements`
+  + `AchievementService.list_definitions` (موجودتين) لعمل الـjoin
+  (اسم/أيقونة) في طبقة guardian نفسها؛ `TransportService.list_bookings`
+  (موجودة، مش `get_my_bookings` — تفصيل مهم تحت)؛
+  `HealthService.get_my_appointments` (بعد إصلاح الجلسة اللي فاتت) +
+  `HealthService.get_facility` (موجودة) لاسم المنشأة.
+
+**⚠️ انحراف واحد موثَّق عن الطلب الحرفي:** استُخدمت
+`TransportService.list_bookings(tenant_id, passenger_id=ward_id)` بدل
+`get_my_bookings` المذكورة — الاتنين بينفذوا **نفس استعلام repo
+بالحرف**، لكن `get_my_bookings` بتضيف `_check_saas_limits(tenant_id,
+"transport")` فوقها (بوابة اشتراك SaaS للـtenant ككل، اتأكَّد فعليًا
+بالفشل الحي: tenant_id=1 في DB الديف مالوش خطة "transport" مفعَّلة،
+فـ`get_my_bookings` كانت هتكسر overview أي طالب لأي tenant بلا اشتراك
+transport صريح — قيد بيئي منفصل تمامًا عن تفويض guardian). التبديل
+لـ`list_bookings` بيحافظ على نفس البيانات بالضبط بلا المخاطرة بتعديل
+اشتراكات tenant المشتركة.
+
+**الاختبار الحي** (`tests/test_guardian_overview_endpoint_implementation.py`،
+3 سيناريوهات، fixtures عبر إدخال ORM مباشر لكل الدومينات الأربعة —
+كورس+تسجيل، تعريف إنجاز+منح، منشور+تعليق، محطتان+أسطول+مركبة+مسار+رحلة+حجز،
+منشأة+موعد):
+1. علاقة VERIFIED + نشاط حقيقي في الأربعة → الرد يحتوي بيانات صحيحة
+   من كل قطاع (عنوان الكورس، اسم الإنجاز، عدد المنشورات/التعليقات،
+   تاريخ/حالة الرحلة، اسم المنشأة/حالة الموعد) — **PASSED**.
+2. نفس الطالب يحجب HEALTH بعدها (`update_visibility`) → استدعاء تاني
+   → `"health" not in overview` (استبعاد كامل، مش `null`)، باقي
+   الثلاثة لسه موجودين — **PASSED**.
+3. علاقة `PENDING_WARD_APPROVAL` (مش VERIFIED بعد) → `PermissionDeniedError`
+   — **PASSED**.
+4. مستخدم بلا أي علاقة إطلاقًا → `PermissionDeniedError` — **PASSED**.
+
+**النتيجة: 3/3 نجحوا** (12/12 مع كل ملفات guardian الثلاثة معًا).
+
+**Regression check:**
+- كل اختبارات guardian الثلاثة معًا (foundation + flow + overview):
+  **12/12 نجحوا**.
+- عيّنة عبر الدومينات المُعدَّلة (`test_social_getter_endpoints_wiring.py`
+  + `test_transport_getter_endpoints_wiring.py` +
+  `test_transport_vehicles_fleets_drivers.py` +
+  `test_achievements_foundation_implementation.py`، 19 اختبار): **19/19
+  نجحوا** — صفر تأثير من `get_user_enrollments_summary`/
+  `get_user_activity_summary` الجديدتين على أي مسار قائم.
+- `pytest --collect-only` على كامل `tests/` (236 اختبار، +3 من هذه
+  الجلسة): صفر خطأ استيراد جديد؛ نفس الخطأ المسبق الوحيد
+  (`ActionCommission`، غير مرتبط).
+
+**الحالة النهائية:** الـendpoint مبني بالكامل ومتحقَّق منه حيًا.
+**صفر تعديل على أي منطق قائم** في academy/achievements/social/transport/health
+— إضافتان جديدتان فقط (academy join + social summary)، والباقي استهلاك
+مباشر لدوال موجودة من طبقة guardian. لم يُعمَل commit بعد — بانتظار
+طلب المستخدم.
+
+**المرجع الكامل:**
+`.claude/reports/guardian-overview-endpoint-implementation-session-log.md`.
+
+## [2026-09-16] بند Backlog جديد — `backlog-live-session-instructor-id-no-identity-verification`
+
+**الوصف:** `instructor_id` في `LiveSessionCreate` (`academy/schemas.py:317-319`)
+حقل إجباري بلا قيمة افتراضية، **يُدخَل حر بالكامل من العميل** — بلا أي
+تحقق سيرفر إنه يطابق `Course.instructor_id` بتاع الكورس اللي الـlive
+session تابعة له، ولا حتى إنه يطابق `current_user.id` (المُدخِل نفسه).
+الفحص الوحيد على الـendpoint (`POST /academy/nodes/{node_id}/live`،
+`academy/router.py:433-442`) هو `get_current_instructor_or_admin` —
+دور عام (INSTRUCTOR/ADMIN/SUPER_ADMIN/EXECUTIVE_DIRECTOR)، مش تطابق
+هوية. أي مدرّس أو أدمن يقدر يدخل `instructor_id` لمدرّس تاني تمامًا،
+عمدًا أو بالغلط، وهيتقبل بلا اعتراض.
+
+**تصحيح على التوثيق التاريخي** (كان موثَّقًا في جلسة
+`targeted-notifications-planning` كـ"hardcoded `instructor_id=1`"):
+الـfallback الفعلي في `AcademyRepository.create_live_session`
+(`academy/repository.py:707-716`، `if "instructor_id" not in
+session_data: session_data["instructor_id"] = 1`) **غير قابل للتفعيل
+عمليًا اليوم** — بما إن `LiveSessionCreate` بتحدد الحقل إجباري،
+`data.model_dump()` هيحتوي المفتاح دايمًا (تأكَّد بـgrep شامل: صفر
+مستدعٍ تاني لـ`create_live_session` في كامل المشروع). **المشكلة
+الحقيقية أعمق من الـfallback نفسه**: غياب أي تحقق مقابل مصدر حقيقة
+(`Course.instructor_id`) على القيمة المُدخَلة، مش القيمة الافتراضية
+الميتة.
+
+**الأثر:** خطر نظري بالكامل حاليًا — جدول `live_sessions` **فاضي
+تمامًا** في DB الديف (تأكَّد مباشرة، صفر صف)، فمفيش أي بيانات حقيقية
+اتأثرت لحد الآن. لكن الخطر بنيوي وحقيقي: أي استخدام فعلي مستقبلي
+(بما فيه أي منطق تنبيه/توجيه يعتمد على `LiveSession.instructor_id`،
+زي ميزة "رسالة لمدرّس" المُخطَّط لها) معرَّض لمعلومة مدرّس غير موثوقة.
+
+**الحل المتوقَّع (لم يُنفَّذ):** إما (أ) اشتقاق `instructor_id` من
+`Course.instructor_id` بتاع الكورس نفسه بدل قبوله من العميل (حذفه من
+`LiveSessionCreate` تمامًا)، أو (ب) لو لازم يفضل قابل للتخصيص (مدرّس
+مختلف يغطي جلسة معيّنة)، إضافة تحقق صريح إنه عضو مُصرَّح له بالتدريس
+على هذا الكورس (زي عضوية كيان)، مش مجرد دور عام.
+
+**الحالة:** 🟡 **مفتوح، أولوية متوسطة** — خطر نظري (الجدول فاضي حاليًا)
+لكن بنيوي حقيقي، يستاهل إصلاح قبل أي اعتماد فعلي على
+`LiveSession.instructor_id` في ميزة جديدة. راجع
+`.claude/reports/guardian-message-instructor-planning-session-log.md` §2.
+
+---
+
+## [2026-09-16] بند Backlog جديد — `backlog-send-notification-missing-realtime-broadcast`
+
+**الوصف:** `broadcast_to_user_redis()` (`communications/router.py:79-82`
+— البث اللحظي الحقيقي الوحيد عبر Redis Pub/Sub لـWebSocket
+`/communications/ws`) **موجودة ومُستدعاة فقط جوّه الـrouter handler
+الخاص بـ`POST /communications/notifications/send`**
+(`communications/router.py:89-128`، endpoint إداري محمي
+بـ`get_current_superuser`) — **بعد** استدعاء
+`CommunicationsService.send_notification()`، مش جوّها. البث اللحظي
+**ليس جزءًا من `send_notification()` نفسها إطلاقًا**.
+
+**الأثر المؤكَّد بالقراءة المباشرة:** أي دومين تاني بينادي
+`CommunicationsService.send_notification()` مباشرة — وهو نمط
+الاستخدام الفعلي **الوحيد** اليوم عبر كل المشروع (`transport`,
+`realestate`, `automation`, `saas`, و`guardian._notify_admins_pending_review`
+من الجلسات الأخيرة) — بياخد **صف `Notification` محفوظ في DB بس**،
+**بلا أي بث WebSocket لحظي**. المستلم لازم يفتح `GET
+/communications/notifications/me` (endpoint موجود ومؤكَّد،
+`communications/router.py:134`) بنفسه ليكتشف وجود إشعار جديد — صفر
+"push" حقيقي لأي تنبيه برمجي (server-to-server) في المشروع كله
+اليوم، فقط للمسار الإداري اليدوي الوحيد. **تأكيد إضافي:**
+`send_notification_task` (Celery، `app/core/celery_app.py:71-73`)
+نفسها دالة فارغة تمامًا (`pass`، موسومة صراحةً "مؤقتة") بغض النظر عن
+القناة — يعني حتى لو البث كان جوّه الـservice، مفيش قناة فعلية غير
+Redis Pub/Sub أصلًا.
+
+**الحل المتوقَّع (لم يُنفَّذ):** نقل استدعاء `broadcast_to_user_redis()`
+لجوّه `CommunicationsService.send_notification()` نفسها (بعد الـcommit
+مباشرة)، عشان كل مستدعٍ برمجي يستفيد من نفس البث اللحظي بدل الأدمن
+اليدوي بس. يحتاج فحص تبعية دائرية محتملة (`communications/service.py`
+لازم يستورد من `communications/router.py` أو نقل الدالة المساعدة
+لمكان مشترك، زي `app/core/` أو داخل الـservice نفسها).
+
+**الحالة:** 🟡 **مفتوح، أولوية متوسطة** — كل تنبيهات اليوم (بما فيها
+تنبيهات guardian للأدمنز) بتفتقد بثًا لحظيًا فعليًا، لكن الوظيفة
+الأساسية (حفظ الإشعار + إمكانية الاستعلام عنه لاحقًا) سليمة. راجع
+`.claude/reports/guardian-message-instructor-planning-session-log.md` §3.
+
+## [2026-09-16] guardian-message-instructor-implementation — ✅ POST /guardian/wards/{ward_id}/message-instructor مبني بالكامل، 16/16 اختبار guardian — اكتشاف وتجاوز باج schema حقيقي (academy_instructors بلا tenant_id)
+
+بناءً على [[project_guardian_message_instructor_planning]] بالحرف، اتبنى
+`GuardianService.message_instructor` + `POST
+/guardian/wards/{ward_id}/message-instructor`:
+
+- **فحص التفويض**: نفس `get_ward_overview` بالحرف (`GuardianRelationship`
+  موجودة، `tenant_id` مطابق، `status == VERIFIED`) + فحص إضافي خاص:
+  `GuardianVisibilitySetting` لقطاع `ACADEMY` لازم يكون `is_visible=True`
+  — غير كده `PermissionDeniedError`.
+- **سلسلة تحديد المدرّس**: `AcademyRepository.get_enrollment(ward_id,
+  course_id, tenant_id)` (تأكيد تسجيل فعلي، غير كده `NotFoundError`) →
+  `AcademyRepository.get_course(course_id, tenant_id)` (`instructor_id
+  IS NULL` → `NotFoundError`) → **مش** `AcademyRepository.get_instructor`
+  (راجع الاكتشاف تحت) → `send_notification(user_id=instructor_user_id,
+  ..., channel=IN_APP, idempotency_key=None)`. قرار `idempotency_key=None`
+  موثَّق بتعليق صريح في الكود: الرسائل مش عملية حساسة لإعادة محاولة،
+  كل رسالة لازم تتسجل كصف مستقل.
+
+**⚠️ اكتشاف باج schema حقيقي أثناء التحقق الحي (مش تخطيطي):**
+`AcademyRepository.get_instructor(instructor_id, tenant_id)` — الدالة
+المطلوبة أصلًا في التخطيط لخطوة 4 — **بتفشل فوريًا لأي استدعاء
+إطلاقًا**، مؤكَّد بتجربة مباشرة معزولة قبل أي لمس كود:
+```
+sqlalchemy.exc.ProgrammingError: UndefinedColumnError: column academy_instructors.tenant_id does not exist
+```
+الموديل (`academy/models.py`) بيعرّف `Instructor.tenant_id`، لكن جدول
+`academy_instructors` الفعلي (`\d academy_instructors` حي) **بلا هذا
+العمود إطلاقًا** — انحراف موديل↔DB قديم، موجود من قبل هذه الجلسة
+بالكامل، غير مرتبط بـguardian. **تم إيقاف التنفيذ وعرض الخيارات على
+المستخدم صراحةً** (تجاوز داخل guardian فقط / إصلاح `get_instructor`
+نفسها / migration لإضافة العمود / تأجيل كامل) — **القرار المُتَّخذ:
+تجاوز معزول تمامًا داخل `guardian/repository.py` بس، صفر لمس على
+`academy/repository.py` أو أي migration.**
+
+**الحل المُنفَّذ**: دالة جديدة `GuardianRepository.get_instructor_user_id(instructor_id)`
+— `SELECT Instructor.user_id WHERE Instructor.id == instructor_id` **بلا
+أي فلتر `tenant_id`** (الأمان محقَّق مسبقًا عبر `Course.tenant_id`
+المفحوص فعلًا في الخطوة السابقة — `Course.instructor_id` FK يضمن صف
+`Instructor` حقيقي). `message_instructor` بتستخدمها بدل
+`academy_repo.get_instructor(...)`. **صفر تعديل على أي ملف academy.**
+
+**الاختبار الحي** (`tests/test_guardian_message_instructor_implementation.py`،
+4 سيناريوهات — الـfixture لصف `Instructor` استخدمت `insert()` من
+SQLAlchemy Core بدل `db.add(Instructor(...))` عمدًا، لنفس سبب باج
+الـschema بالضبط: الـORM كان بيولّد INSERT شامل لكل أعمدة الموديل
+المُعرَّفة بما فيها `tenant_id` الوهمي، حتى بدون تمريره صراحةً):
+1. علاقة VERIFIED + تسجيل فعلي + مدرّس مُسنَد → نجاح، صف `Notification`
+   حقيقي محفوظ للمدرّس (تحقق مباشر من DB، مش mock). **PASSED**.
+2. قطاع `ACADEMY` محجوب → `PermissionDeniedError`. **PASSED**.
+3. `course_id` الطالب مش مسجَّل فيه → `NotFoundError`. **PASSED**.
+4. كورس بلا مدرّس مُسنَد (`instructor_id IS NULL`) → `NotFoundError`.
+   **PASSED**.
+
+**النتيجة: 4/4 نجحوا** (16/16 مع كل ملفات guardian الأربعة معًا).
+
+**اكتشاف جانبي أثناء التطوير (غير مرتبط بالكود النهائي، مُصلَح ذاتيًا):**
+أول محاولتين للاختبار فشلتا (قبل اكتشاف الحل النهائي)، وبما إن المستخدمين
+التجريبيين بيتكوّنوا عبر `UserRepository.create()` (بتعمل `commit()`
+فوري، مستقل عن نجاح باقي الاختبار)، تركوا **36 مستخدم throwaway يتيم**
+في DB (الفشل حصل قبل الوصول لـ`try/finally` الخاص بالتنظيف). اتنضَّفوا
+يدويًا بعد نجاح التشغيلة النهائية (`DELETE ... WHERE username LIKE
+'p_regtest_msg_%'` بعد تأكيد `4/4 PASSED`) — **صفر بقايا بيانات
+حاليًا**، ونمط `fx = await _build_...()` قبل `try:` (بدل جوّاه) موجود
+كمان في كل ملفات guardian السابقة (سابقة قائمة، لم تُعدَّل هنا).
+
+**Regression check:**
+- كل ملفات guardian الأربعة معًا (foundation + flow + overview +
+  message-instructor): **16/16 نجحوا**.
+- `pytest --collect-only` على كامل `tests/` (240 اختبار، +4 من هذه
+  الجلسة): صفر خطأ استيراد جديد؛ نفس الخطأ المسبق الوحيد
+  (`ActionCommission`، غير مرتبط).
+- **صفر تعديل على `academy/`, `communications/`, أو أي دومين تاني غير
+  `guardian/`** — تم التحقق بمطابقة الملفات المعدَّلة.
+
+**الحالة النهائية:** الـendpoint مبني بالكامل ومتحقَّق منه حيًا. باج
+schema حقيقي اتكشف، اتوقَّف التنفيذ، اتعرضت الخيارات، واتحل بقرار
+المستخدم الصريح بأضيق نطاق ممكن. لم يُعمَل commit بعد — بانتظار طلب
+المستخدم.
+
+**المرجع الكامل:**
+`.claude/reports/guardian-message-instructor-implementation-session-log.md`.
+
+## [2026-09-16] بند Backlog جديد — `backlog-academy-instructors-missing-tenant-id`
+
+**الوصف:** جدول `academy_instructors` الفعلي في DB **بلا عمود
+`tenant_id` إطلاقًا** (تأكَّد مباشرة عبر `\d academy_instructors`:
+`id, user_id, org_entity_id, bio, expertise_areas,
+revenue_share_percentage, is_approved, created_at, updated_at` بس) —
+رغم إن الموديل `Instructor` (`academy/models.py`) بيعرّف
+`tenant_id = Column(Integer, ForeignKey("academy_tenants.id"),
+nullable=False, index=True)` صراحةً. **أي كود يحاول `INSERT` أو
+`SELECT`/`WHERE` على `Instructor.tenant_id` عبر الـORM يفشل فورًا
+بـ`UndefinedColumnError`** — مؤكَّد حيًا مرتين مستقلتين (`INSERT` عبر
+`db.add(Instructor(...))`، و`SELECT` عبر
+`AcademyRepository.get_instructor()`).
+
+**الأثر:** `AcademyRepository.create_instructor()` (`repository.py:142-146`)
+و`AcademyRepository.get_instructor()` (`repository.py:149-153`) —
+**كلاهما مكسورتان بالكامل لأي استدعاء، بلا استثناء**. `create_instructor`
+**dead code فعليًا** (صفر مستدعٍ في كامل المشروع، تأكَّد بـgrep) — مفيش
+أي endpoint حاليًا لإنشاء مدرّس جديد عبر الـAPI. `get_instructor`
+**مُستخدَمة في مسارات حية** (`count_instructor_courses` وما شابه)، لكن
+لم تُختبَر حيًا قبل هذه الجلسة — أول استدعاء فعلي (أثناء بناء
+`guardian.message_instructor`) كشف الكسر فورًا.
+
+**عزل التينانتات على `academy_instructors` معتمد بالكامل على فلترة
+غير مباشرة** — عبر `Course.tenant_id` (لما نوصل لمدرّس من خلال كورس)
+أو `EntityMembership`/`OrganizationEntity.tenant_id` (لما نوصل من خلال
+الكيان التنظيمي) — **مش FK مباشر على الجدول نفسه**. هذا نمط مختلف عن
+كل جدول تاني في `academy` (كلهم عندهم `tenant_id` مباشر).
+
+**الحل المتوقَّع (لم يُنفَّذ):** migration مخصَّص يضيف عمود `tenant_id`
+فعليًا لجدول `academy_instructors` (مع تحديد قيمته من `org_entity_id`
+أو `user_id.tenant_id` للصفوف الحالية إن وُجدت)، بعد فحص بيانات حقيقية
+أولًا. يحتاج جلسة تصميم/migration منفصلة تمامًا — **خارج نطاق guardian
+بالكامل**.
+
+**الحالة:** 🟡 **مفتوح، أولوية متوسطة** — تُجووِز بنجاح داخل
+`guardian/repository.py` (استعلام معزول بلا فلتر `tenant_id`، الأمان
+محقَّق عبر `Course` بدلًا منه) بدون الحاجة لإصلاح هذا البند أولًا، لكنه
+يستاهل إصلاح مستقل لأي استخدام مستقبلي لـ`AcademyRepository.get_instructor`/
+`create_instructor` نفسهما. راجع
+`.claude/reports/guardian-message-instructor-implementation-session-log.md`.

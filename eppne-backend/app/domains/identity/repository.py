@@ -36,6 +36,15 @@ class UserRepository:
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
+    async def list_by_role(self, tenant_id: int, roles: List[str]) -> List[User]:
+        """كل المستخدمين النشطين في هذا الـtenant بأحد الأدوار المُمرَّرة
+        (قيم `SystemRole` كنص) — للاستخدام في تنبيه الأدمنز مثلًا."""
+        query = select(User).where(
+            and_(User.tenant_id == tenant_id, User.system_role.in_(roles), User.is_active == True)  # noqa: E712
+        )
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
     async def get_by_username_or_email(self, login: str, tenant_id: int) -> Optional[User]:
         query = select(User).where(
             and_(

@@ -425,6 +425,12 @@ class AcademyService:
     async def get_user_enrollments(self, user_id: int, skip: int = 0, limit: int = 100):
         return await self.repo.get_user_enrollments(user_id, self.tenant_id, skip, limit)
 
+    async def get_user_enrollments_summary(self, user_id: int, skip: int = 0, limit: int = 10):
+        """ملخص خفيف (عنوان الكورس + تقدّم + حالة) — لعرض ولي الأمر
+        (guardian overview). دالة جديدة بحتة، صفر تعديل على
+        `get_user_enrollments` القائمة."""
+        return await self.repo.get_user_enrollments_summary(user_id, self.tenant_id, skip, limit)
+
     async def update_progress(self, user_id: int, course_id: int, progress: float):
         enrollment = await self.repo.get_enrollment(user_id, course_id, self.tenant_id)
         if not enrollment:

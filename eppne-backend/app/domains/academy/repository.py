@@ -528,6 +528,29 @@ class AcademyRepository:
         items = [EnrollmentResponse.model_validate(enr) for enr in result.scalars().all()]
         return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
 
+    async def get_user_enrollments_summary(
+        self, user_id: int, tenant_id: int, skip: int = 0, limit: int = 10
+    ) -> List[Any]:
+        """ملخص خفيف للتسجيلات لعرض ولي الأمر (guardian overview) — دالة
+        جديدة بحتة، صفر تعديل على `get_user_enrollments`/`EnrollmentResponse`
+        القائمتين. `join` جديد مع `Course` لإرجاع العنوان مباشرة بدل
+        `course_id` الخام فقط."""
+        query = (
+            select(
+                Course.title,
+                Enrollment.progress_percentage,
+                Enrollment.is_completed,
+                Enrollment.status,
+            )
+            .join(Course, Course.id == Enrollment.course_id)
+            .where(and_(Enrollment.user_id == user_id, Enrollment.tenant_id == tenant_id))
+            .order_by(Enrollment.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await self.db.execute(query)
+        return result.all()
+
     async def update_progress(self, user_id: int, course_id: int, tenant_id: int, progress: float) -> Optional[Enrollment]:
         enrollment = await self.get_enrollment(user_id, course_id, tenant_id)
         if enrollment:

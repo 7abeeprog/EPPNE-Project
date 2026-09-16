@@ -42,6 +42,7 @@ from app.domains.commerce.router import router as commerce_router
 from app.domains.communications.router import router as communications_router
 from app.domains.employment.router import router as employment_router
 from app.domains.finance.router import router as finance_router
+from app.domains.guardian.router import router as guardian_router
 from app.domains.health.router import router as health_router
 from app.domains.identity.router import router as identity_router, protected_router as identity_protected_router
 from app.domains.insurance.router import router as insurance_router
@@ -278,6 +279,7 @@ routers_config = [
     (digital_twin_router, "/digital-twin", ["Digital Twin"], "digital_twin"),
     (employment_router, "/employment", ["Employment"], "employment"),
     (finance_router, "/finance", ["Finance"], "finance"),
+    (guardian_router, "/guardian", ["Guardian"], "guardian"),
     (health_router, "/health", ["Health"], "health"),
     (insurance_router, "/insurance", ["Insurance"], "insurance"),
     (invitations_router, "/invitations", ["Invitations"], "invitations"),

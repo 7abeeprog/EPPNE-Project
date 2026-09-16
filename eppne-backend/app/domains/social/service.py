@@ -96,6 +96,11 @@ class SocialService:
         await self._check_saas_limits(tenant_id, "social")
         return await self.repo.get_global_feed(tenant_id, skip, limit)
 
+    async def get_user_activity_summary(self, user_id: int, tenant_id: int) -> dict:
+        """ملخص رقمي بحت لعرض ولي الأمر (guardian overview) — دالة جديدة
+        بحتة، لا تلمس أي منطق فيد/منشورات قائم."""
+        return await self.repo.get_user_activity_summary(user_id, tenant_id)
+
     async def get_post(self, post_id: int, tenant_id: int) -> Post:
         post = await self.repo.get_post(post_id)
         if not post or post.tenant_id != tenant_id:  # type: ignore

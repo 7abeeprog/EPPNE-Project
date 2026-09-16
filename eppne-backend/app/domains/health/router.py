@@ -127,6 +127,7 @@ async def get_my_appointments(
     service = HealthService(db)
     appointments = await service.get_my_appointments(
         user_id=cast(int, current_user.id),
+        tenant_id=cast(int, current_user.tenant_id),
         status_filter=status_filter
     )
     return appointments

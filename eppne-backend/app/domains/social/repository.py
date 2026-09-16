@@ -38,6 +38,38 @@ class SocialRepository:
         )
         return list(result.scalars().all())
 
+    async def get_user_activity_summary(self, user_id: int, tenant_id: int) -> dict:
+        """ملخص رقمي بحت (عدد منشورات/تعليقات + آخر نشاط) لعرض ولي الأمر
+        (guardian overview) — دالة جديدة بحتة، صفر أي محتوى خام. `Post`
+        بلا أي عمود خصوصية على مستوى المنشور (راجع
+        .claude/reports/guardian-overview-endpoint-planning-session-log.md
+        §2)، فالأنسب أمنيًا عد بس بلا نص."""
+        posts_row = (
+            await self.db.execute(
+                select(func.count(Post.id), func.max(Post.created_at)).where(
+                    and_(Post.author_id == user_id, Post.tenant_id == tenant_id, Post.is_deleted == False)
+                )
+            )
+        ).one()
+        comments_row = (
+            await self.db.execute(
+                select(func.count(PostComment.id), func.max(PostComment.created_at)).where(
+                    and_(PostComment.author_id == user_id, PostComment.tenant_id == tenant_id, PostComment.is_deleted == False)
+                )
+            )
+        ).one()
+
+        post_count, last_post_at = posts_row
+        comment_count, last_comment_at = comments_row
+        candidates = [ts for ts in (last_post_at, last_comment_at) if ts is not None]
+        last_activity_at = max(candidates) if candidates else None
+
+        return {
+            "post_count": post_count or 0,
+            "comment_count": comment_count or 0,
+            "last_activity_at": last_activity_at,
+        }
+
     async def add_like(self, post_id: int, user_id: int) -> bool:
         existing = await self.db.execute(select(PostLike).where(PostLike.post_id == post_id, PostLike.user_id == user_id))
         if existing.scalar_one_or_none():
