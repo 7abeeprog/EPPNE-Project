@@ -4349,4 +4349,85 @@ PermissionDeniedError)... except Exception...` **قبل** try/except
 **تحقق حي نهائي:** `pytest tests/test_saas_active_subscription.py` →
 **`4 passed`** (كان `2 failed, 2 passed`). صفر مشاكل تالتة غير متوقعة.
 
+## [2026-09-17] `academy-camera-single-section-consent-scenario-deferred` — ✅ محسوم للـpilot الحالي [2026-09-17]
+
+**الوصف الأصلي:** أثناء تصميم كاميرات academy (راجع
+`.claude/reports/unified-site-model-and-academy-camera-design-proposal.md`
+و`.claude/reports/camera-implementation-step0-single-section-scenario.md`)،
+اتكشف إن opt-out الحقيقي (رفض تسجيل الكاميرا) مستحيل عمليًا لو المدرسة
+عندها section واحد بس لكل صف دراسي — الطالب الرافض مالوش فصل بديل
+ينتقل له. الفحص وقتها أكّد إن السيناريو ده افتراض نظري بحت (صفر مدرسة
+حقيقية onboarded، `AcademyCohort` صفر صف موجود، كل الـ9 enrollments
+الحية `cohort_id = NULL`).
+
+**القرار:** محسوم لصالح **الخيار الأصلي رقم 1 من التقرير، لكن بصيغة
+مختلفة جوهريًا** — مش "قبول الكاميرا شرط إلزامي بعد التسجيل"، بل
+**تصميم المدرسة نفسه قائم من الأساس على "فصول بكاميرات + فصول بدون"
+كخيار (option) على مستوى الفصل نفسه**، يُحدَّد **قبل** أي تسجيل طالب
+فيه — مش نقل اضطراري لاحق. بمعنى: المعضلة الأصلية ("مفيش فصل بديل")
+لا تنطبق على حجم الـpilot الحقيقي المؤكَّد.
+
+**حجم الـpilot المؤكَّد:** 14 مرحلة دراسية (KG1-2, ابتدائي1-6,
+إعدادي1-3, ثانوي1-3) × حتى 5 فصول/مرحلة × كثافة 20-60 طالب/فصل — يعني
+حتى ~70 فصل محتمل لمدرسة واحدة، **مش كلهم بالضرورة بكاميرا**.
+
+**شرط تصميمي جديد ناتج عن هذا القرار (لازم يُضاف لتصميم `Site`/
+`ClassroomCameraAnalysis` قبل أي migration):** حقل صريح (مثلًا
+`has_camera_option`) على مستوى الـcohort/section أو `Site` نفسه، يحدد
+**مسبقًا** هل الفصل ده "مخصَّص كاميرا" — **قرار إداري وقت إنشاء الفصل،
+مش استنتاج لاحق من وجود بيانات `classroom_camera_analyses` مسجَّلة
+فعليًا لهذا الفصل**. هذا يغيّر §1.3/§2.1 من مستند التصميم الأصلي (لسه
+لم يُطبَّق — بانتظار migration الخطوة 2).
+
+**الحالة:** ✅ محسوم للـpilot الحالي [2026-09-17]. التنفيذ الفعلي
+(migration `Site` + الحقل الجديد) لسه لم يبدأ — الجلسة الحالية منتقلة
+لتصميم device authentication (الخطوة 1 من خطة التنفيذ المتفَق عليها)
+قبل أي migration.
+
 **الحالة:** ✅ **الملف بالكامل سليم الآن.** `.claude/reports/backlog-review-2026-09-16-session-log.md`.
+
+## [2026-09-17] ربط الأربعة دومينات بـ`Site` الموحّد (iot/manufacturing/agritech/health) — ✅ مكتمل بالكامل
+
+**السياق:** الخطوة 3 من `.claude/reports/unified-site-model-and-academy-camera-design-proposal.md`
+(§1.4) — ربط كل دومين له مفهوم "موقع فعلي" بـ`Site` الموحّد الجديد
+(migration 057). نُفِّذت على 4 دومينات بالتتابع، بموافقة صريحة قبل كل
+دومين. التقرير الختامي المجمَّع:
+`.claude/reports/unified-site-model-four-domain-rollout-final-summary.md`.
+
+| # | الدومين | الموديل | migration | النوع |
+|---|---|---|---|---|
+| 1 | `iot` | `SmartAsset` | 058 | استبدال كامل (`entity_id`/`location_gps` حُذفا) |
+| 2 | `manufacturing` | `ManufacturingFacility` | 059 | استبدال كامل (`entity_id`/`location_gps` حُذفا، `real_estate_unit_id` بلا لمس) |
+| 3 | `agritech` | `SmartFarm` | 060 | إضافة صافية (`land_asset_id`/`entity_id` الميت بلا لمس) |
+| 4 | `health` | `HealthFacility` | 061 | إضافة صافية — استثناء موثَّق (`entity_id` FK حقيقي لـ`sovereign_entities_v2` عبر migration 052، بلا لمس) |
+
+**سلاسل حذف throwaway قبل فرض `NOT NULL`** (بيانات constructor/regression
+test مؤكَّدة، صفر بيانات إنتاجية، صفر إعادة إدراج): iot (1 صف)،
+manufacturing (5 صفوف/4 جداول)، agritech (10 صفوف/10 جداول)، health (2
+صف/5 جداول مفحوصة).
+
+**فشل جديد وُجد وأُصلح (اختبارات لم تكن تمرّر `site_id` الإلزامي
+الجديد):**
+- `test_agritech_router_wiring.py::test_agritech_full_domain_flow_live`
+- 5 ملفات health: `test_guardian_overview_endpoint_implementation.py`,
+  `test_health_appointments_tenant_isolation_fix.py`,
+  `test_health_entity_membership_full_implementation.py`,
+  `test_health_nameerror_and_fee_ordering_fix.py`,
+  `test_idempotency_truthy_bug_fix.py`
+
+كل الإصلاحات كانت إضافة `Site` fixture + تمريرها + تنظيفها فقط — صفر
+لمس لمنطق الاختبار الأصلي.
+
+**تحقق نهائي:** pytest كامل بعد health → **`13 failed, 225 passed, 2
+xfailed`** — مطابقة حرفية 100% مع baseline المعروف (نفس الـ13 اسم فشل
+الموروثة، غير متعلقة بهذا المجهود). `app.domains.sites` تأكَّد شغّال بعد
+كل الأربعة migrations.
+
+**Backlog مفتوح ناتج عن هذه الجلسة:**
+
+### `agritech-smartfarm-unused-entity-id-column`
+`SmartFarm.entity_id` (nullable, بلا FK) عمود ميت 100% — غائب من
+`SmartFarmCreate` schema، غير مُستخدَم في `service.create_farm()` ولا أي
+مكان تاني. بموافقة المستخدم، تُرك بلا لمس عمدًا (نطاق agritech كان
+"site_id فقط"). **الحالة:** 🟡 مفتوح، أولوية منخفضة — تنظيف مستقبلي منفصل
+تمامًا عن مجهود Site.

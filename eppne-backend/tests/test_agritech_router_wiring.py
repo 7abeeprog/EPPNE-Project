@@ -32,6 +32,7 @@ from app.domains.agritech.models import (
 )
 
 from app.domains.realestate.models import LandAsset, ZoningCategory, LegalStatus
+from app.domains.sites.models import Site, SiteType
 
 TENANT_ID = 1
 OTHER_TENANT_ID = 2
@@ -71,6 +72,13 @@ async def test_agritech_full_domain_flow_live(db):
     manager = await _create_user(db, "p_regtest_agritech_manager")
     land = await _create_land_asset(db, TENANT_ID, manager.id)
 
+    site = Site(
+        tenant_id=TENANT_ID, site_type=SiteType.FARM,
+        name=f"REGTEST-AGRITECH-SITE-{_suffix()}",
+    )
+    db.add(site)
+    await db.flush()
+
     service = AgriTechService(db, TENANT_ID)
 
     farm = zone = cycle = harvest_res = cohort = yield_res = None
@@ -79,6 +87,7 @@ async def test_agritech_full_domain_flow_live(db):
         # ---------- 1. Farms ----------
         farm = await service.create_farm(manager.id, {
             "land_asset_id": land.id,
+            "site_id": site.id,
             "name": f"REGTEST-FARM-{_suffix()}",
             "farm_type": FarmType.HYDROPONICS,
             "total_area_acres": Decimal("12.5"),
@@ -249,6 +258,7 @@ async def test_agritech_full_domain_flow_live(db):
                 await cleanup_db.execute(delete(FarmZone).where(FarmZone.id == zone.id))
             if farm:
                 await cleanup_db.execute(delete(SmartFarm).where(SmartFarm.id == farm.id))
+            await cleanup_db.execute(delete(Site).where(Site.id == site.id))
             await cleanup_db.execute(delete(LandAsset).where(LandAsset.id == land.id))
             await cleanup_db.execute(delete(User).where(User.id == manager.id))
             await cleanup_db.commit()

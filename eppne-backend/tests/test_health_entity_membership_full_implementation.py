@@ -35,6 +35,7 @@ from app.core.models import EntityMembership, EntityMembershipRole
 from app.domains.health.service import HealthService, ENTITY_TYPE
 from app.domains.health.repository import HealthRepository
 from app.domains.health.models import HealthFacility, FacilityCategory
+from app.domains.sites.models import Site, SiteType
 
 TENANT_ID = 1
 
@@ -76,6 +77,14 @@ async def _add_membership(db, *, entity_id: int, user_id: int, role: EntityMembe
     await db.commit()
 
 
+async def _create_site(db) -> Site:
+    site = Site(tenant_id=TENANT_ID, site_type=SiteType.HEALTH_FACILITY, name=f"REGTEST-HEALTHFAC-SITE-{_suffix()}")
+    db.add(site)
+    await db.commit()
+    await db.refresh(site)
+    return site
+
+
 # ============================================================
 # 1) create_facility — عضو (OWNER) ينجح، غير عضو يترفض
 # ============================================================
@@ -86,6 +95,7 @@ async def test_create_facility_owner_succeeds_non_member_rejected(db):
     outsider = await _create_user(db, "p_regtest_healthfacmem_outsider")
     entity = await _create_sovereign_entity(db, owner.id)
     await _add_membership(db, entity_id=entity.id, user_id=owner.id, role=EntityMembershipRole.OWNER)
+    site = await _create_site(db)
 
     service = HealthService(db)
     facility_ids = []
@@ -96,6 +106,7 @@ async def test_create_facility_owner_succeeds_non_member_rejected(db):
             "specialties": ["general"],
             "facility_wallet_address": None,
             "entity_id": entity.id,
+            "site_id": site.id,
         })
         facility_ids.append(facility.id)
         assert facility.entity_id == entity.id
@@ -107,6 +118,7 @@ async def test_create_facility_owner_succeeds_non_member_rejected(db):
                 "specialties": ["general"],
                 "facility_wallet_address": None,
                 "entity_id": entity.id,
+                "site_id": site.id,
             })
     finally:
         async with AsyncSessionLocal() as cleanup_db:
@@ -118,6 +130,7 @@ async def test_create_facility_owner_succeeds_non_member_rejected(db):
                 EntityMembership.user_id == owner.id,
             ))
             await cleanup_db.execute(delete(SovereignEntity).where(SovereignEntity.id == entity.id))
+            await cleanup_db.execute(delete(Site).where(Site.id == site.id))
             await cleanup_db.execute(delete(User).where(User.id.in_([owner.id, outsider.id])))
             await cleanup_db.commit()
 
@@ -131,6 +144,7 @@ async def test_create_facility_executive_director_succeeds(db):
     director = await _create_user(db, "p_regtest_healthfacmem_director")
     entity = await _create_sovereign_entity(db, director.id)
     await _add_membership(db, entity_id=entity.id, user_id=director.id, role=EntityMembershipRole.EXECUTIVE_DIRECTOR)
+    site = await _create_site(db)
 
     service = HealthService(db)
     facility_ids = []
@@ -141,6 +155,7 @@ async def test_create_facility_executive_director_succeeds(db):
             "specialties": ["general"],
             "facility_wallet_address": None,
             "entity_id": entity.id,
+            "site_id": site.id,
         })
         facility_ids.append(facility.id)
         assert facility.entity_id == entity.id
@@ -154,6 +169,7 @@ async def test_create_facility_executive_director_succeeds(db):
                 EntityMembership.user_id == director.id,
             ))
             await cleanup_db.execute(delete(SovereignEntity).where(SovereignEntity.id == entity.id))
+            await cleanup_db.execute(delete(Site).where(Site.id == site.id))
             await cleanup_db.execute(delete(User).where(User.id == director.id))
             await cleanup_db.commit()
 
@@ -167,11 +183,12 @@ async def test_create_facility_executive_director_succeeds(db):
 async def test_facility_entity_deletion_sets_null_not_cascade(db):
     creator = await _create_user(db, "p_regtest_healthfacmem_setnull_creator")
     entity = await _create_sovereign_entity(db, creator.id)
+    site = await _create_site(db)
 
     repo = HealthRepository(db)
     suffix = _suffix()
     facility = await repo.create_facility(
-        tenant_id=TENANT_ID, entity_id=entity.id,
+        tenant_id=TENANT_ID, entity_id=entity.id, site_id=site.id,
         name=f"REGTEST-HEALTHFAC-{suffix}", facility_category=FacilityCategory.CLINIC,
     )
     facility_id = facility.id
@@ -190,5 +207,6 @@ async def test_facility_entity_deletion_sets_null_not_cascade(db):
         assert refreshed.entity_id is None
     finally:
         await db.execute(delete(HealthFacility).where(HealthFacility.id == facility_id))
+        await db.execute(delete(Site).where(Site.id == site.id))
         await db.execute(delete(User).where(User.id == creator.id))
         await db.commit()

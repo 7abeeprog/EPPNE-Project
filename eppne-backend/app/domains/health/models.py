@@ -69,11 +69,17 @@ class BiometricSource(str, enum.Enum):
 
 # ========== 1. المنشآت الصحية (مع Multi-Tenancy) ==========
 class HealthFacility(Base):
+    """site_id إضافة صافية (migration 061) — استثناء بحسب §1.4 من مستند
+    التصميم: entity_id هنا FK حقيقي لـsovereign_entities_v2 (migration
+    052، جزء من مجهود health entity-membership hardening مُغلَق) وبلا لمس
+    إطلاقًا. صفر location_gps هنا من الأساس — إضافة نضيفة 100%. راجع:
+    .claude/reports/unified-site-model-and-academy-camera-design-proposal.md"""
     __tablename__ = "health_facilities"
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     entity_id = Column(Integer, nullable=True, index=True)
+    site_id = Column(Integer, ForeignKey("sites.id"), nullable=False, index=True)
     name = Column(String(255), nullable=False, index=True)
     facility_category = Column(SQLEnum(FacilityCategory), nullable=False)
     supported_targets = Column(JSONB, default=list)

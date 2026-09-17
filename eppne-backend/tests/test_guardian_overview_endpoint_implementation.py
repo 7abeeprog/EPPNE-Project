@@ -48,6 +48,7 @@ from app.domains.transport.models import (
     TransportHub, Fleet, Vehicle, Route, Trip, TripBooking, TransportType, TripCategory,
 )
 from app.domains.health.models import HealthFacility, MedicalAppointment, FacilityCategory, AppointmentStatus
+from app.domains.sites.models import Site, SiteType
 
 TENANT_ID = 1
 ADULT_BIRTH_DATE = date(1990, 1, 1)
@@ -97,6 +98,7 @@ class _Fixtures:
         self.booking_id = None
         self.facility_id = None
         self.appointment_id = None
+        self.health_site_id = None
 
 
 async def _build_ward_activity(db, ward_id: int, doctor_id: int, driver_id: int) -> _Fixtures:
@@ -196,7 +198,12 @@ async def _build_ward_activity(db, ward_id: int, doctor_id: int, driver_id: int)
     fx.booking_id = booking.id
 
     # ---- HEALTH: منشأة + موعد ----
-    facility = HealthFacility(tenant_id=TENANT_ID, name=f"REGTEST-CLINIC-{suffix}", facility_category=FacilityCategory.CLINIC)
+    health_site = Site(tenant_id=TENANT_ID, site_type=SiteType.HEALTH_FACILITY, name=f"REGTEST-HEALTH-SITE-{suffix}")
+    db.add(health_site)
+    await db.flush()
+    fx.health_site_id = health_site.id
+
+    facility = HealthFacility(tenant_id=TENANT_ID, site_id=health_site.id, name=f"REGTEST-CLINIC-{suffix}", facility_category=FacilityCategory.CLINIC)
     db.add(facility)
     await db.flush()
     fx.facility_id = facility.id
@@ -220,6 +227,8 @@ async def _cleanup_all(user_ids, relationship_id, fx: _Fixtures):
             await cleanup_db.execute(delete(MedicalAppointment).where(MedicalAppointment.id == fx.appointment_id))
         if fx.facility_id:
             await cleanup_db.execute(delete(HealthFacility).where(HealthFacility.id == fx.facility_id))
+        if fx.health_site_id:
+            await cleanup_db.execute(delete(Site).where(Site.id == fx.health_site_id))
         if fx.booking_id:
             await cleanup_db.execute(delete(TripBooking).where(TripBooking.id == fx.booking_id))
         if fx.trip_id:

@@ -66,6 +66,7 @@ class AgriTechService:
             tenant_id=self.tenant_id,
             manager_id=user_id,
             land_asset_id=data["land_asset_id"],
+            site_id=data["site_id"],
             name=sanitized_name,
             farm_type=data["farm_type"],
             total_area_acres=data["total_area_acres"],

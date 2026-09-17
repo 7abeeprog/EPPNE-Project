@@ -91,6 +91,7 @@ from app.domains.health.models import (
 from app.domains.communications.router import send_notification, send_mail
 from app.domains.communications.schemas import NotificationCreate, MailMessageCreate
 from app.domains.communications.models import Notification, MailMessage, MailThread, MailboxItem
+from app.domains.sites.models import Site, SiteType
 
 TENANT_ID = 1
 
@@ -137,9 +138,14 @@ async def test_book_appointment_first_call_executes_second_call_returns_same_app
     doctor = await _create_user(db, "p_idem_appt_doctor")
     tenant = SimpleNamespace(id=TENANT_ID)
 
+    site = Site(tenant_id=TENANT_ID, site_type=SiteType.HEALTH_FACILITY, name=f"REGTEST-IdemSite-{_suffix()}")
+    db.add(site)
+    await db.flush()
+
     health_repo = HealthRepository(db)
     facility = await health_repo.create_facility(
         tenant_id=TENANT_ID,
+        site_id=site.id,
         name=f"REGTEST-IdemFacility-{_suffix()}",
         facility_category=FacilityCategory.CLINIC,
     )
@@ -183,6 +189,7 @@ async def test_book_appointment_first_call_executes_second_call_returns_same_app
         async with AsyncSessionLocal() as cleanup_db:
             await cleanup_db.execute(delete(MedicalAppointment).where(MedicalAppointment.doctor_id == doctor.id))
             await cleanup_db.execute(delete(HealthFacility).where(HealthFacility.id == facility.id))
+            await cleanup_db.execute(delete(Site).where(Site.id == site.id))
             await cleanup_db.commit()
         await _cleanup_users_and_finance(db, [patient.id, doctor.id])
 

@@ -105,11 +105,10 @@ class ManufacturingService:
         async with self.db.begin_nested():
             facility = await self.repo.create_facility(
                 tenant_id=tenant_id,
-                entity_id=data["entity_id"],
+                site_id=data["site_id"],
                 manager_id=user_id,
                 name=sanitized_name,
                 facility_type=data["facility_type"],
-                location_gps=data.get("location_gps"),
                 real_estate_unit_id=data.get("real_estate_unit_id")
             )
 

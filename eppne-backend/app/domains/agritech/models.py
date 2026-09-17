@@ -58,12 +58,19 @@ class BioProductType(str, enum.Enum):
 
 # ========== 1. المزارع السيادية ==========
 class SmartFarm(Base):
+    """site_id إضافة صافية (migration 060) — لا استبدال هنا، بعكس iot/
+    manufacturing: مفيش location_gps أصلًا، و entity_id (ميت، بلا FK،
+    غير مستخدم في أي كود) بلا لمس عمدًا (راجع: backlog
+    agritech-smartfarm-unused-entity-id-column). land_asset_id بلا لمس
+    أيضًا — سؤال مختلف ("مسجَّلة على أي أرض"). راجع:
+    .claude/reports/unified-site-model-and-academy-camera-design-proposal.md"""
     __tablename__ = "smart_farms"
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     land_asset_id = Column(Integer, ForeignKey("land_assets.id"), nullable=False, index=True)
     entity_id = Column(Integer, nullable=True, index=True)
+    site_id = Column(Integer, ForeignKey("sites.id"), nullable=False, index=True)
     manager_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     name = Column(String(255), nullable=False)

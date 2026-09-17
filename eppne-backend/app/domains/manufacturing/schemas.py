@@ -11,10 +11,9 @@ from app.domains.manufacturing.models import FacilityType, ProductionStatus, Pro
 # ============================================================
 
 class ManufacturingFacilityCreate(BaseModel):
-    entity_id: int = Field(description="معرف الكيان المرتبط")
+    site_id: int = Field(description="معرف الـSite (الموقع الفعلي للمنشأة)")
     name: str = Field(description="اسم المنشأة")
     facility_type: FacilityType = Field(description="نوع المنشأة")
-    location_gps: Optional[Dict[str, float]] = Field(default=None, description="الموقع الجغرافي")
     real_estate_unit_id: Optional[int] = Field(default=None, description="معرف الوحدة العقارية")
 
 

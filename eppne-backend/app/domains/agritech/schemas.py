@@ -8,6 +8,7 @@ from app.domains.agritech.models import FarmType, CropCategory, HarvestGrade, Bi
 # ========== Farms ==========
 class SmartFarmCreate(BaseModel):
     land_asset_id: int
+    site_id: int
     name: str
     farm_type: FarmType
     total_area_acres: Decimal

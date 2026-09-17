@@ -29,6 +29,7 @@ from app.domains.identity.models import User
 from app.domains.health.service import HealthService
 from app.domains.health.repository import HealthRepository
 from app.domains.health.models import MedicalAppointment, HealthFacility, FacilityCategory, AppointmentStatus
+from app.domains.sites.models import Site, SiteType
 
 TENANT_ID = 1
 WRONG_TENANT_ID = 16
@@ -57,9 +58,16 @@ async def test_get_my_appointments_isolates_by_tenant_id(db):
     service = HealthService(db)
     facility_id = None
     appointment_id = None
+    site_id = None
     try:
+        site = Site(tenant_id=TENANT_ID, site_type=SiteType.HEALTH_FACILITY, name=f"REGTEST-HEALTH-SITE-{_suffix()}")
+        db.add(site)
+        await db.flush()
+        site_id = site.id
+
         facility = await repo.create_facility(
             tenant_id=TENANT_ID,
+            site_id=site_id,
             name=f"REGTEST-CLINIC-{_suffix()}",
             facility_category=FacilityCategory.CLINIC,
         )
@@ -101,5 +109,7 @@ async def test_get_my_appointments_isolates_by_tenant_id(db):
                 await cleanup_db.execute(delete(MedicalAppointment).where(MedicalAppointment.id == appointment_id))
             if facility_id:
                 await cleanup_db.execute(delete(HealthFacility).where(HealthFacility.id == facility_id))
+            if site_id:
+                await cleanup_db.execute(delete(Site).where(Site.id == site_id))
             await cleanup_db.execute(delete(User).where(User.id.in_([patient_id, doctor_id])))
             await cleanup_db.commit()

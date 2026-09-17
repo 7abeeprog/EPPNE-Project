@@ -57,6 +57,7 @@ from app.domains.projects.router import router as projects_router
 from app.domains.realestate.router import router as realestate_router
 from app.domains.saas.router import router as saas_router
 from app.domains.service_marketplace.router import router as marketplace_router
+from app.domains.sites.router import router as sites_router
 from app.domains.social.router import router as social_router
 from app.domains.sovereign_entities.router import router as sovereign_router
 from app.domains.tenders_auctions.router import router as tenders_auctions_router
@@ -294,6 +295,7 @@ routers_config = [
     (realestate_router, "/realestate", ["Real Estate"], "realestate"),
     (saas_router, "/saas", ["SaaS"], "saas"),
     (marketplace_router, "/marketplace", ["Service Marketplace"], "marketplace"),
+    (sites_router, "/sites", ["Sites"], "sites"),
     (social_router, "/social", ["Social"], "social"),
     (sovereign_router, "/sovereign", ["Sovereign Entities"], "sovereign"),
     (tenders_auctions_router, "/tenders", ["Tenders & Auctions"], "tenders"),

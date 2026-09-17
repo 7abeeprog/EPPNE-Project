@@ -35,6 +35,8 @@ from app.domains.iot.service import IoTService
 from app.domains.iot.models import SmartAsset, UtilityReading, AssetClass, UtilityType, IoTRequestLog
 from app.domains.iot.schemas import CarbonSettlementResponse
 
+from app.domains.sites.models import Site, SiteType
+
 from app.domains.finance.models import Wallet, Transaction, AuditLog as FinanceAuditLog
 from app.domains.finance.repository import WalletRepository
 
@@ -71,7 +73,7 @@ async def _ensure_system_wallet_funded(db, min_balance: float):
     return system_user.id, wallet.id, original_balances
 
 
-async def _cleanup(user_ids, asset_ids, reading_ids, system_wallet_id, system_original_balances):
+async def _cleanup(user_ids, asset_ids, reading_ids, system_wallet_id, system_original_balances, site_ids=None):
     async with AsyncSessionLocal() as cdb:
         await cdb.execute(delete(FinanceAuditLog).where(FinanceAuditLog.user_id.in_(user_ids)))
         await cdb.execute(delete(Transaction).where(
@@ -80,6 +82,8 @@ async def _cleanup(user_ids, asset_ids, reading_ids, system_wallet_id, system_or
         await cdb.execute(delete(IoTRequestLog).where(IoTRequestLog.user_id.in_(user_ids)))
         await cdb.execute(delete(UtilityReading).where(UtilityReading.id.in_(reading_ids)))
         await cdb.execute(delete(SmartAsset).where(SmartAsset.id.in_(asset_ids)))
+        if site_ids:
+            await cdb.execute(delete(Site).where(Site.id.in_(site_ids)))
         await cdb.execute(delete(User).where(User.id.in_(user_ids)))  # Wallet ondelete=CASCADE
         await cdb.execute(update(Wallet).where(Wallet.id == system_wallet_id).values(balances=system_original_balances))
         await cdb.commit()
@@ -91,15 +95,24 @@ async def test_settle_carbon_credits_success_matches_response_schema(db):
     user_ids = [owner.id]
     asset_ids = []
     reading_ids = []
+    site_ids = []
     system_wallet_id = None
     system_original_balances = None
 
     try:
         system_user_id, system_wallet_id, system_original_balances = await _ensure_system_wallet_funded(db, min_balance=1000)
 
+        site = Site(
+            tenant_id=TENANT_ID, site_type=SiteType.GENERIC,
+            name=f"REGTEST-CARBONSETTLE-SITE-{_suffix()}",
+        )
+        db.add(site)
+        await db.flush()
+        site_ids.append(site.id)
+
         repo = IoTRepository(db)
         asset = await repo.create_asset(
-            tenant_id=TENANT_ID, owner_id=owner.id,
+            tenant_id=TENANT_ID, owner_id=owner.id, site_id=site.id,
             asset_code=f"REGTEST-CARBONSETTLE-{_suffix()}",
             asset_class=AssetClass.UTILITY_METER,
             specs={},
@@ -134,7 +147,7 @@ async def test_settle_carbon_credits_success_matches_response_schema(db):
         refreshed = await db.execute(select(UtilityReading).where(UtilityReading.id == reading.id))
         assert refreshed.scalar_one().is_settled_on_chain is True, "FAIL: القراءة لسه مش متسواة بعد settle_carbon_credits"
     finally:
-        await _cleanup(user_ids, asset_ids, reading_ids, system_wallet_id, system_original_balances)
+        await _cleanup(user_ids, asset_ids, reading_ids, system_wallet_id, system_original_balances, site_ids)
 
 
 @pytest.mark.asyncio

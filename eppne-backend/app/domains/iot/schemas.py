@@ -11,17 +11,16 @@ from app.domains.iot.models import AssetClass, UtilityType, GridStationType, Dev
 # ============================================================
 
 class SmartAssetCreate(BaseModel):
-    entity_id: Optional[int] = Field(default=None, description="معرف الكيان")
+    site_id: int = Field(description="معرف الـSite (فصل/منشأة/موقع فعلي)")
     asset_code: str = Field(description="رمز الأصل")
     asset_class: AssetClass = Field(description="فئة الأصل")
-    location_gps: Optional[Dict[str, float]] = Field(default=None, description="الموقع الجغرافي")
     specs: Dict[str, Any] = Field(default_factory=dict, description="المواصفات")
     hardware_did: Optional[str] = Field(default=None, description="معرف الأجهزة")
     iot_wallet_address: Optional[str] = Field(default=None, description="عنوان محفظة IoT")
 
 
 class SmartAssetUpdate(BaseModel):
-    location_gps: Optional[Dict[str, float]] = Field(default=None, description="الموقع الجغرافي")
+    site_id: Optional[int] = Field(default=None, description="معرف الـSite (فصل/منشأة/موقع فعلي)")
     specs: Optional[Dict[str, Any]] = Field(default=None, description="المواصفات")
     is_online: Optional[bool] = Field(default=None, description="هل الجهاز متصل؟")
     health_status: Optional[DeviceHealthStatus] = Field(default=None, description="حالة الصحة")

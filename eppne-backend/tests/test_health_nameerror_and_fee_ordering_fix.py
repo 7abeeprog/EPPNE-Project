@@ -70,6 +70,7 @@ from app.domains.health.models import (
 )
 from app.domains.sovereign_entities.models import SovereignEntity, SovereignEntityType
 from app.core.models import EntityMembership, EntityMembershipRole
+from app.domains.sites.models import Site, SiteType
 
 TENANT_ID = 1
 
@@ -137,9 +138,15 @@ async def test_create_facility_endpoint_persists_with_correct_audit_data(db):
     ))
     await db.commit()
 
+    site = Site(tenant_id=TENANT_ID, site_type=SiteType.HEALTH_FACILITY, name=f"REGTEST-HEALTHFAC-NAMEERROR-SITE-{suffix}")
+    db.add(site)
+    await db.commit()
+    await db.refresh(site)
+
     tenant = SimpleNamespace(id=TENANT_ID)
     data = HealthFacilityCreate(
         entity_id=entity.id,
+        site_id=site.id,
         name=f"REGTEST-Clinic-{suffix}",
         facility_category=FacilityCategory.CLINIC,
         specialties=["general"],
@@ -168,6 +175,7 @@ async def test_create_facility_endpoint_persists_with_correct_audit_data(db):
                 EntityMembership.user_id == admin.id,
             ))
             await cleanup_db.execute(delete(SovereignEntity).where(SovereignEntity.id == entity.id))
+            await cleanup_db.execute(delete(Site).where(Site.id == site.id))
             await cleanup_db.commit()
         await _cleanup_users_and_finance(db, [admin.id])
 
@@ -223,9 +231,14 @@ async def test_book_appointment_endpoint_success_charges_fee_exactly_once(db):
     doctor = await _create_user(db, "p_health_appt_doctor")
     tenant = SimpleNamespace(id=TENANT_ID)
 
+    site = Site(tenant_id=TENANT_ID, site_type=SiteType.HEALTH_FACILITY, name=f"REGTEST-ApptSite-{_suffix()}")
+    db.add(site)
+    await db.flush()
+
     health_repo = HealthRepository(db)
     facility = await health_repo.create_facility(
         tenant_id=TENANT_ID,
+        site_id=site.id,
         name=f"REGTEST-ApptFacility-{_suffix()}",
         facility_category=FacilityCategory.CLINIC,
     )
@@ -273,6 +286,7 @@ async def test_book_appointment_endpoint_success_charges_fee_exactly_once(db):
         async with AsyncSessionLocal() as cleanup_db:
             await cleanup_db.execute(delete(MedicalAppointment).where(MedicalAppointment.doctor_id == doctor.id))
             await cleanup_db.execute(delete(HealthFacility).where(HealthFacility.id == facility.id))
+            await cleanup_db.execute(delete(Site).where(Site.id == site.id))
             await cleanup_db.commit()
         await _cleanup_users_and_finance(db, [patient.id, doctor.id])
 

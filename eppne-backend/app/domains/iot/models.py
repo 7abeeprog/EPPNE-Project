@@ -39,16 +39,19 @@ class DeviceHealthStatus(str, enum.Enum):
 
 # ========== 1. الأصول الذكية (كاميرات، وحدات، عدادات) ==========
 class SmartAsset(Base):
+    """site_id يستبدل entity_id/location_gps القديمين بالكامل (migration
+    058) — استبدال كامل، لا مرحلة انتقالية، بحسب §1.4 من مستند التصميم
+    (صفر بيانات حقيقية وقت التنفيذ). راجع:
+    .claude/reports/unified-site-model-and-academy-camera-design-proposal.md"""
     __tablename__ = "smart_assets"
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    entity_id = Column(Integer, nullable=True, index=True)
+    site_id = Column(Integer, ForeignKey("sites.id"), nullable=False, index=True)
     owner_id = Column(BigInteger, ForeignKey("users.id"), nullable=True, index=True)
 
     asset_code = Column(String(100), unique=True, index=True, nullable=False)
     asset_class = Column(SQLEnum(AssetClass), nullable=False, index=True)
-    location_gps = Column(JSONB, nullable=True)
     specs = Column(JSONB, default=dict)
 
     is_online = Column(Boolean, default=False)
@@ -63,7 +66,7 @@ class SmartAsset(Base):
     is_deleted = Column(Boolean, default=False)
 
     __table_args__ = (
-        Index("ix_smart_asset_entity", "entity_id"),
+        Index("ix_smart_asset_site", "site_id"),
         Index("ix_smart_asset_owner", "owner_id"),
         Index("ix_smart_asset_class", "asset_class"),
     )

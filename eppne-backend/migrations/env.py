@@ -23,6 +23,7 @@ from app.core.config import settings
 
 # المستوى 0: بنية تحتية عامة عابرة للدومينات
 from app.core.models import *
+from app.domains.sites.models import *
 
 # المستوى 1: القطاعات السيادية الأساسية
 from app.domains.identity.models import *

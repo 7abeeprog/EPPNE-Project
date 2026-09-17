@@ -43,15 +43,18 @@ class TrackingStatus(str, enum.Enum):
 # ========== المنشآت الصناعية ==========
 
 class ManufacturingFacility(Base):
+    """site_id يستبدل entity_id/location_gps القديمين بالكامل (migration
+    059) — استبدال كامل بحسب §1.4 من مستند التصميم. real_estate_unit_id
+    سؤال مختلف تمامًا (على أي عقار مبني المصنع) ويبقى بلا لمس. راجع:
+    .claude/reports/unified-site-model-and-academy-camera-design-proposal.md"""
     __tablename__ = "manufacturing_facilities"
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
     real_estate_unit_id = Column(Integer, ForeignKey("property_units.id"), nullable=True, index=True)
-    entity_id = Column(Integer, nullable=False, index=True)
+    site_id = Column(Integer, ForeignKey("sites.id"), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     facility_type = Column(SQLEnum(FacilityType), nullable=False)
-    location_gps = Column(JSONB, nullable=True)
 
     manager_id = Column(BigInteger, ForeignKey("users.id"), nullable=False)
     safety_compliance_score = Column(Numeric(5, 2), default=100.0)
@@ -64,7 +67,7 @@ class ManufacturingFacility(Base):
 
     __table_args__ = (
         Index("ix_manufacturing_facility_tenant", "tenant_id"),
-        Index("ix_manufacturing_facility_entity", "entity_id"),
+        Index("ix_manufacturing_facility_site", "site_id"),
         Index("ix_manufacturing_facility_type", "facility_type"),
     )
 
