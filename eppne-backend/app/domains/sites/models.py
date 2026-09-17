@@ -19,6 +19,8 @@ class SiteType(str, enum.Enum):
     Postgres، لإضافة قيمة جديدة (مثلًا NURSERY) بصفر migration مستقبلًا.
     راجع §1.3.1 من مستند التصميم."""
     ACADEMY_CAMPUS = "ACADEMY_CAMPUS"
+    GRADE_LEVEL = "GRADE_LEVEL"  # ابن مباشر لـACADEMY_CAMPUS — شجرة academy site hierarchy
+    CLASSROOM = "CLASSROOM"  # ابن مباشر لـGRADE_LEVEL — نفس الشجرة
     FACTORY = "FACTORY"
     FARM = "FARM"
     HEALTH_FACILITY = "HEALTH_FACILITY"

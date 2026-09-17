@@ -17,6 +17,11 @@ from app.domains.academy.repository import AcademyRepository
 from app.domains.academy.models import Course, Enrollment, TaskSubmission
 from app.domains.academy.schemas import *
 
+from app.domains.sites.service import SiteService
+from app.domains.sites.schemas import (
+    AcademyCampusCreate, GradeLevelCreate, ClassroomCreate, SiteResponse,
+)
+
 # ============================================================
 # 🔥 دوال مساعدة للـ Rate Limiting (مؤقتاً في الذاكرة)
 # ============================================================
@@ -658,3 +663,70 @@ async def get_my_digital_twin(
     service = AcademyService(db, tenant_id)
     twin = await service.get_or_create_digital_twin(cast(int, current_user.id))
     return twin
+
+# ============================================================
+# Site Hierarchy (مدرسة ← مرحلة ← فصل) — POST+GET فقط في هذه الدفعة.
+# DELETE وربط classroom_camera_analyses.site_id مؤجَّلان عمدًا لخطوات
+# منفصلة لاحقة. نفس نمط صلاحيات create_cohort/create_track بالحرف
+# (get_current_superuser = SUPER_ADMIN/EXECUTIVE_DIRECTOR).
+# ============================================================
+@router.post("/sites", response_model=SiteResponse, status_code=201)
+async def create_academy_campus(
+    data: AcademyCampusCreate,
+    current_user: User = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = cast(int, current_user.tenant_id)
+    service = SiteService(db, tenant_id)
+    return await service.create_academy_campus(data.name)
+
+@router.get("/sites", response_model=List[SiteResponse])
+async def list_academy_campuses(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = cast(int, current_user.tenant_id)
+    service = SiteService(db, tenant_id)
+    return await service.list_academy_campuses()
+
+@router.post("/sites/{school_id}/grades", response_model=SiteResponse, status_code=201)
+async def create_grade_level(
+    school_id: int,
+    data: GradeLevelCreate,
+    current_user: User = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = cast(int, current_user.tenant_id)
+    service = SiteService(db, tenant_id)
+    return await service.create_grade_level(school_id, data.name)
+
+@router.get("/sites/{school_id}/grades", response_model=List[SiteResponse])
+async def list_grade_levels(
+    school_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = cast(int, current_user.tenant_id)
+    service = SiteService(db, tenant_id)
+    return await service.list_grade_levels(school_id)
+
+@router.post("/sites/{grade_id}/classes", response_model=SiteResponse, status_code=201)
+async def create_classroom(
+    grade_id: int,
+    data: ClassroomCreate,
+    current_user: User = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = cast(int, current_user.tenant_id)
+    service = SiteService(db, tenant_id)
+    return await service.create_classroom(grade_id, data.name, data.max_capacity)
+
+@router.get("/sites/{grade_id}/classes", response_model=List[SiteResponse])
+async def list_classrooms(
+    grade_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    tenant_id = cast(int, current_user.tenant_id)
+    service = SiteService(db, tenant_id)
+    return await service.list_classrooms(grade_id)

@@ -4431,3 +4431,76 @@ xfailed`** — مطابقة حرفية 100% مع baseline المعروف (نفس
 مكان تاني. بموافقة المستخدم، تُرك بلا لمس عمدًا (نطاق agritech كان
 "site_id فقط"). **الحالة:** 🟡 مفتوح، أولوية منخفضة — تنظيف مستقبلي منفصل
 تمامًا عن مجهود Site.
+
+---
+
+## جلسة `academy-site-hierarchy-endpoints-implementation` (2026-09-17)
+
+**الهدف:** endpoints لإدارة شجرة Site الأكاديمية (مدرسة → مرحلة → فصل)
+فوق `app/domains/sites/models.py` (migration 057، كان صفر
+service/repository/endpoint فعلي قبل هذه الجلسة — راجع الجلسة التصميمية
+السابقة read-only، صفر كود).
+
+**تحقق قبل التنفيذ (صحّح افتراض تصميمي):**
+- `SiteType` مؤكَّد `native_enum=False` — إضافة `GRADE_LEVEL`/`CLASSROOM`
+  تمت بصفر migration (VARCHAR بلا CHECK constraint).
+- ⚠️ الافتراض الأصلي إن `ClassroomCameraAnalysis.site_id` موجود غلط —
+  الموديل الفعلي (`academy/models.py:487-507`) بيربط بـ`org_entity_id`
+  بس، **صفر عمود `site_id`** أصلًا. رُبط هذا الجزء بالكامل — لو لزم مستقبلًا
+  محتاج migration منفصلة لإضافة العمود، خارج نطاق هذه الجلسة عمدًا.
+- نمط الصلاحيات مؤكَّد: `get_current_superuser` (شرط
+  `system_role in [SUPER_ADMIN, EXECUTIVE_DIRECTOR]`) هو نفسه المستخدَم
+  فعليًا لكل endpoint إنشاء هرمية تنظيمية في academy
+  (`/tenants`, `/entities`, `/tracks`, `/cohorts`) — اتّبع بالحرف، صفر
+  نمط صلاحيات جديد.
+
+**نُفِّذ (POST+GET فقط، بقرار نطاق صريح — DELETE وربط
+`classroom_camera_analyses.site_id` مؤجَّلان عمدًا):**
+- ملفات جديدة: `app/domains/sites/schemas.py`,
+  `app/domains/sites/repository.py`, `app/domains/sites/service.py`
+  (`SiteService` عام قابل لإعادة الاستخدام لأنواع `Site` تانية مستقبلًا —
+  مش خاص بـacademy فقط).
+- `app/domains/sites/models.py`: أُضيف `SiteType.GRADE_LEVEL` و
+  `SiteType.CLASSROOM` (صفر migration، راجع فوق).
+- `app/domains/academy/router.py`: 6 endpoints جديدة تحت prefix
+  `/academy` الموجود (`POST/GET /sites`,
+  `POST/GET /sites/{school_id}/grades`,
+  `POST/GET /sites/{grade_id}/classes`) — تحقق `parent.site_type` عند كل
+  إنشاء (`ValidationError` → 422 لو أصل من نوع خطأ، `NotFoundError` → 404
+  لو الأصل مش موجود).
+- `max_capacity` للفصل (validation 20-60 عبر Pydantic `Field`) اتخزّن
+  جوّه `Site.geo_metadata` (JSONB) — **قرار نطاق واعٍ**: صفر عمود مخصص
+  بصفر migration جديدة في هذه الدفعة، رغم إن اسم العمود "geo_metadata"
+  مش دقيق دلاليًا لبيانات غير جغرافية. لو ده اتلاحظ كإشكال مستقبلًا،
+  الحل الأنظف عمود `capacity` مخصص عبر migration منفصلة.
+
+**اختبار حي وُجد فيه باج حقيقي في نمط الاختبار نفسه (مش في الكود
+المُنتَج):** `test_academy_site_hierarchy_endpoints_implementation.py`
+— أول تشغيلة كاملة كشفت فشل جديد واحد (`test_list_endpoints_scoped_by_tenant_and_parent`،
+`AttributeError: 'NoneType' object has no attribute 'send'` / `RuntimeError:
+Event loop is closed`) بيظهر بس لما الاختبارات تتشغّل بالتتابع، مش منفردة.
+السبب: اختبار سابق في نفس الملف كان بيفتح `AsyncSessionLocal()` يدويًا
+بلا طلب fixture الـ`db` من `conftest.py` — فـ`engine.dispose()` الإلزامي
+على Windows (موثَّق في `conftest.py:19-25`) ما كانش بيتنفّذ، فسابت
+connections متسربة من event loop قديم للاختبار اللي بعده. الإصلاح: خلي
+الاختبار يطلب fixture الـ`db` بدل `AsyncSessionLocal()` يدوي.
+
+**تحقق نهائي:** pytest كامل (باستثناء
+`test_affiliate_service_missing_methods.py` collection error المعروف
+مسبقًا، غير متعلق) → **`13 failed, 229 passed, 2 xfailed`** — مطابقة
+حرفية 100% مع baseline المعروف (نفس الـ13 اسم فشل الموروثة بالحرف). صفر
+regression. الجلسة توقفت هنا بقرار المستخدم — زرع بيانات pilot فعلية أو
+ربط الكاميرا مؤجَّلان لموافقة منفصلة.
+
+**Backlog مفتوح ناتج عن هذه الجلسة:**
+
+### `site-classroom-max-capacity-in-geo-metadata-field`
+`max_capacity` للفصول (`Site.site_type=CLASSROOM`) متخزّنة حاليًا جوّه
+`Site.geo_metadata` (JSONB، `{"max_capacity": N}`) بدل عمود مخصص —
+موديل `Site` الأصلي (migration 057) ما فيهوش عمود `capacity`، والقرار
+كان تفادي migration جديدة لحقل واحد في دفعة POST+GET هذه الجلسة. اسم
+الحقل "geo_metadata" غير دقيق دلاليًا لبيانات غير جغرافية زي السعة.
+**الحالة:** 🟡 مفتوح، أولوية منخفضة — يستاهل migration منفصلة مستقبلية
+لعمود `capacity` مخصص لو الفريق حاب حل أنظف. راجع
+`.claude/reports/academy-site-hierarchy-endpoints-implementation-session-log.md`
+§2.
