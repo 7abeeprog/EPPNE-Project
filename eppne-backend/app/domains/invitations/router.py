@@ -3,6 +3,7 @@
 مسارات (Endpoints) قطاع الدعوات وخدمة العملاء – النسخة الذهبية
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks, Header, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List, cast
@@ -17,6 +18,12 @@ from app.domains.academy.models import AcademyTenant
 from app.core.rate_limiter import rate_limit
 
 router = APIRouter(prefix="/invitations", tags=["Sovereign CRM & Invitations"])
+
+_REGISTRATION_VIA_INVITATION_REQUIRED_MESSAGE = (
+    "Account creation through invitation acceptance is not supported on this endpoint. "
+    "Registration is done through the registration flow. "
+    "Registered users must authenticate to accept an invitation."
+)
 
 
 # ============================================================
@@ -565,23 +572,40 @@ async def delete_invitation(
     return {"message": "Invitation deleted"}
 
 
-@router.post("/{invitation_id}/accept", response_model=InvitationAcceptResponse)
+@router.post(
+    "/{invitation_id}/accept",
+    response_model=InvitationAcceptResponse,
+    responses={
+        401: {
+            "model": InvitationAcceptUnauthorizedResponse,
+            "description": "Anonymous caller: account creation via invitation acceptance is not supported.",
+            "headers": {"WWW-Authenticate": {"description": "Bearer", "schema": {"type": "string"}}},
+        }
+    },
+)
 @rate_limit(max_requests=10, window_seconds=60)
 async def accept_invitation(
     invitation_id: int,
     data: InvitationAccept,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
+    if current_user is None:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            headers={"WWW-Authenticate": "Bearer"},
+            content={
+                "detail": _REGISTRATION_VIA_INVITATION_REQUIRED_MESSAGE,
+                "code": "REGISTRATION_VIA_INVITATION_REQUIRED",
+            },
+        )
     service = InvitationsService(db)
-    user_id = cast(int, current_user.id) if current_user else None
     result = await service.accept_invitation(
         invitation_id=invitation_id,
-        tenant_id=cast(int, tenant.id),
+        tenant_id=cast(int, current_user.tenant_id),
         accept_data=data.model_dump(),
-        user_id=user_id,
+        user_id=cast(int, current_user.id),
         idempotency_key=idempotency_key
     )
     return result

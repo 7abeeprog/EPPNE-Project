@@ -114,17 +114,6 @@ class InvitationsService:
         )
         return agents.data[0] if agents.data else None
 
-    async def _create_user_from_invitation(self, data: dict, tenant_id: int, invitation_id: int):
-        from app.domains.identity.service import UserService
-        identity_service = UserService(self.db, tenant_id)
-        from app.domains.identity.schemas import UserCreate
-        user_create = UserCreate(
-            username=data.get("email", "").split("@")[0],
-            email=cast(str, data.get("email")),
-            password=data.get("password", "TempPass123!")
-        )
-        return await identity_service.register(user_create, f"INV-ACCEPT-T{tenant_id}-{invitation_id}")
-
     async def _apply_discount_gift(self, user_id: int, invitation: SovereignInvitation):
         pass
 
@@ -273,7 +262,7 @@ class InvitationsService:
         invitation_id: int,
         tenant_id: int,
         accept_data: Dict[str, Any],
-        user_id: Optional[int] = None,
+        user_id: int,
         idempotency_key: Optional[str] = None
     ) -> Dict[str, Any]:
         await self._check_saas_limits(tenant_id, "crm")
@@ -286,10 +275,6 @@ class InvitationsService:
         invitation = await self.repo.get_invitation(invitation_id, tenant_id)
         if not invitation or invitation.status != InvitationStatus.SENT:  # type: ignore
             raise NotFoundError("Invitation not found or not sent")
-
-        if not user_id:
-            new_user = await self._create_user_from_invitation(accept_data, tenant_id, invitation_id)
-            user_id = cast(int, new_user.id)
 
         async with self.db.begin_nested():
             lead = await self.repo.create_lead(

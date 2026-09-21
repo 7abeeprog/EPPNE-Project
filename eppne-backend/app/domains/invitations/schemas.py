@@ -92,6 +92,11 @@ class InvitationAcceptResponse(BaseModel):
     redirect_url: str
 
 
+class InvitationAcceptUnauthorizedResponse(BaseModel):
+    detail: str
+    code: Literal["REGISTRATION_VIA_INVITATION_REQUIRED"]
+
+
 # ============================================================
 # 2. العملاء المحتملون (Leads)
 # ============================================================
