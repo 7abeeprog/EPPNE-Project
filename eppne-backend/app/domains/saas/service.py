@@ -258,6 +258,7 @@ class SaaSControlService:
             self.tenant_id,
             status="CANCELLED",
             auto_renew=False,
+            cancelled_at=datetime.now(timezone.utc),
         )
         await self.db.commit()
         return result
@@ -548,6 +549,57 @@ class SaaSControlService:
                 logger.error(f"Trial expiry reminder failed: subscription {sub_id} - {str(e)}")
 
         return reminders_sent
+
+    async def cleanup_cancelled_subscriptions(self, tenant_id: Optional[int] = None) -> int:
+        """المرحلة أ فقط من تنظيف الاشتراكات الملغاة — تعطيل
+        TenantServiceAccess.is_active للاشتراكات CANCELLED منذ 30 يومًا
+        فأكثر (cancelled_at <= الآن - 30 يوم). بلا أي حذف أو تعمية
+        لبيانات شخصية — ده مؤجَّل عمدًا لجلسة تصميم منفصلة تراجع دومين
+        privacy (راجع cleanup-cancelled-subscriptions-task-fix-session-
+        log.md §backlog، ونطاق ضيق موثَّق صراحةً هناك، بعكس ادّعاء
+        الـdocstring الأصلي في saas_tasks.py "حذف بيانات المستخدمين").
+
+        اشتراكات CANCELLED من قبل migration 048 (cancelled_at لسه NULL،
+        زي id=50) مُستبعدة بالكامل — get_cancelled_subscriptions_for_cleanup
+        بتفلتر cancelled_at IS NOT NULL صراحةً، بلا أي fallback على
+        updated_at (غير موثوق كفاية: بيتغيّر لأي تعديل على الصف، مش
+        بالضرورة وقت الإلغاء).
+
+        الخدمة المرتبطة بكل اشتراك بتتحدد عبر plan.service_id (نفس FK
+        المباشر المستخدَم في get_active_subscription، مش
+        PlanServiceAccess many-to-many — ده pilot دومين insurance فقط
+        حاليًا، راجع تعليق get_active_subscription_via_plan_access في
+        repository.py). لو الخطة بلا service_id (nullable من migration
+        046) أو مفيش TenantServiceAccess مطابق أصلًا أو هو معطَّل
+        بالفعل، الاشتراك بيتخطى بصمت (مش عدّ كـ"معطَّل").
+
+        try/except حول كل اشتراك على حدة — فشل واحد ما يوقفش فحص الباقي.
+        ترجع عدد صفوف TenantServiceAccess اللي اتعطَّلت فعليًا (مش عدد
+        الاشتراكات المرشَّحة للفحص)."""
+        subscriptions = await self.repo.get_cancelled_subscriptions_for_cleanup(tenant_id)
+        disabled_count = 0
+
+        for sub in subscriptions:
+            sub_id = cast(int, sub.id)
+            sub_tenant_id = cast(int, sub.tenant_id)
+            try:
+                plan = await self.repo.get_plan_by_id_admin(cast(int, sub.plan_id))
+                if not plan or plan.service_id is None:
+                    continue
+
+                access = await self.repo.get_tenant_service_access(sub_tenant_id, cast(int, plan.service_id))
+                if not access or not cast(bool, access.is_active):
+                    continue
+
+                await self.repo.update_service_access(cast(int, access.id), is_active=False)
+                await self.db.commit()
+                disabled_count += 1
+                logger.info(f"Service access disabled for cancelled subscription {sub_id}")
+
+            except Exception as e:
+                logger.error(f"Cleanup cancelled subscription failed: subscription {sub_id} - {str(e)}")
+
+        return disabled_count
 
     # ==========================================
     # 4. صلاحيات الوصول (Access Control)

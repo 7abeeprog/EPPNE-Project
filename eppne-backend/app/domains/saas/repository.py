@@ -268,6 +268,28 @@ class SaaSRepository:
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
+    async def get_cancelled_subscriptions_for_cleanup(
+        self,
+        tenant_id: Optional[int] = None,
+    ) -> List[TenantSubscription]:
+        """اشتراكات CANCELLED جاهزة للمرحلة أ من التنظيف (تعطيل service
+        access) — cancelled_at IS NOT NULL و<= الآن - 30 يوم. اشتراكات
+        CANCELLED قديمة قبل migration 048 (cancelled_at لسه NULL) مُستبعدة
+        عمدًا [2026-09-09] — راجع cleanup-cancelled-subscriptions-task-
+        fix-session-log.md لسبب رفض fallback على updated_at. بلا فلتر
+        tenant_id افتراضيًا (عبر كل المستأجرين)، بنفس نمط
+        get_past_due_subscriptions."""
+        threshold = datetime.now(timezone.utc) - timedelta(days=30)
+        conditions = [
+            TenantSubscription.status == "CANCELLED",
+            TenantSubscription.cancelled_at.isnot(None),
+            TenantSubscription.cancelled_at <= threshold,
+        ]
+        if tenant_id is not None:
+            conditions.append(TenantSubscription.tenant_id == tenant_id)
+        result = await self.db.execute(select(TenantSubscription).where(and_(*conditions)))
+        return list(result.scalars().all())
+
     async def get_tenant_subscriptions(
         self,
         tenant_id: int,

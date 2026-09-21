@@ -256,18 +256,25 @@ def send_trial_expiry_reminders_task(self):
 )
 def cleanup_cancelled_subscriptions_task(self):
     """
-    تنظيف الاشتراكات الملغاة (حذف البيانات المؤقتة، إلغاء الموارد).
-    - تُنفذ أسبوعياً.
-    - تحذف بيانات المستخدمين وفقاً لسياسة الخصوصية (GDPR/PDPL).
+    تنظيف الاشتراكات الملغاة — المرحلة أ فقط حاليًا: تعطيل
+    TenantServiceAccess.is_active بعد 30 يوم من الإلغاء (cancelled_at).
+    - تُنفذ أسبوعياً (غير مجدولة تلقائيًا في beat_schedule حاليًا).
+    - نطاق ضيق متعمَّد [2026-09-09]: بلا أي حذف أو تعمية لبيانات شخصية —
+      ده مؤجَّل عمدًا لجلسة تصميم منفصلة تراجع دومين privacy (راجع
+      .claude/reports/cleanup-cancelled-subscriptions-task-fix-session-log.md).
+      "cleaned_count" هنا = عدد صفوف service access المُعطَّلة فعليًا،
+      مش عدد اشتراكات "منظَّفة" بالمعنى الكامل للـdocstring القديم.
     """
     try:
         async def _run():
             async with SessionLocal() as db:  # ✅ استخدام SessionLocal
-                service = SaaSControlService(db)
-                # 🔥 ملاحظة: تأكد من وجود دالة cleanup_cancelled_subscriptions في SaaSControlService
-                cleaned_count = await service.cleanup_cancelled_subscriptions()  # type: ignore[attr-defined]
+                # [2026-09-09] نفس نمط الباقي — SaaSControlService(db, 0)،
+                # tenant_id=0 كـsentinel إداري، cleanup_cancelled_subscriptions
+                # بتفحص كل tenant عبر sub.tenant_id مش self.tenant_id.
+                service = SaaSControlService(db, 0)
+                cleaned_count = await service.cleanup_cancelled_subscriptions()
                 await db.commit()
-                
+
                 logger.info(f"✅ Cancelled subscriptions cleaned: {cleaned_count} subscriptions.")
                 return {
                     "status": "success",

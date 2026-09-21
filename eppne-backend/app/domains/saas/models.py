@@ -77,6 +77,7 @@ class TenantSubscription(Base):
         Index("ix_saas_tenant_subscriptions_next_billing", "next_billing_date"),
         Index("ix_saas_tenant_subscriptions_idempotency", "idempotency_key", unique=True, postgresql_where=text("idempotency_key IS NOT NULL")),
         Index("ix_saas_tenant_subscriptions_tenant_status", "tenant_id", "status"),
+        Index("ix_saas_tenant_subscriptions_cancelled_at", "cancelled_at"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -87,6 +88,12 @@ class TenantSubscription(Base):
 
     status = Column(String(50), default="ACTIVE")
     grace_period_end_date = Column(DateTime(timezone=True), nullable=True)
+    # [2026-09-09] migration 048 — يُملأ فقط عبر cancel_subscription وقت
+    # الإلغاء الفعلي. اشتراكات CANCELLED من قبل هذه الـmigration تفضل
+    # NULL هنا (بلا backfill من updated_at — غير موثوق كفاية، راجع
+    # cleanup-cancelled-subscriptions-task-fix-session-log.md) —
+    # cleanup_cancelled_subscriptions بتستبعدها صراحةً.
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
 
     trial_end_date = Column(DateTime(timezone=True), nullable=True)
     start_date = Column(DateTime(timezone=True), server_default=func.now())
