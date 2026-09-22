@@ -9,6 +9,7 @@ from app.domains.tourism_sports.models import (
     PlayerTransfer, Tournament, SportsMatch
 )
 from app.core.errors import NotFoundError
+from app.domains.identity.models import User
 
 
 class TourismSportsRepository:
@@ -150,6 +151,21 @@ class TourismSportsRepository:
         await self.db.flush()
         await self.db.refresh(transfer)
         return transfer
+
+    async def get_medical_review_approver(self, tenant_id: int, exclude_user_id: int) -> Optional[int]:
+        """أقدم SUPER_ADMIN/EXECUTIVE_DIRECTOR نشط في التينانت، باستثناء صاحب العرض."""
+        result = await self.db.execute(
+            select(User.id)
+            .where(
+                User.tenant_id == tenant_id,
+                User.is_active.is_(True),
+                User.system_role.in_(["SUPER_ADMIN", "EXECUTIVE_DIRECTOR"]),
+                User.id != exclude_user_id,
+            )
+            .order_by(User.created_at.asc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
     async def get_transfer(self, transfer_id: int, tenant_id: int) -> Optional[PlayerTransfer]:
         result = await self.db.execute(

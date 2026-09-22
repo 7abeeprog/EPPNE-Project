@@ -18,7 +18,7 @@ from app.domains.ai_agents.service import AIAgentsService
 from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
-from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
+from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError, AISystemSuspendedError
 from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
@@ -461,6 +461,7 @@ class TourismSportsService:
 
         medical_flag = False
         medical_report = None
+        medical_untrusted = False
         ai_service = AIAgentsService(self.db, tenant_id)
         try:
             ai_result = await ai_service.execute_agent_action(
@@ -476,8 +477,14 @@ class TourismSportsService:
             )
             medical_flag = ai_result.get("result", {}).get("flag", False)
             medical_report = ai_result.get("result", {}).get("summary")
+        except AISystemSuspendedError as e:
+            medical_untrusted = True
+            logger.warning(f"AI medical analysis skipped (kill switch suspended): {e}")
         except Exception as e:
+            medical_untrusted = True
             logger.warning(f"AI medical analysis failed: {e}")
+
+        requires_medical_review = medical_untrusted or medical_flag
 
         from app.domains.ai_governance.service import AIGovernanceService
         governance = AIGovernanceService(self.db, tenant_id)
@@ -494,7 +501,7 @@ class TourismSportsService:
             transfer = await self.repo.create_transfer(
                 tenant_id=tenant_id,
                 from_club_id=from_club_id,
-                status=TransferStatus.BID_PLACED,
+                status=TransferStatus.MEDICAL_REVIEW if requires_medical_review else TransferStatus.BID_PLACED,
                 medical_ai_flag=medical_flag,
                 medical_report_summary=medical_report,
                 idempotency_key=idempotency_key,
@@ -515,22 +522,57 @@ class TourismSportsService:
             )
 
         await self.db.commit()
+        # مأخوذتان قبل أي rollback محتمَل لاحقًا (كتلة المراجعة الطبية تحت) لتفادي
+        # الوصول لخاصية منتهية الصلاحية على كائنات هذه الجلسة بعد rollback.
+        transfer_id = transfer.id
+        player_user_id_val = player.user_id
+
+        if requires_medical_review:
+            try:
+                approver_id = await self.repo.get_medical_review_approver(
+                    tenant_id=tenant_id, exclude_user_id=user_id
+                )
+                if approver_id:
+                    await ai_service.repo.create_approval_request(
+                        tenant_id=tenant_id,
+                        agent_id=6,
+                        human_approver_id=approver_id,
+                        action_type="PLAYER_TRANSFER_MEDICAL_REVIEW",
+                        proposed_payload={
+                            "transfer_id": transfer_id,
+                            "player_id": data["player_id"],
+                            "medical_flag": medical_flag,
+                            "medical_untrusted": medical_untrusted,
+                            "medical_report_summary": medical_report,
+                        },
+                        idempotency_key=f"MEDICAL-REVIEW-T{tenant_id}-{transfer_id}"
+                    )
+                else:
+                    logger.error(
+                        f"No eligible medical review approver (SUPER_ADMIN/EXECUTIVE_DIRECTOR) "
+                        f"found in tenant {tenant_id} for transfer {transfer_id} — "
+                        f"transfer blocked in MEDICAL_REVIEW with no resolvable approval."
+                    )
+            except Exception as e:
+                await self.db.rollback()
+                await self.db.refresh(transfer)  # يعيد مزامنة transfer بعد rollback حتى يبقى صالحًا للإرجاع/التسلسل
+                logger.error(f"Failed to create medical review approval for transfer {transfer_id}: {e}")
 
         try:
             await invoice_service.create_invoice(  # type: ignore[attr-defined]
                 entity_id=tenant_id,
                 user_id=user_id,
                 amount=agency_fee,
-                description=f"Agency fee for transfer of player {player.user_id}",
+                description=f"Agency fee for transfer of player {player_user_id_val}",
                 due_date=datetime.utcnow() + timedelta(days=30)
             )
         except Exception as e:
             await self.db.rollback()
-            logger.error(f"Invoice creation failed for player transfer bid {transfer.id}: {e}")
+            logger.error(f"Invoice creation failed for player transfer bid {transfer_id}: {e}")
 
         # تخزين معرف التحويل فقط
         if idempotency_key:
-            await self._store_idempotency(idempotency_key, {"transfer_id": transfer.id})
+            await self._store_idempotency(idempotency_key, {"transfer_id": transfer_id})
 
         return transfer
 
