@@ -49,7 +49,7 @@ class InsurancePolicy(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("academy_tenants.id"), nullable=False, index=True)
-    issuer_entity_id = Column(Integer, ForeignKey("sovereign_entities_v2.id", ondelete="CASCADE"), nullable=False, index=True)
+    issuer_entity_id = Column(Integer, ForeignKey("sovereign_entities_v2.id", ondelete="SET NULL"), nullable=True, index=True)
     name = Column(String(255), nullable=False)
     policy_type = Column(SQLEnum(PolicyType), nullable=False, index=True)
     description = Column(Text, nullable=True)

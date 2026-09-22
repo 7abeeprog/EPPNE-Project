@@ -7,7 +7,7 @@ export type PensionStatus = 'ACTIVE' | 'SUSPENDED' | 'TERMINATED';
 export interface InsurancePolicy {
   id: number;
   tenant_id: number;
-  issuer_entity_id: number;
+  issuer_entity_id: number | null;
   name: string;
   policy_type: PolicyType;
   description?: string;

@@ -30,12 +30,13 @@ from app.domains.identity.service import UserService
 from app.domains.identity.schemas import UserCreate
 from app.domains.identity.models import User
 
-from app.domains.insurance.service import InsuranceService
+from app.domains.insurance.service import InsuranceService, ENTITY_TYPE as INSURANCE_ENTITY_TYPE
 from app.domains.insurance.repository import InsuranceRepository
 from app.domains.insurance.models import (
     InsurancePolicy, InsuranceSubscription, InsuranceClaim, PensionRecord,
     EmployeeInsuranceProfile, PolicyType, PremiumCycle, PensionStatus,
 )
+from app.core.models import EntityMembership, EntityMembershipRole
 
 TENANT_ID = 1
 OTHER_TENANT_ID = 2
@@ -57,6 +58,10 @@ async def _create_user(db, prefix: str) -> User:
 
 @pytest.mark.asyncio
 async def test_update_policy_real_record_and_tenant_isolation(db):
+    """[2026-09-10] بعد إصلاح فجوة الصلاحيات في update_policy (راجع
+    .claude/reports/insurance-entity-membership-gap-fix-session-log.md)،
+    reviewer_id لازم يكون عضو OWNER/EXECUTIVE_DIRECTOR على issuer_entity_id
+    البوليصة — عضوية throwaway بتتحط هنا وتتنضف في finally."""
     user = await _create_user(db, "p_regtest_ins_policy_user")
     repo = InsuranceRepository(db)
     policy = await repo.create_policy(
@@ -67,16 +72,27 @@ async def test_update_policy_real_record_and_tenant_isolation(db):
     )
     policy_id = policy.id
 
+    db.add(EntityMembership(
+        entity_type=INSURANCE_ENTITY_TYPE, entity_id=EXISTING_ISSUER_ENTITY_ID,
+        user_id=user.id, tenant_id=TENANT_ID, role=EntityMembershipRole.OWNER,
+    ))
+    await db.commit()
+
     service = InsuranceService(db)
     try:
         with pytest.raises(NotFoundError):
-            await service.update_policy(policy_id, OTHER_TENANT_ID, {"name": "hacked"})
+            await service.update_policy(policy_id, OTHER_TENANT_ID, reviewer_id=user.id, data={"name": "hacked"})
 
-        result = await service.update_policy(policy_id, TENANT_ID, {"name": "REGTEST-UPDATED"})
+        result = await service.update_policy(policy_id, TENANT_ID, reviewer_id=user.id, data={"name": "REGTEST-UPDATED"})
         assert result.name == "REGTEST-UPDATED"
     finally:
         async with AsyncSessionLocal() as cleanup_db:
             await cleanup_db.execute(delete(InsurancePolicy).where(InsurancePolicy.id == policy_id))
+            await cleanup_db.execute(delete(EntityMembership).where(
+                EntityMembership.entity_type == INSURANCE_ENTITY_TYPE,
+                EntityMembership.entity_id == EXISTING_ISSUER_ENTITY_ID,
+                EntityMembership.user_id == user.id,
+            ))
             await cleanup_db.execute(delete(User).where(User.id == user.id))
             await cleanup_db.commit()
 

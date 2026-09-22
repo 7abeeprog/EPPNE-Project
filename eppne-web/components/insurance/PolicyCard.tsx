@@ -51,7 +51,7 @@ export default function PolicyCard({ policy, onSubscribe }: { policy: InsuranceP
         </div>
         <div className="flex items-center gap-2">
           <Building2 className="w-3 h-3" />
-          الجهة المصدرة: #{policy.issuer_entity_id}
+          الجهة المصدرة: {policy.issuer_entity_id != null ? `#${policy.issuer_entity_id}` : 'جهة مُصدِرة محذوفة'}
         </div>
       </div>
       {policy.is_active && onSubscribe && (

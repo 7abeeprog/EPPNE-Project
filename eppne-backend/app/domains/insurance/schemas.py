@@ -39,6 +39,7 @@ class InsurancePolicyUpdate(BaseModel):
 
 
 class InsurancePolicyResponse(InsurancePolicyCreate):
+    issuer_entity_id: Optional[int] = None
     id: int
     tenant_id: int
     is_active: bool
