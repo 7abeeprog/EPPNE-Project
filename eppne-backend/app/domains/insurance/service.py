@@ -124,7 +124,14 @@ class InsuranceService:
     # ============================================================
 
     async def create_policy(self, user_id: int, tenant_id: int, data: Dict[str, Any]) -> InsurancePolicy:
-        """إنشاء بوليصة تأمين جديدة (للمشرفين فقط)."""
+        """إنشاء بوليصة تأمين جديدة (للمشرفين فقط، وأعضاء الكيان المُصدِر فقط)."""
+        member = await self.membership.get_member(
+            entity_type=ENTITY_TYPE, entity_id=data["issuer_entity_id"],
+            user_id=user_id,
+        )
+        if member is None or member.role not in [EntityMembershipRole.OWNER, EntityMembershipRole.EXECUTIVE_DIRECTOR]:
+            raise PermissionDeniedError("Not authorized to create policy for this entity")
+
         async with self.db.begin_nested():
             policy = await self.repo.create_policy(
                 tenant_id=tenant_id,
@@ -157,10 +164,18 @@ class InsuranceService:
             raise PermissionDeniedError("ليس لديك صلاحية الاطلاع على هذه البوليصة")
         return policy
 
-    async def update_policy(self, policy_id: int, tenant_id: int, data: Dict[str, Any]) -> InsurancePolicy:
+    async def update_policy(self, policy_id: int, tenant_id: int, reviewer_id: int, data: Dict[str, Any]) -> InsurancePolicy:
         policy = await self.repo.get_policy(policy_id)
         if not policy or cast(int, policy.tenant_id) != tenant_id:  # type: ignore
             raise NotFoundError("Policy not found")
+
+        member = await self.membership.get_member(
+            entity_type=ENTITY_TYPE, entity_id=cast(int, policy.issuer_entity_id),  # type: ignore
+            user_id=reviewer_id,
+        )
+        if member is None or member.role not in [EntityMembershipRole.OWNER, EntityMembershipRole.EXECUTIVE_DIRECTOR]:
+            raise PermissionDeniedError("Not authorized to update policy for this entity")
+
         return await self.repo.update_policy(policy_id, **data)
 
     # ============================================================

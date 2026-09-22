@@ -88,6 +88,7 @@ async def update_policy(
     policy = await service.update_policy(
         policy_id=policy_id,
         tenant_id=cast(int, current_user.tenant_id),
+        reviewer_id=cast(int, current_user.id),
         data=data.model_dump(exclude_unset=True)
     )
     return policy
