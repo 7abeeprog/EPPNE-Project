@@ -161,6 +161,14 @@ class InsuranceRepository:
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
+    async def list_active_pensions(self, tenant_id: int) -> List[PensionRecord]:
+        query = select(PensionRecord).where(
+            PensionRecord.tenant_id == tenant_id,  # type: ignore
+            PensionRecord.status == PensionStatus.ACTIVE  # type: ignore
+        ).order_by(PensionRecord.start_date.desc())  # type: ignore
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
     async def update_pension(self, pension_id: int, **kwargs) -> PensionRecord:
         await self.db.execute(update(PensionRecord).where(PensionRecord.id == pension_id).values(**kwargs))  # type: ignore
         await self.db.commit()

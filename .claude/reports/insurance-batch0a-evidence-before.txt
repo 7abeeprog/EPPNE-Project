@@ -1,0 +1,109 @@
+
+### PHASE
+  phase: before
+  tenants: (124, 125)
+  wallets_start: {'admin_A@TA': '500', 'member_A@TA': '500', 'benef_A@TA': None, 'premium_receiver_A@TA': None, 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': None, 'admin_A@T_B(ghost)': None}
+  user1_wallets: ['39|1|710.0']
+
+### ATTACK-1 create_policy (admin_A + header B)
+  http: 201
+  resp: {'id': 629, 'tenant_id': 125, 'issuer_entity_id': 1139}
+  db: ['629|125|1139']
+
+### ATTACK-2 review_claim reject B's claim (admin_A + header B)
+  http: 200
+  resp: {'id': 157, 'status': 'REJECTED', 'subscription_id': 345}
+  db: ['157|125|REJECTED|TMPINS attack reject']
+
+### ATTACK-3a create_pension beneficiary=benef_B (admin_A + header B)
+  http: 201
+  resp: {'id': 60, 'status': 'ACTIVE', 'beneficiary_id': 13501}
+  db: ['60|125|13501']
+
+### ATTACK-3b create_pension beneficiary=benef_A (own user) but header B
+  http: 201
+  resp: {'id': 61, 'status': 'ACTIVE', 'beneficiary_id': 13496}
+  db: ['61|125|13496']
+
+### ATTACK-4 create_employee_profile user=emp_B (admin_A + header B)
+  http: 201
+  resp: {'id': 54, 'status': 'ACTIVE', 'user_id': 13502}
+  db: ['54|125|13502']
+
+### ATTACK-5a subscribe FREE policy_B (member_A + header B)
+  http: 201
+  resp: {'id': 346, 'status': 'ACTIVE', 'policy_id': 627}
+  db: ['346|125|627|13495']
+
+### ATTACK-5b subscribe PAID premium 10 policy_B (member_A + header B) - money-moving
+  http: 403
+  resp: {'detail': 'Insufficient balance for premium payment'}
+  db: []
+  wallets_before: {'admin_A@TA': '500', 'member_A@TA': '500', 'benef_A@TA': None, 'premium_receiver_A@TA': None, 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': None, 'admin_A@T_B(ghost)': None}
+  wallets_after: {'admin_A@TA': '500', 'member_A@TA': '500', 'benef_A@TA': None, 'premium_receiver_A@TA': None, 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': None, 'admin_A@T_B(ghost)': None}
+
+### ATTACK-6 submit_claim on subscription 346 (member_A + header B)
+  http: 500
+  resp: Internal Server Error
+  db: []
+
+### ATTACK-7 get_my_subscriptions (member_A + header B)
+  http: 200
+  resp: list[1] ids=[346]
+
+### LEGIT-1 create_policy (admin_A, own tenant)
+  http: 201
+  resp: {'id': 630, 'tenant_id': 124, 'issuer_entity_id': 1139}
+  db: ['630|124']
+
+### LEGIT-5 subscribe PAID policy_A premium 10 (member_A, own tenant) - money-moving
+  http: 201
+  resp: {'id': 347, 'status': 'ACTIVE', 'policy_id': 624}
+  db: ['347|124|624']
+  wallets_before: {'admin_A@TA': '500', 'member_A@TA': '500', 'benef_A@TA': None, 'premium_receiver_A@TA': None, 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': None, 'admin_A@T_B(ghost)': None}
+  wallets_after: {'admin_A@TA': '500', 'member_A@TA': '490.0', 'benef_A@TA': None, 'premium_receiver_A@TA': '10.0', 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': None, 'admin_A@T_B(ghost)': None}
+
+### LEGIT-6 submit_claim (member_A, own tenant)
+  http: 500
+  resp: Internal Server Error
+  db: []
+
+### LEGIT-7 get_my_subscriptions (member_A, own tenant)
+  http: 200
+  resp: list[2] ids=[347, 343]
+
+### LEGIT-2 review_claim APPROVE 20 (admin_A, own tenant) - money-moving
+  http: 200
+  resp: {'id': 155, 'status': 'PAID', 'subscription_id': 343}
+  db: ['155|124|PAID|20.00000000|TX-EAC1C8F3023D']
+  wallets_before: {'admin_A@TA': '500', 'member_A@TA': '490.0', 'benef_A@TA': None, 'premium_receiver_A@TA': '10.0', 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': None, 'admin_A@T_B(ghost)': None}
+  wallets_after: {'admin_A@TA': '480.0', 'member_A@TA': '510.0', 'benef_A@TA': None, 'premium_receiver_A@TA': '10.0', 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': None, 'admin_A@T_B(ghost)': None}
+
+### LEGIT-3 create_pension benef_A (admin_A, own tenant)
+  http: 201
+  resp: {'id': 62, 'status': 'ACTIVE', 'beneficiary_id': 13496}
+  db: ['62|124|13496']
+
+### LEGIT-4 create_employee_profile emp_A (admin_A, own tenant)
+  http: 201
+  resp: {'id': 55, 'status': 'ACTIVE', 'user_id': 13497}
+  db: ['55|124|13497']
+
+### DISBURSE as admin_A (header A)
+  http: 200
+  resp: {'message': 'Disbursed 0 pensions', 'count': 0}
+  pension_rows: 7
+  pensions_unchanged: True
+  pensions_after: ['56|124|ACTIVE|0.00000000|NULL', '57|124|ACTIVE|0.00000000|NULL', '58|125|ACTIVE|0.00000000|NULL', '59|125|ACTIVE|0.00000000|NULL', '60|125|ACTIVE|0.00000000|NULL', '61|125|ACTIVE|0.00000000|NULL', '62|124|ACTIVE|0.00000000|NULL']
+  wallets_unchanged: True
+  user1_unchanged: True
+  pension_transfer_tx_rows: ['ERR ERROR:  column "tenant_id" does not exist\nLINE 1: ...sactions where notes like \'Pension payment%\' and (tenant_id ...\n                                                             ^']
+
+### FINAL
+  wallets: {'admin_A@TA': '480.0', 'member_A@TA': '510.0', 'benef_A@TA': None, 'premium_receiver_A@TA': '10.0', 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': None, 'admin_A@T_B(ghost)': None}
+  user1: ['39|1|710.0']
+
+evidence saved
+[before] raw SQL: ACTIVE pension rows for tenants (124,125): [(56, 124), (57, 124), (58, 125), (59, 125), (60, 125), (61, 125), (62, 124)]
+[before] OLD list_pensions_for_beneficiary(None, ACTIVE) -> [] (the query disburse used)
+[before] list_active_pensions does not exist yet

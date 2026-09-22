@@ -580,6 +580,9 @@ class InsuranceService:
 
     async def create_pension(self, user_id: int, data: Dict[str, Any]) -> PensionRecord:
         """إنشاء سجل معاش (للمشرفين فقط)."""
+        # المستفيد لازم يكون من نفس تينانت المستدعي (get_by_id بيفلتر بـtenant_id)
+        if await self._get_user(cast(int, data["beneficiary_id"]), cast(int, data["tenant_id"])) is None:
+            raise NotFoundError("Beneficiary not found")
         async with self.db.begin_nested():
             pension = await self.repo.create_pension(**data)
             await audit_log(
@@ -613,16 +616,23 @@ class InsuranceService:
             raise NotFoundError("Pension not found")
         return await self.repo.update_pension(pension_id, status=PensionStatus.SUSPENDED)
 
-    async def disburse_monthly_pensions(self) -> int:
-        """دفع المعاشات الشهرية (يتم استدعاؤها تلقائياً عبر جدولة)."""
-        pensions = await self.repo.list_pensions_for_beneficiary(cast(int, None), status=PensionStatus.ACTIVE)
+    async def disburse_monthly_pensions(self, tenant_id: int) -> int:
+        """دفع المعاشات الشهرية لتينانت واحد (يتم استدعاؤها تلقائياً عبر جدولة).
+
+        الطبقة (أ) فقط (عزل التينانت). منطق الصرف نفسه (sender_id=1، غياب
+        idempotency_key، نوع last_payout_tx، فحص "دُفع هذا الشهر") لم يُلمَس عمدًا —
+        راجع بند backlog `insurance-disburse-pensions-payout-logic-broken`.
+        """
+        pensions = await self.repo.list_active_pensions(tenant_id)
         count = 0
         for pension in pensions:
+            if cast(int, pension.tenant_id) != tenant_id:  # فحص دفاعي (belt-and-suspenders)
+                continue
             if pension.last_payout_tx:  # type: ignore
                 last_payout_date = await self._get_payout_date(pension.last_payout_tx)  # type: ignore
                 if last_payout_date and last_payout_date.month == datetime.utcnow().month:
                     continue
-            finance = FinanceService(self.db, cast(int, pension.tenant_id))
+            finance = FinanceService(self.db, tenant_id)
             try:
                 tx = await finance.transfer(
                     sender_id=1,
@@ -643,6 +653,9 @@ class InsuranceService:
 
     async def create_employee_insurance_profile(self, user_id: int, data: Dict[str, Any]) -> EmployeeInsuranceProfile:
         """إنشاء ملف تأميني للموظف."""
+        # الموظف لازم يكون من نفس تينانت المستدعي (get_by_id بيفلتر بـtenant_id)
+        if await self._get_user(cast(int, data["user_id"]), cast(int, data["tenant_id"])) is None:
+            raise NotFoundError("Employee user not found")
         async with self.db.begin_nested():
             profile = await self.repo.create_employee_profile(**data)
             await audit_log(

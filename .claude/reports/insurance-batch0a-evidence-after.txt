@@ -1,0 +1,144 @@
+
+### PHASE
+  phase: after
+  tenants: (128, 129)
+  wallets_start: {'admin_A@TA': '500', 'member_A@TA': '500', 'benef_A@TA': None, 'premium_receiver_A@TA': None, 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': '500', 'admin_A@T_B(ghost)': None}
+  user1_wallets: ['39|1|710.0']
+
+### GHOST-WALLET baseline (before attack calls)
+  wallet_rows_in_tenantB_total: ['6']
+  tenantA_users_wallets_in_tenantB: ['13515|500']
+
+### ATTACK-1 create_policy (admin_A + header B)
+  http: 201
+  resp: {'id': 643, 'tenant_id': 128, 'issuer_entity_id': 1143}
+  db: ['643|128|1143']
+
+### ATTACK-2 review_claim reject B's claim (admin_A + header B)
+  http: 404
+  resp: {'detail': 'Claim not found'}
+  db: ['168|129|SUBMITTED|']
+
+### ATTACK-3a create_pension beneficiary=benef_B (admin_A + header B)
+  http: 404
+  resp: {'detail': 'Beneficiary not found'}
+  db: []
+
+### ATTACK-3b create_pension beneficiary=benef_A (own user) but header B
+  http: 201
+  resp: {'id': 74, 'status': 'ACTIVE', 'beneficiary_id': 13516}
+  db: ['74|128|13516']
+
+### ATTACK-4 create_employee_profile user=emp_B (admin_A + header B)
+  http: 404
+  resp: {'detail': 'Employee user not found'}
+  db: []
+
+### ATTACK-5a subscribe FREE policy_B (member_A + header B)
+  http: 404
+  resp: {'detail': 'Policy not found or inactive'}
+  db: []
+
+### ATTACK-5b subscribe PAID premium 10 policy_B (member_A + header B) - money-moving
+  http: 404
+  resp: {'detail': 'Policy not found or inactive'}
+  db: []
+  wallets_before: {'admin_A@TA': '500', 'member_A@TA': '500', 'benef_A@TA': None, 'premium_receiver_A@TA': None, 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': '500', 'admin_A@T_B(ghost)': None}
+  wallets_after: {'admin_A@TA': '500', 'member_A@TA': '500', 'benef_A@TA': None, 'premium_receiver_A@TA': None, 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': '500', 'admin_A@T_B(ghost)': None}
+
+### ATTACK-6 submit_claim on subscription 355 (member_A + header B)
+  http: 404
+  resp: {'detail': 'Subscription not found'}
+  db: []
+
+### ATTACK-7 get_my_subscriptions (member_A + header B)
+  http: 200
+  resp: list[1] ids=[354]
+
+### GHOST-WALLET after ATTACK calls
+  wallet_rows_in_tenantB_total: ['6']
+  tenantA_users_wallets_in_tenantB: ['13515|500']
+  unchanged: True
+
+### LEGIT-1 create_policy (admin_A, own tenant)
+  http: 201
+  resp: {'id': 644, 'tenant_id': 128, 'issuer_entity_id': 1143}
+  db: ['644|128']
+
+### LEGIT-5 subscribe PAID policy_A premium 10 (member_A, own tenant) - money-moving
+  http: 201
+  resp: {'id': 357, 'status': 'ACTIVE', 'policy_id': 638}
+  db: ['357|128|638']
+  wallets_before: {'admin_A@TA': '500', 'member_A@TA': '500', 'benef_A@TA': None, 'premium_receiver_A@TA': None, 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': '500', 'admin_A@T_B(ghost)': None}
+  wallets_after: {'admin_A@TA': '500', 'member_A@TA': '490.0', 'benef_A@TA': None, 'premium_receiver_A@TA': '10.0', 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': '500', 'admin_A@T_B(ghost)': None}
+
+### LEGIT-6 submit_claim (member_A, own tenant)
+  http: 500
+  resp: Internal Server Error
+  db: []
+
+### LEGIT-7 get_my_subscriptions (member_A, own tenant)
+  http: 200
+  resp: list[2] ids=[357, 354]
+
+### LEGIT-2 review_claim APPROVE 20 (admin_A, own tenant) - money-moving
+  http: 200
+  resp: {'id': 166, 'status': 'PAID', 'subscription_id': 354}
+  db: ['166|128|PAID|20.00000000|TX-EEC5CFD5BC46']
+  wallets_before: {'admin_A@TA': '500', 'member_A@TA': '490.0', 'benef_A@TA': None, 'premium_receiver_A@TA': '10.0', 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': '500', 'admin_A@T_B(ghost)': None}
+  wallets_after: {'admin_A@TA': '480.0', 'member_A@TA': '510.0', 'benef_A@TA': None, 'premium_receiver_A@TA': '10.0', 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': '500', 'admin_A@T_B(ghost)': None}
+
+### LEGIT-3 create_pension benef_A (admin_A, own tenant)
+  http: 201
+  resp: {'id': 75, 'status': 'ACTIVE', 'beneficiary_id': 13516}
+  db: ['75|128|13516']
+
+### LEGIT-4 create_employee_profile emp_A (admin_A, own tenant)
+  http: 201
+  resp: {'id': 58, 'status': 'ACTIVE', 'user_id': 13517}
+  db: ['58|128|13517']
+
+### DISBURSE as admin_A (header A)
+  http: 200
+  resp: {'message': 'Disbursed 0 pensions', 'count': 0}
+  pension_rows: 6
+  pensions_unchanged: True
+  pensions_after: ['70|128|ACTIVE|0.00000000|NULL', '71|128|ACTIVE|0.00000000|NULL', '72|129|ACTIVE|0.00000000|NULL', '73|129|ACTIVE|0.00000000|NULL', '74|128|ACTIVE|0.00000000|NULL', '75|128|ACTIVE|0.00000000|NULL']
+  wallets_unchanged: True
+  user1_unchanged: True
+  pension_tx_rows_before: ['0']
+  pension_tx_rows_after: ['0']
+  tx_from_user1_since_call: ['0']
+  tx_total_before: ['197']
+  tx_total_after: ['197']
+
+### AFTER extra: NO X-Tenant-ID header at all
+  http: 200
+  resp: list[2] ids=[357, 354]
+
+### DISBURSE as admin_A with SPOOFED header B
+  http: 200
+  resp: {'message': 'Disbursed 0 pensions', 'count': 0}
+  pension_rows: 6
+  pensions_unchanged: True
+  pensions_after: ['70|128|ACTIVE|0.00000000|NULL', '71|128|ACTIVE|0.00000000|NULL', '72|129|ACTIVE|0.00000000|NULL', '73|129|ACTIVE|0.00000000|NULL', '74|128|ACTIVE|0.00000000|NULL', '75|128|ACTIVE|0.00000000|NULL']
+  wallets_unchanged: True
+  user1_unchanged: True
+  pension_tx_rows_before: ['0']
+  pension_tx_rows_after: ['0']
+  tx_from_user1_since_call: ['0']
+  tx_total_before: ['197']
+  tx_total_after: ['197']
+
+### FINAL
+  wallets: {'admin_A@TA': '480.0', 'member_A@TA': '510.0', 'benef_A@TA': None, 'premium_receiver_A@TA': '10.0', 'admin_B@TB': '500', 'member_B@TB': '500', 'benef_B@TB': None, 'premium_receiver_B@TB': None, 'member_A@T_B(ghost)': '500', 'admin_A@T_B(ghost)': None}
+  user1: ['39|1|710.0']
+
+evidence saved
+
+=== pension isolation (in-process) ===
+[after] raw SQL: ACTIVE pension rows for tenants (128,129): [(70, 128), (71, 128), (72, 129), (73, 129), (74, 128), (75, 128)]
+[after] OLD list_pensions_for_beneficiary(None, ACTIVE) -> [] (the query disburse used)
+[after] NEW list_active_pensions(tenant A) -> [(74, 128), (75, 128), (70, 128), (71, 128)] | only_that_tenant: True | leaks_other_tenant: False
+[after] NEW list_active_pensions(tenant B) -> [(72, 129), (73, 129)] | only_that_tenant: True | leaks_other_tenant: False
+[after] NEW list_active_pensions(tenant nonexistent 999999) -> [] | only_that_tenant: True | leaks_other_tenant: False

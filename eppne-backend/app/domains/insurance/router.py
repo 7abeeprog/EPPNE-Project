@@ -25,14 +25,14 @@ router = APIRouter(prefix="/insurance", tags=["Sovereign Insurance"])
 @rate_limit(max_requests=10, window_seconds=60)
 async def create_policy(
     data: InsurancePolicyCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InsuranceService(db)
     policy = await service.create_policy(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump()
     )
     return policy
@@ -103,14 +103,14 @@ async def update_policy(
 async def subscribe(
     data: InsuranceSubscriptionCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InsuranceService(db)
     subscription = await service.subscribe(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
@@ -123,14 +123,14 @@ async def get_my_subscriptions(
     status: Optional[str] = Query(None, description="حالة الاشتراك"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InsuranceService(db)
     subscriptions = await service.get_my_subscriptions(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         status=status,
         skip=skip,
         limit=limit
@@ -187,14 +187,14 @@ async def cancel_subscription(
 async def submit_claim(
     data: InsuranceClaimCreate,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InsuranceService(db)
     claim = await service.submit_claim(
         user_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         data=data.model_dump(),
         idempotency_key=idempotency_key
     )
@@ -225,15 +225,15 @@ async def review_claim(
     approved_amount: Optional[Decimal] = Query(None, description="المبلغ المعتمد (إن كانت الموافقة)"),
     notes: Optional[str] = Query(None, description="ملاحظات المراجعة"),
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InsuranceService(db)
     claim = await service.review_claim(
         claim_id=claim_id,
         reviewer_id=cast(int, current_user.id),
-        tenant_id=cast(int, tenant.id),
+        tenant_id=tenant_id,
         approve=approve,
         approved_amount=approved_amount,
         notes=notes,
@@ -279,13 +279,13 @@ async def update_claim(
 @rate_limit(max_requests=5, window_seconds=60)
 async def create_pension(
     data: PensionRecordCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InsuranceService(db)
     pension_data = data.model_dump()
-    pension_data["tenant_id"] = tenant.id
+    pension_data["tenant_id"] = tenant_id
     pension = await service.create_pension(
         user_id=cast(int, current_user.id),
         data=pension_data
@@ -350,12 +350,12 @@ async def suspend_pension(
 @rate_limit(max_requests=5, window_seconds=60)
 async def disburse_pensions(
     background_tasks: BackgroundTasks,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InsuranceService(db)
-    count = await service.disburse_monthly_pensions()
+    count = await service.disburse_monthly_pensions(tenant_id)
     return {"message": f"Disbursed {count} pensions", "count": count}
 
 
@@ -367,13 +367,13 @@ async def disburse_pensions(
 @rate_limit(max_requests=5, window_seconds=60)
 async def create_employee_profile(
     data: EmployeeInsuranceProfileCreate,
-    tenant: AcademyTenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_superuser),
     db: AsyncSession = Depends(get_db)
 ):
+    tenant_id = cast(int, current_user.tenant_id)
     service = InsuranceService(db)
     profile_data = data.model_dump()
-    profile_data["tenant_id"] = tenant.id
+    profile_data["tenant_id"] = tenant_id
     profile = await service.create_employee_insurance_profile(
         user_id=cast(int, current_user.id),
         data=profile_data
