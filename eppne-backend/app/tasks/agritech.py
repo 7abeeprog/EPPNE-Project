@@ -13,6 +13,7 @@ from app.core.celery_app import celery_app
 from app.core.database import SessionLocal
 from app.domains.agritech.repository import AgriTechRepository
 from app.domains.agritech.service import AgriTechService
+from app.core.errors import AISystemSuspendedError
 from app.core.logging_conf import logger
 
 
@@ -203,7 +204,12 @@ async def _analyze_high_priority(db, reading, zone, farm):
         return {"ai_analysis": ai_result, "recommendations": recommendations}
 
     except Exception as e:
-        logger.warning(f"AI analysis failed, using fallback: {e}")
+        if isinstance(e, AISystemSuspendedError):
+            # Kill Switch مفعَّل: لا استدعاء AI. الفولباك أدناه قاعدة حتمية بلا AI (تنبيه ري عاجل)
+            # ويُبقى عمدًا — إسقاطه يضر فعليًا. لا retry: الاستثناء لا يخرج من هنا.
+            logger.warning(f"AI suspended (kill switch): skipping AI analysis for reading {reading.id}; rule-based fallback only")
+        else:
+            logger.warning(f"AI analysis failed, using fallback: {e}")
         if reading.moisture_percent and reading.moisture_percent < 30:
             await event_bus.publish("agritech.urgent.irrigation", {
                 "zone_id": zone.id,

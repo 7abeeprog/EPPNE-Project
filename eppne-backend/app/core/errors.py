@@ -103,6 +103,12 @@ class VoiceAssistantError(SovereignError):
 class AIProviderError(SovereignError):
     def __init__(self, message: str = "فشل الاتصال بمزود الذكاء الاصطناعي"):
         super().__init__(message, status_code=503)
+
+class AISystemSuspendedError(SovereignError):
+    """الـ Kill Switch العالمي للذكاء الاصطناعي مُفعَّل — كل استدعاءات الـ AI مرفوضة."""
+    def __init__(self, message: str = "نظام الذكاء الاصطناعي متوقف مؤقتًا بقرار إداري"):
+        super().__init__(message, status_code=503, code="AI_SYSTEM_SUSPENDED")
+
 class NetworkError(Exception):
     """خطأ في الاتصال بالشبكة أو واجهات برمجة التطبيقات الخارجية (APIs)"""
     pass

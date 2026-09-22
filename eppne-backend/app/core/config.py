@@ -163,6 +163,23 @@ class Settings(BaseSettings):
     )
 
     # ============================================================
+    # 6c. تينانت المنصة (Platform Tenant) — Kill Switch الـ AI
+    # ============================================================
+    # ⚠️ مفهوميًا منفصل تمامًا عن PUBLIC_REGISTRATION_TENANT_ID: هذا هو التينانت
+    # الذي يُسمح لـ SUPER_ADMIN/EXECUTIVE_DIRECTOR فيه فقط بتشغيل أدوات الطوارئ
+    # العالمية (POST /admin/system/toggle-ai-agents)، بينما ذاك يحدد أين يُسجَّل
+    # المستخدمون الجدد. القيمتان تساويان 1 اليوم صدفةً؛ لا تفترض أنهما يجب أن
+    # تتطابقا دائمًا — وأي دمج بينهما قرار معماري صريح لا اختصار كسول.
+    PLATFORM_TENANT_ID: int = Field(
+        default=1,
+        description=(
+            "التينانت الوحيد الذي يملك مستخدموه (SUPER_ADMIN/EXECUTIVE_DIRECTOR) "
+            "صلاحية أدوات الطوارئ العالمية على مستوى المنصة كلها. "
+            "إلزامي تعيينها صراحةً في .env في بيئة الإنتاج."
+        )
+    )
+
+    # ============================================================
     # 7. العملات والتخزين
     # ============================================================
     CRYPTO_MODE: str = Field(default="FULL_CRYPTO")
@@ -272,6 +289,15 @@ class Settings(BaseSettings):
                     "self-registration writes into.)"
                 )
 
+            # PLATFORM_TENANT_ID: نفس النمط — يحدد من يملك صلاحية Kill Switch الـ AI العالمي
+            if os.getenv("PLATFORM_TENANT_ID") is None:
+                raise ValueError(
+                    "❌ PLATFORM_TENANT_ID must be set explicitly in .env for production! "
+                    "(Implicit default is not allowed — this value determines which tenant's "
+                    "SUPER_ADMIN/EXECUTIVE_DIRECTOR users may trigger platform-wide emergency "
+                    "controls such as the AI kill switch.)"
+                )
+
             # التحقق من صحة مفتاح التشفير (تم عبر validator أعلاه، لكن نضعه هنا كتأكيد)
             try:
                 base64.urlsafe_b64decode(self.SECRET_ENCRYPTION_KEY)
@@ -300,6 +326,12 @@ class Settings(BaseSettings):
                     "⚠️  [DEV] Using default PUBLIC_REGISTRATION_TENANT_ID=%s. "
                     "Must be set explicitly in .env before production.",
                     self.PUBLIC_REGISTRATION_TENANT_ID,
+                )
+            if os.getenv("PLATFORM_TENANT_ID") is None:
+                logger.warning(
+                    "⚠️  [DEV] Using default PLATFORM_TENANT_ID=%s. "
+                    "Must be set explicitly in .env before production.",
+                    self.PLATFORM_TENANT_ID,
                 )
             # لا نتحقق من SECRET_ENCRYPTION_KEY في التطوير لأنه قد يكون مولّداً تلقائياً
 

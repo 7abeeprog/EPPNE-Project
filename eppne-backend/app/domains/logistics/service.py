@@ -16,7 +16,7 @@ from app.domains.saas.service import SaaSControlService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
 from app.domains.finance.service import FinanceService
-from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
+from app.core.errors import AISystemSuspendedError, NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
 from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
@@ -573,6 +573,8 @@ class LogisticsService:
             trend = prediction.get("trend", 1.0)
             external = prediction.get("external_factors", {})
 
+        except AISystemSuspendedError:
+            raise
         except Exception as e:
             logger.error(f"AI forecast failed: {e}")
             predicted_demand = 100

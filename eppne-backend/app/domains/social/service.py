@@ -19,7 +19,7 @@ from app.domains.ai_agents.service import AIAgentsService
 from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
-from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
+from app.core.errors import AISystemSuspendedError, NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
 from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
@@ -354,6 +354,8 @@ class SocialService:
             )
             suggestions = ai_result.get("result", {}).get("suggestions", [])
             return suggestions
+        except AISystemSuspendedError:
+            raise
         except Exception as e:
             logger.error(f"AI matchmaking failed: {e}")
             import random

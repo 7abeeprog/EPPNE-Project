@@ -32,6 +32,7 @@ from app.domains.identity.models import User
 # ==========================================
 from app.domains.academy.router import router as academy_router
 from app.domains.achievements.router import router as achievements_router
+from app.domains.admin.router import admin_router
 from app.domains.affiliate.router import router as affiliate_router
 from app.domains.agritech.router import router as agritech_router
 from app.domains.ai_agents.router import router as ai_agents_router
@@ -270,6 +271,7 @@ async def performance_middleware(request: Request, call_next):
 routers_config = [
     (academy_router, "/academy", ["Academy"], "academy"),
     (achievements_router, "/achievements", ["Achievements"], "achievements"),
+    (admin_router, "/admin/system", ["System Admin"], "admin"),
     (affiliate_router, "/affiliate", ["Affiliate"], "affiliate"),
     (agritech_router, "/agritech", ["Agritech"], "agritech"),
     (ai_agents_router, "/ai-agents", ["AI Agents"], "ai"),

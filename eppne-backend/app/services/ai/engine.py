@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional, List, Tuple
 import aiohttp
 import asyncio
 
+from app.core.features import ensure_ai_available
 from app.services.ai.models import (
     AIModelId,
     ModelConfig,
@@ -87,6 +88,10 @@ class AIEngine:
         Returns:
             النتيجة مع البيانات الوصفية
         """
+        # 0. Kill Switch — أول سطر وخارج أي try عمدًا: الـ try/except في آخر الدالة يعيد المحاولة
+        # بنموذج بديل ثم يرمي Exception عاديًا (500)، فلو كانت البوابة داخله لضاع الـ 503.
+        await ensure_ai_available("ai_engine.generate")
+
         # 1. التوجيه الذكي
         selected_model, route_result = await AIRouter.route_request(
             prompt=prompt,

@@ -170,6 +170,23 @@ async def get_current_superuser(
     return current_user
 
 
+async def get_current_platform_superuser(
+    current_user: User = Depends(get_current_superuser)
+) -> User:
+    """
+    SUPER_ADMIN/EXECUTIVE_DIRECTOR **من تينانت المنصة فقط** — لأدوات الطوارئ العالمية
+    (مثل Kill Switch الـ AI). get_current_superuser وحده لا يكفي: الدور لكل تينانت، فـ
+    superuser أي تينانت آخر كان يقدر يعطّل المنصة كلها. أنظر settings.PLATFORM_TENANT_ID.
+    """
+    if current_user.tenant_id != settings.PLATFORM_TENANT_ID:
+        logger.warning(
+            f"⚠️ Platform-level control denied: user={current_user.id} tenant={current_user.tenant_id} "
+            f"(platform tenant is {settings.PLATFORM_TENANT_ID})"
+        )
+        raise PermissionDeniedError("Platform-level superuser privileges required")
+    return current_user
+
+
 def is_admin_or_above(user: User) -> bool:
     role_value = user.system_role.value if hasattr(user.system_role, "value") else user.system_role
     return role_value in ["ADMIN", "SUPER_ADMIN", "EXECUTIVE_DIRECTOR"]

@@ -21,6 +21,7 @@ from app.core.errors import NotFoundError, PermissionDeniedError, ValidationErro
 from app.core.logging_conf import logger
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
+from app.core.features import ensure_ai_available
 from app.core.redis_client import redis_client
 from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.domains.finance.service import FinanceService
@@ -152,6 +153,9 @@ class AIAgentsService:
         executor_user_id: int,
         idempotency_key: str
     ) -> Dict[str, Any]:
+        # Kill Switch — فحص مبكر قبل أي قراءة/كتابة (لا ai_task_logs ولا approval ولا حتى إعادة نتيجة مخبأة)
+        await ensure_ai_available(f"ai_agents.execute_agent_action[agent={agent_id}]")
+
         cached = await self._validate_idempotency(idempotency_key)
         if cached:
             return cached
