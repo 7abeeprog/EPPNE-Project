@@ -66,10 +66,17 @@ class SaaSControlService:
         # الإجباري الموجود بالفعل — راجع §7 بند 4 من مستند تصميم حساب
         # النظام الموحَّد لكل تينانت.
         from app.domains.academy.repository import AcademyRepository
+        from app.domains.identity.repository import UserRepository
         academy_repo = AcademyRepository(self.db)
         tenant = await academy_repo.get_tenant_by_id(tenant_id)
         if not tenant:
             raise NotFoundError("التينانت غير موجود")
+        # الأدمن لازم يكون عضوًا في نفس التينانت — وإلا transfer() هيخصم من
+        # محفظة (admin, tenant_id) لمستخدم مش عضو فيها. راجع
+        # saas-sender-id-collision-fix-session-log.md §4.3-أ و§8.
+        admin = await UserRepository(self.db).get_by_id(cast(int, tenant.admin_id), tenant_id)
+        if admin is None:
+            raise ValidationError("أدمن التينانت لا ينتمي لنفس التينانت — لا يمكن تحديد دافع الفاتورة")
         return cast(int, tenant.admin_id)
 
     # ==========================================

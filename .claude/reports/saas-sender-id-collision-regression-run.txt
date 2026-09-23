@@ -1,0 +1,35 @@
+E:\cc\eppne-backend\venv\Lib\site-packages\pytest_asyncio\plugin.py:207: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-8.3.4, pluggy-1.6.0 -- E:\cc\eppne-backend\venv\Scripts\python.exe
+rootdir: E:\cc\eppne-backend
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-0.25.2
+asyncio: mode=Mode.STRICT, asyncio_default_fixture_loop_scope=None
+collecting ... collected 10 items
+
+tests/test_financeservice_tenant_binding_fix.py::test_process_auto_renewals_admin_sentinel_full_loop_success_and_past_due PASSED [ 10%]
+tests/test_financeservice_tenant_binding_fix.py::test_pay_invoice_same_tenant_still_works_after_removing_self_finance PASSED [ 20%]
+tests/test_saas_cancel_subscription_silent_write.py::test_cancel_subscription_persists_cancelled_status_independent_session PASSED [ 30%]
+tests/test_saas_cancel_subscription_silent_write.py::test_cancel_already_cancelled_subscription_raises_validation_error PASSED [ 40%]
+tests/test_trigger_renewals_endpoint_missing_commit.py::test_trigger_renewals_endpoint_persists_past_due_after_fix PASSED [ 50%]
+tests/test_trigger_renewals_endpoint_missing_commit.py::test_trigger_renewals_endpoint_success_path_no_double_commit_error PASSED [ 60%]
+tests/test_saas_pay_invoice_sender_id_collision_guard.py::test_pay_invoice_debits_admin_not_user_whose_id_equals_tenant_id PASSED [ 70%]
+tests/test_saas_pay_invoice_sender_id_collision_guard.py::test_auto_renewal_debits_admin_not_user_whose_id_equals_tenant_id PASSED [ 80%]
+tests/test_saas_pay_invoice_sender_id_collision_guard.py::test_pay_invoice_rejects_admin_from_another_tenant PASSED [ 90%]
+tests/test_saas_pay_invoice_sender_id_collision_guard.py::test_auto_renewal_fails_for_admin_from_another_tenant PASSED [100%]
+
+============================== warnings summary ===============================
+app\domains\employment\router.py:378
+  E:\cc\eppne-backend\app\domains\employment\router.py:378: DeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+    month: str = Query(..., regex=r"^\d{4}-\d{2}$", description="شهر بصيغة YYYY-MM"),
+
+tests/test_financeservice_tenant_binding_fix.py::test_process_auto_renewals_admin_sentinel_full_loop_success_and_past_due
+tests/test_saas_pay_invoice_sender_id_collision_guard.py::test_pay_invoice_debits_admin_not_user_whose_id_equals_tenant_id
+tests/test_saas_pay_invoice_sender_id_collision_guard.py::test_auto_renewal_debits_admin_not_user_whose_id_equals_tenant_id
+  sys:1: SAWarning: Multiple rows returned with uselist=False for eagerly-loaded attribute 'User.wallet'
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================= 10 passed, 4 warnings in 194.87s (0:03:14) ==================

@@ -1,0 +1,42 @@
+E:\cc\eppne-backend\venv\Lib\site-packages\pytest_asyncio\plugin.py:207: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+F                                                                        [100%]
+================================== FAILURES ===================================
+_____________ test_pay_invoice_rejects_admin_from_another_tenant ______________
+
+db = <sqlalchemy.ext.asyncio.session.AsyncSession object at 0x000002358C20CDD0>
+
+    @pytest.mark.asyncio
+    async def test_pay_invoice_rejects_admin_from_another_tenant(db):
+        s: dict = {}
+        try:
+            s = await _seed(db)
+            invoice_id = await _pending_invoice(db, s, s["T2"])
+    
+            try:
+                await SaaSControlService(db, s["T2"]).pay_invoice(invoice_id)
+                raised = False
+            except ValidationError:
+                raised = True
+                await db.rollback()
+    
+            balance = await _balance(s["A"], s["T2"])
+            txs = await _transactions(f"PAY-INV-{invoice_id}")
+>           assert raised and balance == FUNDED and not txs, (
+                f"أدمن من تينانت تانية اتقبل كدافع: raised={raised}، رصيد (A, T2)={balance}، transactions={txs}"
+            )
+E           AssertionError: أدمن من تينانت تانية اتقبل كدافع: raised=False، رصيد (A, T2)=90.0، transactions=[(14015, 14016, Decimal('10.00000000'))]
+E           assert (False)
+
+tests\test_saas_pay_invoice_sender_id_collision_guard.py:271: AssertionError
+============================== warnings summary ===============================
+app\domains\employment\router.py:378
+  E:\cc\eppne-backend\app\domains\employment\router.py:378: DeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+    month: str = Query(..., regex=r"^\d{4}-\d{2}$", description="شهر بصيغة YYYY-MM"),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_saas_pay_invoice_sender_id_collision_guard.py::test_pay_invoice_rejects_admin_from_another_tenant
+1 failed, 1 warning in 140.27s (0:02:20)
