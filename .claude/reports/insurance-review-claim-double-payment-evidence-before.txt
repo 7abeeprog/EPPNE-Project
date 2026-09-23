@@ -1,0 +1,36 @@
+### PHASE: before   tenant=130  users={'reviewer': 13786, 'claimant': 13787, 'claimant2': 13788}  claims={'C1': 174, 'C2': 175, 'C3': 176, 'C4': 177, 'C5': 178}
+  user1 wallets (must stay unchanged): ['39|1|710.0']
+
+### SCENARIO A — approve=true twice on C1 (id=174), no Idempotency-Key header
+  [A-start] wallets={'reviewer': '500', 'claimant': '0', 'claimant2': '0'}
+  [A-start] claim=['174|SUBMITTED|0.00000000||']
+  [A-start] transactions(claim_payout_174*)=[]
+  [A-start] invoices(tenant 130) count|sum=['0|0']
+  -> PUT /insurance/claims/174/review?approve=true  [A-call1]  http=200  resp={'id': 174, 'status': 'PAID', 'approved_amount_mrusdt': '20.00000000', 'payout_tx_hash': 'TX-63F260DEA6C3'}
+  [A-after-call1] wallets={'reviewer': '480.0', 'claimant': '20.0', 'claimant2': '0'}
+  [A-after-call1] claim=['174|PAID|20.00000000|TX-63F260DEA6C3|TMPRC A-call1']
+  [A-after-call1] transactions(claim_payout_174*)=['942|TX-63F260DEA6C3|claim_payout_174_84e16ed10d0e|13786|13787|20.00000000|MR_USDT|TRANSFER|COMPLETED']
+  [A-after-call1] invoices(tenant 130) count|sum=['1|20.00000000']
+  -> PUT /insurance/claims/174/review?approve=true  [A-call2]  http=200  resp={'id': 174, 'status': 'PAID', 'approved_amount_mrusdt': '20.00000000', 'payout_tx_hash': 'TX-F4E2E3721A14'}
+  [A-after-call2] wallets={'reviewer': '460.0', 'claimant': '40.0', 'claimant2': '0'}
+  [A-after-call2] claim=['174|PAID|20.00000000|TX-F4E2E3721A14|TMPRC A-call2']
+  [A-after-call2] transactions(claim_payout_174*)=['942|TX-63F260DEA6C3|claim_payout_174_84e16ed10d0e|13786|13787|20.00000000|MR_USDT|TRANSFER|COMPLETED', '943|TX-F4E2E3721A14|claim_payout_174_b480007bcf58|13786|13787|20.00000000|MR_USDT|TRANSFER|COMPLETED']
+  [A-after-call2] invoices(tenant 130) count|sum=['2|40.00000000']
+
+### SCENARIO B — approve=true then approve=false on C2 (id=175)
+  [B-start] wallets={'reviewer': '460.0', 'claimant': '40.0', 'claimant2': '0'}
+  [B-start] claim=['175|SUBMITTED|0.00000000||']
+  [B-start] transactions(claim_payout_175*)=[]
+  [B-start] invoices(tenant 130) count|sum=['2|40.00000000']
+  -> PUT /insurance/claims/175/review?approve=true  [B-call1-approve]  http=200  resp={'id': 175, 'status': 'PAID', 'approved_amount_mrusdt': '20.00000000', 'payout_tx_hash': 'TX-F04C4D93D45A'}
+  [B-after-approve] wallets={'reviewer': '440.0', 'claimant': '40.0', 'claimant2': '20.0'}
+  [B-after-approve] claim=['175|PAID|20.00000000|TX-F04C4D93D45A|TMPRC B-call1-approve']
+  [B-after-approve] transactions(claim_payout_175*)=['944|TX-F04C4D93D45A|claim_payout_175_266efbd3af54|13786|13788|20.00000000|MR_USDT|TRANSFER|COMPLETED']
+  [B-after-approve] invoices(tenant 130) count|sum=['3|60.00000000']
+  -> PUT /insurance/claims/175/review?approve=false  [B-call2-reject]  http=200  resp={'id': 175, 'status': 'REJECTED', 'approved_amount_mrusdt': '20.00000000', 'payout_tx_hash': 'TX-F04C4D93D45A'}
+  [B-after-reject] wallets={'reviewer': '440.0', 'claimant': '40.0', 'claimant2': '20.0'}
+  [B-after-reject] claim=['175|REJECTED|20.00000000|TX-F04C4D93D45A|TMPRC B-call2-reject']
+  [B-after-reject] transactions(claim_payout_175*)=['944|TX-F04C4D93D45A|claim_payout_175_266efbd3af54|13786|13788|20.00000000|MR_USDT|TRANSFER|COMPLETED']
+  [B-after-reject] invoices(tenant 130) count|sum=['3|60.00000000']
+
+  user1 wallets (end): ['39|1|710.0']

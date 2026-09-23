@@ -97,6 +97,11 @@ class VoiceAssistantError(SovereignError):
     def __init__(self, message: str = "فشل في معالجة الأمر الصوتي"):
         super().__init__(message, status_code=500)
 
+class ClaimStatusConflictError(SovereignError):
+    """مطالبة تأمين ليست في حالة تسمح بالمراجعة (سبق حسمها: APPROVED/PAID/REJECTED)"""
+    def __init__(self, message: str = "المطالبة ليست في حالة قابلة للمراجعة"):
+        super().__init__(message, status_code=409, code="CLAIM_STATUS_CONFLICT")
+
 # ==========================================
 # 7. أخطاء الذكاء الاصطناعي
 # ==========================================

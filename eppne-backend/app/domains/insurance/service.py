@@ -15,7 +15,7 @@ from app.domains.ai_agents.service import AIAgentsService
 from app.domains.saas.service import SaaSControlService as SaaSSubscriptionService
 from app.domains.affiliate.service import AffiliateService
 from app.domains.invoicing.service import InvoicingService
-from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError
+from app.core.errors import NotFoundError, PermissionDeniedError, InsufficientBalanceError, ValidationError, ClaimStatusConflictError
 from app.core.idempotency import get_idempotency_result, store_idempotency_result
 from app.core.audit import audit_log
 from app.core.event_bus import EventBus
@@ -30,6 +30,8 @@ from app.domains.insurance.models import (
 from app.domains.identity.models import User
 
 ENTITY_TYPE = "SOVEREIGN_ENTITY"  # نفس القيمة المستخدَمة في sovereign_entities/service.py
+# review_claim يقبل فقط مطالبات لم تُحسَم بعد؛ APPROVED/PAID/REJECTED نهائية لهذا المسار
+REVIEWABLE_CLAIM_STATUSES = {ClaimStatus.SUBMITTED, ClaimStatus.UNDER_INVESTIGATION}
 
 
 class InsuranceService:
@@ -476,6 +478,9 @@ class InsuranceService:
         claim = await self.repo.get_claim(claim_id)
         if not claim or cast(int, claim.tenant_id) != tenant_id:  # type: ignore
             raise NotFoundError("Claim not found")
+        # فحص مبكر (بلا قفل) قبل مراجعة AI — الفحص الحاسم تحت القفل أدناه
+        if claim.status not in REVIEWABLE_CLAIM_STATUSES:
+            raise ClaimStatusConflictError(f"Claim already reviewed (status={claim.status.value})")  # type: ignore
 
         subscription = await self.repo.get_subscription(claim.subscription_id)  # type: ignore
         policy = await self.repo.get_policy(subscription.policy_id)  # type: ignore
@@ -509,12 +514,19 @@ class InsuranceService:
         invoice_service = InvoicingService(self.db, tenant_id)
         # 🔥 معاملة ذرية للموافقة والصرف
         async with self.db.begin_nested():
+            # قفل صف المطالبة وإعادة فحص الحالة: يمنع الدفع المزدوج (طلبين متتاليين أو متزامنين)
+            # ويمنع تحويل مطالبة PAID إلى REJECTED
+            locked_claim = await self.repo.get_claim_for_update(claim_id)
+            if locked_claim is None or locked_claim.status not in REVIEWABLE_CLAIM_STATUSES:
+                raise ClaimStatusConflictError("Claim already reviewed")
+
             if approve:
                 final_amount = approved_amount or cast(Decimal, claim.claimed_amount_mrusdt)  # type: ignore
                 if final_amount > cast(Decimal, policy.max_coverage_limit_mrusdt):  # type: ignore
                     final_amount = cast(Decimal, policy.max_coverage_limit_mrusdt)  # type: ignore
 
-                payment_idempotency = f"claim_payout_{claim_id}_{uuid.uuid4().hex[:12]}"
+                # مفتاح حتمي لكل مطالبة: حماية transfer من التكرار تشتغل فعلًا
+                payment_idempotency = f"claim_payout_{claim_id}"
                 payout_tx = await finance.transfer(
                     sender_id=reviewer_id,
                     receiver_email=await self._get_user_email(claim.claimant_user_id, tenant_id),  # type: ignore

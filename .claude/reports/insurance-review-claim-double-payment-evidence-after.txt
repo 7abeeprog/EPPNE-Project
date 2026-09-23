@@ -1,0 +1,48 @@
+### PHASE: after   tenant=130  users={'reviewer': 13786, 'claimant': 13787, 'claimant2': 13788}  claims={'C1': 174, 'C2': 175, 'C3': 176, 'C4': 177, 'C5': 178}
+  user1 wallets (must stay unchanged): ['39|1|710.0']
+
+### SCENARIO A — approve=true twice on C3 (id=176), no Idempotency-Key header
+  [A-start] wallets={'reviewer': '440.0', 'claimant': '40.0', 'claimant2': '20.0'}
+  [A-start] claim=['176|SUBMITTED|0.00000000||']
+  [A-start] transactions(claim_payout_176*)=[]
+  [A-start] invoices(tenant 130) count|sum=['3|60.00000000']
+  -> PUT /insurance/claims/176/review?approve=true  [A-call1]  http=200  resp={'id': 176, 'status': 'PAID', 'approved_amount_mrusdt': '20.00000000', 'payout_tx_hash': 'TX-FB2BF0367ECA'}
+  [A-after-call1] wallets={'reviewer': '420.0', 'claimant': '60.0', 'claimant2': '20.0'}
+  [A-after-call1] claim=['176|PAID|20.00000000|TX-FB2BF0367ECA|TMPRC A-call1']
+  [A-after-call1] transactions(claim_payout_176*)=['945|TX-FB2BF0367ECA|claim_payout_176|13786|13787|20.00000000|MR_USDT|TRANSFER|COMPLETED']
+  [A-after-call1] invoices(tenant 130) count|sum=['4|80.00000000']
+  -> PUT /insurance/claims/176/review?approve=true  [A-call2]  http=409  resp={'detail': 'Claim already reviewed (status=PAID)', 'code': 'CLAIM_STATUS_CONFLICT'}
+  [A-after-call2] wallets={'reviewer': '420.0', 'claimant': '60.0', 'claimant2': '20.0'}
+  [A-after-call2] claim=['176|PAID|20.00000000|TX-FB2BF0367ECA|TMPRC A-call1']
+  [A-after-call2] transactions(claim_payout_176*)=['945|TX-FB2BF0367ECA|claim_payout_176|13786|13787|20.00000000|MR_USDT|TRANSFER|COMPLETED']
+  [A-after-call2] invoices(tenant 130) count|sum=['4|80.00000000']
+
+### SCENARIO B — approve=true then approve=false on C4 (id=177)
+  [B-start] wallets={'reviewer': '420.0', 'claimant': '60.0', 'claimant2': '20.0'}
+  [B-start] claim=['177|SUBMITTED|0.00000000||']
+  [B-start] transactions(claim_payout_177*)=[]
+  [B-start] invoices(tenant 130) count|sum=['4|80.00000000']
+  -> PUT /insurance/claims/177/review?approve=true  [B-call1-approve]  http=200  resp={'id': 177, 'status': 'PAID', 'approved_amount_mrusdt': '20.00000000', 'payout_tx_hash': 'TX-2DC85B9DC248'}
+  [B-after-approve] wallets={'reviewer': '400.0', 'claimant': '60.0', 'claimant2': '40.0'}
+  [B-after-approve] claim=['177|PAID|20.00000000|TX-2DC85B9DC248|TMPRC B-call1-approve']
+  [B-after-approve] transactions(claim_payout_177*)=['946|TX-2DC85B9DC248|claim_payout_177|13786|13788|20.00000000|MR_USDT|TRANSFER|COMPLETED']
+  [B-after-approve] invoices(tenant 130) count|sum=['5|100.00000000']
+  -> PUT /insurance/claims/177/review?approve=false  [B-call2-reject]  http=409  resp={'detail': 'Claim already reviewed (status=PAID)', 'code': 'CLAIM_STATUS_CONFLICT'}
+  [B-after-reject] wallets={'reviewer': '400.0', 'claimant': '60.0', 'claimant2': '40.0'}
+  [B-after-reject] claim=['177|PAID|20.00000000|TX-2DC85B9DC248|TMPRC B-call1-approve']
+  [B-after-reject] transactions(claim_payout_177*)=['946|TX-2DC85B9DC248|claim_payout_177|13786|13788|20.00000000|MR_USDT|TRANSFER|COMPLETED']
+  [B-after-reject] invoices(tenant 130) count|sum=['5|100.00000000']
+
+### SCENARIO C — two concurrent approve=true on C5 (id=178) via asyncio.gather, separate connections/sessions
+  [C-start] wallets={'reviewer': '400.0', 'claimant': '60.0', 'claimant2': '40.0'}
+  [C-start] claim=['178|SUBMITTED|0.00000000||']
+  [C-start] transactions(claim_payout_178*)=[]
+  [C-start] invoices(tenant 130) count|sum=['5|100.00000000']
+  -> C-req1: http=200 resp={'id': 178, 'status': 'PAID', 'approved_amount_mrusdt': '20.00000000', 'payout_tx_hash': 'TX-F55492A5774A'}
+  -> C-req2: http=409 resp={'detail': 'Claim already reviewed', 'code': 'CLAIM_STATUS_CONFLICT'}
+  [C-end] wallets={'reviewer': '380.0', 'claimant': '80.0', 'claimant2': '40.0'}
+  [C-end] claim=['178|PAID|20.00000000|TX-F55492A5774A|TMPRC C-req1']
+  [C-end] transactions(claim_payout_178*)=['947|TX-F55492A5774A|claim_payout_178|13786|13787|20.00000000|MR_USDT|TRANSFER|COMPLETED']
+  [C-end] invoices(tenant 130) count|sum=['6|120.00000000']
+
+  user1 wallets (end): ['39|1|710.0']

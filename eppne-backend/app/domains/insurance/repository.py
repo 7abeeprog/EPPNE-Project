@@ -118,6 +118,16 @@ class InsuranceRepository:
         result = await self.db.execute(select(InsuranceClaim).where(InsuranceClaim.id == claim_id))  # type: ignore
         return result.scalar_one_or_none()
 
+    async def get_claim_for_update(self, claim_id: int) -> Optional[InsuranceClaim]:
+        # SELECT ... FOR UPDATE + populate_existing: يقفل الصف لحد commit ويقرأ الحالة
+        # الحالية من الـDB حتى لو الكائن موجود بالفعل في identity map
+        result = await self.db.execute(
+            select(InsuranceClaim).where(InsuranceClaim.id == claim_id)  # type: ignore
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
     async def list_claims_for_subscription(self, subscription_id: int) -> List[InsuranceClaim]:
         result = await self.db.execute(
             select(InsuranceClaim).where(InsuranceClaim.subscription_id == subscription_id)  # type: ignore
