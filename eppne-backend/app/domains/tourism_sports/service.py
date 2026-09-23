@@ -488,19 +488,21 @@ class TourismSportsService:
 
         from app.domains.ai_governance.service import AIGovernanceService
         governance = AIGovernanceService(self.db, tenant_id)
-        await governance.check_and_consume(
-            agent_id=6,
-            user_id=user_id,
-            action_type="PLAYER_TRANSFER_ANALYSIS",
-            tokens=200,
-            cost=Decimal("0.02")
-        )
+        try:
+            await governance.check_and_consume(
+                agent_id=6,
+                user_id=user_id,
+                action_type="PLAYER_TRANSFER_ANALYSIS",
+                tokens=200,
+                cost=Decimal("0.02")
+            )
+        except Exception as e:
+            logger.warning(f"AI governance check_and_consume failed (agent 6 unavailable): {e}")
 
         invoice_service = InvoicingService(self.db, tenant_id)
         async with self.db.begin_nested():
             transfer = await self.repo.create_transfer(
                 tenant_id=tenant_id,
-                from_club_id=from_club_id,
                 status=TransferStatus.MEDICAL_REVIEW if requires_medical_review else TransferStatus.BID_PLACED,
                 medical_ai_flag=medical_flag,
                 medical_report_summary=medical_report,
@@ -568,6 +570,7 @@ class TourismSportsService:
             )
         except Exception as e:
             await self.db.rollback()
+            await self.db.refresh(transfer)
             logger.error(f"Invoice creation failed for player transfer bid {transfer_id}: {e}")
 
         # تخزين معرف التحويل فقط
