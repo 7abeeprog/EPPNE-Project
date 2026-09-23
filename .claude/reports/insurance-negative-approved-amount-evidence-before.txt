@@ -1,0 +1,89 @@
+BEFORE-fix proof — 2026-09-23T09:25:17.645326+00:00
+git HEAD code, finance/service.py + insurance/router.py unmodified
+tenant=144 reviewer=13851 claimant=13852 claims C1=194 C2=195 C3=196 suffix=bd430284
+
+=== B1: review_claim(C1, approved_amount=-50), claimant balance 0
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('0', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('0', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: sqlalchemy.exc.IntegrityError; constraint=check_wallet_balances_non_negative
+  message: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.CheckViolationError'>: new row for relation "wallets" violates check constraint "check_wallet_balances_non_negative"
+  net change zero: True; expected constraint: check_wallet_balances_non_negative
+  VERDICT: PASS
+
+  [B2 setup] claimant MR_USDT set to 100 via direct UPDATE on throwaway tenant wallet
+=== B2: review_claim(C1, approved_amount=-50), claimant balance 100
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: sqlalchemy.exc.IntegrityError; constraint=check_transaction_amount_positive
+  message: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.CheckViolationError'>: new row for relation "transactions" violates check constraint "check_transaction_amount_positive"
+  net change zero: True; expected constraint: check_transaction_amount_positive
+  VERDICT: PASS
+
+=== B3: HTTP PUT /api/insurance/claims/195/review?approve=true&approved_amount=-50
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  HTTP status: 400; body: Invalid host header
+  net change zero: True
+  VERDICT: FAIL
+
+=== B4: FinanceService.transfer(R -> claimant, -10)
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: sqlalchemy.exc.IntegrityError; constraint=check_transaction_amount_positive
+  message: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.CheckViolationError'>: new row for relation "transactions" violates check constraint "check_transaction_amount_positive"
+  net change zero: True; expected constraint: check_transaction_amount_positive
+  VERDICT: PASS
+
+=== B5: FinanceService.hold_funds(R, -10)
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: sqlalchemy.exc.IntegrityError; constraint=check_wallet_held_balances_non_negative
+  message: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.CheckViolationError'>: new row for relation "wallets" violates check constraint "check_wallet_held_balances_non_negative"
+  net change zero: True; expected constraint: check_wallet_held_balances_non_negative
+  VERDICT: PASS
+
+=== B6: FinanceService.release_held_funds(R, -10), R held=0
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: sqlalchemy.exc.IntegrityError; constraint=check_transaction_amount_positive
+  message: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.CheckViolationError'>: new row for relation "transactions" violates check constraint "check_transaction_amount_positive"
+  net change zero: True; expected constraint: check_transaction_amount_positive
+  VERDICT: PASS
+
+=== B7: FinanceService.settle_held_funds(R -> claimant, -10), R held=0
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: sqlalchemy.exc.IntegrityError; constraint=check_transaction_amount_positive
+  message: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.CheckViolationError'>: new row for relation "transactions" violates check constraint "check_transaction_amount_positive"
+  net change zero: True; expected constraint: check_transaction_amount_positive
+  VERDICT: PASS
+
+=== B8: review_claim(C3, approved_amount=0)
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  result: status=ClaimStatus.PAID approved=20.00000000 tx=TX-D341247A5131
+  after : {'reviewer(bal,held)': ('480.0', 'None'), 'claimant(bal,held)': ('120.0', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('PAID', '20.00000000', 'TX-D341247A5131')}, 'tx_rows': 1, 'invoices': 1}
+  VERDICT (expected: pays full 20): PASS
+
+ANY FUND MOVEMENT IN B1-B7: False
+
+=== B3 (re-run, base_url=http://localhost): HTTP PUT /api/insurance/claims/195/review?approve=true&approved_amount=-50
+  before: {'reviewer(bal,held)': ('480.0', 'None'), 'claimant(bal,held)': ('120.0', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('PAID', '20.00000000', 'TX-D341247A5131')}, 'tx_rows': 1, 'invoices': 1}
+  after : {'reviewer(bal,held)': ('480.0', 'None'), 'claimant(bal,held)': ('120.0', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('PAID', '20.00000000', 'TX-D341247A5131')}, 'tx_rows': 1, 'invoices': 1}
+  HTTP status: 500; body: Internal Server Error
+  net change zero: True
+  VERDICT: PASS
+
+=== B3b (cause check, raise_app_exceptions=True): HTTP PUT /api/insurance/claims/195/review?approve=true&approved_amount=-50
+  before: {'reviewer(bal,held)': ('480.0', 'None'), 'claimant(bal,held)': ('120.0', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('PAID', '20.00000000', 'TX-D341247A5131')}, 'tx_rows': 1, 'invoices': 1}
+  app exception: sqlalchemy.exc.IntegrityError; constraint=check_transaction_amount_positive
+  after : {'reviewer(bal,held)': ('480.0', 'None'), 'claimant(bal,held)': ('120.0', 'None'), 'claims(status,approved,tx)': {194: ('SUBMITTED', '0E-8', None), 195: ('SUBMITTED', '0E-8', None), 196: ('PAID', '20.00000000', 'TX-D341247A5131')}, 'tx_rows': 1, 'invoices': 1}
+  HTTP status: 500; body: (raised)
+  net change zero: True
+  VERDICT: PASS
+
+NOTE: the first B3 block above (HTTP 400 "Invalid host header", VERDICT FAIL) never reached the endpoint —
+TrustedHostMiddleware rejected base_url host "test" (not in ALLOWED_HOSTS). It is a harness error, not a result.
+B3 was re-run with base_url=http://localhost (block "B3 (re-run ...)": 500, zero change) and once more with
+raise_app_exceptions=True to identify the cause (block "B3b": IntegrityError / check_transaction_amount_positive).
+B3/B3b ran AFTER B8, so their "before" snapshot shows B8's 480/120 — both unchanged by B3/B3b.
+Throwaway ids: tenant=144 reviewer=13851 claimant=13852 claims 194,195,196. NOT cleaned up yet (awaiting approval).

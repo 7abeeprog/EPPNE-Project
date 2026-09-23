@@ -1,0 +1,124 @@
+AFTER-fix verification — 2026-09-23T09:37:44.823299+00:00
+tenant=145 reviewer=13853 claimant=13854 claims C1=197 C2=198 C3=199 C4=200 suffix=b2a93b7b
+
+=== N1 (=B1): review_claim(C1, -50), claimant balance 0
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('0', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('0', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: ValidationError: المبلغ يجب أن يكون أكبر من صفر
+  SQL statements during call: 16; wallet UPDATE / transactions INSERT: 0
+  net change zero: True
+  VERDICT: PASS
+
+  [N2 setup] claimant MR_USDT set to 100
+
+=== N2 (=B2): review_claim(C1, -50), claimant balance 100
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: ValidationError: المبلغ يجب أن يكون أكبر من صفر
+  SQL statements during call: 16; wallet UPDATE / transactions INSERT: 0
+  net change zero: True
+  VERDICT: PASS
+
+=== N3 (=B3): HTTP PUT review C2 approved_amount=-50
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  HTTP status: 422; body: {"detail":[{"type":"greater_than","loc":["query","approved_amount"],"msg":"Input should be greater than 0","input":"-50","ctx":{"gt":0}}]}
+  wallet UPDATE / transactions INSERT during request: 0
+  VERDICT: PASS
+
+=== N3b: HTTP PUT review C2 approved_amount=0
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  HTTP status: 422; body: {"detail":[{"type":"greater_than","loc":["query","approved_amount"],"msg":"Input should be greater than 0","input":"0","ctx":{"gt":0}}]}
+  wallet UPDATE / transactions INSERT during request: 0
+  VERDICT: PASS
+
+=== N4 [-10] (=B4): transfer(R->C, -10)
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: ValidationError: المبلغ يجب أن يكون أكبر من صفر
+  SQL statements during call: 0; wallet UPDATE / transactions INSERT: 0
+  net change zero: True; zero SQL required
+  VERDICT: PASS
+
+=== N5 [-10] (=B5): hold_funds(R, -10)
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: ValidationError: المبلغ يجب أن يكون أكبر من صفر
+  SQL statements during call: 0; wallet UPDATE / transactions INSERT: 0
+  net change zero: True; zero SQL required
+  VERDICT: PASS
+
+=== N6 [-10] (=B6): release_held_funds(R, -10)
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: ValidationError: المبلغ يجب أن يكون أكبر من صفر
+  SQL statements during call: 0; wallet UPDATE / transactions INSERT: 0
+  net change zero: True; zero SQL required
+  VERDICT: PASS
+
+=== N7 [-10] (=B7): settle_held_funds(R->C, -10)
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: ValidationError: المبلغ يجب أن يكون أكبر من صفر
+  SQL statements during call: 0; wallet UPDATE / transactions INSERT: 0
+  net change zero: True; zero SQL required
+  VERDICT: PASS
+
+=== N4 [0] (=B4): transfer(R->C, 0)
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: ValidationError: المبلغ يجب أن يكون أكبر من صفر
+  SQL statements during call: 0; wallet UPDATE / transactions INSERT: 0
+  net change zero: True; zero SQL required
+  VERDICT: PASS
+
+=== N5 [0] (=B5): hold_funds(R, 0)
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: ValidationError: المبلغ يجب أن يكون أكبر من صفر
+  SQL statements during call: 0; wallet UPDATE / transactions INSERT: 0
+  net change zero: True; zero SQL required
+  VERDICT: PASS
+
+=== N6 [0] (=B6): release_held_funds(R, 0)
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: ValidationError: المبلغ يجب أن يكون أكبر من صفر
+  SQL statements during call: 0; wallet UPDATE / transactions INSERT: 0
+  net change zero: True; zero SQL required
+  VERDICT: PASS
+
+=== N7 [0] (=B7): settle_held_funds(R->C, 0)
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  exception: ValidationError: المبلغ يجب أن يكون أكبر من صفر
+  SQL statements during call: 0; wallet UPDATE / transactions INSERT: 0
+  net change zero: True; zero SQL required
+  VERDICT: PASS
+
+=== N8 (=B8, known limitation backlog #7): direct service review_claim(C3, approved_amount=0)
+  before: {'reviewer(bal,held)': ('500', 'None'), 'claimant(bal,held)': ('100', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('SUBMITTED', '0E-8', None), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 0, 'invoices': 0}
+  after : {'reviewer(bal,held)': ('480.0', 'None'), 'claimant(bal,held)': ('120.0', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('PAID', '20.00000000', 'TX-61754AF7BCB4'), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 1, 'invoices': 1}
+  exception: None
+  SQL statements during call: 51; wallet UPDATE / transactions INSERT: 3
+  net change zero: False
+  VERDICT: PASS
+
+=== A1: HTTP PUT review C4 approved_amount=50 (positive flow)
+  before: {'reviewer(bal,held)': ('480.0', 'None'), 'claimant(bal,held)': ('120.0', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('PAID', '20.00000000', 'TX-61754AF7BCB4'), 200: ('SUBMITTED', '0E-8', None)}, 'tx_rows': 1, 'invoices': 1}
+  after : {'reviewer(bal,held)': ('430.0', 'None'), 'claimant(bal,held)': ('170.0', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('PAID', '20.00000000', 'TX-61754AF7BCB4'), 200: ('PAID', '50.00000000', 'TX-3D20975F6E2A')}, 'tx_rows': 2, 'invoices': 2}
+  HTTP status: 200; body: {"subscription_id":389,"incident_date":"2026-09-23T09:37:44.765091Z","incident_description":"REGTEST negamt C4","evidence_urls":[],"claimed_amount_mrusdt":"20.00000000","id":200,"claimant_user_id":13854,"approved_amount_mrusdt":"50","status":"PAID","investigation_notes":null,"oracle_verification_has
+  wallet UPDATE / transactions INSERT during request: 3
+  VERDICT: PASS
+
+=== A2: hold 10 -> release 10 -> hold 10 -> settle 10 (R -> claimant)
+  start : {'reviewer(bal,held)': ('430.0', 'None'), 'claimant(bal,held)': ('170.0', 'None'), 'claims(status,approved,tx)': {197: ('SUBMITTED', '0E-8', None), 198: ('SUBMITTED', '0E-8', None), 199: ('PAID', '20.00000000', 'TX-61754AF7BCB4'), 200: ('PAID', '50.00000000', 'TX-3D20975F6E2A')}, 'tx_rows': 2, 'invoices': 2}
+  after hold_funds: reviewer=('420.0', '10.0') claimant=('170.0', 'None') tx_rows=3
+  after release_held_funds: reviewer=('430.0', '0.0') claimant=('170.0', 'None') tx_rows=4
+  after hold_funds: reviewer=('420.0', '10.0') claimant=('170.0', 'None') tx_rows=5
+  after settle_held_funds: reviewer=('420.0', '0.0') claimant=('180.0', 'None') tx_rows=6
+  expected end: reviewer (420, held 0), claimant 180, tx_rows +4
+  VERDICT: PASS
+
+SUMMARY: 15/15 PASS — N1 (=B1)=PASS, N2 (=B2)=PASS, N3 (=B3)=PASS, N3b=PASS, N4 [-10] (=B4)=PASS, N5 [-10] (=B5)=PASS, N6 [-10] (=B6)=PASS, N7 [-10] (=B7)=PASS, N4 [0] (=B4)=PASS, N5 [0] (=B5)=PASS, N6 [0] (=B6)=PASS, N7 [0] (=B7)=PASS, N8 (=B8, known limitation backlog #7)=PASS, A1=PASS, A2=PASS

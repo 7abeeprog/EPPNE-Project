@@ -69,6 +69,12 @@ class FinanceService:
         if not idempotency_key:
             raise ValidationError("Idempotency key is required")
 
+        # مبلغ <= 0 يعكس اتجاه التحويل منطقيًا (فحص الرصيد يمر دائمًا)؛
+        # بدون هذا الحارس الحاجز الوحيد هو CHECK في DB (IntegrityError → 500)
+        amount_decimal = Decimal(str(amount))
+        if amount_decimal <= 0:
+            raise ValidationError("المبلغ يجب أن يكون أكبر من صفر")
+
         existing_tx = await self.tx_repo.get_by_idempotency_key(idempotency_key, self.tenant_id)
         if existing_tx:
             logger.warning(f"Duplicate transfer request detected: {idempotency_key}")
@@ -86,8 +92,6 @@ class FinanceService:
         crypto_mode = str(getattr(state, "crypto_mode", "FULL_CRYPTO"))
         if crypto_mode == "POINTS_ONLY" and currency != "LOYALTY_POINTS":
             raise PermissionDeniedError("العملات المشفرة معطلة حالياً")
-
-        amount_decimal = Decimal(str(amount))
 
         async with self.db.begin_nested():
             first_id, second_id = sorted([sender_id, cast(int, receiver.id)])
@@ -157,6 +161,8 @@ class FinanceService:
         ua: Optional[str] = None
     ):
         amount_decimal = Decimal(str(amount))
+        if amount_decimal <= 0:
+            raise ValidationError("المبلغ يجب أن يكون أكبر من صفر")
 
         if idempotency_key:
             existing_tx = await self.tx_repo.get_by_idempotency_key(idempotency_key, self.tenant_id)
@@ -220,6 +226,8 @@ class FinanceService:
         ua: Optional[str] = None
     ):
         amount_decimal = Decimal(str(amount))
+        if amount_decimal <= 0:
+            raise ValidationError("المبلغ يجب أن يكون أكبر من صفر")
 
         if idempotency_key:
             existing_tx = await self.tx_repo.get_by_idempotency_key(idempotency_key, self.tenant_id)
@@ -286,6 +294,10 @@ class FinanceService:
         if not idempotency_key:
             raise ValidationError("Idempotency key is required")
 
+        amount_decimal = Decimal(str(amount))
+        if amount_decimal <= 0:
+            raise ValidationError("المبلغ يجب أن يكون أكبر من صفر")
+
         existing_tx = await self.tx_repo.get_by_idempotency_key(idempotency_key, self.tenant_id)
         if existing_tx:
             logger.warning(f"Duplicate settlement request detected: {idempotency_key}")
@@ -298,8 +310,6 @@ class FinanceService:
 
         if receiver.tenant_id != self.tenant_id:
             raise PermissionDeniedError("المستلم لا يخص هذا المستأجر")
-
-        amount_decimal = Decimal(str(amount))
 
         async with self.db.begin_nested():
             first_id, second_id = sorted([sender_id, cast(int, receiver.id)])

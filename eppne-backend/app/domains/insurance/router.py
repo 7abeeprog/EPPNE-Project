@@ -222,7 +222,7 @@ async def get_my_claims(
 async def review_claim(
     claim_id: int,
     approve: bool = Query(..., description="true للموافقة، false للرفض"),
-    approved_amount: Optional[Decimal] = Query(None, description="المبلغ المعتمد (إن كانت الموافقة)"),
+    approved_amount: Optional[Decimal] = Query(None, gt=0, description="المبلغ المعتمد (إن كانت الموافقة)"),
     notes: Optional[str] = Query(None, description="ملاحظات المراجعة"),
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     current_user: User = Depends(get_current_active_user),
