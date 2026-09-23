@@ -82,3 +82,15 @@ class Invoice(Base):
 
     def __repr__(self):
         return f"<Invoice {self.invoice_number} | {self.status.value} | {self.amount} {self.currency}>"
+
+
+class InvoiceNumberCounter(Base):
+    """آخر seq صادر لـinvoice_number لكل تينانت — مستقل عن صفوف invoices، فحذف
+    فاتورة لا يعيد استخدام رقمها أبدًا (migration 068)."""
+    __tablename__ = "invoice_number_counters"
+    __table_args__ = (
+        CheckConstraint("last_seq >= 0", name="check_invoice_number_counters_last_seq_non_negative"),
+    )
+
+    tenant_id = Column(Integer, ForeignKey("academy_tenants.id", ondelete="CASCADE"), primary_key=True)
+    last_seq = Column(Integer, nullable=False)

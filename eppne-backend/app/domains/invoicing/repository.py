@@ -1,6 +1,6 @@
 # app/domains/invoicing/repository.py
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete, func, and_, or_
+from sqlalchemy import select, update, delete, func, and_, or_, text
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -119,6 +119,24 @@ class InvoicingRepository:
             select(func.count()).where(Invoice.tenant_id == tenant_id)
         )
         return result.scalar() or 0
+
+    async def next_invoice_seq(self, tenant_id: int) -> int:
+        # قفل صف العداد (ON CONFLICT DO UPDATE) بيسلسل الاستدعاءات المتزامنة لنفس التينانت
+        # لحد commit() في create_invoice. GREATEST مع MAX(seq) الفعلي بيغطي تينانت بلا صف
+        # عداد لكن عنده فواتير (مُدرجة مباشرة) — بلا ما يرجع أبدًا لرقم أقل من آخر رقم صادر.
+        result = await self.db.execute(
+            text("""
+                INSERT INTO invoice_number_counters (tenant_id, last_seq)
+                SELECT :tenant_id, COALESCE(MAX(split_part(invoice_number, '-', 3)::int), 0) + 1
+                FROM invoices
+                WHERE tenant_id = :tenant_id AND invoice_number ~ ('^INV-' || tenant_id || '-[0-9]+$')
+                ON CONFLICT (tenant_id) DO UPDATE
+                    SET last_seq = GREATEST(invoice_number_counters.last_seq + 1, EXCLUDED.last_seq)
+                RETURNING last_seq
+            """),
+            {"tenant_id": tenant_id},
+        )
+        return result.scalar_one()
 
     async def get_invoices_by_reference(
         self,

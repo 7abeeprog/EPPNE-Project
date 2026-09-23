@@ -114,8 +114,7 @@ class InvoicingService:
 
     async def _generate_invoice_number(self, tenant_id: int) -> str:
         prefix = "INV"
-        count = await self.repo.count_invoices(tenant_id)
-        seq = str(count + 1).zfill(6)
+        seq = str(await self.repo.next_invoice_seq(tenant_id)).zfill(6)
         return f"{prefix}-{tenant_id}-{seq}"
 
     # ============================================================
