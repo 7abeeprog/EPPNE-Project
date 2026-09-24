@@ -23,6 +23,7 @@ from app.core.redis_client import redis_client
 from app.core.logging_conf import logger
 from app.core.entity_membership_service import EntityMembershipService
 from app.core.models import EntityMembershipRole
+from app.core.system_account_service import get_or_create_system_account
 from app.domains.insurance.models import (
     InsurancePolicy, InsuranceSubscription, InsuranceClaim,
     PensionRecord, EmployeeInsuranceProfile, ClaimStatus, PensionStatus
@@ -629,13 +630,16 @@ class InsuranceService:
         return await self.repo.update_pension(pension_id, status=PensionStatus.SUSPENDED)
 
     async def disburse_monthly_pensions(self, tenant_id: int) -> int:
-        """دفع المعاشات الشهرية لتينانت واحد (يتم استدعاؤها تلقائياً عبر جدولة).
+        """دفع المعاشات الشهرية لتينانت واحد (يدويًا عبر POST /insurance/admin/disburse-pensions؛ غير مجدولة).
 
-        الطبقة (أ) فقط (عزل التينانت). منطق الصرف نفسه (sender_id=1، غياب
-        idempotency_key، نوع last_payout_tx، فحص "دُفع هذا الشهر") لم يُلمَس عمدًا —
-        راجع بند backlog `insurance-disburse-pensions-payout-logic-broken`.
+        الدافع حساب النظام الخاص بالتينانت (get_or_create_system_account)، لا user_id=1.
+        باقي منطق الصرف (غياب idempotency_key، نوع last_payout_tx، فحص "دُفع هذا الشهر")
+        لم يُلمَس عمدًا — راجع بند backlog `insurance-disburse-pensions-payout-logic-broken`.
         """
         pensions = await self.repo.list_active_pensions(tenant_id)
+        if not pensions:
+            return 0
+        system_account = await get_or_create_system_account(self.db, tenant_id)
         count = 0
         for pension in pensions:
             if cast(int, pension.tenant_id) != tenant_id:  # فحص دفاعي (belt-and-suspenders)
@@ -647,7 +651,7 @@ class InsuranceService:
             finance = FinanceService(self.db, tenant_id)
             try:
                 tx = await finance.transfer(
-                    sender_id=1,
+                    sender_id=cast(int, system_account.id),
                     receiver_email=await self._get_user_email(pension.beneficiary_id, cast(int, pension.tenant_id)),  # type: ignore
                     currency="MR_USDT",
                     amount=pension.monthly_amount_mrusdt,  # type: ignore
