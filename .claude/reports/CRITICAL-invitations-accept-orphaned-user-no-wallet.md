@@ -1,3 +1,15 @@
+> ## ✅ مُغلَق — [تحديث 2026-09-24]
+> **الآلية الموصوفة أدناه لم تعد موجودة في الكود.**
+> 1. **`9f37201` (2026-08-18):** نُقل `_create_user_from_invitation` إلى خارج `begin_nested()` (جلسة `invitations-savepoint-leak`، `PROGRESS_LOG.md` بند #11a).
+> 2. **`54d6cfe` (2026-09-22، Batch 0-B1):** حُذفت `_create_user_from_invitation` وكلمة المرور الافتراضية نهائيًا؛ `POST /invitations/{id}/accept` بلا مصادقة يُرجع `401 REGISTRATION_VIA_INVITATION_REQUIRED` قبل أي وصول لـDB؛ المستأجر من `current_user` فقط.
+> 3. تحقق إعادة (قراءة فقط، 2026-09-24): صفر استدعاء لـ`UserService`/`register()` في دومين `invitations`؛ صفر مستخدم حقيقي بلا محفظة في DB.
+> 4. **دليل هذا التقرير حُذف في 2026-09-24** بعد التحقق من صفر مراجع (191 قيد FK على `users` + أعمدة بلا FK = 0 صف؛ 3 جداول FK على الدعوة = 0 صف): `users.id=52` (`p_ctor_inv_newuser@eppne.com`) و`sovereign_invitations_v2.id=1` (`P-CTOR-INV-ACCEPT-TEST`، `SENT`)، في معاملة واحدة محروسة (`ALL GUARDS PASSED` ⇒ `COMMIT`؛ users 124⇒123، الدعوات 4⇒3، `SENT` 1⇒0). مفتاح Redis `user:52:1` **لم يُتحقَّق منه** (`NOAUTH`)، والمتوقع أنه منتهٍ (TTL=3600ث). التفاصيل: `invitations-orphaned-user-wallet-investigation-session-log.md` §10.
+>
+> المتبقي من نفس العائلة (خارج هذا الملف): عدم ذرّية `UserService.register()` (commit-ان متتاليان في `identity/repository.py`) — المرحلة 5 من تصميم 0-B، غير مفتوحة.
+> المراجع: `invitations-batch0b-critical-read-session-log.md`، `invitations-batch0b1-close-hole-session-log.md`، `invitations-orphaned-user-wallet-investigation-session-log.md`.
+
+---
+
 # 🔴🔴 يوزر حقيقي بلا محفظة بيتسجَّل على القرص فعليًا — `invitations.accept_invitation`
 
 **تاريخ الاكتشاف:** 2026-08-17
